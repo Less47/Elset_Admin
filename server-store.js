@@ -15,7 +15,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = path.resolve(process.env.ELSET_DATA_DIR || path.join(__dirname, "data"));
+const DATA_DIR = path.resolve(globalThis.process?.env?.ELSET_DATA_DIR || path.join(__dirname, "data"));
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
@@ -1010,6 +1010,99 @@ export function getAdminBackup(requestUser) {
       exportedBy: sanitizeUser(requestUser),
       sourceFile: path.basename(DATA_FILE),
     },
+  };
+}
+
+function buildSessionRecord(token, userId) {
+  return {
+    token,
+    userId,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+  };
+}
+
+function buildRestoredSessionUserMatcher(requestUser) {
+  const requestUsername = normalizeUsername(requestUser?.username);
+  const requestUserId = String(requestUser?.id || "").trim();
+
+  return (candidateUser) => {
+    if (!candidateUser) return false;
+    if (requestUserId && candidateUser.id === requestUserId) return true;
+    return requestUsername ? candidateUser.username === requestUsername : false;
+  };
+}
+
+function canInjectCurrentUserIntoBackup(data, currentUserAccount) {
+  if (!currentUserAccount) return false;
+
+  const duplicateUsername = data.users.some((entry) => entry.username === currentUserAccount.username);
+  if (duplicateUsername) return false;
+
+  if (currentUserAccount.staffId) {
+    const duplicateStaffLink = data.users.some((entry) => entry.staffId === currentUserAccount.staffId);
+    if (duplicateStaffLink) return false;
+  }
+
+  return true;
+}
+
+function prepareBackupImportData(backupInput) {
+  if (!backupInput || typeof backupInput !== "object" || Array.isArray(backupInput)) {
+    throw new Error("The uploaded backup must be a JSON object.");
+  }
+
+  if (backupInput.backup && backupInput.backup.format !== "elset-backup-v1") {
+    throw new Error("This backup file uses an unsupported format.");
+  }
+
+  const { backup: _BACKUP, ...workspaceData } = backupInput;
+  return {
+    ...workspaceData,
+    sessions: [],
+  };
+}
+
+export function restoreAdminBackup(requestUser, backupInput, sessionToken = "") {
+  if (!requestUser || requestUser.role !== "admin") {
+    throw new Error("You do not have permission to restore a full backup.");
+  }
+
+  const currentData = loadData();
+  const currentUserMatcher = buildRestoredSessionUserMatcher(requestUser);
+  const currentUserAccount = currentData.users.find(currentUserMatcher) || null;
+  let restoredData = normalizeStoredData(prepareBackupImportData(backupInput));
+  let restoredSessionUser = restoredData.users.find(currentUserMatcher) || null;
+  let preservedCurrentAdmin = false;
+
+  if (sessionToken && !restoredSessionUser && canInjectCurrentUserIntoBackup(restoredData, currentUserAccount)) {
+    restoredData = normalizeStoredData({
+      ...restoredData,
+      users: [...restoredData.users, currentUserAccount],
+      sessions: [],
+    });
+    restoredSessionUser = restoredData.users.find(currentUserMatcher) || null;
+    preservedCurrentAdmin = Boolean(restoredSessionUser);
+  }
+
+  const savedData = saveData({
+    ...restoredData,
+    sessions: sessionToken && restoredSessionUser ? [buildSessionRecord(sessionToken, restoredSessionUser.id)] : [],
+  });
+  const resolvedUser = restoredSessionUser
+    ? sanitizeUser(savedData.users.find((entry) => entry.id === restoredSessionUser.id) || restoredSessionUser)
+    : requestUser;
+
+  return {
+    accounts: savedData.users.map(sanitizeManagedUserAccount).filter(Boolean),
+    message: sessionToken && !restoredSessionUser
+      ? "Backup restored, but your current login could not be matched to an account in that file."
+      : preservedCurrentAdmin
+        ? "Backup restored and your current admin login was preserved."
+        : "Backup restored successfully.",
+    sessionPreserved: !sessionToken || Boolean(restoredSessionUser),
+    state: buildUserState(savedData, resolvedUser),
+    user: resolvedUser,
   };
 }
 

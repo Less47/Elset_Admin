@@ -294,13 +294,18 @@ export default function SettingsManager({
   authToken,
   isAdmin,
   onDownloadBackup,
+  onRestoreBackup,
   backupSummary,
 }) {
   const tabMeta = settingsTabMeta[activeSettingsTab] || settingsTabMeta.preferences;
   const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
-  const [backupStatus, setBackupStatus] = useState("idle");
-  const [backupMessage, setBackupMessage] = useState("");
+  const [downloadStatus, setDownloadStatus] = useState("idle");
+  const [downloadMessage, setDownloadMessage] = useState("");
+  const [restoreStatus, setRestoreStatus] = useState("idle");
+  const [restoreMessage, setRestoreMessage] = useState("");
+  const [restoreFile, setRestoreFile] = useState(null);
+  const [restoreInputKey, setRestoreInputKey] = useState(0);
 
   const activeTemplate = useMemo(() => {
     return currentTemplateType === "invoice"
@@ -334,21 +339,46 @@ export default function SettingsManager({
   };
 
   const handleBackupDownload = async () => {
-    if (!onDownloadBackup || backupStatus === "loading") return;
+    if (!onDownloadBackup || downloadStatus === "loading") return;
 
-    setBackupStatus("loading");
-    setBackupMessage("");
+    setDownloadStatus("loading");
+    setDownloadMessage("");
 
     const result = await onDownloadBackup();
 
     if (result?.ok) {
-      setBackupStatus("success");
-      setBackupMessage(`${result.filename || "Backup file"} downloaded successfully.`);
+      setDownloadStatus("success");
+      setDownloadMessage(`${result.filename || "Backup file"} downloaded successfully.`);
       return;
     }
 
-    setBackupStatus("error");
-    setBackupMessage(result?.error || "Unable to download the backup file.");
+    setDownloadStatus("error");
+    setDownloadMessage(result?.error || "Unable to download the backup file.");
+  };
+
+  const handleBackupRestore = async () => {
+    if (!onRestoreBackup || restoreStatus === "loading" || !restoreFile) return;
+
+    const shouldContinue = window.confirm(
+      "Restoring a backup will overwrite the current shared workspace data for everyone using this app. Continue?"
+    );
+    if (!shouldContinue) return;
+
+    setRestoreStatus("loading");
+    setRestoreMessage("");
+
+    const result = await onRestoreBackup(restoreFile);
+
+    if (result?.ok) {
+      setRestoreStatus("success");
+      setRestoreMessage(result.message || `${restoreFile.name || "Backup file"} restored successfully.`);
+      setRestoreFile(null);
+      setRestoreInputKey((prev) => prev + 1);
+      return;
+    }
+
+    setRestoreStatus("error");
+    setRestoreMessage(result?.error || "Unable to restore the backup file.");
   };
 
   return (
@@ -704,29 +734,100 @@ export default function SettingsManager({
                   <Button
                     className="rounded-xl"
                     onClick={handleBackupDownload}
-                    disabled={!isAdmin || backupStatus === "loading"}
+                    disabled={!isAdmin || downloadStatus === "loading"}
                   >
-                    {backupStatus === "loading" ? "Preparing Backup..." : "Download Backup"}
+                    {downloadStatus === "loading" ? "Preparing Backup..." : "Download Backup"}
                   </Button>
 
-                  {backupStatus === "loading" ? (
+                  {downloadStatus === "loading" ? (
                     <Badge className="bg-sky-100 text-sky-800">Generating file...</Badge>
-                  ) : backupStatus === "success" ? (
+                  ) : downloadStatus === "success" ? (
                     <Badge className="bg-emerald-100 text-emerald-800">Backup downloaded</Badge>
-                  ) : backupStatus === "error" ? (
+                  ) : downloadStatus === "error" ? (
                     <Badge className="bg-rose-100 text-rose-800">Download failed</Badge>
                   ) : null}
                 </div>
 
-                {backupMessage ? (
-                  <p className={`text-sm ${backupStatus === "error" ? "text-rose-700" : "text-slate-600"}`}>
-                    {backupMessage}
+                {downloadMessage ? (
+                  <p className={`text-sm ${downloadStatus === "error" ? "text-rose-700" : "text-slate-600"}`}>
+                    {downloadMessage}
                   </p>
                 ) : !isAdmin ? (
                   <p className="text-sm text-amber-700">
                     Sign in with an admin account to download a full backup file from this screen.
                   </p>
                 ) : null}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-slate-200 shadow-sm">
+              <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <CardTitle className="text-lg">Restore From Backup</CardTitle>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Upload a previously downloaded backup JSON file to replace the current shared workspace snapshot.
+                  </p>
+                </div>
+                <Badge className={isAdmin ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}>
+                  {isAdmin ? "Overwrite Mode" : "Admin Only"}
+                </Badge>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                  This will overwrite customers, jobs, staff, settings, templates, deleted records, and saved login accounts on the shared server.
+                </div>
+
+                <FormField label="Backup JSON file">
+                  <Input
+                    key={restoreInputKey}
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={(event) => {
+                      setRestoreFile(event.target.files?.[0] || null);
+                      setRestoreStatus("idle");
+                      setRestoreMessage("");
+                    }}
+                    disabled={!isAdmin || restoreStatus === "loading"}
+                  />
+                </FormField>
+
+                {restoreFile ? (
+                  <p className="text-sm text-slate-600">
+                    Selected file: <span className="font-medium text-slate-900">{restoreFile.name}</span>
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    className="rounded-xl"
+                    onClick={handleBackupRestore}
+                    disabled={!isAdmin || !restoreFile || restoreStatus === "loading"}
+                  >
+                    {restoreStatus === "loading" ? "Restoring Backup..." : "Restore Backup"}
+                  </Button>
+
+                  {restoreStatus === "loading" ? (
+                    <Badge className="bg-sky-100 text-sky-800">Replacing shared data...</Badge>
+                  ) : restoreStatus === "success" ? (
+                    <Badge className="bg-emerald-100 text-emerald-800">Backup restored</Badge>
+                  ) : restoreStatus === "error" ? (
+                    <Badge className="bg-rose-100 text-rose-800">Restore failed</Badge>
+                  ) : null}
+                </div>
+
+                {restoreMessage ? (
+                  <p className={`text-sm ${restoreStatus === "error" ? "text-rose-700" : "text-slate-600"}`}>
+                    {restoreMessage}
+                  </p>
+                ) : !isAdmin ? (
+                  <p className="text-sm text-amber-700">
+                    Sign in with an admin account to restore a backup file from this screen.
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-600">
+                    Use this only with backup files exported from this workspace.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -762,6 +863,9 @@ export default function SettingsManager({
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 The file is exported directly from the server-side data store, so it reflects the shared workspace rather than only your current browser state.
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                Before restoring a backup, download a fresh copy of the current workspace so you can roll back if the uploaded file is older than expected.
               </div>
             </CardContent>
           </Card>

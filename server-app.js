@@ -19,6 +19,7 @@ import {
   getDefaultLoginAccounts,
   getSessionUser,
   revokeSession,
+  restoreAdminBackup,
   saveAdminUserAccount,
   saveAuthorizedAppState,
 } from "./server-store.js";
@@ -468,6 +469,19 @@ export function createServerApp() {
       return res.status(200).send(payload);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to generate the backup file.";
+      return res.status(400).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/data-backup/restore", requireAuth, requireRole(["admin"]), (req, res) => {
+    try {
+      const restored = restoreAdminBackup(req.user, req.body, req.authToken);
+      return res.json({
+        ok: true,
+        ...restored,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to restore the backup file.";
       return res.status(400).json({ error: message });
     }
   });

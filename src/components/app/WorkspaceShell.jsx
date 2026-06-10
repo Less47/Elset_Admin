@@ -525,6 +525,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             authToken={authToken}
             isAdmin={isAdmin}
             onDownloadBackup={auth.handleDownloadBackup}
+            onRestoreBackup={auth.handleRestoreBackup}
             backupSummary={{
               staff: data.staff.length,
               customers: data.customers.length,

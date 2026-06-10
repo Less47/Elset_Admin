@@ -443,6 +443,67 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     }
   }
 
+  async function handleRestoreBackup(file) {
+    if (!isAdmin || (!AUTH_DISABLED && !authToken)) {
+      return { ok: false, error: "Only admins can restore a full backup." };
+    }
+
+    if (!file) {
+      return { ok: false, error: "Choose a backup file before restoring." };
+    }
+
+    try {
+      const fileContents = await file.text();
+      let parsedBackup = null;
+
+      try {
+        parsedBackup = JSON.parse(fileContents);
+      } catch {
+        throw new Error("The selected file is not valid JSON.");
+      }
+
+      const response = await fetchWithAuth("/api/admin/data-backup/restore", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(parsedBackup),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Unable to restore the backup file.");
+      }
+
+      const nextState = normalizeAppState(payload.state);
+      hasLoadedServerStateRef.current = true;
+      lastSyncedDataRef.current = JSON.stringify(nextState);
+      syncErrorRef.current = "";
+      setData(nextState);
+      setAdminUserAccounts(Array.isArray(payload.accounts) ? payload.accounts : []);
+      setAdminUserAccountsError("");
+      setAuthError("");
+
+      if (payload.user) {
+        setAuthUser(payload.user);
+      }
+
+      return {
+        ok: true,
+        message: payload.message || `${file.name || "Backup file"} restored successfully.`,
+        sessionPreserved: payload.sessionPreserved !== false,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to restore the backup file.";
+
+      if (/session expired|sign in again|authentication required/i.test(message)) {
+        clearSessionState(message);
+      }
+
+      return { ok: false, error: message };
+    }
+  }
+
   return {
     adminUserAccounts,
     adminUserAccountsError,
@@ -452,6 +513,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     authUser,
     canManageBusiness,
     handleDownloadBackup,
+    handleRestoreBackup,
     handleSaveStaffLoginAccount,
     isAdmin,
     isAuthenticated,
