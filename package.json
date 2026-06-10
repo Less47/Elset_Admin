@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:client\" \"npm:dev:server\"",
     "dev:client": "node dev-client.js",
+    "start": "node server.js",
     "server": "node server.js",
     "dev:server": "node dev-server.js",
     "demo:data": "node scripts/generate-demo-data.mjs",

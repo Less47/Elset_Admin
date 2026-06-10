@@ -15,7 +15,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = path.resolve(process.env.ELSET_DATA_DIR || path.join(__dirname, "data"));
 const DATA_FILE = path.join(DATA_DIR, "app-data.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
