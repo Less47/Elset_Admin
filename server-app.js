@@ -14,6 +14,7 @@ import {
   restoreAuthBackup,
   saveManagedUserAccount,
   syncManagedUserNamesWithStaff,
+  verifyUserPassword,
 } from "./server-auth.js";
 import {
   ADMIN_EMAIL,
@@ -256,6 +257,8 @@ function prepareWorkspaceBackupImportData(backupInput) {
   const {
     authUsers: _authUsers,
     backup: _backup,
+    backupData: _backupData,
+    restorePassword: _restorePassword,
     users: _legacyUsers,
     sessions: _legacySessions,
     ...workspaceData
@@ -536,8 +539,20 @@ export function createServerApp() {
 
   app.post("/api/admin/data-backup/restore", requireAuth, requireRole(["admin"]), (req, res) => {
     try {
-      const workspaceData = saveData(prepareWorkspaceBackupImportData(req.body));
-      const restoredAuth = restoreAuthBackup(req.body, req.user);
+      const restorePassword = String(req.body?.restorePassword || "");
+      const hasWrappedBackup = Object.prototype.hasOwnProperty.call(req.body || {}, "backupData");
+      const backupInput = hasWrappedBackup ? req.body?.backupData : req.body;
+
+      if (!restorePassword) {
+        return res.status(400).json({ error: "Re-enter your admin password to restore a backup." });
+      }
+
+      if (!verifyUserPassword(req.user.id, restorePassword)) {
+        return res.status(403).json({ error: "The admin password you entered is incorrect." });
+      }
+
+      const workspaceData = saveData(prepareWorkspaceBackupImportData(backupInput));
+      const restoredAuth = restoreAuthBackup(backupInput, req.user);
       syncManagedUserNamesWithStaff(workspaceData.staff);
       const resolvedUser = restoredAuth.user || req.user;
       const state = getAuthorizedAppState(resolvedUser);

@@ -501,6 +501,25 @@ export async function getRequestAuthSession(req) {
   };
 }
 
+export function verifyUserPassword(userId, password) {
+  const normalizedUserId = normalizeOptionalString(userId);
+  const passwordValue = String(password || "");
+
+  if (!normalizedUserId || !passwordValue) {
+    return false;
+  }
+
+  const userRow = getRawAuthUserRowById(normalizedUserId);
+  if (!userRow?.passwordHash) {
+    return false;
+  }
+
+  return verifyLegacyPassword({
+    hash: userRow.passwordHash,
+    password: passwordValue,
+  });
+}
+
 export function getManagedUserAccounts(staff = []) {
   const staffById = new Map((Array.isArray(staff) ? staff : []).map((staffMember) => [staffMember.id, staffMember]));
   return getAllRawAuthUserRows()

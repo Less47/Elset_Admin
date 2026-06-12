@@ -3,6 +3,7 @@ import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -309,6 +310,8 @@ export default function SettingsManager({
   const [restoreMessage, setRestoreMessage] = useState("");
   const [restoreFile, setRestoreFile] = useState(null);
   const [restoreInputKey, setRestoreInputKey] = useState(0);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [restorePassword, setRestorePassword] = useState("");
 
   const activeTemplate = useMemo(() => {
     return currentTemplateType === "invoice"
@@ -359,24 +362,30 @@ export default function SettingsManager({
     setDownloadMessage(result?.error || "Unable to download the backup file.");
   };
 
-  const handleBackupRestore = async () => {
-    if (!onRestoreBackup || restoreStatus === "loading" || !restoreFile) return;
+  const openRestoreConfirmation = () => {
+    if (!onRestoreBackup || restoreStatus === "loading" || !restoreFile || !isAdmin) return;
+    setRestoreStatus("idle");
+    setRestoreMessage("");
+    setRestorePassword("");
+    setRestoreConfirmOpen(true);
+  };
 
-    const shouldContinue = window.confirm(
-      "Restoring a backup will overwrite the current shared workspace data for everyone using this app. Continue?"
-    );
-    if (!shouldContinue) return;
+  const handleBackupRestore = async (event) => {
+    event?.preventDefault();
+    if (!onRestoreBackup || restoreStatus === "loading" || !restoreFile) return;
 
     setRestoreStatus("loading");
     setRestoreMessage("");
 
-    const result = await onRestoreBackup(restoreFile);
+    const result = await onRestoreBackup(restoreFile, restorePassword);
 
     if (result?.ok) {
       setRestoreStatus("success");
       setRestoreMessage(result.message || `${restoreFile.name || "Backup file"} restored successfully.`);
       setRestoreFile(null);
       setRestoreInputKey((prev) => prev + 1);
+      setRestorePassword("");
+      setRestoreConfirmOpen(false);
       return;
     }
 
@@ -812,7 +821,7 @@ export default function SettingsManager({
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     className="rounded-xl"
-                    onClick={handleBackupRestore}
+                    onClick={openRestoreConfirmation}
                     disabled={!isAdmin || !restoreFile || restoreStatus === "loading"}
                   >
                     {restoreStatus === "loading" ? "Restoring Backup..." : "Restore Backup"}
@@ -837,11 +846,80 @@ export default function SettingsManager({
                   </p>
                 ) : (
                   <p className="text-sm text-slate-600">
-                    Use this only with backup files exported from this workspace.
+                    Use this only with backup files exported from this workspace. You will need to re-enter your admin password before the restore starts.
                   </p>
                 )}
               </CardContent>
             </Card>
+
+            <Dialog
+              open={restoreConfirmOpen}
+              onOpenChange={(nextOpen) => {
+                if (restoreStatus === "loading") return;
+                setRestoreConfirmOpen(nextOpen);
+                if (!nextOpen) {
+                  setRestorePassword("");
+                }
+              }}
+            >
+              <DialogContent className="rounded-3xl sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Confirm Backup Restore</DialogTitle>
+                  <DialogDescription>
+                    Restoring a backup will overwrite the current shared workspace for everyone. Re-enter your admin password to continue.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <form className="grid gap-4" onSubmit={handleBackupRestore}>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    This replaces customers, jobs, staff, templates, deleted records, and saved login accounts with the uploaded backup file.
+                  </div>
+
+                  {restoreFile ? (
+                    <p className="text-sm text-slate-600">
+                      Backup file: <span className="font-medium text-slate-900">{restoreFile.name}</span>
+                    </p>
+                  ) : null}
+
+                  <FormField label="Admin password">
+                    <Input
+                      type="password"
+                      value={restorePassword}
+                      onChange={(event) => setRestorePassword(event.target.value)}
+                      placeholder="Re-enter your password"
+                      autoComplete="current-password"
+                      disabled={restoreStatus === "loading"}
+                    />
+                  </FormField>
+
+                  {restoreStatus === "error" && restoreMessage ? (
+                    <p className="text-sm text-rose-700">{restoreMessage}</p>
+                  ) : null}
+
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => {
+                        setRestoreConfirmOpen(false);
+                        setRestorePassword("");
+                      }}
+                      disabled={restoreStatus === "loading"}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="rounded-xl"
+                      disabled={!restorePassword || restoreStatus === "loading"}
+                    >
+                      {restoreStatus === "loading" ? "Restoring Backup..." : "Confirm Restore"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
 
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader>

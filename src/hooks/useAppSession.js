@@ -416,13 +416,17 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     }
   }
 
-  async function handleRestoreBackup(file) {
+  async function handleRestoreBackup(file, password) {
     if (!isAdmin) {
       return { ok: false, error: "Only admins can restore a full backup." };
     }
 
     if (!file) {
       return { ok: false, error: "Choose a backup file before restoring." };
+    }
+
+    if (!String(password || "")) {
+      return { ok: false, error: "Re-enter your admin password to continue." };
     }
 
     try {
@@ -440,7 +444,10 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(parsedBackup),
+        body: JSON.stringify({
+          backupData: parsedBackup,
+          restorePassword: password,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
 
