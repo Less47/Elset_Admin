@@ -51,12 +51,21 @@ npm run server
 
 Then open `http://localhost:3101`.
 
-## Quote Email Setup
+## Environment Setup
 
-Copy `.env.example` to `.env` and fill in your Resend SMTP details:
+Copy `.env.example` to `.env` and fill in the runtime values you need:
 
 ```bash
 ELSET_API_PORT=3101
+ELSET_FRONTEND_URL=http://localhost:5173
+BETTER_AUTH_SECRET=replace-me-with-a-random-secret
+BETTER_AUTH_URL=http://localhost:3101
+GEOAPIFY_API_KEY=replace-me
+# Optional: only needed if you want a separate Geoapify key for map tiles
+GEOAPIFY_MAPS_API_KEY=
+GEOAPIFY_COUNTRY_CODE=au
+GEOAPIFY_MAP_STYLE=osm-bright
+GEOAPIFY_AUTOCOMPLETE_LIMIT=6
 SMTP_HOST=smtp.resend.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -65,6 +74,8 @@ SMTP_PASS=replace-me
 EMAIL_FROM=admin@elset.com.au
 ```
 
+`GEOAPIFY_API_KEY` enables address autocomplete and map geocoding.
+`GEOAPIFY_MAPS_API_KEY` is optional because the server falls back to `GEOAPIFY_API_KEY` for map tiles.
 `EMAIL_FROM` must use a domain you have verified in Resend, so `admin@elset.com.au` will work once `elset.com.au` is verified in your Resend account.
 
 When the API is running, quote sends:
@@ -72,6 +83,40 @@ When the API is running, quote sends:
 - generate a PDF attachment from the current quote template
 - send the email directly from the backend through Resend SMTP
 - record send history against the quote in the app state
+
+## Fly.io Deployment
+
+Do not rely on a local `.env` file being present inside the Fly machine. Set production config as Fly secrets and environment variables instead.
+
+Required secret for the jobs map:
+
+```bash
+flyctl secrets set GEOAPIFY_API_KEY=replace-me -a elset-admin
+```
+
+Optional if you want a separate Geoapify tiles key:
+
+```bash
+flyctl secrets set GEOAPIFY_MAPS_API_KEY=replace-me -a elset-admin
+```
+
+Typical production secrets:
+
+```bash
+flyctl secrets set BETTER_AUTH_SECRET=replace-me SMTP_HOST=smtp.resend.com SMTP_PORT=465 SMTP_SECURE=true SMTP_USER=resend SMTP_PASS=replace-me EMAIL_FROM=admin@elset.com.au -a elset-admin
+```
+
+After updating secrets, deploy again or restart the machine:
+
+```bash
+flyctl deploy -a elset-admin
+```
+
+You can confirm what Fly has configured with:
+
+```bash
+flyctl secrets list -a elset-admin
+```
 
 ## Quote Template Editing
 

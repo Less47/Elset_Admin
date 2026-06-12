@@ -3,8 +3,18 @@ import path from "path";
 import express from "express";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { fileURLToPath } from "url";
 import { generateDocumentPdf } from "./quote-pdf.js";
+import {
+  auth,
+  getAuthBackupUsers,
+  getManagedUserAccounts,
+  getRequestAuthSession,
+  restoreAuthBackup,
+  saveManagedUserAccount,
+  syncManagedUserNamesWithStaff,
+} from "./server-auth.js";
 import {
   ADMIN_EMAIL,
   buildDocumentEmail,
@@ -12,15 +22,9 @@ import {
   normalizeQuoteTemplate,
 } from "./src/lib/quote-template.js";
 import {
-  authenticateUser,
-  getAdminBackup,
-  getAdminUserAccounts,
   getAuthorizedAppState,
-  getDefaultLoginAccounts,
-  getSessionUser,
-  revokeSession,
-  restoreAdminBackup,
-  saveAdminUserAccount,
+  loadData,
+  saveData,
   saveAuthorizedAppState,
 } from "./server-store.js";
 
@@ -28,7 +32,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.join(__dirname, "dist");
 const envPath = path.join(__dirname, ".env");
-const AUTH_DISABLED = true;
 const GEOAPIFY_AUTOCOMPLETE_URL = "https://api.geoapify.com/v1/geocode/autocomplete";
 const GEOAPIFY_GEOCODE_SEARCH_URL = "https://api.geoapify.com/v1/geocode/search";
 const DEFAULT_GEOAPIFY_MAP_STYLE = "osm-bright";
@@ -38,13 +41,7 @@ const MIN_ADDRESS_QUERY_LENGTH = 3;
 const MAX_ADDRESS_QUERY_LENGTH = 160;
 const GEOAPIFY_MAP_ATTRIBUTION = 'Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> | <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a>';
 const geoapifyGeocodeCache = new Map();
-const LOCAL_AUTH_USER = Object.freeze({
-  id: "local-auth-disabled-user",
-  username: "local-admin",
-  name: "Local Admin",
-  role: "admin",
-  staffId: null,
-});
+const BACKUP_FORMAT_VERSION = "elset-backup-v2";
 
 dotenv.config({ path: envPath });
 
@@ -75,6 +72,12 @@ function validateDocumentPayload(body, { requireCustomerEmail = true } = {}) {
 function getMissingEnv() {
   const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS"];
   return required.filter((key) => !process.env[key]);
+}
+
+function getConfigSourceLabel() {
+  return process.env.FLY_APP_NAME
+    ? "the Fly app secrets or environment"
+    : envPath;
 }
 
 function getTransportConfig() {
@@ -111,6 +114,29 @@ function getGeoapifyAutocompleteLimit() {
   const configuredValue = Number.parseInt(String(process.env.GEOAPIFY_AUTOCOMPLETE_LIMIT || DEFAULT_GEOAPIFY_AUTOCOMPLETE_LIMIT), 10);
   if (!Number.isFinite(configuredValue)) return DEFAULT_GEOAPIFY_AUTOCOMPLETE_LIMIT;
   return Math.min(Math.max(configuredValue, 1), 10);
+}
+
+function logOptionalConfigWarnings() {
+  const configSourceLabel = getConfigSourceLabel();
+  const missingEmailEnv = getMissingEnv();
+
+  if (missingEmailEnv.length > 0) {
+    console.warn(
+      `[config] Missing ${missingEmailEnv.join(", ")} in ${configSourceLabel}. Quote email sending will be unavailable.`
+    );
+  }
+
+  if (!getGeoapifyApiKey()) {
+    console.warn(
+      `[config] Missing GEOAPIFY_API_KEY in ${configSourceLabel}. Address lookup and map geocoding will be unavailable.`
+    );
+  }
+
+  if (!getGeoapifyMapsApiKey()) {
+    console.warn(
+      `[config] Missing GEOAPIFY_MAPS_API_KEY or GEOAPIFY_API_KEY in ${configSourceLabel}. Jobs map tiles will be unavailable.`
+    );
+  }
 }
 
 function buildGeoapifyAutocompleteUrl(query) {
@@ -199,46 +225,74 @@ async function geocodeAddressQuery(query, signal) {
   return location;
 }
 
-function getAuthToken(req) {
-  const authorization = req.headers.authorization || "";
-  return authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-}
-
-function getRequestUser(req) {
-  const token = getAuthToken(req);
-  const user = token ? getSessionUser(token) : null;
-
-  if (user) {
-    return { token, user };
-  }
-
-  if (AUTH_DISABLED) {
-    return { token: "", user: LOCAL_AUTH_USER };
-  }
-
-  return { token: "", user: null };
-}
-
 function buildBackupFilename() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `elset-admin-backup-${timestamp}.json`;
+}
+
+function applyAuthResponseHeaders(res, headers) {
+  if (!headers) return;
+
+  headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie") {
+      res.append("Set-Cookie", value);
+      return;
+    }
+
+    res.setHeader(key, value);
+  });
+}
+
+function prepareWorkspaceBackupImportData(backupInput) {
+  if (!backupInput || typeof backupInput !== "object" || Array.isArray(backupInput)) {
+    throw new Error("The uploaded backup must be a JSON object.");
+  }
+
+  const backupFormat = String(backupInput.backup?.format || "").trim();
+  if (backupFormat && !["elset-backup-v1", BACKUP_FORMAT_VERSION].includes(backupFormat)) {
+    throw new Error("This backup file uses an unsupported format.");
+  }
+
+  const {
+    authUsers: _authUsers,
+    backup: _backup,
+    users: _legacyUsers,
+    sessions: _legacySessions,
+    ...workspaceData
+  } = backupInput;
+
+  return {
+    ...workspaceData,
+    users: [],
+    sessions: [],
+    meta: {
+      ...(workspaceData.meta || {}),
+      authMigration: {
+        version: "better-auth-v1",
+        migratedAt: new Date().toISOString(),
+      },
+    },
+  };
 }
 
 export function createServerApp() {
   const app = express();
   const shouldServeStatic = process.env.ELSET_DISABLE_STATIC !== "true";
   const frontendUrl = String(process.env.ELSET_FRONTEND_URL || "").trim();
-  app.use(express.json({ limit: "15mb" }));
+  const configSourceLabel = getConfigSourceLabel();
+  logOptionalConfigWarnings();
 
-  function requireAuth(req, res, next) {
-    const { token, user } = getRequestUser(req);
+  async function requireAuth(req, res, next) {
+    const authSession = await getRequestAuthSession(req);
 
-    if (!user) {
+    if (!authSession?.user) {
       return res.status(401).json({ error: "Authentication required." });
     }
 
-    req.authToken = token;
-    req.user = user;
+    applyAuthResponseHeaders(res, authSession.headers);
+    req.authSession = authSession.session;
+    req.user = authSession.user;
+    req.rawAuthUser = authSession.rawUser;
     return next();
   }
 
@@ -251,6 +305,23 @@ export function createServerApp() {
     };
   }
 
+  app.get("/api/auth/me", async (req, res) => {
+    const authSession = await getRequestAuthSession(req);
+
+    if (!authSession?.user) {
+      return res.status(401).json({ error: "Your session has expired. Please sign in again." });
+    }
+
+    applyAuthResponseHeaders(res, authSession.headers);
+    return res.json({
+      ok: true,
+      user: authSession.user,
+    });
+  });
+
+  app.all("/api/auth/{*any}", toNodeHandler(auth));
+  app.use(express.json({ limit: "15mb" }));
+
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true });
   });
@@ -259,7 +330,7 @@ export function createServerApp() {
     const apiKey = getGeoapifyApiKey();
     if (!apiKey) {
       return res.status(503).json({
-        error: `Address lookup is not configured. Add GEOAPIFY_API_KEY to ${envPath}.`,
+        error: `Address lookup is not configured. Add GEOAPIFY_API_KEY to ${configSourceLabel}.`,
       });
     }
 
@@ -309,7 +380,7 @@ export function createServerApp() {
     const mapsApiKey = getGeoapifyMapsApiKey();
     if (!mapsApiKey) {
       return res.status(503).json({
-        error: `Map tiles are not configured. Add GEOAPIFY_MAPS_API_KEY or GEOAPIFY_API_KEY to ${envPath}.`,
+        error: `Map tiles are not configured. Add GEOAPIFY_MAPS_API_KEY or GEOAPIFY_API_KEY to ${configSourceLabel}.`,
       });
     }
 
@@ -330,7 +401,7 @@ export function createServerApp() {
     const apiKey = getGeoapifyApiKey();
     if (!apiKey) {
       return res.status(503).json({
-        error: `Address geocoding is not configured. Add GEOAPIFY_API_KEY to ${envPath}.`,
+        error: `Address geocoding is not configured. Add GEOAPIFY_API_KEY to ${configSourceLabel}.`,
       });
     }
 
@@ -372,44 +443,6 @@ export function createServerApp() {
     }
   });
 
-  app.post("/api/auth/login", (req, res) => {
-    if (AUTH_DISABLED) {
-      return res.json({
-        ok: true,
-        token: "",
-        user: LOCAL_AUTH_USER,
-      });
-    }
-
-    const { username, password } = req.body || {};
-    const session = authenticateUser(username, password);
-
-    if (!session) {
-      return res.status(401).json({ error: "Invalid username or password." });
-    }
-
-    return res.json({
-      ok: true,
-      token: session.token,
-      user: session.user,
-    });
-  });
-
-  app.post("/api/auth/logout", requireAuth, (req, res) => {
-    if (req.authToken) {
-      revokeSession(req.authToken);
-    }
-    return res.json({ ok: true });
-  });
-
-  app.get("/api/auth/me", requireAuth, (req, res) => {
-    return res.json({
-      ok: true,
-      user: req.user,
-      demoAccounts: getDefaultLoginAccounts(),
-    });
-  });
-
   app.get("/api/app-state", requireAuth, (req, res) => {
     try {
       return res.json({
@@ -424,9 +457,14 @@ export function createServerApp() {
 
   app.put("/api/app-state", requireAuth, (req, res) => {
     try {
+      const state = saveAuthorizedAppState(req.user, req.body);
+      if (req.user.role !== "technician") {
+        syncManagedUserNamesWithStaff(state.staff);
+      }
+
       return res.json({
         ok: true,
-        state: saveAuthorizedAppState(req.user, req.body),
+        state,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save the shared workspace data.";
@@ -434,11 +472,12 @@ export function createServerApp() {
     }
   });
 
-  app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (req, res) => {
+  app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {
+      const data = loadData();
       return res.json({
         ok: true,
-        accounts: getAdminUserAccounts(req.user),
+        accounts: getManagedUserAccounts(data.staff),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load login accounts.";
@@ -446,11 +485,18 @@ export function createServerApp() {
     }
   });
 
-  app.put("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (req, res) => {
+  app.put("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), async (req, res) => {
     try {
+      const data = loadData();
+      const account = await saveManagedUserAccount({
+        requestHeaders: fromNodeHeaders(req.headers),
+        accountInput: req.body,
+        staff: data.staff,
+      });
+
       return res.json({
         ok: true,
-        account: saveAdminUserAccount(req.user, req.body),
+        account,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save login account.";
@@ -460,7 +506,22 @@ export function createServerApp() {
 
   app.get("/api/admin/data-backup", requireAuth, requireRole(["admin"]), (req, res) => {
     try {
-      const backup = getAdminBackup(req.user);
+      const data = loadData();
+      const backup = {
+        ...data,
+        users: [],
+        sessions: [],
+        authUsers: getAuthBackupUsers(),
+        backup: {
+          format: BACKUP_FORMAT_VERSION,
+          exportedAt: new Date().toISOString(),
+          exportedBy: req.user,
+          sourceFiles: {
+            workspace: "app-data.json",
+            auth: "auth.db",
+          },
+        },
+      };
       const payload = JSON.stringify(backup, null, 2);
 
       res.setHeader("Cache-Control", "no-store");
@@ -475,10 +536,19 @@ export function createServerApp() {
 
   app.post("/api/admin/data-backup/restore", requireAuth, requireRole(["admin"]), (req, res) => {
     try {
-      const restored = restoreAdminBackup(req.user, req.body, req.authToken);
+      const workspaceData = saveData(prepareWorkspaceBackupImportData(req.body));
+      const restoredAuth = restoreAuthBackup(req.body, req.user);
+      syncManagedUserNamesWithStaff(workspaceData.staff);
+      const resolvedUser = restoredAuth.user || req.user;
+      const state = getAuthorizedAppState(resolvedUser);
+
       return res.json({
         ok: true,
-        ...restored,
+        accounts: getManagedUserAccounts(workspaceData.staff),
+        message: restoredAuth.message,
+        sessionPreserved: restoredAuth.sessionPreserved,
+        state,
+        user: resolvedUser,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to restore the backup file.";
