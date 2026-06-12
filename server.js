@@ -1,7 +1,9 @@
+import { ensureAuthReady } from "./server-auth.js";
 import { createServerApp } from "./server-app.js";
 
 const port = Number(process.env.ELSET_API_PORT || process.env.PORT || 3101);
 const frontendUrl = String(process.env.ELSET_FRONTEND_URL || "").trim();
+await ensureAuthReady();
 const app = createServerApp();
 
 app.listen(port, () => {

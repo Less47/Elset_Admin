@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authClient } from "@/lib/auth-client";
 import {
-  AUTH_DISABLED,
-  LOCAL_AUTH_USER,
   countBusinessRecords,
   getLegacyPersistedState,
-  getStoredAuthToken,
   hasCompletedServerMigration,
   markServerMigrationComplete,
   normalizeAppState,
-  persistAuthToken,
   purgeExpiredRecycleBinState,
   seedData,
 } from "@/lib/app-support";
@@ -29,10 +26,10 @@ function getDownloadFilename(contentDisposition) {
 }
 
 export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
-  const [authToken, setAuthToken] = useState(() => (AUTH_DISABLED ? "" : getStoredAuthToken()));
-  const [authUser, setAuthUser] = useState(() => (AUTH_DISABLED ? LOCAL_AUTH_USER : null));
-  const [authStatus, setAuthStatus] = useState(() => (AUTH_DISABLED ? "checking" : (getStoredAuthToken() ? "checking" : "logged_out")));
+  const [authUser, setAuthUser] = useState(null);
+  const [authStatus, setAuthStatus] = useState("checking");
   const [authError, setAuthError] = useState("");
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [adminUserAccounts, setAdminUserAccounts] = useState([]);
   const [adminUserAccountsError, setAdminUserAccountsError] = useState("");
   const lastSyncedDataRef = useRef("");
@@ -41,11 +38,12 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   const hasLoadedServerStateRef = useRef(false);
 
   const isAuthenticated = authStatus === "authenticated" && Boolean(authUser);
+  const isAuthenticating = authStatus === "authenticating";
   const isTechnician = authUser?.role === "technician";
   const isAdmin = authUser?.role === "admin";
   const canManageBusiness = authUser?.role === "admin" || authUser?.role === "office";
 
-  const clearSessionState = useCallback((message = "") => {
+  const clearSessionState = useCallback((message = "", { resetWorkspace = true } = {}) => {
     if (saveTimeoutRef.current) {
       window.clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
@@ -54,45 +52,28 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     hasLoadedServerStateRef.current = false;
     lastSyncedDataRef.current = "";
     syncErrorRef.current = "";
-    setAuthToken("");
     setAuthError(message);
-    setAdminUserAccounts([]);
-    setAdminUserAccountsError("");
-    setData(normalizeAppState(seedData));
-    onResetWorkspaceChromeRef.current?.();
-
-    if (AUTH_DISABLED) {
-      setAuthUser(LOCAL_AUTH_USER);
-      setAuthStatus("authenticated");
-      return;
-    }
-
     setAuthUser(null);
     setAuthStatus("logged_out");
+    setLoginForm((prev) => ({ ...prev, password: "" }));
+    setAdminUserAccounts([]);
+    setAdminUserAccountsError("");
+
+    if (resetWorkspace) {
+      setData(normalizeAppState(seedData));
+      onResetWorkspaceChromeRef.current?.();
+    }
   }, [onResetWorkspaceChromeRef, setData]);
 
-  const fetchWithAuth = useCallback(async (url, options = {}, tokenOverride) => {
+  const fetchWithAuth = useCallback(async (url, options = {}) => {
     const headers = new Headers(options.headers || {});
-    const resolvedToken = tokenOverride ?? authToken;
-
-    if (resolvedToken) {
-      headers.set("Authorization", `Bearer ${resolvedToken}`);
-    }
 
     return fetch(url, {
       ...options,
+      credentials: "same-origin",
       headers,
     });
-  }, [authToken]);
-
-  useEffect(() => {
-    if (AUTH_DISABLED) {
-      persistAuthToken("");
-      return;
-    }
-
-    persistAuthToken(authToken);
-  }, [authToken]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -103,98 +84,40 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   }, []);
 
   useEffect(() => {
+    if (authStatus !== "checking") {
+      return undefined;
+    }
+
     let cancelled = false;
 
     async function restoreSession() {
-      if (AUTH_DISABLED) {
-        setAuthStatus("checking");
-        setAuthError("");
-
-        try {
-          const stateResponse = await fetchWithAuth("/api/app-state", { method: "GET" }, "");
-          const statePayload = await stateResponse.json().catch(() => ({}));
-          if (!stateResponse.ok) {
-            throw new Error(statePayload.error || "Failed to load the shared workspace data.");
-          }
-
-          let nextState = normalizeAppState(statePayload.state);
-
-          if (!hasCompletedServerMigration()) {
-            const legacyState = getLegacyPersistedState();
-            if (legacyState && countBusinessRecords(legacyState) > countBusinessRecords(nextState)) {
-              const migrateResponse = await fetchWithAuth(
-                "/api/app-state",
-                {
-                  method: "PUT",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify(legacyState),
-                },
-                ""
-              );
-              const migratePayload = await migrateResponse.json().catch(() => ({}));
-              if (!migrateResponse.ok) {
-                throw new Error(migratePayload.error || "Failed to migrate your existing browser data to the shared server.");
-              }
-
-              nextState = normalizeAppState(migratePayload.state);
-            }
-
-            markServerMigrationComplete();
-          }
-
-          if (cancelled) return;
-
-          hasLoadedServerStateRef.current = true;
-          lastSyncedDataRef.current = JSON.stringify(nextState);
-          syncErrorRef.current = "";
-          setData(nextState);
-          setAuthUser(LOCAL_AUTH_USER);
-          setAuthToken("");
-          setAuthStatus("authenticated");
-          setAuthError("");
-          return;
-        } catch (error) {
-          if (cancelled) return;
-
-          const message = error instanceof Error ? error.message : "Unable to load the shared workspace data.";
-          hasLoadedServerStateRef.current = false;
-          lastSyncedDataRef.current = "";
-          syncErrorRef.current = "";
-          setData(normalizeAppState(seedData));
-          setAuthUser(LOCAL_AUTH_USER);
-          setAuthToken("");
-          setAuthStatus("authenticated");
-          setAuthError(message);
-          return;
-        }
-      }
-
-      if (!authToken) {
-        hasLoadedServerStateRef.current = false;
-        lastSyncedDataRef.current = "";
-        syncErrorRef.current = "";
-        setAuthUser(null);
-        setAdminUserAccounts([]);
-        setAdminUserAccountsError("");
-        setAuthStatus("logged_out");
-        setData(normalizeAppState(seedData));
-        return;
-      }
-
-      setAuthStatus("checking");
       setAuthError("");
 
       try {
-        const meResponse = await fetchWithAuth("/api/auth/me", { method: "GET" }, authToken);
+        const meResponse = await fetchWithAuth("/api/auth/me", { method: "GET" });
         const mePayload = await meResponse.json().catch(() => ({}));
-        if (!meResponse.ok) {
-          throw new Error(mePayload.error || "Your session has expired. Please sign in again.");
+
+        if (meResponse.status === 401) {
+          if (cancelled) return;
+
+          hasLoadedServerStateRef.current = false;
+          lastSyncedDataRef.current = "";
+          syncErrorRef.current = "";
+          setAuthUser(null);
+          setAdminUserAccounts([]);
+          setAdminUserAccountsError("");
+          setAuthStatus("logged_out");
+          setAuthError("");
+          setData(normalizeAppState(seedData));
+          return;
+        }
+
+        if (!meResponse.ok || !mePayload.user) {
+          throw new Error(mePayload.error || "Unable to restore your session.");
         }
 
         const user = mePayload.user;
-        const stateResponse = await fetchWithAuth("/api/app-state", { method: "GET" }, authToken);
+        const stateResponse = await fetchWithAuth("/api/app-state", { method: "GET" });
         const statePayload = await stateResponse.json().catch(() => ({}));
         if (!stateResponse.ok) {
           throw new Error(statePayload.error || "Failed to load the shared workspace data.");
@@ -205,17 +128,13 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         if (user?.role !== "technician" && !hasCompletedServerMigration()) {
           const legacyState = getLegacyPersistedState();
           if (legacyState && countBusinessRecords(legacyState) > countBusinessRecords(nextState)) {
-            const migrateResponse = await fetchWithAuth(
-              "/api/app-state",
-              {
-                method: "PUT",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(legacyState),
+            const migrateResponse = await fetchWithAuth("/api/app-state", {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
               },
-              authToken
-            );
+              body: JSON.stringify(legacyState),
+            });
             const migratePayload = await migrateResponse.json().catch(() => ({}));
             if (!migrateResponse.ok) {
               throw new Error(migratePayload.error || "Failed to migrate your existing browser data to the shared server.");
@@ -249,7 +168,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     return () => {
       cancelled = true;
     };
-  }, [authToken, clearSessionState, fetchWithAuth, setData]);
+  }, [authStatus, clearSessionState, fetchWithAuth, setData]);
 
   useEffect(() => {
     if (authStatus !== "authenticated") return undefined;
@@ -262,7 +181,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   }, [authStatus, setData]);
 
   useEffect(() => {
-    if (authStatus !== "authenticated" || (!AUTH_DISABLED && !authToken) || !hasLoadedServerStateRef.current) {
+    if (authStatus !== "authenticated" || !hasLoadedServerStateRef.current) {
       return undefined;
     }
 
@@ -322,7 +241,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         window.clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [authStatus, authToken, clearSessionState, data, fetchWithAuth, setData]);
+  }, [authStatus, clearSessionState, data, fetchWithAuth, setData]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {
@@ -361,8 +280,66 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     };
   }, [fetchWithAuth, isAdmin, isAuthenticated]);
 
+  function handleLoginFieldChange(field, value) {
+    setAuthError("");
+    setLoginForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  async function handleLogin() {
+    const username = String(loginForm.username || "").trim();
+    const password = String(loginForm.password || "");
+
+    if (!username || !password) {
+      const message = "Enter your username and password.";
+      setAuthError(message);
+      return { ok: false, error: message };
+    }
+
+    setAuthStatus("authenticating");
+    setAuthError("");
+
+    try {
+      const { data: signInData, error } = await authClient.signIn.username({
+        username,
+        password,
+        rememberMe: true,
+      });
+
+      if (error || !signInData?.user) {
+        throw new Error(error?.message || "Unable to sign in.");
+      }
+
+      setLoginForm({ username, password: "" });
+      setAuthUser(null);
+      setAuthStatus("checking");
+      setAuthError("");
+      return { ok: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to sign in.";
+      setAuthUser(null);
+      setAuthStatus("logged_out");
+      setAuthError(message);
+      setLoginForm((prev) => ({ ...prev, password: "" }));
+      return { ok: false, error: message };
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await authClient.signOut();
+    } catch {
+      // Clear the local session even if the server logout call fails.
+    }
+
+    clearSessionState("");
+    return { ok: true };
+  }
+
   async function handleSaveStaffLoginAccount(accountInput) {
-    if (!isAdmin || (!AUTH_DISABLED && !authToken)) {
+    if (!isAdmin) {
       return { ok: false, error: "Only admins can manage login access." };
     }
 
@@ -400,7 +377,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   }
 
   async function handleDownloadBackup() {
-    if (!isAdmin || (!AUTH_DISABLED && !authToken)) {
+    if (!isAdmin) {
       return { ok: false, error: "Only admins can download a full backup." };
     }
 
@@ -408,10 +385,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       const response = await fetchWithAuth("/api/admin/data-backup", { method: "GET" });
 
       if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("The backup API needs a backend restart before data backup is available.");
-        }
-
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "Unable to generate the backup file.");
       }
@@ -444,7 +417,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   }
 
   async function handleRestoreBackup(file) {
-    if (!isAdmin || (!AUTH_DISABLED && !authToken)) {
+    if (!isAdmin) {
       return { ok: false, error: "Only admins can restore a full backup." };
     }
 
@@ -480,18 +453,33 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       lastSyncedDataRef.current = JSON.stringify(nextState);
       syncErrorRef.current = "";
       setData(nextState);
-      setAdminUserAccounts(Array.isArray(payload.accounts) ? payload.accounts : []);
-      setAdminUserAccountsError("");
       setAuthError("");
 
-      if (payload.user) {
-        setAuthUser(payload.user);
+      if (payload.sessionPreserved === false) {
+        const nextMessage = payload.message || "Backup restored. Sign in again to continue.";
+        setAuthUser(null);
+        setAuthStatus("logged_out");
+        setAuthError(nextMessage);
+        setAdminUserAccounts([]);
+        setAdminUserAccountsError("");
+
+        return {
+          ok: true,
+          message: nextMessage,
+          sessionPreserved: false,
+        };
       }
+
+      const nextAccounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+      const nextUser = payload.user || null;
+      setAuthUser(nextUser);
+      setAdminUserAccounts(nextUser?.role === "admin" ? nextAccounts : []);
+      setAdminUserAccountsError("");
 
       return {
         ok: true,
         message: payload.message || `${file.name || "Backup file"} restored successfully.`,
-        sessionPreserved: payload.sessionPreserved !== false,
+        sessionPreserved: true,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to restore the backup file.";
@@ -509,14 +497,18 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     adminUserAccountsError,
     authError,
     authStatus,
-    authToken,
     authUser,
     canManageBusiness,
     handleDownloadBackup,
+    handleLogin,
+    handleLoginFieldChange,
+    handleLogout,
     handleRestoreBackup,
     handleSaveStaffLoginAccount,
     isAdmin,
+    isAuthenticating,
     isAuthenticated,
     isTechnician,
+    loginForm,
   };
 }

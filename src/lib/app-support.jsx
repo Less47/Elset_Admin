@@ -26,7 +26,6 @@ import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
   AUTH_MIGRATION_KEY,
-  AUTH_TOKEN_KEY,
   RECYCLE_BIN_RETENTION_MS,
   STORAGE_KEY,
   contentDensityOptions,
@@ -43,10 +42,7 @@ import {
 export {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
-  AUTH_DISABLED,
   AUTH_MIGRATION_KEY,
-  AUTH_TOKEN_KEY,
-  LOCAL_AUTH_USER,
   LOGO_SRC,
   RECYCLE_BIN_RETENTION_MS,
   STORAGE_KEY,
@@ -804,6 +800,8 @@ export function normalizeThemeSettings(settings) {
     sidebarWidth: normalizeOptionValue(settings?.sidebarWidth, sidebarWidthOptions, defaultThemeSettings.sidebarWidth),
     contentDensity: normalizeOptionValue(settings?.contentDensity, contentDensityOptions, defaultThemeSettings.contentDensity),
     companyName: normalizeTextSetting(settings?.companyName, defaultThemeSettings.companyName),
+    companyAbn: normalizeTextSetting(settings?.companyAbn, defaultThemeSettings.companyAbn),
+    companyAcn: normalizeTextSetting(settings?.companyAcn, defaultThemeSettings.companyAcn),
     companyEmail: normalizeTextSetting(settings?.companyEmail, defaultThemeSettings.companyEmail),
     companyPhone: normalizeTextSetting(settings?.companyPhone, defaultThemeSettings.companyPhone),
     companyAddress: normalizeTextSetting(settings?.companyAddress, defaultThemeSettings.companyAddress),
@@ -1711,27 +1709,6 @@ export function getInitialState() {
     invoiceTemplate: normalizeInvoiceTemplate(seedData.invoiceTemplate),
     settings: normalizeThemeSettings(seedData.settings),
   };
-}
-
-export function getStoredAuthToken() {
-  try {
-    return localStorage.getItem(AUTH_TOKEN_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-export function persistAuthToken(token) {
-  try {
-    if (token) {
-      localStorage.setItem(AUTH_TOKEN_KEY, token);
-      return;
-    }
-
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch {
-    // Ignore local storage write issues.
-  }
 }
 
 export function getLegacyPersistedState() {

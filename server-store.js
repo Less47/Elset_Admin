@@ -927,6 +927,20 @@ function pruneExpiredSessions(data) {
   };
 }
 
+function normalizeAuthMigrationMeta(meta) {
+  const version = String(meta?.version || "").trim();
+  const migratedAt = meta?.migratedAt ? new Date(meta.migratedAt).toISOString() : "";
+
+  if (!version || !migratedAt) {
+    return null;
+  }
+
+  return {
+    version,
+    migratedAt,
+  };
+}
+
 function normalizeStoredData(rawData) {
   const data = rawData || buildSeedData();
   return syncUsersWithStaff(pruneExpiredSessions({
@@ -952,6 +966,9 @@ function normalizeStoredData(rawData) {
     invoiceTemplate: normalizeInvoiceTemplate(data.invoiceTemplate),
     settings: normalizeSettings(data.settings),
     meta: {
+      ...(normalizeAuthMigrationMeta(data.meta?.authMigration)
+        ? { authMigration: normalizeAuthMigrationMeta(data.meta?.authMigration) }
+        : {}),
       initializedAt: data.meta?.initializedAt || new Date().toISOString(),
       updatedAt: data.meta?.updatedAt || new Date().toISOString(),
     },

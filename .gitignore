@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 .env
+auth.db
+data/auth.db
+data/auth.db-*
 
 # Editor directories and files
 .vscode/*

@@ -1,22 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { LoaderCircle, MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { getStoredAuthToken } from "@/lib/app-support";
 import { cn } from "@/lib/utils";
 
 const MIN_QUERY_LENGTH = 3;
 
 async function fetchAddressSuggestions(query, signal) {
-  const headers = new Headers();
-  const authToken = getStoredAuthToken();
-
-  if (authToken) {
-    headers.set("Authorization", `Bearer ${authToken}`);
-  }
-
   const response = await fetch(`/api/address/autocomplete?q=${encodeURIComponent(query)}`, {
     method: "GET",
-    headers,
     signal,
   });
   const payload = await response.json().catch(() => ({}));
@@ -241,4 +232,3 @@ export function AddressAutocompleteInput({
     </div>
   );
 }
-

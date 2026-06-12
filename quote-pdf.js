@@ -54,8 +54,6 @@ const CONTENT_RECT = rectFromTemplate(77, 435, 1086, 990);
 const FOOTER_RECT = rectFromTemplate(77, 1465, 1086, 130);
 const TOP_STRIP_CLEAR_RECT = rectFromTemplate(0, 0, 1240, 92);
 const HEADER_CONTENT_CLEAR_RECT = insetRect(HEADER_RECT, 3);
-const HEADER_CLEAR_NAME_RECT = HEADER_CONTENT_CLEAR_RECT;
-const HEADER_CLEAR_TITLE_RECT = HEADER_CONTENT_CLEAR_RECT;
 
 function hexToRgb(hex) {
   const value = String(hex || "").replace("#", "");
@@ -174,6 +172,169 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
 
   const drawHeader = () => {
     const headerInnerRect = insetRect(HEADER_RECT, 18);
+
+    {
+      const companyName = normalizedTemplate.companyName || "Elset";
+      const headingText = normalizedTemplate.quoteHeading || documentLabel;
+      const companyDetailSize = 8;
+      const companyDetailColor = rgb(0.25, 0.25, 0.25);
+      const companyDetailSections = [
+        normalizedTemplate.companyAddress,
+        [
+          normalizedTemplate.companyAbn ? `ABN ${normalizedTemplate.companyAbn}` : "",
+          normalizedTemplate.companyAcn ? `ACN ${normalizedTemplate.companyAcn}` : "",
+        ].filter(Boolean).join("  |  "),
+        [
+          normalizedTemplate.companyEmail,
+          normalizedTemplate.companyPhone,
+        ].filter(Boolean).join("  |  "),
+      ].filter(Boolean);
+
+      const buildCompanyDetailLines = (maxWidth, maxLines = 5) => {
+        const lines = [];
+
+        for (const section of companyDetailSections) {
+          const wrappedLines = wrapText(section, regularFont, companyDetailSize, maxWidth);
+          for (const line of wrappedLines) {
+            if (!line) continue;
+            lines.push(line);
+            if (lines.length >= maxLines) {
+              return lines;
+            }
+          }
+        }
+
+        return lines;
+      };
+
+      const drawAlignedText = (text, { x, y, width, font, size, color, align = "left" }) => {
+        const textX = align === "right"
+          ? x + width - font.widthOfTextAtSize(text, size)
+          : x;
+
+        page.drawText(text, {
+          x: textX,
+          y,
+          font,
+          size,
+          color,
+        });
+      };
+
+      if (baseTemplateImage) {
+        page.drawRectangle({
+          ...TOP_STRIP_CLEAR_RECT,
+          color: rgb(1, 1, 1),
+        });
+        page.drawRectangle({
+          ...HEADER_CONTENT_CLEAR_RECT,
+          color: panelFill,
+        });
+      }
+
+      if (logoImage) {
+        const logoDimensions = logoImage.scaleToFit(
+          Math.min(headerInnerRect.width * 0.42, 160),
+          headerInnerRect.height - 10
+        );
+        const companyInfoX = headerInnerRect.x + logoDimensions.width + 24;
+        const companyInfoWidth = headerInnerRect.x + headerInnerRect.width - companyInfoX;
+        const companyNameSize = fitTextSize(companyName, boldFont, companyInfoWidth, 14, 11);
+        const companyDetailLines = buildCompanyDetailLines(companyInfoWidth, 5);
+        const logoMeta = [headingText, context.documentReference].filter(Boolean).join("  |  ");
+
+        page.drawImage(logoImage, {
+          x: headerInnerRect.x,
+          y: headerInnerRect.y + (headerInnerRect.height - logoDimensions.height) / 2,
+          width: logoDimensions.width,
+          height: logoDimensions.height,
+        });
+
+        drawAlignedText(companyName, {
+          x: companyInfoX,
+          y: headerInnerRect.y + headerInnerRect.height - companyNameSize - 2,
+          width: companyInfoWidth,
+          font: boldFont,
+          size: companyNameSize,
+          color: accent,
+          align: "right",
+        });
+
+        let infoY = headerInnerRect.y + headerInnerRect.height - companyNameSize - 14;
+        for (const line of companyDetailLines) {
+          drawAlignedText(line, {
+            x: companyInfoX,
+            y: infoY,
+            width: companyInfoWidth,
+            font: regularFont,
+            size: companyDetailSize,
+            color: companyDetailColor,
+            align: "right",
+          });
+          infoY -= 9.5;
+        }
+
+        if (logoMeta && companyDetailLines.length <= 3) {
+          drawAlignedText(logoMeta, {
+            x: companyInfoX,
+            y: headerInnerRect.y + 2,
+            width: companyInfoWidth,
+            font: regularFont,
+            size: 7.5,
+            color: companyDetailColor,
+            align: "right",
+          });
+        }
+
+        return;
+      }
+
+      const companyTextWidth = headerInnerRect.width - 220;
+      const companyNameSize = fitTextSize(companyName, boldFont, companyTextWidth, 20, 14);
+      const headingSize = fitTextSize(headingText, boldFont, 170, 16, 11);
+      const companyDetailLines = buildCompanyDetailLines(Math.min(companyTextWidth, 260), 5);
+      const referenceMeta = [context.documentReference, document.issueDate].filter(Boolean).join("  |  ");
+
+      page.drawText(companyName, {
+        x: headerInnerRect.x + 54,
+        y: headerInnerRect.y + headerInnerRect.height - companyNameSize - 6,
+        font: boldFont,
+        size: companyNameSize,
+        color: accent,
+      });
+
+      let infoY = headerInnerRect.y + headerInnerRect.height - companyNameSize - 20;
+      for (const line of companyDetailLines) {
+        page.drawText(line, {
+          x: headerInnerRect.x + 54,
+          y: infoY,
+          font: regularFont,
+          size: companyDetailSize,
+          color: companyDetailColor,
+        });
+        infoY -= 10;
+      }
+
+      page.drawText(headingText, {
+        x: headerInnerRect.x + headerInnerRect.width - boldFont.widthOfTextAtSize(headingText, headingSize),
+        y: headerInnerRect.y + 24,
+        font: boldFont,
+        size: headingSize,
+        color: accent,
+      });
+
+      if (referenceMeta) {
+        page.drawText(referenceMeta, {
+          x: headerInnerRect.x + headerInnerRect.width - regularFont.widthOfTextAtSize(referenceMeta, 8.5),
+          y: headerInnerRect.y + 10,
+          font: regularFont,
+          size: 8.5,
+          color: companyDetailColor,
+        });
+      }
+
+      return;
+    }
 
     if (baseTemplateImage) {
       page.drawRectangle({

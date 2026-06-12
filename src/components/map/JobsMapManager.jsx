@@ -13,7 +13,6 @@ import {
   customerTypeOptions,
   formatCustomerType,
   formatSiteType,
-  getStoredAuthToken,
   normalizeSiteAddress,
   siteTypeOptions,
   toTimestamp,
@@ -31,11 +30,6 @@ const JOB_FILTERS = [
 
 function createAuthorizedHeaders(contentType = null) {
   const headers = new Headers();
-  const authToken = getStoredAuthToken();
-
-  if (authToken) {
-    headers.set("Authorization", `Bearer ${authToken}`);
-  }
 
   if (contentType) {
     headers.set("Content-Type", contentType);

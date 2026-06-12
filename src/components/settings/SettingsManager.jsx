@@ -31,6 +31,8 @@ import {
 
 const companyFields = [
   { key: "companyName", label: "Company name", placeholder: "Elset" },
+  { key: "companyAbn", label: "ABN", placeholder: "12 345 678 901" },
+  { key: "companyAcn", label: "ACN", placeholder: "123 456 789" },
   { key: "companyEmail", label: "Company email", placeholder: "admin@elset.com.au" },
   { key: "companyPhone", label: "Company phone", placeholder: "0400 000 000" },
   { key: "companyAddress", label: "Company address", placeholder: "Street, suburb, state", multiline: true },
@@ -45,6 +47,8 @@ const emailFields = [
 
 const templateFields = [
   { key: "companyName", label: "Company name" },
+  { key: "companyAbn", label: "ABN" },
+  { key: "companyAcn", label: "ACN" },
   { key: "companyEmail", label: "Company email" },
   { key: "companyPhone", label: "Company phone" },
   { key: "companyAddress", label: "Company address", multiline: true, rows: 3 },
@@ -179,7 +183,7 @@ function WorkspacePreview({ settings }) {
   );
 }
 
-function ExactDocumentPreview({ authToken, requestBody }) {
+function ExactDocumentPreview({ requestBody }) {
   const deferredRequestBody = useDeferredValue(requestBody);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewStatus, setPreviewStatus] = useState("idle");
@@ -199,7 +203,6 @@ function ExactDocumentPreview({ authToken, requestBody }) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
           body: deferredRequestBody,
           signal: controller.signal,
@@ -232,7 +235,7 @@ function ExactDocumentPreview({ authToken, requestBody }) {
     return () => {
       controller.abort();
     };
-  }, [authToken, deferredRequestBody]);
+  }, [deferredRequestBody]);
 
   useEffect(() => () => {
     if (previewUrl) {
@@ -291,7 +294,7 @@ export default function SettingsManager({
   templates,
   onTemplateChange,
   onResetTemplate,
-  authToken,
+  isAuthenticated,
   isAdmin,
   onDownloadBackup,
   onRestoreBackup,
@@ -392,8 +395,8 @@ export default function SettingsManager({
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{tabMeta.description}</p>
             </div>
           </div>
-          <Badge className={authToken ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
-            {authToken ? "Server sync enabled" : "Local mode"}
+          <Badge className={isAuthenticated ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
+            {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
         </CardHeader>
       </Card>
@@ -472,7 +475,7 @@ export default function SettingsManager({
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  The company name, email, phone, and address fields can be copied into both document templates without resetting the rest of the wording.
+                  The company name, ABN, ACN, email, phone, and address fields can be copied into both document templates without resetting the rest of the wording.
                 </div>
                 <Button className="rounded-xl" onClick={onApplyCompanyToTemplates}>
                   Apply Company Details To Templates
@@ -485,6 +488,15 @@ export default function SettingsManager({
                 <CardTitle className="text-lg">Current Defaults</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Company Identity</p>
+                  <p className="mt-2 font-medium text-slate-900">{normalizedSettings.companyName || "Not set"}</p>
+                  <p className="mt-1 text-slate-700">
+                    {[normalizedSettings.companyAbn ? `ABN ${normalizedSettings.companyAbn}` : "", normalizedSettings.companyAcn ? `ACN ${normalizedSettings.companyAcn}` : ""]
+                      .filter(Boolean)
+                      .join("  •  ") || "ABN / ACN not set"}
+                  </p>
+                </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Primary Sender</p>
                   <p className="mt-2 font-medium text-slate-900">{normalizedSettings.defaultSenderEmail || "Not set"}</p>
@@ -594,7 +606,7 @@ export default function SettingsManager({
               <p className="mt-1 text-sm text-slate-600">See the exact generated document attachment before sending it to a customer.</p>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <ExactDocumentPreview authToken={authToken} requestBody={previewRequestBody} />
+              <ExactDocumentPreview requestBody={previewRequestBody} />
             </CardContent>
           </Card>
         </div>

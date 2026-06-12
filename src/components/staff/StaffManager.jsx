@@ -196,6 +196,7 @@ function StaffFormDialog({
                   const loginResult = await onSaveLoginAccount({
                     id: linkedLoginAccount?.id || null,
                     staffId: resolvedStaff.id,
+                    staffName: resolvedStaff.name,
                     username: draftLogin.username,
                     role: draftLogin.role,
                     password: draftLogin.password.trim(),

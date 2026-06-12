@@ -1,4 +1,4 @@
-import { ChevronRight, Maximize2, Minimize2, Plus } from "lucide-react";
+import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import CalendarManager from "@/components/calendar/CalendarManager";
 import CustomerManager from "@/components/customers/CustomerManager";
 import InventoryManager from "@/components/inventory/InventoryManager";
@@ -17,7 +17,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
-  AUTH_DISABLED,
   LOGO_SRC,
   addMonths,
   buildCustomerSites,
@@ -40,7 +39,7 @@ import {
 } from "@/lib/app-support";
 
 export default function WorkspaceShell({ auth, chrome, data, derived, supplierManualState, actions }) {
-  const { authError, authToken, authUser, canManageBusiness, isAdmin, isTechnician } = auth;
+  const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
     activeSection,
     activeSettingsTab,
@@ -102,6 +101,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     handleUpdateMaintenancePlan,
     handleUpdateStaff,
   } = actions;
+  const roleMenuLabel = isTechnician ? "Technician" : isAdmin ? "Admin" : "Office";
+  const roleDescription = isTechnician
+    ? "Access your assigned jobs, open job details, and keep field progress updated."
+    : isAdmin
+      ? "Manage the full workspace, staff login access, templates, and shared operational data."
+      : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
 
   return (
     <>
@@ -124,24 +129,13 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                     <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
                   </div>
                   <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
-                    {isTechnician ? (
-                      <>
-                        <span className="block text-[0.7rem]">Technician</span>
-                        <span className="mt-1 block text-sm">Menu</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="block text-[0.8rem]">Admin</span>
-                        <span className="mt-1 block text-base">Menu</span>
-                      </>
-                    )}
+                    <span className="block text-[0.7rem]">{roleMenuLabel}</span>
+                    <span className="mt-1 block text-sm">Menu</span>
                   </div>
                 </div>
-                {isTechnician ? (
-                  <p className="mt-4 text-sm leading-6" style={{ color: themePalette.sidebarHeaderMuted }}>
-                    Access your assigned jobs, open job details, and keep field progress updated.
-                  </p>
-                ) : null}
+                <p className="mt-4 text-sm leading-6" style={{ color: themePalette.sidebarHeaderMuted }}>
+                  {roleDescription}
+                </p>
               </div>
 
               <div className="mt-4 grid gap-2">
@@ -227,10 +221,15 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                       {authUser.username}
                     </p>
                   ) : null}
-                  {AUTH_DISABLED ? (
-                    <p className="mt-4 text-xs leading-5" style={{ color: themePalette.sidebarInactiveMuted }}>
-                      Login is currently disabled. The workspace opens directly in local admin mode.
-                    </p>
+                  {isAuthenticated ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-4 w-full rounded-xl bg-white/80"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -522,7 +521,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             }}
             onTemplateChange={handleUpdateDocumentTemplate}
             onResetTemplate={handleResetDocumentTemplate}
-            authToken={authToken}
+            isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
             onDownloadBackup={auth.handleDownloadBackup}
             onRestoreBackup={auth.handleRestoreBackup}

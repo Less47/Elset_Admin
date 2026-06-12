@@ -1,16 +1,7 @@
 import { ADMIN_EMAIL } from "@/lib/quote-template";
 
 export const STORAGE_KEY = "gateflow-demo-v1";
-export const AUTH_TOKEN_KEY = "gateflow-auth-token-v1";
 export const AUTH_MIGRATION_KEY = "gateflow-server-migration-v1";
-export const AUTH_DISABLED = true;
-export const LOCAL_AUTH_USER = Object.freeze({
-  id: "local-auth-disabled-user",
-  username: "local-admin",
-  name: "Local Admin",
-  role: "admin",
-  staffId: null,
-});
 export const LOGO_SRC = "/elset-logo.png";
 export const SUPPLIER_MANUALS_BASE_URL = "https://supplier-list-gamma.vercel.app";
 export const SUPPLIER_MANUALS_INDEX_URL = `${SUPPLIER_MANUALS_BASE_URL}/suppliers.json`;
@@ -78,6 +69,8 @@ export const defaultThemeSettings = {
   sidebarWidth: "standard",
   contentDensity: "comfortable",
   companyName: "Elset",
+  companyAbn: "",
+  companyAcn: "",
   companyEmail: ADMIN_EMAIL,
   companyPhone: "",
   companyAddress: "",
@@ -103,6 +96,8 @@ export const uiSettingKeys = [
 
 export const preferenceSettingKeys = [
   "companyName",
+  "companyAbn",
+  "companyAcn",
   "companyEmail",
   "companyPhone",
   "companyAddress",

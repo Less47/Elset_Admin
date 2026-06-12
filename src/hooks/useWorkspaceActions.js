@@ -1,5 +1,4 @@
 import {
-  AUTH_DISABLED,
   buildMaintenanceJobDescription,
   defaultThemeSettings,
   getNextJobNumber,
@@ -32,7 +31,6 @@ import {
 } from "@/lib/quote-template";
 
 export function useWorkspaceActions({
-  authToken,
   canManageBusiness,
   data,
   docType,
@@ -669,7 +667,7 @@ export function useWorkspaceActions({
   }
 
   async function handleSendDocument(doc) {
-    if (!canManageBusiness || (!AUTH_DISABLED && !authToken) || !selectedFreshJob) return;
+    if (!canManageBusiness || !selectedFreshJob) return;
     if (!selectedFreshJob.customerEmail) {
       window.alert(`Add a customer email address before sending the ${docType}.`);
       return;
@@ -696,7 +694,6 @@ export function useWorkspaceActions({
         : normalizeQuoteTemplate(data.quoteTemplate);
       const requestHeaders = {
         "Content-Type": "application/json",
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       };
       const response = await fetch("/api/documents/send", {
         method: "POST",
@@ -992,6 +989,8 @@ export function useWorkspaceActions({
       quoteTemplate: normalizeQuoteTemplate({
         ...prev.quoteTemplate,
         companyName: themeSettings.companyName,
+        companyAbn: themeSettings.companyAbn,
+        companyAcn: themeSettings.companyAcn,
         companyEmail: themeSettings.companyEmail,
         companyPhone: themeSettings.companyPhone,
         companyAddress: themeSettings.companyAddress,
@@ -999,6 +998,8 @@ export function useWorkspaceActions({
       invoiceTemplate: normalizeInvoiceTemplate({
         ...prev.invoiceTemplate,
         companyName: themeSettings.companyName,
+        companyAbn: themeSettings.companyAbn,
+        companyAcn: themeSettings.companyAcn,
         companyEmail: themeSettings.companyEmail,
         companyPhone: themeSettings.companyPhone,
         companyAddress: themeSettings.companyAddress,

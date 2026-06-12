@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import WorkspaceDialogs from "@/components/app/WorkspaceDialogs";
 import WorkspaceShell from "@/components/app/WorkspaceShell";
 import { AuthLoadingScreen } from "@/components/auth/AuthLoadingScreen";
+import { LoginScreen } from "@/components/auth/LoginScreen";
 import { useAppSession } from "@/hooks/useAppSession";
 import { useSupplierManuals } from "@/hooks/useSupplierManuals";
 import { useThemePalette } from "@/hooks/useThemePalette";
@@ -99,7 +100,6 @@ export default function App() {
     supplierManuals: supplierManualState.manuals,
   });
   const workspaceActions = useWorkspaceActions({
-    authToken: session.authToken,
     canManageBusiness: session.canManageBusiness,
     data,
     docType,
@@ -122,6 +122,19 @@ export default function App() {
 
   if (session.authStatus === "checking") {
     return <AuthLoadingScreen logoSrc={LOGO_SRC} />;
+  }
+
+  if (!session.isAuthenticated) {
+    return (
+      <LoginScreen
+        loginForm={session.loginForm}
+        onFieldChange={session.handleLoginFieldChange}
+        onSubmit={session.handleLogin}
+        error={session.authError}
+        isLoading={session.isAuthenticating}
+        logoSrc={LOGO_SRC}
+      />
+    );
   }
 
   return (

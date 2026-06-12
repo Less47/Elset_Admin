@@ -2,7 +2,11 @@ export const ADMIN_EMAIL = "admin@elset.com.au";
 
 export const documentTemplatePlaceholders = [
   "{{companyName}}",
+  "{{companyAbn}}",
+  "{{companyAcn}}",
   "{{companyEmail}}",
+  "{{companyPhone}}",
+  "{{companyAddress}}",
   "{{customerName}}",
   "{{customerEmail}}",
   "{{jobTitle}}",
@@ -16,6 +20,8 @@ export const quoteTemplatePlaceholders = documentTemplatePlaceholders;
 
 export const defaultQuoteTemplate = {
   companyName: "Elset",
+  companyAbn: "",
+  companyAcn: "",
   companyEmail: ADMIN_EMAIL,
   companyPhone: "",
   companyAddress: "",
@@ -32,6 +38,8 @@ export const defaultQuoteTemplate = {
 
 export const defaultInvoiceTemplate = {
   companyName: "Elset",
+  companyAbn: "",
+  companyAcn: "",
   companyEmail: ADMIN_EMAIL,
   companyPhone: "",
   companyAddress: "",
@@ -99,7 +107,11 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
 
   return {
     companyName: normalizedTemplate.companyName,
+    companyAbn: normalizedTemplate.companyAbn || "",
+    companyAcn: normalizedTemplate.companyAcn || "",
     companyEmail: normalizedTemplate.companyEmail || ADMIN_EMAIL,
+    companyPhone: normalizedTemplate.companyPhone || "",
+    companyAddress: normalizedTemplate.companyAddress || "",
     customerName: job?.customerName || "",
     customerEmail: job?.customerEmail || "",
     jobTitle: job?.title || "",
