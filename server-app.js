@@ -565,7 +565,7 @@ export function createServerApp() {
     const missingEnv = getMissingEnv();
     if (missingEnv.length > 0) {
       return res.status(500).json({
-        error: `Missing SMTP configuration in ${envPath}: ${missingEnv.join(", ")}.`,
+        error: `Missing SMTP configuration in ${configSourceLabel}: ${missingEnv.join(", ")}.`,
       });
     }
 
