@@ -53,12 +53,15 @@ const templateFields = [
   { key: "companyEmail", label: "Company email" },
   { key: "companyPhone", label: "Company phone" },
   { key: "companyAddress", label: "Company address", multiline: true, rows: 3 },
+  { key: "bankAccountName", label: "Bank account name", documentTypes: ["invoice"] },
+  { key: "bankBsb", label: "Bank BSB", documentTypes: ["invoice"] },
+  { key: "bankAccountNumber", label: "Bank account number", documentTypes: ["invoice"] },
   { key: "accentColor", label: "Accent colour", type: "color" },
   { key: "quoteHeading", label: "Document heading" },
-  { key: "introText", label: "Intro text", multiline: true, rows: 4 },
-  { key: "notesHeading", label: "Notes heading" },
-  { key: "termsHeading", label: "Terms heading" },
-  { key: "termsText", label: "Terms text", multiline: true, rows: 5 },
+  { key: "introText", label: "Intro text", multiline: true, rows: 4, documentTypes: ["invoice"] },
+  { key: "notesHeading", label: "Notes heading", documentTypes: ["invoice"] },
+  { key: "termsHeading", label: "Section heading" },
+  { key: "termsText", label: "Section text", multiline: true, rows: 5 },
   { key: "footerText", label: "Footer text", multiline: true, rows: 3 },
 ];
 
@@ -326,6 +329,10 @@ export default function SettingsManager({
     document: previewFixture.document,
     template: activeTemplate,
   }), [activeTemplate, currentTemplateType, previewFixture]);
+  const visibleTemplateFields = useMemo(
+    () => templateFields.filter((field) => !field.documentTypes || field.documentTypes.includes(currentTemplateType)),
+    [currentTemplateType]
+  );
   const backupCards = useMemo(() => ([
     { key: "customers", label: "Customers", value: backupSummary?.customers || 0 },
     { key: "jobs", label: "Jobs", value: backupSummary?.jobs || 0 },
@@ -559,7 +566,7 @@ export default function SettingsManager({
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  {templateFields.map((field) => (
+                  {visibleTemplateFields.map((field) => (
                     <div key={field.key} className={field.multiline ? "md:col-span-2" : ""}>
                       <FormField label={field.label}>
                         {field.multiline ? (

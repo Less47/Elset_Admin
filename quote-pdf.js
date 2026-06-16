@@ -49,9 +49,47 @@ function fitTextSize(text, font, maxWidth, preferredSize, minSize = 10) {
   return size;
 }
 
+function truncateTextToWidth(text, font, size, maxWidth) {
+  const suffix = "...";
+  let value = String(text || "").trim();
+  if (!value || font.widthOfTextAtSize(value, size) <= maxWidth) {
+    return value;
+  }
+
+  while (value.length > 0 && font.widthOfTextAtSize(`${value}${suffix}`, size) > maxWidth) {
+    value = value.slice(0, -1).trimEnd();
+  }
+
+  return value ? `${value}${suffix}` : suffix;
+}
+
+function calculatePaidAmount(payments = []) {
+  return (Array.isArray(payments) ? payments : []).reduce((sum, payment) => {
+    const amount = Number(payment?.amount || 0);
+    return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+  }, 0);
+}
+
+function calculateBalanceDue(document) {
+  const total = calculateDocTotal(document?.items || []);
+  const paid = calculatePaidAmount(document?.payments || []);
+  return Math.max(0, total - paid);
+}
+
+function getVisibleDocumentNotes(type, notes = "") {
+  if (type === "quote") return "";
+
+  const normalizedNotes = String(notes || "").trim();
+  const legacyDueDateNotes = [
+    "Payment due within 7 days.",
+    "Payment due within 7 days. Please reference the invoice number when remitting payment.",
+  ];
+
+  return legacyDueDateNotes.includes(normalizedNotes) ? "" : normalizedNotes;
+}
+
 const HEADER_RECT = rectFromTemplate(77, 155, 1086, 220);
-const CONTENT_RECT = rectFromTemplate(77, 435, 1086, 990);
-const FOOTER_RECT = rectFromTemplate(77, 1465, 1086, 130);
+const CONTENT_RECT = rectFromTemplate(77, 395, 1086, 1230);
 const TOP_STRIP_CLEAR_RECT = rectFromTemplate(0, 0, 1240, 92);
 const HEADER_CONTENT_CLEAR_RECT = insetRect(HEADER_RECT, 3);
 
@@ -125,9 +163,8 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
   let page;
   let y = 0;
 
-  const contentInnerRect = insetRect(CONTENT_RECT, 18);
-  const footerInnerRect = insetRect(FOOTER_RECT, 16);
-  const contentBottom = contentInnerRect.y + 6;
+  const contentInnerRect = insetRect(CONTENT_RECT, 12);
+  const contentBottom = contentInnerRect.y + 4;
 
   const drawPageShell = (targetPage) => {
     if (baseTemplateImage) {
@@ -157,7 +194,7 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
       color: accent,
     });
 
-    for (const rect of [HEADER_RECT, CONTENT_RECT, FOOTER_RECT]) {
+    for (const rect of [HEADER_RECT, CONTENT_RECT]) {
       targetPage.drawRectangle({
         x: rect.x,
         y: rect.y,
@@ -336,28 +373,7 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
       return;
     }
 
-    if (baseTemplateImage) {
-      page.drawRectangle({
-        ...TOP_STRIP_CLEAR_RECT,
-        color: rgb(1, 1, 1),
-      });
-      page.drawRectangle({
-        ...HEADER_CONTENT_CLEAR_RECT,
-        color: panelFill,
-      });
-    }
-
-    if (logoImage) {
-      const logoDimensions = logoImage.scaleToFit(headerInnerRect.width * 0.74, headerInnerRect.height - 20);
-      page.drawImage(logoImage, {
-        x: headerInnerRect.x,
-        y: headerInnerRect.y + (headerInnerRect.height - logoDimensions.height) / 2,
-        width: logoDimensions.width,
-        height: logoDimensions.height,
-      });
-      return;
-    }
-
+    // eslint-disable-next-line no-unreachable
     const companyTextWidth = headerInnerRect.width - 220;
     const companyName = normalizedTemplate.companyName || "Elset";
     const companyNameSize = fitTextSize(companyName, boldFont, companyTextWidth, 20, 14);
@@ -374,17 +390,6 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
       Math.min(companyTextWidth, 250)
     ).slice(0, 3);
     const referenceMeta = [context.documentReference, document.issueDate].filter(Boolean).join("  ·  ");
-
-    if (baseTemplateImage) {
-      page.drawRectangle({
-        ...HEADER_CLEAR_NAME_RECT,
-        color: panelFill,
-      });
-      page.drawRectangle({
-        ...HEADER_CLEAR_TITLE_RECT,
-        color: panelFill,
-      });
-    }
 
     let companyX = headerInnerRect.x + 54;
     if (!baseTemplateImage && logoImage) {
@@ -441,7 +446,7 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     drawPageShell(page);
     drawHeader();
-    y = contentInnerRect.y + contentInnerRect.height - 18;
+    y = contentInnerRect.y + contentInnerRect.height - 12;
   };
 
   const ensureSpace = (heightNeeded, { keepTableHeader = false } = {}) => {
@@ -458,12 +463,17 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     x = contentInnerRect.x,
     width = contentInnerRect.width,
     font = regularFont,
-    size = 11,
-    lineHeight = 15,
+    size = 10.2,
+    lineHeight = 12.5,
     color = rgb(0.15, 0.15, 0.15),
-    gapAfter = 10,
+    gapAfter = 6,
+    maxLines = null,
   }) => {
-    const lines = wrapText(text, font, size, width);
+    let lines = wrapText(text, font, size, width);
+    if (maxLines && lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      lines[lines.length - 1] = truncateTextToWidth(lines[lines.length - 1], font, size, width);
+    }
     if (lines.length === 0) {
       ensureSpace(gapAfter);
       y -= gapAfter;
@@ -481,9 +491,9 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     y -= gapAfter;
   };
 
-  const drawKeyValue = (label, value, x, width, topY) => {
-    const labelSize = 9;
-    const valueSize = 10.5;
+  const drawKeyValue = (label, value, x, width, topY, { maxValueLines = 2 } = {}) => {
+    const labelSize = 7.8;
+    const valueSize = 9.2;
     let cursorY = topY;
 
     page.drawText(label.toUpperCase(), {
@@ -493,8 +503,12 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
       size: labelSize,
       color: rgb(0.45, 0.45, 0.45),
     });
-    cursorY -= 14;
-    const valueLines = wrapText(value || "-", regularFont, valueSize, width);
+    cursorY -= 11;
+    let valueLines = wrapText(value || "-", regularFont, valueSize, width);
+    if (maxValueLines && valueLines.length > maxValueLines) {
+      valueLines = valueLines.slice(0, maxValueLines);
+      valueLines[valueLines.length - 1] = truncateTextToWidth(valueLines[valueLines.length - 1], regularFont, valueSize, width);
+    }
     for (const line of valueLines) {
       page.drawText(line, {
         x,
@@ -503,55 +517,38 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
         size: valueSize,
         color: rgb(0.1, 0.1, 0.1),
       });
-      cursorY -= 13;
+      cursorY -= 10.5;
     }
-    return cursorY - 6;
+    return cursorY - 4;
   };
 
   const drawTableHeader = () => {
-    ensureSpace(30);
+    ensureSpace(24);
     page.drawRectangle({
       x: contentInnerRect.x,
-      y: y - 18,
+      y: y - 15,
       width: contentInnerRect.width,
-      height: 22,
+      height: 18,
       color: lightAccent,
     });
 
     for (const column of columns) {
       page.drawText(column.label, {
         x: column.x,
-        y: y - 11,
+        y: y - 10,
         font: boldFont,
-        size: 9.5,
+        size: 8.4,
         color: accent,
       });
     }
-    y -= 28;
-  };
-
-  const drawFooter = () => {
-    const footerText = fillTemplateText(normalizedTemplate.footerText, context);
-    const footerLines = wrapText(footerText, regularFont, 9.5, footerInnerRect.width).slice(0, 4);
-    let footerY = footerInnerRect.y + footerInnerRect.height - 12;
-
-    for (const line of footerLines) {
-      page.drawText(line, {
-        x: footerInnerRect.x,
-        y: footerY,
-        font: regularFont,
-        size: 9.5,
-        color: rgb(0.18, 0.18, 0.18),
-      });
-      footerY -= 11;
-    }
+    y -= 22;
   };
 
   const columns = (() => {
     const width = contentInnerRect.width;
-    const descriptionWidth = width * 0.53;
-    const qtyWidth = width * 0.11;
-    const rateWidth = width * 0.16;
+    const descriptionWidth = width * 0.56;
+    const qtyWidth = width * 0.09;
+    const rateWidth = width * 0.15;
     const totalWidth = width - descriptionWidth - qtyWidth - rateWidth;
 
     return [
@@ -564,39 +561,47 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
 
   startNewPage();
 
-  ensureSpace(150);
+  ensureSpace(110);
   const leftColumnX = contentInnerRect.x;
-  const rightColumnX = contentInnerRect.x + contentInnerRect.width / 2 + 12;
-  const columnWidth = contentInnerRect.width / 2 - 12;
+  const rightColumnX = contentInnerRect.x + contentInnerRect.width / 2 + 10;
+  const columnWidth = contentInnerRect.width / 2 - 10;
   const metaTopY = y;
 
-  let leftColumnEnd = drawKeyValue(`${documentLabel} for`, job.customerName, leftColumnX, columnWidth, metaTopY);
-  leftColumnEnd = drawKeyValue("Customer email", job.customerEmail || "Not provided", leftColumnX, columnWidth, leftColumnEnd);
+  let leftColumnEnd = drawKeyValue(`${documentLabel} for`, job.customerName, leftColumnX, columnWidth, metaTopY, { maxValueLines: 1 });
+  leftColumnEnd = drawKeyValue("Customer email", job.customerEmail || "Not provided", leftColumnX, columnWidth, leftColumnEnd, { maxValueLines: 1 });
   leftColumnEnd = drawKeyValue("Service address", job.jobAddress || "Not provided", leftColumnX, columnWidth, leftColumnEnd);
 
-  let rightColumnEnd = drawKeyValue("Reference", context.documentReference, rightColumnX, columnWidth, metaTopY);
-  rightColumnEnd = drawKeyValue("Issue date", document.issueDate || "-", rightColumnX, columnWidth, rightColumnEnd);
-  rightColumnEnd = drawKeyValue("Job title", job.title || "-", rightColumnX, columnWidth, rightColumnEnd);
+  let rightColumnEnd = drawKeyValue("Reference", context.documentReference, rightColumnX, columnWidth, metaTopY, { maxValueLines: 1 });
+  rightColumnEnd = drawKeyValue("Issue date", document.issueDate || "-", rightColumnX, columnWidth, rightColumnEnd, { maxValueLines: 1 });
+  if (type !== "quote") {
+    rightColumnEnd = drawKeyValue("Job title", job.title || "-", rightColumnX, columnWidth, rightColumnEnd);
+  }
 
-  y = Math.min(leftColumnEnd, rightColumnEnd) - 8;
+  y = Math.min(leftColumnEnd, rightColumnEnd) - 6;
 
-  drawParagraph({
-    text: fillTemplateText(normalizedTemplate.introText, context),
-    size: 11,
-    lineHeight: 16,
-    gapAfter: 18,
-  });
+  const introText = type === "quote"
+    ? String(job.description || "").trim()
+    : fillTemplateText(normalizedTemplate.introText, context).trim();
+
+  if (introText) {
+    drawParagraph({
+      text: introText,
+      size: 9.8,
+      lineHeight: 12,
+      gapAfter: 8,
+    });
+  }
 
   drawTableHeader();
 
   for (const item of document.items || []) {
-    const descriptionLines = wrapText(item.description || `${documentLabel} item`, regularFont, 10, columns[0].width);
-    const rowHeight = Math.max(22, descriptionLines.length * 12 + 10);
-    ensureSpace(rowHeight + 6, { keepTableHeader: true });
+    const descriptionLines = wrapText(item.description || `${documentLabel} item`, regularFont, 8.8, columns[0].width);
+    const rowHeight = Math.max(17, descriptionLines.length * 10.2 + 7);
+    ensureSpace(rowHeight + 3, { keepTableHeader: true });
 
     page.drawRectangle({
       x: contentInnerRect.x,
-      y: y - rowHeight + 4,
+      y: y - rowHeight + 3,
       width: contentInnerRect.width,
       height: rowHeight,
       borderWidth: 1,
@@ -604,16 +609,16 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
       color: rgb(1, 1, 1),
     });
 
-    let descriptionY = y - 10;
+    let descriptionY = y - 8;
     for (const line of descriptionLines) {
       page.drawText(line, {
         x: columns[0].x,
         y: descriptionY,
         font: regularFont,
-        size: 10,
+        size: 8.8,
         color: rgb(0.12, 0.12, 0.12),
       });
-      descriptionY -= 12;
+      descriptionY -= 10.2;
     }
 
     const qty = Number(item.qty || 0);
@@ -625,90 +630,92 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     const totalText = money(lineTotal);
 
     page.drawText(qtyText, {
-      x: columns[1].x + columns[1].width - regularFont.widthOfTextAtSize(qtyText, 10),
-      y: y - 10,
+      x: columns[1].x + columns[1].width - regularFont.widthOfTextAtSize(qtyText, 8.8),
+      y: y - 8,
       font: regularFont,
-      size: 10,
+      size: 8.8,
       color: rgb(0.12, 0.12, 0.12),
     });
     page.drawText(rateText, {
-      x: columns[2].x + columns[2].width - regularFont.widthOfTextAtSize(rateText, 10),
-      y: y - 10,
+      x: columns[2].x + columns[2].width - regularFont.widthOfTextAtSize(rateText, 8.8),
+      y: y - 8,
       font: regularFont,
-      size: 10,
+      size: 8.8,
       color: rgb(0.12, 0.12, 0.12),
     });
     page.drawText(totalText, {
-      x: columns[3].x + columns[3].width - boldFont.widthOfTextAtSize(totalText, 10),
-      y: y - 10,
+      x: columns[3].x + columns[3].width - boldFont.widthOfTextAtSize(totalText, 8.8),
+      y: y - 8,
       font: boldFont,
-      size: 10,
+      size: 8.8,
       color: rgb(0.12, 0.12, 0.12),
     });
 
-    y -= rowHeight + 6;
+    y -= rowHeight + 3;
   }
 
-  ensureSpace(44);
-  const totalBoxWidth = Math.min(220, contentInnerRect.width * 0.42);
+  ensureSpace(34);
+  const totalBoxWidth = Math.min(205, contentInnerRect.width * 0.4);
   const totalBoxX = contentInnerRect.x + contentInnerRect.width - totalBoxWidth;
   page.drawRectangle({
     x: totalBoxX,
-    y: y - 24,
+    y: y - 21,
     width: totalBoxWidth,
-    height: 28,
+    height: 24,
     color: lightAccent,
     borderWidth: 1,
     borderColor: accent,
   });
-  page.drawText(`${documentLabel} Total`, {
+  const totalLabel = type === "invoice" ? "Balance due" : `${documentLabel} Total`;
+  page.drawText(totalLabel, {
     x: totalBoxX + 12,
-    y: y - 15,
+    y: y - 13,
     font: boldFont,
-    size: 10.5,
+    size: 9.4,
     color: accent,
   });
-  const grandTotal = money(calculateDocTotal(document.items || []));
+  const grandTotal = money(type === "invoice" ? calculateBalanceDue(document) : calculateDocTotal(document.items || []));
   page.drawText(grandTotal, {
-    x: totalBoxX + totalBoxWidth - 12 - boldFont.widthOfTextAtSize(grandTotal, 11),
-    y: y - 15,
+    x: totalBoxX + totalBoxWidth - 12 - boldFont.widthOfTextAtSize(grandTotal, 10),
+    y: y - 13,
     font: boldFont,
-    size: 11,
+    size: 10,
     color: rgb(0.08, 0.08, 0.08),
   });
-  y -= 40;
+  y -= 30;
 
-  drawParagraph({
-    text: normalizedTemplate.notesHeading,
-    font: boldFont,
-    size: 12,
-    lineHeight: 15,
-    color: accent,
-    gapAfter: 6,
-  });
-  drawParagraph({
-    text: document.notes?.trim() || "No additional notes.",
-    size: 10.5,
-    lineHeight: 14,
-    gapAfter: 16,
-  });
+  const documentNotes = getVisibleDocumentNotes(type, document.notes);
+  if (documentNotes) {
+    drawParagraph({
+      text: normalizedTemplate.notesHeading,
+      font: boldFont,
+      size: 10.6,
+      lineHeight: 12,
+      color: accent,
+      gapAfter: 3,
+    });
+    drawParagraph({
+      text: documentNotes,
+      size: 9.2,
+      lineHeight: 11.2,
+      gapAfter: 8,
+    });
+  }
 
   drawParagraph({
     text: normalizedTemplate.termsHeading,
     font: boldFont,
-    size: 12,
-    lineHeight: 15,
+    size: 10.6,
+    lineHeight: 12,
     color: accent,
-    gapAfter: 6,
+    gapAfter: 3,
   });
   drawParagraph({
     text: fillTemplateText(normalizedTemplate.termsText, context),
-    size: 10.5,
-    lineHeight: 14,
-    gapAfter: 16,
+    size: 9.2,
+    lineHeight: 11.2,
+    gapAfter: 8,
   });
-
-  drawFooter();
 
   return {
     bytes: await pdfDoc.save(),

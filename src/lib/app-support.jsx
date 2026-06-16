@@ -1746,12 +1746,13 @@ export function createTemplatePreviewFixture(type) {
       job: {
         id: "preview-invoice",
         jobNumber: 101,
+        description: "Scheduled service and safety inspection completed for the main entry system.",
         ...customer,
       },
       document: {
         type: "invoice",
         issueDate: slugDate(),
-        notes: "Payment due within 7 days. Please reference the invoice number when remitting payment.",
+        notes: "Scheduled service and safety inspection completed as listed.",
         items: [
           { id: "preview-invoice-1", description: "Scheduled service labour", qty: 2, rate: 145 },
           { id: "preview-invoice-2", description: "Replacement gate safety edge", qty: 1, rate: 265 },
@@ -1764,6 +1765,7 @@ export function createTemplatePreviewFixture(type) {
     job: {
       id: "preview-quote",
       jobNumber: 42,
+      description: "Inspect the existing gate automation, diagnose intermittent faults, and quote required safety sensor replacement.",
       ...customer,
     },
     document: {
@@ -1784,7 +1786,7 @@ export function buildDefaultDoc(job, type) {
   return {
     type,
     issueDate,
-    notes: isInvoice ? "Payment due within 7 days." : "Quote valid for 14 days.",
+    notes: "",
     ...(isInvoice
       ? {
           dueDate: addDaysToDateInput(issueDate, 7),
