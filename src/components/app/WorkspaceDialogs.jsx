@@ -50,6 +50,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
     handleOpenCustomerProfile,
     handleOpenDoc,
     handleOpenJob,
+    handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
     handleSaveSiteProfile,
     handleSendDocument,
@@ -137,6 +138,10 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
           setJobDetailsOpen(false);
           handleOpenDoc(selectedFreshJob, type);
         } : null}
+        onOpenSentDocument={canManageBusiness ? (type) => {
+          if (!selectedFreshJob) return;
+          handleOpenSentDocumentCopy(selectedFreshJob, type);
+        } : null}
         onAddNote={(text) => {
           if (!selectedFreshJob) return;
 
@@ -178,6 +183,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             type={docType}
             isSendingDocument={isSendingDocument}
             onSendDocument={handleSendDocument}
+            onOpenSentDocument={() => selectedFreshJob && handleOpenSentDocumentCopy(selectedFreshJob, docType)}
             onSave={(doc) => {
               if (!selectedFreshJob) return;
               updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, doc) });

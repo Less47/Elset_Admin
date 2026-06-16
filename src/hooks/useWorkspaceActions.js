@@ -23,6 +23,7 @@ import {
 } from "@/lib/app-support";
 import {
   ADMIN_EMAIL,
+  buildTemplateWithBusinessDetails,
   defaultInvoiceTemplate,
   defaultQuoteTemplate,
   normalizeDocumentTemplate,
@@ -666,6 +667,104 @@ export function useWorkspaceActions({
     setDocEditorOpen(true);
   }
 
+  function getDocumentTemplateSnapshot(type) {
+    return buildTemplateWithBusinessDetails(
+      type === "invoice" ? data.invoiceTemplate : data.quoteTemplate,
+      themeSettings,
+      type
+    );
+  }
+
+  function buildDocumentJobSnapshot(job) {
+    return {
+      id: job.id,
+      jobNumber: job.jobNumber,
+      title: job.title,
+      description: job.description,
+      urgency: job.urgency,
+      status: job.status,
+      scheduledDate: job.scheduledDate,
+      assignedTechnicianId: job.assignedTechnicianId,
+      assignedTechnicianName: job.assignedTechnicianName,
+      customerId: job.customerId,
+      customerName: job.customerName,
+      customerEmail: job.customerEmail,
+      customerPhone: job.customerPhone,
+      jobAddress: job.jobAddress,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+    };
+  }
+
+  async function handleOpenSentDocumentCopy(job, type) {
+    if (!canManageBusiness || !job) return;
+
+    const documentLabel = type === "invoice" ? "invoice" : "quote";
+    const currentDocument = normalizeDocument(type, job[type]);
+    const sentHistory = Array.isArray(currentDocument?.sentHistory) ? currentDocument.sentHistory : [];
+    const latestSentEntry = sentHistory.at(-1) || null;
+
+    if (!currentDocument || !latestSentEntry) {
+      window.alert(`No sent ${documentLabel} copy is available yet.`);
+      return;
+    }
+
+    const popup = window.open("about:blank", "_blank");
+    if (popup) {
+      popup.opener = null;
+      popup.document.title = `Opening ${documentLabel}...`;
+      popup.document.body.innerHTML = `<p style="font-family: sans-serif; padding: 24px;">Opening ${documentLabel} PDF...</p>`;
+    }
+
+    try {
+      const documentSnapshot = normalizeDocument(
+        type,
+        latestSentEntry.documentSnapshot || latestSentEntry.document || currentDocument
+      );
+      const templateSnapshot = type === "invoice"
+        ? normalizeInvoiceTemplate(latestSentEntry.templateSnapshot || getDocumentTemplateSnapshot(type))
+        : normalizeQuoteTemplate(latestSentEntry.templateSnapshot || getDocumentTemplateSnapshot(type));
+      const jobSnapshot = {
+        ...job,
+        ...(latestSentEntry.jobSnapshot || {}),
+      };
+      const response = await fetch("/api/quotes/preview-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          documentType: type,
+          job: jobSnapshot,
+          document: documentSnapshot,
+          template: templateSnapshot,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || `Unable to open the sent ${documentLabel} PDF.`);
+      }
+
+      const pdfBlob = await response.blob();
+      const previewUrl = URL.createObjectURL(pdfBlob);
+
+      if (popup && !popup.closed) {
+        popup.location.href = previewUrl;
+      } else {
+        window.open(previewUrl, "_blank", "noopener,noreferrer");
+      }
+
+      window.setTimeout(() => URL.revokeObjectURL(previewUrl), 1000 * 60);
+    } catch (error) {
+      if (popup && !popup.closed) {
+        popup.close();
+      }
+      const message = error instanceof Error ? error.message : `Unable to open the sent ${documentLabel} PDF.`;
+      window.alert(message);
+    }
+  }
+
   async function handleSendDocument(doc) {
     if (!canManageBusiness || !selectedFreshJob) return;
     if (!selectedFreshJob.customerEmail) {
@@ -678,20 +777,18 @@ export function useWorkspaceActions({
       return count + (job[docType]?.sentHistory?.length || 0);
     }, 0);
 
-    if (priorAttempts > 0) {
-      const confirmed = window.confirm(
-        docType === "invoice"
-          ? "Are you sure? An invoice may have already been sent."
-          : "Are you sure? A quote may have already been sent."
-      );
-      if (!confirmed) return;
-    }
+    const documentLabel = docType === "invoice" ? "invoice" : "quote";
+    const previousSendWarning = priorAttempts > 0
+      ? `\n\nThis customer already has ${priorAttempts} previous ${documentLabel} send ${priorAttempts === 1 ? "attempt" : "attempts"}.`
+      : "";
+    const confirmed = window.confirm(
+      `Are you sure you want to send this ${documentLabel} to ${selectedFreshJob.customerEmail}?${previousSendWarning}\n\nThis will email the customer a PDF attachment.`
+    );
+    if (!confirmed) return;
 
     try {
       setIsSendingDocument(true);
-      const template = docType === "invoice"
-        ? normalizeInvoiceTemplate(data.invoiceTemplate)
-        : normalizeQuoteTemplate(data.quoteTemplate);
+      const template = getDocumentTemplateSnapshot(docType);
       const requestHeaders = {
         "Content-Type": "application/json",
       };
@@ -733,6 +830,9 @@ export function useWorkspaceActions({
             fromEmail: payload.fromEmail || ADMIN_EMAIL,
             toEmail: selectedFreshJob.customerEmail,
             messageId: payload.messageId || "",
+            jobSnapshot: buildDocumentJobSnapshot(selectedFreshJob),
+            documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
+            templateSnapshot: template,
           },
         ],
       };
@@ -982,34 +1082,8 @@ export function useWorkspaceActions({
     }));
   }
 
-  function handleApplyCompanyToTemplates() {
-    if (!canManageBusiness) return;
-    setData((prev) => ({
-      ...prev,
-      quoteTemplate: normalizeQuoteTemplate({
-        ...prev.quoteTemplate,
-        companyName: themeSettings.companyName,
-        companyAbn: themeSettings.companyAbn,
-        companyAcn: themeSettings.companyAcn,
-        companyEmail: themeSettings.companyEmail,
-        companyPhone: themeSettings.companyPhone,
-        companyAddress: themeSettings.companyAddress,
-      }),
-      invoiceTemplate: normalizeInvoiceTemplate({
-        ...prev.invoiceTemplate,
-        companyName: themeSettings.companyName,
-        companyAbn: themeSettings.companyAbn,
-        companyAcn: themeSettings.companyAcn,
-        companyEmail: themeSettings.companyEmail,
-        companyPhone: themeSettings.companyPhone,
-        companyAddress: themeSettings.companyAddress,
-      }),
-    }));
-  }
-
   return {
     createJob,
-    handleApplyCompanyToTemplates,
     handleApplyThemePreset,
     handleCreateCustomer,
     handleCreateInventoryItem,
@@ -1026,6 +1100,7 @@ export function useWorkspaceActions({
     handleGenerateMaintenanceJob,
     handleOpenCustomerProfile,
     handleOpenDoc,
+    handleOpenSentDocumentCopy,
     handleOpenJob,
     handleOpenSiteProfile,
     handleResetDocumentTemplate,

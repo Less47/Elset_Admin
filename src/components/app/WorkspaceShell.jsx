@@ -71,7 +71,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     visibleSideNavItems,
   } = derived;
   const {
-    handleApplyCompanyToTemplates,
     handleApplyThemePreset,
     handleCreateInventoryItem,
     handleCreateMaintenancePlan,
@@ -85,6 +84,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     handleOpenCustomerProfile,
     handleOpenDoc,
     handleOpenJob,
+    handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
     handleResetDocumentTemplate,
     handleResetPreferences,
@@ -447,6 +447,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             jobs={data.jobs}
             onOpenJob={handleOpenJob}
             onOpenInvoice={(job) => handleOpenDoc(job, "invoice")}
+            onOpenSentInvoice={(job) => handleOpenSentDocumentCopy(job, "invoice")}
             onUpdateInvoicePayment={handleUpdateInvoicePayment}
             formatDate={formatDate}
             getInvoicePaymentSummary={getInvoicePaymentSummary}
@@ -512,7 +513,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             onApplyPreset={handleApplyThemePreset}
             onResetUiSettings={handleResetUiSettings}
             onResetPreferences={handleResetPreferences}
-            onApplyCompanyToTemplates={handleApplyCompanyToTemplates}
             activeTemplateType={activeTemplateType}
             onActiveTemplateTypeChange={setActiveTemplateType}
             templates={{
@@ -525,6 +525,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             isAdmin={isAdmin}
             onDownloadBackup={auth.handleDownloadBackup}
             onRestoreBackup={auth.handleRestoreBackup}
+            onPreviewServiceM8Import={auth.handlePreviewServiceM8Import}
+            onApplyServiceM8Import={auth.handleApplyServiceM8Import}
             backupSummary={{
               staff: data.staff.length,
               customers: data.customers.length,

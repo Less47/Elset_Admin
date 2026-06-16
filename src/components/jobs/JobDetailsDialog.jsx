@@ -31,6 +31,7 @@ export default function JobDetailsDialog({
   onOpenCustomerProfile = null,
   onOpenSiteProfile = null,
   onOpenDocument = null,
+  onOpenSentDocument = null,
 }) {
   const [note, setNote] = useState("");
   const [selectedPhoto, setSelectedPhoto] = useState(null);
@@ -220,46 +221,64 @@ export default function JobDetailsDialog({
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <div className="rounded-2xl border p-3">
-                    <p className="font-medium">Quote</p>
-                    <p className="mt-1 text-muted-foreground">
-                      {job.quote ? `Saved - ${money(calculateDocTotal(job.quote.items))}` : "No quote saved yet"}
-                    </p>
-                    {job.quote?.sentHistory?.length ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Sent {job.quote.sentHistory.length} {job.quote.sentHistory.length === 1 ? "time" : "times"}
-                      </p>
-                    ) : null}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">Quote</p>
+                        <p className="mt-1 text-muted-foreground">
+                          {job.quote ? `Saved - ${money(calculateDocTotal(job.quote.items))}` : "No quote saved yet"}
+                        </p>
+                        {job.quote?.sentHistory?.length ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Sent {job.quote.sentHistory.length} {job.quote.sentHistory.length === 1 ? "time" : "times"}
+                          </p>
+                        ) : null}
+                      </div>
+                      {job.quote?.sentHistory?.length && onOpenSentDocument ? (
+                        <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => onOpenSentDocument("quote")}>
+                          Open Quote
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="rounded-2xl border p-3">
-                    <p className="font-medium">Invoice</p>
-                    <p className="mt-1 text-muted-foreground">
-                      {job.invoice ? `Saved - ${money(calculateDocTotal(job.invoice.items))}` : "No invoice saved yet"}
-                    </p>
-                    {job.invoice ? (
-                      <div className="mt-2 space-y-2">
-                        <div className="flex flex-wrap gap-2">
-                          <Badge className={jobInvoiceStatus.className}>{jobInvoiceStatus.label}</Badge>
-                          <Badge variant="secondary">Due {formatDate(job.invoice.dueDate)}</Badge>
-                        </div>
-                        <div className="text-xs text-slate-600">
-                          <p>Paid {money(jobInvoicePaymentSummary.paidAmount)} of {money(jobInvoicePaymentSummary.total)}</p>
-                          <p>Balance {money(jobInvoicePaymentSummary.balanceAmount)}</p>
-                        </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">Invoice</p>
+                        <p className="mt-1 text-muted-foreground">
+                          {job.invoice ? `Saved - ${money(calculateDocTotal(job.invoice.items))}` : "No invoice saved yet"}
+                        </p>
+                        {job.invoice ? (
+                          <div className="mt-2 space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                              <Badge className={jobInvoiceStatus.className}>{jobInvoiceStatus.label}</Badge>
+                              <Badge variant="secondary">Due {formatDate(job.invoice.dueDate)}</Badge>
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              <p>Paid {money(jobInvoicePaymentSummary.paidAmount)} of {money(jobInvoicePaymentSummary.total)}</p>
+                              <p>Balance {money(jobInvoicePaymentSummary.balanceAmount)}</p>
+                            </div>
+                          </div>
+                        ) : null}
+                        {job.invoice?.sentHistory?.length ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Sent {job.invoice.sentHistory.length} {job.invoice.sentHistory.length === 1 ? "time" : "times"}
+                          </p>
+                        ) : null}
                       </div>
-                    ) : null}
-                    {job.invoice?.sentHistory?.length ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Sent {job.invoice.sentHistory.length} {job.invoice.sentHistory.length === 1 ? "time" : "times"}
-                      </p>
-                    ) : null}
+                      {job.invoice?.sentHistory?.length && onOpenSentDocument ? (
+                        <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => onOpenSentDocument("invoice")}>
+                          Open Invoice
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                   {onOpenDocument ? (
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("quote")}>
-                        Open Quote
+                        Open Quote Editor
                       </Button>
                       <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("invoice")}>
-                        Open Invoice
+                        Open Invoice Editor
                       </Button>
                     </div>
                   ) : null}

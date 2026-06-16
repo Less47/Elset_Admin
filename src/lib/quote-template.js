@@ -25,6 +25,18 @@ export const documentTemplatePlaceholders = [
 
 export const quoteTemplatePlaceholders = documentTemplatePlaceholders;
 
+export const documentBusinessDetailKeys = [
+  "companyName",
+  "companyAbn",
+  "companyAcn",
+  "companyEmail",
+  "companyPhone",
+  "companyAddress",
+  "bankAccountName",
+  "bankBsb",
+  "bankAccountNumber",
+];
+
 export const defaultQuoteTemplate = {
   companyName: "Elset",
   companyAbn: "",
@@ -103,6 +115,20 @@ export function normalizeDocumentTemplate(template, type = "quote") {
   }
 
   return normalized;
+}
+
+export function getDocumentBusinessDetails(source = {}) {
+  return documentBusinessDetailKeys.reduce((details, key) => {
+    details[key] = String(source?.[key] ?? "").trim();
+    return details;
+  }, {});
+}
+
+export function buildTemplateWithBusinessDetails(template, businessDetails = {}, type = "quote") {
+  return normalizeDocumentTemplate({
+    ...template,
+    ...getDocumentBusinessDetails(businessDetails),
+  }, type);
 }
 
 export function normalizeQuoteTemplate(template) {

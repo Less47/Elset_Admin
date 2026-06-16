@@ -34,9 +34,14 @@ const defaultSettings = {
   showSectionDescriptions: true,
   showHeroEyebrow: true,
   companyName: "Elset",
+  companyAbn: "",
+  companyAcn: "",
   companyEmail: ADMIN_EMAIL,
   companyPhone: "",
   companyAddress: "",
+  bankAccountName: "ELSET PTY LTD",
+  bankBsb: "",
+  bankAccountNumber: "",
   defaultSenderEmail: ADMIN_EMAIL,
   replyToEmail: ADMIN_EMAIL,
   quoteCcEmail: "",
@@ -487,6 +492,42 @@ function normalizeUserRole(role) {
   return userRoleValues.includes(role) ? role : "technician";
 }
 
+function normalizeExternalRefs(refs) {
+  const serviceM8 = refs?.serviceM8;
+  if (!serviceM8 || typeof serviceM8 !== "object") return {};
+
+  const normalizedServiceM8 = {};
+  const stringKeys = [
+    "companyUuid",
+    "jobUuid",
+    "generatedJobId",
+    "importedAt",
+    "editDate",
+  ];
+
+  stringKeys.forEach((key) => {
+    const value = String(serviceM8[key] || "").trim();
+    if (value) {
+      normalizedServiceM8[key] = value;
+    }
+  });
+
+  if (Array.isArray(serviceM8.siteUuids)) {
+    const siteUuids = [...new Set(
+      serviceM8.siteUuids
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+    )];
+    if (siteUuids.length > 0) {
+      normalizedServiceM8.siteUuids = siteUuids;
+    }
+  }
+
+  return Object.keys(normalizedServiceM8).length > 0
+    ? { serviceM8: normalizedServiceM8 }
+    : {};
+}
+
 function normalizeCustomerRecord(customer) {
   if (!customer) return null;
   const address = normalizeSiteAddress(customer.address);
@@ -512,6 +553,7 @@ function normalizeCustomerRecord(customer) {
     address,
     sites,
     siteAccessNotes,
+    externalRefs: normalizeExternalRefs(customer.externalRefs),
     createdAt: customer.createdAt || new Date().toISOString(),
   };
 }
@@ -687,6 +729,7 @@ function normalizeJobRecord(job) {
     photos: Array.isArray(job.photos) ? job.photos.map(normalizePhoto).filter(Boolean) : [],
     quote: normalizeDocumentRecord(job.quote, "quote"),
     invoice: normalizeDocumentRecord(job.invoice, "invoice"),
+    externalRefs: normalizeExternalRefs(job.externalRefs),
   };
 }
 

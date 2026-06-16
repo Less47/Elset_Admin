@@ -12,7 +12,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { buildDefaultDoc, formatDate, getInvoicePaymentSummary, getInvoiceStatus, normalizeDocument, slugDate } from "@/lib/app-support";
 import { ADMIN_EMAIL, calculateDocTotal, money } from "@/lib/quote-template";
 
-export default function DocumentEditor({ open, onOpenChange, job, type, onSave, onSendDocument, isSendingDocument = false }) {
+export default function DocumentEditor({
+  open,
+  onOpenChange,
+  job,
+  type,
+  onSave,
+  onSendDocument,
+  onOpenSentDocument,
+  isSendingDocument = false,
+}) {
   const [docState, setDocState] = useState(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -339,6 +348,11 @@ export default function DocumentEditor({ open, onOpenChange, job, type, onSave, 
         </DialogBody>
 
         <DialogFooter>
+          {sentCount > 0 && onOpenSentDocument ? (
+            <Button variant="outline" onClick={onOpenSentDocument} disabled={isSendingDocument}>
+              Open {documentLabel}
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

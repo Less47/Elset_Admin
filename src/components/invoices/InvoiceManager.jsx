@@ -18,6 +18,7 @@ export default function InvoiceManager({
   jobs,
   onOpenJob,
   onOpenInvoice,
+  onOpenSentInvoice,
   onUpdateInvoicePayment,
   formatDate,
   getInvoicePaymentSummary,
@@ -251,8 +252,8 @@ export default function InvoiceManager({
           </div>
         ) : (
           <div className="overflow-x-auto bg-white">
-            <div className="min-w-[1460px]">
-              <div className="grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_180px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <div className="min-w-[1540px]">
+              <div className="grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 <span>Job</span>
                 <span>Customer</span>
                 <span>Work</span>
@@ -267,7 +268,7 @@ export default function InvoiceManager({
               {filteredRows.map((row, index) => (
                 <div
                   key={row.job.id}
-                  className={`grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_180px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
+                  className={`grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
                     index !== filteredRows.length - 1 ? "border-b border-slate-200" : ""
                   }`}
                 >
@@ -321,8 +322,13 @@ export default function InvoiceManager({
                     <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenJob(row.job)}>
                       Job
                     </Button>
+                    {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
+                      <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenSentInvoice(row.job)}>
+                        Open Invoice
+                      </Button>
+                    ) : null}
                     <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenInvoice(row.job)}>
-                      {row.invoice ? "Invoice" : "Create"}
+                      {row.invoice ? "Open Invoice Editor" : "Create Invoice"}
                     </Button>
                   </div>
                 </div>

@@ -25,6 +25,42 @@ function getDownloadFilename(contentDisposition) {
   return filenameMatch?.[1]?.trim() || buildFallbackBackupFilename();
 }
 
+async function readServiceM8ImportResponse(response) {
+  const contentType = String(response.headers.get("Content-Type") || "").toLowerCase();
+
+  if (!contentType.includes("application/json")) {
+    const bodyText = await response.text().catch(() => "");
+    const statusLabel = `${response.status} ${response.statusText || ""}`.trim();
+    const details = bodyText && !bodyText.trim().startsWith("<")
+      ? ` ${bodyText.trim().slice(0, 180)}`
+      : "";
+
+    return {
+      payload: null,
+      error: response.status === 404
+        ? "The ServiceM8 import API is not available yet. Restart the backend, then try again."
+        : `The ServiceM8 import API returned an unexpected ${statusLabel || "non-JSON"} response.${details}`,
+    };
+  }
+
+  return {
+    payload: await response.json().catch(() => null),
+    error: "",
+  };
+}
+
+function getServiceM8ImportError(response, payload, responseError, fallback) {
+  if (payload?.error) return payload.error;
+  if (responseError) return responseError;
+  if (response.status === 404) {
+    return "The ServiceM8 import API is not available yet. Restart the backend, then try again.";
+  }
+  if (response.ok) {
+    return "The ServiceM8 import API returned an unexpected response. Restart the backend, then try again.";
+  }
+  return fallback;
+}
+
 export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState("checking");
@@ -499,6 +535,102 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     }
   }
 
+  async function handlePreviewServiceM8Import(apiKey, options = {}) {
+    if (!isAdmin) {
+      return { ok: false, error: "Only admins can preview a ServiceM8 import." };
+    }
+
+    if (!String(apiKey || "").trim()) {
+      return { ok: false, error: "Enter your ServiceM8 API key before previewing the import." };
+    }
+
+    try {
+      const response = await fetchWithAuth("/api/admin/servicem8-import/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ apiKey, options }),
+      });
+      const { payload, error: responseError } = await readServiceM8ImportResponse(response);
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(getServiceM8ImportError(
+          response,
+          payload,
+          responseError,
+          "Unable to preview the ServiceM8 import."
+        ));
+      }
+
+      return {
+        ok: true,
+        importedAt: payload.importedAt,
+        previewId: payload.previewId || "",
+        summary: payload.summary,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to preview the ServiceM8 import.";
+
+      if (/session expired|sign in again|authentication required/i.test(message)) {
+        clearSessionState(message);
+      }
+
+      return { ok: false, error: message };
+    }
+  }
+
+  async function handleApplyServiceM8Import(apiKey, options = {}, previewId = "") {
+    if (!isAdmin) {
+      return { ok: false, error: "Only admins can run a ServiceM8 import." };
+    }
+
+    if (!String(apiKey || "").trim() && !String(previewId || "").trim()) {
+      return { ok: false, error: "Preview the ServiceM8 import before importing." };
+    }
+
+    try {
+      const response = await fetchWithAuth("/api/admin/servicem8-import/apply", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ apiKey, options, previewId }),
+      });
+      const { payload, error: responseError } = await readServiceM8ImportResponse(response);
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(getServiceM8ImportError(
+          response,
+          payload,
+          responseError,
+          "Unable to import ServiceM8 data."
+        ));
+      }
+
+      const nextState = normalizeAppState(payload.state);
+      hasLoadedServerStateRef.current = true;
+      lastSyncedDataRef.current = JSON.stringify(nextState);
+      syncErrorRef.current = "";
+      setData(nextState);
+      setAuthError("");
+
+      return {
+        ok: true,
+        importedAt: payload.importedAt,
+        summary: payload.summary,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to import ServiceM8 data.";
+
+      if (/session expired|sign in again|authentication required/i.test(message)) {
+        clearSessionState(message);
+      }
+
+      return { ok: false, error: message };
+    }
+  }
+
   return {
     adminUserAccounts,
     adminUserAccountsError,
@@ -507,9 +639,11 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     authUser,
     canManageBusiness,
     handleDownloadBackup,
+    handleApplyServiceM8Import,
     handleLogin,
     handleLoginFieldChange,
     handleLogout,
+    handlePreviewServiceM8Import,
     handleRestoreBackup,
     handleSaveStaffLoginAccount,
     isAdmin,
