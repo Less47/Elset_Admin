@@ -150,8 +150,8 @@ export function useWorkspaceViewModel({
     const serviceBoardMeta = isTechnician
       ? {
           eyebrow: "Technician Workspace",
-          title: "My Assigned Jobs",
-          description: "Review your assigned jobs, drag them between columns to update status, add field notes and photos, and keep work moving from the field.",
+          title: "Field Jobs",
+          description: "Review field jobs, drag them between columns to update status, add field notes and photos, and keep work moving from the field.",
         }
       : sectionMeta["service-board"];
 

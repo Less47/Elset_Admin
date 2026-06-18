@@ -103,7 +103,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
   } = actions;
   const roleMenuLabel = isTechnician ? "Technician" : isAdmin ? "Admin" : "Office";
   const roleDescription = isTechnician
-    ? "Access your assigned jobs, open job details, and keep field progress updated."
+    ? "Access field jobs, open job details, and keep progress updated."
     : isAdmin
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
@@ -299,7 +299,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                       {isServiceBoardFullScreen
                         ? "Focused board view with search, urgency filtering, per-column sorting, per-column view modes, and quick job creation."
                         : isTechnician
-                          ? "Review your assigned jobs, search by site or customer, drag them between columns, and update notes and photos from the field."
+                          ? "Review field jobs, search by site or customer, drag them between columns, and update notes and photos from the field."
                           : "Manage the office service board, search jobs, change column views, and update status in one place."}
                     </p>
                   </div>

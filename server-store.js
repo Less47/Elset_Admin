@@ -1170,7 +1170,7 @@ function buildUserState(data, user) {
   if (!user) return null;
 
   if (user.role === "technician") {
-    const jobs = data.jobs.filter((job) => job.assignedTechnicianId === user.staffId);
+    const jobs = data.jobs;
     const customerIds = new Set(jobs.map((job) => job.customerId));
     const customers = data.customers.filter((customer) => customerIds.has(customer.id));
     const staff = data.staff.filter((staffMember) => staffMember.id === user.staffId);
@@ -1203,11 +1203,9 @@ function buildUserState(data, user) {
   };
 }
 
-function mergeTechnicianState(existingData, incomingState, user) {
+function mergeTechnicianState(existingData, incomingState) {
   const allowedJobIds = new Set(
-    existingData.jobs
-      .filter((job) => job.assignedTechnicianId === user.staffId)
-      .map((job) => job.id)
+    existingData.jobs.map((job) => job.id)
   );
   const incomingJobsById = new Map(
     (Array.isArray(incomingState?.jobs) ? incomingState.jobs : [])
@@ -1317,7 +1315,7 @@ export function getAuthorizedAppState(user) {
 export function saveAuthorizedAppState(user, incomingState) {
   const data = loadData();
   const merged = user.role === "technician"
-    ? mergeTechnicianState(data, incomingState, user)
+    ? mergeTechnicianState(data, incomingState)
     : mergeOfficeState(data, incomingState);
 
   return buildUserState(saveData(merged), user);
