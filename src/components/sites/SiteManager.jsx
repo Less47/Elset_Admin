@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
@@ -34,13 +34,9 @@ export default function SiteManager({
     [customers]
   );
 
-  useEffect(() => {
-    setNewSiteCustomerId((prev) => (
-      prev && customerOptions.some((customer) => customer.id === prev)
-        ? prev
-        : customerOptions[0]?.id || ""
-    ));
-  }, [customerOptions]);
+  const selectedNewSiteCustomerId = customerOptions.some((customer) => customer.id === newSiteCustomerId)
+    ? newSiteCustomerId
+    : customerOptions[0]?.id || "";
 
   const siteRows = useMemo(
     () =>
@@ -94,6 +90,55 @@ export default function SiteManager({
     return rows;
   }, [deferredSearch, getSiteDisplayName, siteRows, siteTypeFilter, sortBy, toTimestamp]);
 
+  const renderSiteCards = (className) => (
+    <div className={className}>
+      {filteredSites.map((site) => (
+        <div
+          key={`${site.customer.id}-${site.id}`}
+          onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
+          title="Double-click to open site profile"
+          className="cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{site.customer.name}</p>
+              <p className="mt-1 font-semibold text-slate-900">{getSiteDisplayName(site)}</p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
+              {site.siteType ? <Badge className="bg-emerald-100 text-emerald-800">{formatSiteType(site.siteType)}</Badge> : null}
+              {site.assetCount > 0 ? <Badge className="bg-teal-100 text-teal-800">{site.assetCount} items</Badge> : null}
+              {site.accessNotes ? <Badge className="bg-amber-100 text-amber-800">Access</Badge> : null}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 sm:grid-cols-2">
+            <div className="flex items-center justify-between gap-3">
+              <span>Jobs</span>
+              <span className="font-medium text-slate-900">{site.jobCount}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Open jobs</span>
+              <span className="font-medium text-slate-900">{site.openJobCount}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 sm:col-span-2">
+              <span>Last activity</span>
+              <span className="font-medium text-slate-900">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</span>
+            </div>
+          </div>
+
+          {site.profileNotes ? <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-600">{site.profileNotes}</p> : null}
+
+          <div className="mt-4 flex justify-end">
+            <Button variant="outline" className="rounded-xl" onClick={() => onOpenSite(site.customer.id, site.id)}>
+              Open Site Profile
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <>
       <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
@@ -139,7 +184,7 @@ export default function SiteManager({
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
+        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -186,7 +231,7 @@ export default function SiteManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={() => {
                 setSearch("");
                 setSortBy("activity");
@@ -206,7 +251,52 @@ export default function SiteManager({
             </div>
           ) : (
             viewMode === "list" ? (
-              <div className="overflow-x-auto bg-white">
+              <>
+                <div className="bg-white text-xs 2xl:hidden">
+                  <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <span>Site</span>
+                    <span>Customer</span>
+                    <span>Activity</span>
+                    <span className="text-right">Work</span>
+                  </div>
+
+                  {filteredSites.map((site, index) => (
+                    <div
+                      key={`${site.customer.id}-${site.id}`}
+                      onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
+                      title="Double-click to open site profile"
+                      className={`grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
+                        index !== filteredSites.length - 1 ? "border-b border-slate-200" : ""
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <p className="truncate font-semibold text-slate-950">{getSiteDisplayName(site)}</p>
+                          {site.isPrimary ? <Badge variant="secondary" className="hidden px-1.5 py-0 text-[10px] xl:inline-flex">Primary</Badge> : null}
+                          {site.accessNotes ? <Badge className="hidden bg-amber-100 px-1.5 py-0 text-[10px] text-amber-800 xl:inline-flex">Access</Badge> : null}
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.address && getSiteDisplayName(site) !== site.address ? site.address : "Primary site"}</p>
+                      </div>
+                      <div className="min-w-0 text-slate-700">
+                        <p className="truncate font-medium text-slate-900">{site.customer.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.siteType ? formatSiteType(site.siteType) : "Type not set"}</p>
+                      </div>
+                      <div className="min-w-0 text-slate-700">
+                        <p className="truncate">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.assetCount} assets</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <p className="text-right text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-950">{site.jobCount}</span> total / <span className="font-semibold text-slate-950">{site.openJobCount}</span> open
+                        </p>
+                        <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSite(site.customer.id, site.id)}>
+                          Open
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto bg-white 2xl:block">
                 <div className="min-w-[1200px]">
                   <div className="grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     <span>Site</span>
@@ -264,53 +354,9 @@ export default function SiteManager({
                   ))}
                 </div>
               </div>
+              </>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-                {filteredSites.map((site) => (
-                  <div
-                    key={`${site.customer.id}-${site.id}`}
-                    onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
-                    title="Double-click to open site profile"
-                    className="cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{site.customer.name}</p>
-                        <p className="mt-1 font-semibold text-slate-900">{getSiteDisplayName(site)}</p>
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
-                        {site.siteType ? <Badge className="bg-emerald-100 text-emerald-800">{formatSiteType(site.siteType)}</Badge> : null}
-                        {site.assetCount > 0 ? <Badge className="bg-teal-100 text-teal-800">{site.assetCount} items</Badge> : null}
-                        {site.accessNotes ? <Badge className="bg-amber-100 text-amber-800">Access</Badge> : null}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 sm:grid-cols-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Jobs</span>
-                        <span className="font-medium text-slate-900">{site.jobCount}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span>Open jobs</span>
-                        <span className="font-medium text-slate-900">{site.openJobCount}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 sm:col-span-2">
-                        <span>Last activity</span>
-                        <span className="font-medium text-slate-900">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</span>
-                      </div>
-                    </div>
-
-                    {site.profileNotes ? <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-600">{site.profileNotes}</p> : null}
-
-                    <div className="mt-4 flex justify-end">
-                      <Button variant="outline" className="rounded-xl" onClick={() => onOpenSite(site.customer.id, site.id)}>
-                        Open Site Profile
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              renderSiteCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")
             )
           )}
         </CardContent>
@@ -327,7 +373,7 @@ export default function SiteManager({
           <div className="grid gap-4">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer</p>
-              <Select value={newSiteCustomerId} onValueChange={setNewSiteCustomerId}>
+              <Select value={selectedNewSiteCustomerId} onValueChange={setNewSiteCustomerId}>
                 <SelectTrigger className="rounded-lg">
                   <SelectValue placeholder="Select customer" />
                 </SelectTrigger>
@@ -346,9 +392,9 @@ export default function SiteManager({
               Cancel
             </Button>
             <Button
-              disabled={!newSiteCustomerId}
+              disabled={!selectedNewSiteCustomerId}
               onClick={() => {
-                onCreateSite(newSiteCustomerId);
+                onCreateSite(selectedNewSiteCustomerId);
                 setCreateSiteDialogOpen(false);
               }}
             >

@@ -1,10 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { BriefcaseBusiness, LoaderCircle, MapPinned } from "lucide-react";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { LoaderCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,13 +46,6 @@ async function fetchJson(url, options = {}) {
   return payload;
 }
 
-function getJobBadgeClassName(job) {
-  if (job.urgency === "High") return "bg-rose-100 text-rose-800";
-  if (job.status === "Completed") return "bg-emerald-100 text-emerald-800";
-  if (job.status === "In Progress") return "bg-sky-100 text-sky-800";
-  return "bg-amber-100 text-amber-800";
-}
-
 function createJobMarkerIcon(job, isSelected = false) {
   const isCompleted = job.status === "Completed";
   const isUrgent = job.urgency === "High" && !isCompleted;
@@ -87,6 +77,50 @@ function createJobMarkerIcon(job, isSelected = false) {
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
+}
+
+function createJobPopupContent(job, onOpenJob) {
+  const container = document.createElement("div");
+  container.style.display = "grid";
+  container.style.gap = "10px";
+  container.style.minWidth = "190px";
+
+  const title = document.createElement("p");
+  title.textContent = job.title || `Job #${job.jobNumber || ""}`.trim() || "Job";
+  title.style.margin = "0";
+  title.style.fontWeight = "700";
+  title.style.color = "#0f172a";
+  title.style.lineHeight = "1.35";
+
+  const meta = document.createElement("p");
+  meta.textContent = [
+    job.jobNumber ? `#${job.jobNumber}` : "",
+    job.customerName || "",
+  ].filter(Boolean).join(" - ");
+  meta.style.margin = "0";
+  meta.style.fontSize = "12px";
+  meta.style.color = "#64748b";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Job Details";
+  button.style.border = "0";
+  button.style.borderRadius = "10px";
+  button.style.background = "#0f172a";
+  button.style.color = "#ffffff";
+  button.style.cursor = "pointer";
+  button.style.fontSize = "12px";
+  button.style.fontWeight = "700";
+  button.style.padding = "8px 10px";
+  button.style.width = "100%";
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenJob(job);
+  });
+
+  container.append(title, meta, button);
+  return container;
 }
 
 function buildMarkerPositions(jobs) {
@@ -128,7 +162,7 @@ function buildMarkerPositions(jobs) {
   });
 }
 
-export default function JobsMapManager({ customers, jobs, onOpenJob, formatDate }) {
+export default function JobsMapManager({ customers, jobs, onOpenJob }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markersLayerRef = useRef(null);
@@ -137,7 +171,6 @@ export default function JobsMapManager({ customers, jobs, onOpenJob, formatDate 
   const [jobFilter, setJobFilter] = useState(ALL_FILTER_VALUE);
   const [siteTypeFilter, setSiteTypeFilter] = useState(ALL_FILTER_VALUE);
   const [customerTypeFilter, setCustomerTypeFilter] = useState(ALL_FILTER_VALUE);
-  const [selectedJobId, setSelectedJobId] = useState("");
   const [mapConfig, setMapConfig] = useState(null);
   const [mapConfigError, setMapConfigError] = useState("");
   const [isLoadingMapConfig, setIsLoadingMapConfig] = useState(true);
@@ -264,17 +297,6 @@ export default function JobsMapManager({ customers, jobs, onOpenJob, formatDate 
     [jobsWithLocations]
   );
 
-  const selectedJob = useMemo(
-    () => pinnedJobs.find((job) => job.id === selectedJobId) || null,
-    [pinnedJobs, selectedJobId]
-  );
-  const selectedJobResolvedAddress = useMemo(() => {
-    if (!selectedJob?.location?.formatted) return "";
-    const savedAddress = normalizeSiteAddress(selectedJob.jobAddress).toLowerCase();
-    const resolvedAddress = normalizeSiteAddress(selectedJob.location.formatted).toLowerCase();
-    return savedAddress && resolvedAddress === savedAddress ? "" : selectedJob.location.formatted;
-  }, [selectedJob]);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -396,25 +418,40 @@ export default function JobsMapManager({ customers, jobs, onOpenJob, formatDate 
     }
 
     const nextLayer = L.layerGroup();
+    const shouldShowHoverTooltips = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
     pinnedJobs.forEach((job) => {
       const marker = L.marker([job.displayLat, job.displayLon], {
-        icon: createJobMarkerIcon(job, job.id === selectedJob?.id),
+        icon: createJobMarkerIcon(job),
       });
 
-      marker.bindTooltip(
-        `${job.jobNumber ? `#${job.jobNumber} ` : ""}${job.title}`,
-        {
-          direction: "top",
-          offset: [0, -10],
-        }
-      );
-      marker.on("click", () => setSelectedJobId(job.id));
+      if (shouldShowHoverTooltips) {
+        marker.bindTooltip(
+          `${job.jobNumber ? `#${job.jobNumber} ` : ""}${job.title}`,
+          {
+            direction: "top",
+            offset: [0, -10],
+          }
+        );
+      }
+      marker.bindPopup(createJobPopupContent(job, onOpenJob), {
+        closeButton: true,
+        offset: [0, -12],
+      });
+      marker.on("click", () => {
+        const map = mapRef.current;
+        if (!map) return;
+        const maxZoom = Number.isFinite(map.getMaxZoom()) ? map.getMaxZoom() : 20;
+        const nextZoom = Math.min(maxZoom, Math.min(map.getZoom() + 1, 14));
+        marker.closeTooltip();
+        map.setView([job.displayLat, job.displayLon], nextZoom, { animate: true });
+        marker.openPopup();
+      });
       nextLayer.addLayer(marker);
     });
 
     nextLayer.addTo(mapRef.current);
     markersLayerRef.current = nextLayer;
-  }, [isMapReady, pinnedJobs, selectedJob]);
+  }, [isMapReady, onOpenJob, pinnedJobs]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return;
@@ -422,13 +459,6 @@ export default function JobsMapManager({ customers, jobs, onOpenJob, formatDate 
     requestAnimationFrame(() => {
       mapRef.current?.invalidateSize();
     });
-
-    if (selectedJob && Number.isFinite(selectedJob.displayLat) && Number.isFinite(selectedJob.displayLon)) {
-      mapRef.current.setView([selectedJob.displayLat, selectedJob.displayLon], Math.max(mapRef.current.getZoom(), 14), {
-        animate: true,
-      });
-      return;
-    }
 
     if (pinnedJobs.length === 0) {
       mapRef.current.setView(MELBOURNE_CENTER, 10, { animate: true });
@@ -445,220 +475,127 @@ export default function JobsMapManager({ customers, jobs, onOpenJob, formatDate 
       padding: [36, 36],
       maxZoom: 13,
     });
-  }, [isMapReady, pinnedJobs, selectedJob]);
-
-  useEffect(() => {
-    if (!selectedJobId) return;
-    if (pinnedJobs.some((job) => job.id === selectedJobId)) return;
-    setSelectedJobId("");
-  }, [pinnedJobs, selectedJobId]);
+  }, [isMapReady, pinnedJobs]);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_360px]">
-      <div className="space-y-4">
-        <Card className="rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
-          <CardHeader>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <CardTitle className="text-base">Jobs Map</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Visualize saved job addresses around Melbourne, click a pin to inspect the job, and jump straight into the job details.
-                </p>
+    <div className="space-y-4">
+      <Card className="rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+        <CardHeader>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <CardTitle className="text-base">Jobs Map</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Visualize saved job addresses around Melbourne, click a pin to zoom in, then open the job details from the popup.
+              </p>
+            </div>
+            <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-violet-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Pinned</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{pinnedJobs.length}</p>
               </div>
-              <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-violet-50 px-3 py-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Pinned</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{pinnedJobs.length}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Unmapped</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{jobsWithLocations.filter((job) => !job.location).length}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">High Urgency</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{filteredJobs.filter((job) => job.urgency === "High").length}</p>
-                </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Unmapped</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{jobsWithLocations.filter((job) => !job.location).length}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">High Urgency</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{filteredJobs.filter((job) => job.urgency === "High").length}</p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
-              <Input
-                placeholder="Search job number, customer, title, or address..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+            <Input
+              placeholder="Search job number, customer, title, or address..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
 
-              <div className="grid gap-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job Filter</p>
-                <Select value={jobFilter} onValueChange={setJobFilter}>
-                  <SelectTrigger className="rounded-xl bg-white">
-                    <SelectValue placeholder="All jobs" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {JOB_FILTERS.map((filter) => (
-                      <SelectItem key={filter.value} value={filter.value}>
-                        {filter.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site Type</p>
-                <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
-                  <SelectTrigger className="rounded-xl bg-white">
-                    <SelectValue placeholder="All site types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_FILTER_VALUE}>All site types</SelectItem>
-                    <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
-                    {siteTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer Type</p>
-                <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-                  <SelectTrigger className="rounded-xl bg-white">
-                    <SelectValue placeholder="All customer types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_FILTER_VALUE}>All customer types</SelectItem>
-                    <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
-                    {customerTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid gap-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job Filter</p>
+              <Select value={jobFilter} onValueChange={setJobFilter}>
+                <SelectTrigger className="rounded-xl bg-white">
+                  <SelectValue placeholder="All jobs" />
+                </SelectTrigger>
+                <SelectContent>
+                  {JOB_FILTERS.map((filter) => (
+                    <SelectItem key={filter.value} value={filter.value}>
+                      {filter.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {mapConfigError ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-                {mapConfigError}
-              </div>
-            ) : null}
-
-            {geocodeError ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                {geocodeError}
-              </div>
-            ) : null}
-
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
-              {isLoadingMapConfig ? (
-                <div className="flex min-h-[540px] items-center justify-center gap-3 text-sm text-slate-500">
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                  <span>Loading map tiles...</span>
-                </div>
-              ) : (
-                <div ref={mapContainerRef} className="min-h-[540px] w-full" />
-              )}
+            <div className="grid gap-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site Type</p>
+              <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
+                <SelectTrigger className="rounded-xl bg-white">
+                  <SelectValue placeholder="All site types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER_VALUE}>All site types</SelectItem>
+                  <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
+                  {siteTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {isLoadingGeocodes ? (
-              <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="grid gap-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer Type</p>
+              <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
+                <SelectTrigger className="rounded-xl bg-white">
+                  <SelectValue placeholder="All customer types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_FILTER_VALUE}>All customer types</SelectItem>
+                  <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
+                  {customerTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {mapConfigError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {mapConfigError}
+            </div>
+          ) : null}
+
+          {geocodeError ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {geocodeError}
+            </div>
+          ) : null}
+
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+            {isLoadingMapConfig ? (
+              <div className="flex min-h-[540px] items-center justify-center gap-3 text-sm text-slate-500">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                <span>Geocoding saved job addresses...</span>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:self-start">
-        <Card className="rounded-3xl border-slate-200 bg-white/85 shadow-sm backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-base">Selected Job</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedJob ? (
-              <div className="grid gap-4 text-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                      {selectedJob.jobNumber ? `Job #${selectedJob.jobNumber}` : "Job"}
-                    </p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">{selectedJob.title}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selectedJob.siteType ? <Badge className="bg-violet-100 text-violet-800">{formatSiteType(selectedJob.siteType)}</Badge> : null}
-                      {selectedJob.customerType ? <Badge className="bg-fuchsia-100 text-fuchsia-800">{formatCustomerType(selectedJob.customerType)}</Badge> : null}
-                    </div>
-                  </div>
-                  <Badge className={getJobBadgeClassName(selectedJob)}>
-                    {selectedJob.urgency === "High" ? "High Urgency" : selectedJob.status}
-                  </Badge>
-                </div>
-
-                <div className="grid gap-3">
-                  <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <MapPinned className="mt-0.5 h-4 w-4 text-slate-500" />
-                    <div>
-                      <p className="font-medium text-slate-900">{selectedJob.jobAddress || "No address saved"}</p>
-                      {selectedJobResolvedAddress ? (
-                        <p className="mt-1 text-slate-600">{selectedJobResolvedAddress}</p>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <BriefcaseBusiness className="mt-0.5 h-4 w-4 text-slate-500" />
-                    <div>
-                      <p className="font-medium text-slate-900">{selectedJob.customerName || "No customer linked"}</p>
-                      <p className="mt-1 text-slate-600">{selectedJob.assignedTechnicianName || "No technician assigned"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {selectedJob.description ? (
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Description</p>
-                    <p className="mt-2 whitespace-pre-wrap leading-6 text-slate-700">{selectedJob.description}</p>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-600">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Status</span>
-                    <span className="font-medium text-slate-900">{selectedJob.status}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Urgency</span>
-                    <span className="font-medium text-slate-900">{selectedJob.urgency}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Scheduled</span>
-                    <span className="font-medium text-slate-900">{selectedJob.scheduledDate || "Not set"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Updated</span>
-                    <span className="font-medium text-slate-900">{formatDate(selectedJob.updatedAt)}</span>
-                  </div>
-                </div>
-
-                <Button className="rounded-2xl" onClick={() => onOpenJob(selectedJob)}>
-                  Open Job Details
-                </Button>
+                <span>Loading map tiles...</span>
               </div>
             ) : (
-              <EmptyState
-                title="No pinned jobs yet"
-                text="Once a visible job address resolves to coordinates, it will appear here and on the map."
-              />
+              <div ref={mapContainerRef} className="min-h-[540px] w-full" />
             )}
-          </CardContent>
-        </Card>
+          </div>
 
-      </div>
+          {isLoadingGeocodes ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <span>Geocoding saved job addresses...</span>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   );
 }

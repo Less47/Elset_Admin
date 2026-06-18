@@ -346,7 +346,7 @@ export default function StaffManager({
             </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_220px_auto]">
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_auto]">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input
@@ -376,7 +376,7 @@ export default function StaffManager({
             <div className="flex items-end">
               <Button
                 variant="outline"
-                className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+                className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
                 onClick={() => {
                   setSearch("");
                   setSortBy("name-asc");
@@ -428,7 +428,52 @@ export default function StaffManager({
               />
             </div>
           ) : (
-            <div className="overflow-x-auto bg-white">
+            <>
+              <div className="bg-white text-xs 2xl:hidden">
+                <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <span>Staff</span>
+                  <span>Contact</span>
+                  <span className="text-right">Jobs</span>
+                  <span className="text-right">Action</span>
+                </div>
+
+                {filteredStaff.map((staffMember, index) => (
+                  <div
+                    key={staffMember.id}
+                    className={`grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
+                      index !== filteredStaff.length - 1 ? "border-b border-slate-200" : ""
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.role || "Role not set"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</p>
+                    </div>
+                    <div className="min-w-0 text-slate-700">
+                      <p className="truncate">{staffMember.email || "No email"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.phone || "No phone"}</p>
+                    </div>
+                    <div className="min-w-0 text-right text-slate-700">
+                      <p><span className="font-semibold text-slate-950">{staffMember.assignedJobs}</span> assigned</p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">{staffMember.openJobs} open</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 rounded-md border-slate-300 px-2 text-[11px]"
+                        onClick={() => {
+                          setEditingStaff(staffMember);
+                          setStaffDialogOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto bg-white 2xl:block">
               <div className="min-w-[1120px]">
                 <div className="grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                   <span>Staff Member</span>
@@ -482,6 +527,7 @@ export default function StaffManager({
                 ))}
               </div>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

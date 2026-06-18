@@ -177,7 +177,7 @@ export default function JobHistoryManager({
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_200px_180px_180px]">
+        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.6fr)_200px_180px_180px]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -241,7 +241,7 @@ export default function JobHistoryManager({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_200px_170px_170px_170px_auto] xl:items-end">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[220px_200px_170px_170px_170px_auto] 2xl:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Technician</p>
             <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
@@ -316,7 +316,7 @@ export default function JobHistoryManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={resetFilters}
             >
               Reset
@@ -346,7 +346,52 @@ export default function JobHistoryManager({
             <EmptyState title="No jobs found" text="Try adjusting the search or filters to find the job you want." />
           </div>
         ) : (
-          <div className="overflow-x-auto bg-white">
+          <>
+            <div className="bg-white text-xs 2xl:hidden">
+              <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_150px_76px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <span>Job</span>
+                <span>Customer</span>
+                <span>Status</span>
+                <span className="text-right">Open</span>
+              </div>
+
+              {filteredJobs.map((job, index) => (
+                <div
+                  key={job.id}
+                  onDoubleClick={() => onOpenJob(job)}
+                  title="Double-click to open job"
+                  className={`grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_150px_76px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
+                    index !== filteredJobs.length - 1 ? "border-b border-slate-200" : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
+                    <p className="truncate font-semibold text-slate-950">{job.title}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.description || "No description saved."}</p>
+                  </div>
+
+                  <div className="min-w-0 text-slate-700">
+                    <p className="truncate font-medium text-slate-900">{job.customerName}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.jobAddress || "No site address saved"}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.assignedTechnicianName || "Unassigned"} - {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+                  </div>
+
+                  <div className="flex min-w-0 flex-wrap gap-1">
+                    <Badge className={`${statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"} px-1.5 py-0 text-[10px]`}>{job.status}</Badge>
+                    <Badge className={`${getUrgencyBadgeClassName(job.urgency)} px-1.5 py-0 text-[10px]`}>{job.urgency || "Low"}</Badge>
+                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{job.hasQuote ? "Quote" : "No quote"}</Badge>
+                    <Badge className={`${job.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{job.invoiceStatus.label}</Badge>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(job)}>
+                      Open
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto bg-white 2xl:block">
             <div className="min-w-[1520px]">
               <div className="grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 <span>Job</span>
@@ -414,6 +459,7 @@ export default function JobHistoryManager({
               ))}
             </div>
           </div>
+          </>
         )}
       </CardContent>
     </Card>

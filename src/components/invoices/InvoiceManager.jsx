@@ -149,7 +149,7 @@ export default function InvoiceManager({
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_200px_200px_220px_auto]">
+        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_200px_200px_220px_auto]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -215,7 +215,7 @@ export default function InvoiceManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={() => {
                 setSearch("");
                 setTimeRange("all-time");
@@ -251,7 +251,57 @@ export default function InvoiceManager({
             <EmptyState title="No billing records found" text="Try adjusting the search or filters." />
           </div>
         ) : (
-          <div className="overflow-x-auto bg-white">
+          <>
+            <div className="bg-white text-xs 2xl:hidden">
+              <div className="grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <span>Job</span>
+                <span>Invoice</span>
+                <span>Payment</span>
+                <span className="text-right">Actions</span>
+              </div>
+
+              {filteredRows.map((row, index) => (
+                <div
+                  key={row.job.id}
+                  className={`grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
+                    index !== filteredRows.length - 1 ? "border-b border-slate-200" : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
+                    <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.job.title}</p>
+                  </div>
+
+                  <div className="min-w-0 text-slate-700">
+                    <Badge className={`${row.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{row.invoiceStatus.label}</Badge>
+                    <p className="mt-1 truncate text-[11px]">Issued {row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.invoice ? money(row.total) : money(0)}</p>
+                  </div>
+
+                  <div className="min-w-0 text-slate-700">
+                    <p className="truncate font-medium text-slate-900">Bal {row.invoice ? money(row.paymentSummary.balanceAmount) : money(0)}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">Paid {row.invoice ? money(row.paymentSummary.paidAmount) : money(0)}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.paymentSummary.paymentCount} payments</p>
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-1">
+                    <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
+                      Job
+                    </Button>
+                    {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSentInvoice(row.job)}>
+                        Open
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
+                      {row.invoice ? "Editor" : "Create"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto bg-white 2xl:block">
             <div className="min-w-[1540px]">
               <div className="grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 <span>Job</span>
@@ -335,6 +385,7 @@ export default function InvoiceManager({
               ))}
             </div>
           </div>
+          </>
         )}
       </CardContent>
     </Card>

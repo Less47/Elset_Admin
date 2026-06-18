@@ -201,7 +201,7 @@ function ServiceBoardViewToggle({ status, viewMode, onChange }) {
             type="button"
             size="xs"
             variant={isActive ? "secondary" : "ghost"}
-            className={isActive ? "rounded-lg bg-slate-900 px-2.5 text-white hover:bg-slate-900/90 hover:text-white" : "rounded-lg px-2.5 text-slate-600 hover:text-slate-900"}
+            className={isActive ? "rounded-lg bg-slate-900 px-2 text-white hover:bg-slate-900/90 hover:text-white 2xl:px-2.5" : "rounded-lg px-2 text-slate-600 hover:text-slate-900 2xl:px-2.5"}
             onClick={() => onChange(value)}
             aria-label={`${status} ${label} view`}
             aria-pressed={isActive}
@@ -219,7 +219,7 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
   return (
     <Select value={sortMode} onValueChange={onChange}>
       <SelectTrigger
-        className="h-8 min-w-[120px] rounded-lg border-slate-300 bg-white text-xs font-medium"
+        className="h-8 min-w-[96px] rounded-lg border-slate-300 bg-white text-xs font-medium 2xl:min-w-[120px]"
         aria-label={`${status} sort order`}
         title={`${status} sort order`}
       >
@@ -566,12 +566,12 @@ export function OfficeBoard({
             }}
           >
             <CardHeader className="gap-4">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle className="min-w-0 shrink-0">{status}</CardTitle>
-                <div className="flex shrink-0 items-center gap-2">
+              <div className="grid gap-2 2xl:flex 2xl:items-center 2xl:justify-between 2xl:gap-3">
+                <CardTitle className="min-w-0">{status}</CardTitle>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5 2xl:justify-end 2xl:gap-2">
                   <ServiceBoardSortSelect status={status} sortMode={sortMode} onChange={(nextSortMode) => onColumnSortModeChange?.(status, nextSortMode)} />
                   <ServiceBoardViewToggle status={status} viewMode={viewMode} onChange={(nextViewMode) => onColumnViewModeChange?.(status, nextViewMode)} />
-                  <Badge className={statusTheme.badge}>{columnJobs.length}</Badge>
+                  <Badge className={`shrink-0 ${statusTheme.badge}`}>{columnJobs.length}</Badge>
                 </div>
               </div>
             </CardHeader>

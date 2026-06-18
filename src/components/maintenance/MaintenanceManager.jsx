@@ -431,7 +431,7 @@ export default function MaintenanceManager({
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden rounded-3xl border-slate-200">
           <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50">
             <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
@@ -444,7 +444,7 @@ export default function MaintenanceManager({
               </div>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
+            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
               <div className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
                 <Input
@@ -489,7 +489,7 @@ export default function MaintenanceManager({
               <div className="flex items-end">
                 <Button
                   variant="outline"
-                  className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+                  className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
                   onClick={() => {
                     setSearch("");
                     setFilterBy("all");

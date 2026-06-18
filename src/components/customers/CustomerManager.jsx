@@ -135,6 +135,56 @@ export default function CustomerManager({
     return rows;
   }, [createdRange, customerRows, customerTypeFilter, deferredSearch, filterBy, filterClock, sortBy, toTimestamp]);
 
+  const renderCustomerCards = (className) => (
+    <div className={className}>
+      {filteredCustomers.map((customer) => (
+        <div
+          key={customer.id}
+          onDoubleClick={() => onOpenProfile(customer.id)}
+          title="Double-click to open customer profile"
+          className="cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900">{customer.name}</p>
+              <p className="mt-1 text-sm text-slate-600">{customer.address || "No address saved"}</p>
+            </div>
+            {customer.customerType ? <Badge className="bg-slate-100 text-slate-700">{formatCustomerType(customer.customerType)}</Badge> : null}
+          </div>
+
+          <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 sm:grid-cols-2">
+            <div className="flex items-center justify-between gap-3">
+              <span>Email</span>
+              <span className="truncate font-medium text-slate-900">{customer.email || "Not set"}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Phone</span>
+              <span className="truncate font-medium text-slate-900">{customer.phone || "Not set"}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Jobs</span>
+              <span className="font-medium text-slate-900">{customer.jobCount}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span>Open jobs</span>
+              <span className="font-medium text-slate-900">{customer.openJobCount}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 sm:col-span-2">
+              <span>Last activity</span>
+              <span className="font-medium text-slate-900">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <Button variant="outline" className="rounded-xl" onClick={() => onOpenProfile(customer.id)}>
+              Open Profile
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
       <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
@@ -175,7 +225,7 @@ export default function CustomerManager({
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_200px_200px_200px_200px_auto]">
+        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_200px_200px_200px_200px_auto]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -255,7 +305,7 @@ export default function CustomerManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={() => {
                 setSearch("");
                 setSortBy("name-asc");
@@ -285,7 +335,51 @@ export default function CustomerManager({
           </div>
         ) : (
           viewMode === "list" ? (
-            <div className="overflow-x-auto bg-white">
+            <>
+              <div className="bg-white text-xs 2xl:hidden">
+                <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <span>Customer</span>
+                  <span>Contact</span>
+                  <span>Activity</span>
+                  <span className="text-right">Jobs</span>
+                </div>
+
+                {filteredCustomers.map((customer, index) => (
+                  <div
+                    key={customer.id}
+                    onDoubleClick={() => onOpenProfile(customer.id)}
+                    title="Double-click to open customer profile"
+                    className={`grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
+                      index !== filteredCustomers.length - 1 ? "border-b border-slate-200" : ""
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="truncate font-semibold text-slate-950">{customer.name}</p>
+                        {customer.customerType ? <Badge className="hidden bg-slate-100 px-1.5 py-0 text-[10px] text-slate-700 xl:inline-flex">{formatCustomerType(customer.customerType)}</Badge> : null}
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.address || "No address saved"}</p>
+                    </div>
+                    <div className="min-w-0 text-slate-700">
+                      <p className="truncate">{customer.email || "No email"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.phone || "No phone"}</p>
+                    </div>
+                    <div className="min-w-0 text-slate-700">
+                      <p className="truncate">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">Created {formatDate(customer.createdAt)}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <p className="text-right text-[11px] text-slate-600">
+                        <span className="font-semibold text-slate-950">{customer.jobCount}</span> total / <span className="font-semibold text-slate-950">{customer.openJobCount}</span> open
+                      </p>
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenProfile(customer.id)}>
+                        Open
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto bg-white 2xl:block">
               <div className="min-w-[1180px]">
                 <div className="grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                   <span>Customer</span>
@@ -336,54 +430,9 @@ export default function CustomerManager({
                 ))}
               </div>
             </div>
+            </>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-              {filteredCustomers.map((customer) => (
-                <div
-                  key={customer.id}
-                  onDoubleClick={() => onOpenProfile(customer.id)}
-                  title="Double-click to open customer profile"
-                  className="cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900">{customer.name}</p>
-                      <p className="mt-1 text-sm text-slate-600">{customer.address || "No address saved"}</p>
-                    </div>
-                    {customer.customerType ? <Badge className="bg-slate-100 text-slate-700">{formatCustomerType(customer.customerType)}</Badge> : null}
-                  </div>
-
-                  <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 sm:grid-cols-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Email</span>
-                      <span className="truncate font-medium text-slate-900">{customer.email || "Not set"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Phone</span>
-                      <span className="truncate font-medium text-slate-900">{customer.phone || "Not set"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Jobs</span>
-                      <span className="font-medium text-slate-900">{customer.jobCount}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span>Open jobs</span>
-                      <span className="font-medium text-slate-900">{customer.openJobCount}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:col-span-2">
-                      <span>Last activity</span>
-                      <span className="font-medium text-slate-900">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex justify-end">
-                    <Button variant="outline" className="rounded-xl" onClick={() => onOpenProfile(customer.id)}>
-                      Open Profile
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            renderCustomerCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")
           )
         )}
       </CardContent>

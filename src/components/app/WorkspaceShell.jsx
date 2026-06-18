@@ -426,7 +426,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             customers={data.customers}
             jobs={data.jobs}
             onOpenJob={handleOpenJob}
-            formatDate={formatDate}
           />
         ) : null}
 

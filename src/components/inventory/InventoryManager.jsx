@@ -259,7 +259,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input
@@ -305,7 +305,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <div className="flex items-end">
               <Button
                 variant="outline"
-                className="w-full rounded-lg border-slate-300 bg-white xl:w-auto"
+                className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
                 onClick={() => {
                   setSearch("");
                   setFilterBy("all");
@@ -352,7 +352,66 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
               />
             </div>
           ) : (
-            <div className="overflow-x-auto bg-white">
+            <>
+              <div className="bg-white text-xs 2xl:hidden">
+                <div className="grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  <span>Part</span>
+                  <span className="text-right">Stock</span>
+                  <span className="text-right">Value</span>
+                  <span className="text-right">Action</span>
+                </div>
+
+                {filteredParts.map((part, index) => {
+                  const status = getInventoryStockStatus(part);
+                  const stockValue = part.quantity * part.unitCost;
+
+                  return (
+                    <div
+                      key={part.id}
+                      className={`grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
+                        index !== filteredParts.length - 1 ? "border-b border-slate-200" : ""
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">{part.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{part.sku || "No SKU"} - {part.category}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{part.supplier || "No supplier"} / {part.location || "No location"}</p>
+                      </div>
+                      <div className="min-w-0 text-right text-slate-700">
+                        <p className="font-semibold text-slate-950">{part.quantity}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">Reorder {part.reorderLevel}</p>
+                        <Badge className={`${status.className} mt-1 px-1.5 py-0 text-[10px]`}>{status.label}</Badge>
+                      </div>
+                      <div className="min-w-0 text-right text-slate-700">
+                        <p className="font-semibold text-slate-950">{money(stockValue)}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{money(part.unitCost)} ea</p>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-md border-slate-300 px-2 text-[11px]"
+                          onClick={() => {
+                            setEditingPart(part);
+                            setPartDialogOpen(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-md border-rose-200 px-2 text-[11px] text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                          onClick={() => onDeletePart(part.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden overflow-x-auto bg-white 2xl:block">
               <div className="min-w-[1320px]">
                 <div className="grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                   <span>Part</span>
@@ -420,6 +479,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                 })}
               </div>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
