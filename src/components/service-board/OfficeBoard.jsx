@@ -591,7 +591,7 @@ function JobCard({
         <CardContent className={cardContentClassName}>
           {isGridView ? (
             <div className="flex h-full flex-col justify-between gap-4">
-              <div className="space-y-3 pr-10">
+              <div className="space-y-1.5 pr-10">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
                 <p className="text-sm font-medium leading-5 text-slate-800">{job.customerName}</p>
                 <p className="text-xs font-normal leading-4 text-slate-950">{job.title}</p>
