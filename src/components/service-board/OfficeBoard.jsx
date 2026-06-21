@@ -593,6 +593,7 @@ function JobCard({
             <div className="flex h-full flex-col justify-between gap-4">
               <div className="space-y-3 pr-10">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
+                <p className="text-sm font-medium leading-5 text-slate-800">{job.customerName}</p>
                 <p className="text-sm font-semibold leading-5 text-slate-950">{job.title}</p>
                 <p className="line-clamp-3 text-sm leading-5 text-slate-700">{gridAddress}</p>
               </div>
