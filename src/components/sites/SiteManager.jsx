@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatSiteType, siteTypeOptions } from "@/lib/app-support";
+import { formatCustomerType, formatSiteType, siteTypeOptions } from "@/lib/app-support";
 
 const NOT_SET_FILTER_VALUE = "__not_set__";
 
@@ -27,7 +27,9 @@ export default function SiteManager({
   const [viewMode, setViewMode] = useState("list");
   const [createSiteDialogOpen, setCreateSiteDialogOpen] = useState(false);
   const [newSiteCustomerId, setNewSiteCustomerId] = useState("");
+  const [newSiteCustomerSearch, setNewSiteCustomerSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const deferredNewSiteCustomerSearch = useDeferredValue(newSiteCustomerSearch);
 
   const customerOptions = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
@@ -37,6 +39,30 @@ export default function SiteManager({
   const selectedNewSiteCustomerId = customerOptions.some((customer) => customer.id === newSiteCustomerId)
     ? newSiteCustomerId
     : customerOptions[0]?.id || "";
+  const selectedNewSiteCustomer = useMemo(
+    () => customerOptions.find((customer) => customer.id === selectedNewSiteCustomerId) || null,
+    [customerOptions, selectedNewSiteCustomerId]
+  );
+
+  const filteredNewSiteCustomers = useMemo(() => {
+    const query = deferredNewSiteCustomerSearch.toLowerCase().trim();
+    if (!query) return customerOptions;
+
+    return customerOptions.filter((customer) =>
+      [
+        customer.name,
+        customer.email,
+        customer.phone,
+        customer.customerType,
+        customer.address,
+        ...(customer.siteAccessNotes || []).flatMap((site) => [site.address, site.notes]),
+        ...(customer.sites || []).flatMap((site) => [site.label, site.address, site.siteType, site.accessNotes, site.notes]),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [customerOptions, deferredNewSiteCustomerSearch]);
 
   const siteRows = useMemo(
     () =>
@@ -177,7 +203,10 @@ export default function SiteManager({
             <Button
               className="rounded-lg"
               disabled={customerOptions.length === 0}
-              onClick={() => setCreateSiteDialogOpen(true)}
+              onClick={() => {
+                setNewSiteCustomerSearch("");
+                setCreateSiteDialogOpen(true);
+              }}
             >
               <Plus className="mr-2 h-4 w-4" /> New Site
             </Button>
@@ -362,7 +391,13 @@ export default function SiteManager({
         </CardContent>
       </Card>
 
-      <Dialog open={createSiteDialogOpen} onOpenChange={setCreateSiteDialogOpen}>
+      <Dialog
+        open={createSiteDialogOpen}
+        onOpenChange={(open) => {
+          setCreateSiteDialogOpen(open);
+          if (!open) setNewSiteCustomerSearch("");
+        }}
+      >
         <DialogContent className="rounded-3xl sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create New Site</DialogTitle>
@@ -372,23 +407,106 @@ export default function SiteManager({
           </DialogHeader>
           <div className="grid gap-4">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer</p>
-              <Select value={selectedNewSiteCustomerId} onValueChange={setNewSiteCustomerId}>
-                <SelectTrigger className="rounded-lg">
-                  <SelectValue placeholder="Select customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customerOptions.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Find customer</p>
+              <Input
+                className="rounded-lg bg-white"
+                value={newSiteCustomerSearch}
+                onChange={(event) => setNewSiteCustomerSearch(event.target.value)}
+                placeholder="Search name, email, phone, or address..."
+              />
             </div>
+
+            <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+              <span>{filteredNewSiteCustomers.length} customer{filteredNewSiteCustomers.length === 1 ? "" : "s"} found</span>
+              <span>{selectedNewSiteCustomer ? `Selected: ${selectedNewSiteCustomer.name}` : "No customer selected"}</span>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50">
+              {filteredNewSiteCustomers.length === 0 ? (
+                <div className="p-4 text-sm text-slate-500">No customers match that search yet.</div>
+              ) : (
+                filteredNewSiteCustomers.map((customer, index) => {
+                  const isSelected = customer.id === selectedNewSiteCustomerId;
+                  return (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      onClick={() => setNewSiteCustomerId(customer.id)}
+                      className={`grid w-full gap-1 px-4 py-3 text-left transition ${
+                        index !== filteredNewSiteCustomers.length - 1 ? "border-b border-slate-200" : ""
+                      } ${
+                        isSelected
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-900 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <p className="truncate font-medium">{customer.name}</p>
+                          {customer.customerType ? (
+                            <Badge className={isSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}>
+                              {formatCustomerType(customer.customerType)}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                            isSelected
+                              ? "bg-white/15 text-white"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {isSelected ? "Selected" : "Record"}
+                        </span>
+                      </div>
+                      <p className={`truncate text-sm ${isSelected ? "text-slate-200" : "text-slate-600"}`}>
+                        {customer.email || "No email"}{customer.phone ? ` - ${customer.phone}` : ""}
+                      </p>
+                      <p className={`truncate text-xs ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
+                        {customer.address || "No address saved"}
+                      </p>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {selectedNewSiteCustomer ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected customer</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Customer</p>
+                    <p className="mt-1 font-medium text-slate-900">{selectedNewSiteCustomer.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Email</p>
+                    <p className="mt-1 font-medium text-slate-900">{selectedNewSiteCustomer.email || "Not set"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Phone</p>
+                    <p className="mt-1 font-medium text-slate-900">{selectedNewSiteCustomer.phone || "Not set"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Customer type</p>
+                    <p className="mt-1 font-medium text-slate-900">{formatCustomerType(selectedNewSiteCustomer.customerType)}</p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs uppercase text-muted-foreground">Address</p>
+                    <p className="mt-1 font-medium text-slate-900">{selectedNewSiteCustomer.address || "Not set"}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateSiteDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateSiteDialogOpen(false);
+                setNewSiteCustomerSearch("");
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -396,6 +514,7 @@ export default function SiteManager({
               onClick={() => {
                 onCreateSite(selectedNewSiteCustomerId);
                 setCreateSiteDialogOpen(false);
+                setNewSiteCustomerSearch("");
               }}
             >
               Continue
