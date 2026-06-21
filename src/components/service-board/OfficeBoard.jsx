@@ -459,7 +459,7 @@ function JobCard({
   const handleCardDoubleClick = () => onOpen(job);
   const shouldShowHeaderMeta = Boolean(jobValueMeta) || job.status !== "Completed";
   const gridAddress = job.jobAddress || "Not set";
-  const tomorrowActionPositionClassName = isGridView ? "right-3 -top-3" : isCompactView ? "right-12 top-2" : "right-2 top-2";
+  const tomorrowActionPositionClassName = isGridView ? "right-0 top-0 translate-x-1/2 -translate-y-1/2" : isCompactView ? "right-12 top-2" : "right-2 top-2";
   const tomorrowAction = isPlannedForTomorrow ? (
     <span className={`absolute z-10 rounded-full bg-sky-500/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm ${tomorrowActionPositionClassName}`}>
       Tomorrow
@@ -590,7 +590,7 @@ function JobCard({
         <JobCardIndicators
           indicators={cardIndicators}
           showTagLabels={false}
-          className="pointer-events-none absolute left-3 -top-2.5 z-20 gap-1.5"
+          className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-1/2 gap-1.5"
         />
       ) : null}
       {tomorrowAction}
