@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera } from "lucide-react";
+import { Camera, Trash2 } from "lucide-react";
 import { SupplierManualMatches, formatDate, getCustomerSiteAccessNote, getInvoicePaymentSummary, getInvoiceStatus, normalizeSiteAddress } from "@/lib/app-support";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export default function JobDetailsDialog({
   onStatusChange,
   onAddNote,
   onAddPhotos,
+  onDeletePhoto,
   onEditJob,
   onDeleteJob,
   canEditJob = true,
@@ -241,18 +242,40 @@ export default function JobDetailsDialog({
                       <p className="text-sm text-muted-foreground xl:col-span-1 2xl:col-span-2">No photos uploaded yet.</p>
                     ) : (
                       job.photos.map((photo, index) => (
-                        <button
-                          key={photo.id}
-                          type="button"
-                          className="overflow-hidden rounded-2xl border text-left transition hover:border-slate-300 hover:bg-slate-50"
-                          onClick={() => setSelectedPhoto(photo)}
-                        >
-                          <img src={photo.url} alt={photo.name} className="h-28 w-full object-cover" />
-                          <div className="space-y-1 border-t bg-white px-3 py-2">
-                            <p className="truncate text-sm font-medium text-slate-900">{photo.name || `Photo ${index + 1}`}</p>
-                            <p className="text-xs text-slate-500">Open full size</p>
-                          </div>
-                        </button>
+                        <div key={photo.id} className="group relative">
+                          <button
+                            type="button"
+                            className="w-full overflow-hidden rounded-2xl border text-left transition hover:border-slate-300 hover:bg-slate-50"
+                            onClick={() => setSelectedPhoto(photo)}
+                          >
+                            <img src={photo.url} alt={photo.name} className="h-28 w-full object-cover" />
+                            <div className="space-y-1 border-t bg-white px-3 py-2">
+                              <p className="truncate text-sm font-medium text-slate-900">{photo.name || `Photo ${index + 1}`}</p>
+                              <p className="text-xs text-slate-500">Open full size</p>
+                            </div>
+                          </button>
+
+                          {onDeletePhoto ? (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="absolute right-2 top-2 h-8 w-8 rounded-full border-rose-200 bg-white/95 text-rose-700 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onDeletePhoto(photo);
+                                if (selectedPhoto?.id === photo.id) {
+                                  setSelectedPhoto(null);
+                                }
+                              }}
+                              aria-label={`Delete ${photo.name || `photo ${index + 1}`}`}
+                              title="Delete photo"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </div>
                       ))
                     )}
                   </div>

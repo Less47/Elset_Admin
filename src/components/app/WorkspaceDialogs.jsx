@@ -172,6 +172,17 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             window.alert(message);
           }
         }}
+        onDeletePhoto={(photo) => {
+          if (!selectedFreshJob) return;
+
+          const photoLabel = photo?.name || "this photo";
+          const confirmed = window.confirm(`Delete ${photoLabel} from this job? This cannot be undone.`);
+          if (!confirmed) return;
+
+          updateJob(selectedFreshJob.id, {
+            photos: (selectedFreshJob.photos || []).filter((entry) => entry.id !== photo.id),
+          });
+        }}
       />
 
       {canManageBusiness ? (
