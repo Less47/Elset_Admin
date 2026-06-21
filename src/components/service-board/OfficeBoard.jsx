@@ -332,14 +332,43 @@ export function ServiceBoardTomorrowPanel({
   formatDate,
 }) {
   const panelWidth = "min(92vw, 440px)";
+  const tabButtonRef = useRef(null);
+  const [tabEdgeOffset, setTabEdgeOffset] = useState(0);
+
+  useEffect(() => {
+    if (!tabButtonRef.current) return undefined;
+
+    const measureOffset = () => {
+      const width = tabButtonRef.current?.offsetWidth || 0;
+      const height = tabButtonRef.current?.offsetHeight || 0;
+      setTabEdgeOffset(Math.max(0, (width - height) / 2));
+    };
+
+    measureOffset();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      measureOffset();
+    });
+
+    observer.observe(tabButtonRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [jobs.length]);
 
   return (
     <>
       <Button
+        ref={tabButtonRef}
         type="button"
         variant="outline"
         className="fixed top-1/2 z-[60] flex -translate-y-1/2 rotate-90 items-center gap-2 rounded-b-none rounded-t-2xl border-slate-300 bg-white/95 px-3 py-2 shadow-lg transition-all duration-300 hover:bg-white"
-        style={{ right: open ? `calc(${panelWidth} - 20px)` : "-20px" }}
+        style={{ right: open ? `calc(${panelWidth} - ${tabEdgeOffset}px)` : `${-tabEdgeOffset}px` }}
         onClick={() => onOpenChange(!open)}
       >
         <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Tomorrow</span>
