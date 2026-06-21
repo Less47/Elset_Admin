@@ -393,7 +393,7 @@ function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
   if (indicators.length === 0) return null;
 
   return (
-    <div className={`${className} flex flex-wrap items-center gap-2`}>
+    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {indicators.map((indicator) =>
         showTagLabels ? (
           <div
@@ -444,7 +444,7 @@ function JobCard({
   const isGridView = viewMode === "grid";
   const isCompactView = viewMode === "compact";
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
-  const cardClassName = `${isGridView ? "h-full rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card}`;
+  const cardClassName = `${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card}`;
   const cardContentClassName = isGridView ? "flex h-full flex-col p-3.5" : isCompactView ? "p-3.5" : "p-4";
   const descriptionClassName = isCompactView ? "mt-2 line-clamp-1 text-sm text-slate-700" : isGridView ? "mt-2 line-clamp-2 text-sm text-slate-700" : "mt-3 line-clamp-3 text-sm text-slate-700";
   const actionRowClassName = isGridView ? "mt-auto flex flex-wrap gap-2 pt-4" : isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
@@ -459,7 +459,7 @@ function JobCard({
   const handleCardDoubleClick = () => onOpen(job);
   const shouldShowHeaderMeta = Boolean(jobValueMeta) || job.status !== "Completed";
   const gridAddress = job.jobAddress || "Not set";
-  const tomorrowActionPositionClassName = isCompactView ? "right-12 top-2" : "right-2 top-2";
+  const tomorrowActionPositionClassName = isGridView ? "right-3 -top-3" : isCompactView ? "right-12 top-2" : "right-2 top-2";
   const tomorrowAction = isPlannedForTomorrow ? (
     <span className={`absolute z-10 rounded-full bg-sky-500/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm ${tomorrowActionPositionClassName}`}>
       Tomorrow
@@ -586,6 +586,13 @@ function JobCard({
       onDoubleClick={handleCardDoubleClick}
       title="Double-click to open job"
     >
+      {isGridView ? (
+        <JobCardIndicators
+          indicators={cardIndicators}
+          showTagLabels={false}
+          className="pointer-events-none absolute left-3 -top-2.5 z-20 gap-1.5"
+        />
+      ) : null}
       {tomorrowAction}
       <Card className={cardClassName}>
         <CardContent className={cardContentClassName}>
