@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,10 @@ const serviceBoardIndicatorLegend = [
   { id: "maintenance", label: "Maintenance", dotClassName: "bg-teal-500" },
   { id: "access", label: "Access notes", dotClassName: "bg-amber-500" },
 ];
+
+const TOUCH_DRAG_HOLD_MS = 180;
+const TOUCH_DRAG_CANCEL_DISTANCE = 10;
+const TOUCH_DRAG_ACTIVATE_DISTANCE = 6;
 
 function getSiteAccessNotePreview(notes) {
   if (!notes) return "";
@@ -82,6 +86,17 @@ function getJobValueAmount(job) {
   if (job?.invoice) return calculateDocTotal(job.invoice.items || []);
   if (job?.quote) return calculateDocTotal(job.quote.items || []);
   return 0;
+}
+
+function getTrackedTouch(touchList, touchId) {
+  if (!touchList) return null;
+  return Array.from(touchList).find((touch) => touch.identifier === touchId) || null;
+}
+
+function isInteractiveTouchTarget(target) {
+  return target instanceof Element && Boolean(
+    target.closest("button, a, input, select, textarea, [role='button'], [data-slot='select-trigger']")
+  );
 }
 
 function sortJobsForColumn(jobs, sortMode = "recent") {
@@ -428,7 +443,9 @@ function JobCard({
   viewMode = "list",
   showTagLabels = false,
   isPlannedForTomorrow = false,
+  isTouchDragging = false,
   onPlanForTomorrow = null,
+  onTouchDragStart = null,
   formatDate,
   getInvoiceStatus,
 }) {
@@ -444,7 +461,7 @@ function JobCard({
   const isGridView = viewMode === "grid";
   const isCompactView = viewMode === "compact";
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
-  const cardClassName = `${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card}`;
+  const cardClassName = `${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
   const cardContentClassName = isGridView ? "flex h-full flex-col p-3.5" : isCompactView ? "p-3.5" : "p-4";
   const descriptionClassName = isCompactView ? "mt-2 line-clamp-1 text-sm text-slate-700" : isGridView ? "mt-2 line-clamp-2 text-sm text-slate-700" : "mt-3 line-clamp-3 text-sm text-slate-700";
   const actionRowClassName = isGridView ? "mt-auto flex flex-wrap gap-2 pt-4" : isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
@@ -507,7 +524,14 @@ function JobCard({
 
   if (isCompactView) {
     return (
-      <div className="group relative" draggable={draggable} onDragStart={handleDragStart} onDoubleClick={handleCardDoubleClick} title="Double-click to open job">
+      <div
+        className="group relative"
+        draggable={draggable}
+        onDragStart={handleDragStart}
+        onDoubleClick={handleCardDoubleClick}
+        onTouchStart={onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
+        title="Double-click to open job"
+      >
         {tomorrowAction}
         <Card className={cardClassName}>
           <CardContent className={cardContentClassName}>
@@ -584,6 +608,7 @@ function JobCard({
       draggable={draggable}
       onDragStart={handleDragStart}
       onDoubleClick={handleCardDoubleClick}
+      onTouchStart={onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
       title="Double-click to open job"
     >
       {isGridView ? (
@@ -722,6 +747,10 @@ export function OfficeBoard({
   formatDate,
   tomorrowPlanningDate = "",
 }) {
+  const [touchDrag, setTouchDrag] = useState(null);
+  const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
+  const touchDragSessionRef = useRef(null);
+  const touchDragHoldTimerRef = useRef(null);
   const manualMatchesByJobId = useMemo(() => {
     return new Map(jobs.map((job) => [job.id, findSupplierManualMatches(job, supplierManuals, 3)]));
   }, [findSupplierManualMatches, jobs, supplierManuals]);
@@ -733,20 +762,168 @@ export function OfficeBoard({
     );
   }, [customers, getCustomerSiteAccessNote, jobs]);
 
+  const clearTouchDragHoldTimer = useCallback(() => {
+    if (touchDragHoldTimerRef.current) {
+      window.clearTimeout(touchDragHoldTimerRef.current);
+      touchDragHoldTimerRef.current = null;
+    }
+  }, []);
+
+  const syncTouchDrag = useCallback((nextSession) => {
+    touchDragSessionRef.current = nextSession;
+    setTouchDrag(nextSession);
+  }, []);
+
+  const clearTouchDragSession = useCallback(() => {
+    clearTouchDragHoldTimer();
+    touchDragSessionRef.current = null;
+    setTouchDrag(null);
+    setTouchDropTargetStatus("");
+  }, [clearTouchDragHoldTimer]);
+
+  const getTouchDropStatus = useCallback((clientX, clientY) => {
+    const statusElement = document.elementFromPoint(clientX, clientY)?.closest?.("[data-service-board-status]");
+    return statusElement?.getAttribute("data-service-board-status") || "";
+  }, []);
+
+  const handleTouchDragStart = useCallback((job, event) => {
+    if (!allowDragging || event.touches.length !== 1 || isInteractiveTouchTarget(event.target)) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    const nextSession = {
+      jobId: job.id,
+      jobNumber: job.jobNumber,
+      customerName: job.customerName,
+      title: job.title,
+      touchId: touch.identifier,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      isPrimed: false,
+      isActive: false,
+    };
+
+    clearTouchDragHoldTimer();
+    syncTouchDrag(nextSession);
+    setTouchDropTargetStatus("");
+
+    touchDragHoldTimerRef.current = window.setTimeout(() => {
+      const currentSession = touchDragSessionRef.current;
+      if (!currentSession || currentSession.jobId !== job.id || currentSession.touchId !== touch.identifier) {
+        return;
+      }
+
+      syncTouchDrag({
+        ...currentSession,
+        isPrimed: true,
+      });
+    }, TOUCH_DRAG_HOLD_MS);
+  }, [allowDragging, clearTouchDragHoldTimer, syncTouchDrag]);
+
+  useEffect(() => {
+    if (!touchDrag) return undefined;
+
+    const handleTouchMove = (event) => {
+      const currentSession = touchDragSessionRef.current;
+      if (!currentSession) return;
+
+      const touch = getTrackedTouch(event.touches, currentSession.touchId);
+      if (!touch) return;
+
+      const movement = Math.hypot(touch.clientX - currentSession.startX, touch.clientY - currentSession.startY);
+
+      if (!currentSession.isPrimed) {
+        if (movement > TOUCH_DRAG_CANCEL_DISTANCE) {
+          clearTouchDragSession();
+        }
+        return;
+      }
+
+      const nextSession = {
+        ...currentSession,
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        isActive: currentSession.isActive || movement > TOUCH_DRAG_ACTIVATE_DISTANCE,
+      };
+
+      syncTouchDrag(nextSession);
+
+      if (nextSession.isActive) {
+        event.preventDefault();
+        setTouchDropTargetStatus(getTouchDropStatus(touch.clientX, touch.clientY));
+      }
+    };
+
+    const handleTouchEnd = (event) => {
+      const currentSession = touchDragSessionRef.current;
+      if (!currentSession) return;
+
+      const touch = getTrackedTouch(event.changedTouches, currentSession.touchId);
+      const clientX = touch?.clientX ?? currentSession.clientX;
+      const clientY = touch?.clientY ?? currentSession.clientY;
+      const dropStatus = currentSession.isActive ? getTouchDropStatus(clientX, clientY) : "";
+
+      clearTouchDragSession();
+
+      if (currentSession.isActive && dropStatus) {
+        onDropJob(currentSession.jobId, dropStatus);
+      }
+    };
+
+    const handleTouchCancel = () => {
+      clearTouchDragSession();
+    };
+
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchcancel", handleTouchCancel);
+
+    return () => {
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchCancel);
+    };
+  }, [clearTouchDragSession, getTouchDropStatus, onDropJob, syncTouchDrag, touchDrag]);
+
+  useEffect(() => {
+    return () => {
+      clearTouchDragHoldTimer();
+    };
+  }, [clearTouchDragHoldTimer]);
+
   return (
-    <div className="grid gap-4 xl:grid-cols-3">
+    <div className="relative grid gap-4 xl:grid-cols-3">
+      {touchDrag?.isActive ? (
+        <div
+          className="pointer-events-none fixed z-[80] w-[200px] -translate-y-1/2 rounded-2xl border border-sky-300 bg-white/96 px-3 py-2 shadow-2xl backdrop-blur"
+          style={{
+            left: touchDrag.clientX,
+            top: touchDrag.clientY,
+            transform: "translate(18px, -50%)",
+          }}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Move Job #{touchDrag.jobNumber}</p>
+          <p className="mt-1 text-sm font-semibold leading-5 text-slate-950">{touchDrag.customerName}</p>
+          <p className="line-clamp-2 text-xs leading-4 text-slate-600">{touchDrag.title}</p>
+        </div>
+      ) : null}
       {statuses.map((status) => {
         const columnJobs = jobs.filter((job) => job.status === status);
         const sortedColumnJobs = sortJobsForColumn(columnJobs, columnSortModes[status] || "recent");
         const statusTheme = statusThemes[status] || statusThemes["To Do"];
         const sortMode = columnSortModes[status] || "recent";
         const viewMode = columnViewModes[status] || "list";
-        const jobLayoutClassName = viewMode === "grid" ? "grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]" : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
+        const jobLayoutClassName = viewMode === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
+        const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;
 
         return (
           <Card
             key={status}
-            className={`min-h-[520px] rounded-3xl backdrop-blur ${statusTheme.column}`}
+            data-service-board-status={status}
+            className={`min-h-[520px] rounded-3xl backdrop-blur transition-shadow ${statusTheme.column} ${isTouchDropTarget ? "ring-4 ring-sky-300/80 shadow-xl shadow-sky-200/60" : ""}`}
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
               const jobId = event.dataTransfer.getData("jobId");
@@ -786,11 +963,13 @@ export function OfficeBoard({
                       viewMode={viewMode}
                       showTagLabels={showTagLabels}
                       isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
+                      isTouchDragging={touchDrag?.isActive && touchDrag.jobId === job.id}
                       onPlanForTomorrow={
                         onPlanJobForTomorrow && job.serviceBoardTomorrowDate !== tomorrowPlanningDate
                           ? onPlanJobForTomorrow
                           : null
                       }
+                      onTouchDragStart={allowDragging ? handleTouchDragStart : null}
                       formatDate={formatDate}
                       getInvoiceStatus={getInvoiceStatus}
                     />
