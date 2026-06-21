@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
+import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -307,64 +307,85 @@ function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob }) {
   );
 }
 
-export function ServiceBoardTomorrowPlanner({
+export function ServiceBoardTomorrowPanel({
   jobs,
+  open,
   tomorrowDate,
-  onDropJob,
+  onOpenChange,
   onOpenJob,
   onRemoveJob,
   formatDate,
 }) {
-  const [isDragOver, setIsDragOver] = useState(false);
+  const panelWidth = "min(92vw, 440px)";
 
   return (
-    <Card
-      className={`rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur transition ${isDragOver ? "ring-2 ring-sky-300/80" : ""}`}
-      onDragOver={(event) => {
-        event.preventDefault();
-        setIsDragOver(true);
-      }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(event) => {
-        event.preventDefault();
-        const jobId = event.dataTransfer.getData("jobId");
-        setIsDragOver(false);
-        onDropJob(jobId);
-      }}
-    >
-      <CardContent className="grid gap-4 p-4 md:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Tomorrow</p>
-            <p className="mt-1 text-lg font-semibold text-slate-950">{formatDate(tomorrowDate)}</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Drag jobs here to line up tomorrow&apos;s run sheet without changing their current status on the board.
-            </p>
-          </div>
-          <Badge className="w-fit bg-sky-100 text-sky-800">
-            {jobs.length} planned
-          </Badge>
-        </div>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className="fixed top-1/2 z-[60] -translate-y-1/2 rounded-r-none rounded-l-2xl border-slate-300 bg-white/95 px-3 py-6 shadow-lg transition-all duration-300 hover:bg-white"
+        style={{ right: open ? panelWidth : "0px" }}
+        onClick={() => onOpenChange(!open)}
+      >
+        <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Tomorrow</span>
+        <Badge className="bg-sky-100 text-sky-800">{jobs.length}</Badge>
+        <ChevronRight className={`ml-2 h-4 w-4 text-slate-600 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+      </Button>
 
-        {jobs.length === 0 ? (
-          <div className={`rounded-2xl border-2 border-dashed px-5 py-8 text-center text-sm transition ${isDragOver ? "border-sky-400 bg-sky-50 text-sky-900" : "border-slate-300 bg-slate-50 text-slate-600"}`}>
-            Drop jobs here to build tomorrow&apos;s list.
+      <div className={`fixed inset-0 z-40 transition-opacity duration-300 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}>
+        <button
+          type="button"
+          className="absolute inset-0 bg-slate-950/18 backdrop-blur-[1px]"
+          onClick={() => onOpenChange(false)}
+          aria-label="Close tomorrow panel"
+        />
+      </div>
+
+      <aside
+        className={`fixed right-0 top-0 z-50 h-screen w-[min(92vw,440px)] border-l border-slate-200 bg-white/96 shadow-2xl backdrop-blur transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}
+      >
+        <div className="flex h-full flex-col">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Tomorrow</p>
+                <p className="mt-1 text-xl font-semibold text-slate-950">{formatDate(tomorrowDate)}</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Build tomorrow&apos;s run sheet from the board using the hover arrow on each job card.
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onOpenChange(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="text-sm text-slate-600">Planned jobs</span>
+              <Badge className="bg-sky-100 text-sky-800">{jobs.length}</Badge>
+            </div>
           </div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {jobs.map((job) => (
-              <TomorrowJobCard
-                key={job.id}
-                job={job}
-                formatDate={formatDate}
-                onOpenJob={onOpenJob}
-                onRemoveJob={onRemoveJob}
-              />
-            ))}
+
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            {jobs.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+                Hover a job card and click the arrow to send it here.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {jobs.map((job) => (
+                  <TomorrowJobCard
+                    key={job.id}
+                    job={job}
+                    formatDate={formatDate}
+                    onOpenJob={onOpenJob}
+                    onRemoveJob={onRemoveJob}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -406,6 +427,8 @@ function JobCard({
   allowQuickStatusChange = false,
   viewMode = "list",
   showTagLabels = false,
+  isPlannedForTomorrow = false,
+  onPlanForTomorrow = null,
   formatDate,
   getInvoiceStatus,
 }) {
@@ -435,6 +458,28 @@ function JobCard({
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
   const handleCardDoubleClick = () => onOpen(job);
   const shouldShowHeaderMeta = Boolean(jobValueMeta) || job.status !== "Completed";
+  const tomorrowActionPositionClassName = isCompactView ? "right-12 top-2" : "right-2 top-2";
+  const tomorrowAction = isPlannedForTomorrow ? (
+    <span className={`absolute z-10 rounded-full bg-sky-500/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm ${tomorrowActionPositionClassName}`}>
+      Tomorrow
+    </span>
+  ) : onPlanForTomorrow ? (
+    <Button
+      type="button"
+      size="icon"
+      variant="outline"
+      className={`absolute z-10 h-8 w-8 rounded-full border-sky-200 bg-white/95 text-sky-700 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100 ${tomorrowActionPositionClassName}`}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onPlanForTomorrow(job.id);
+      }}
+      aria-label={`Add Job #${job.jobNumber} to tomorrow`}
+      title="Add to tomorrow"
+    >
+      <ArrowUpRight className="h-4 w-4" />
+    </Button>
+  ) : null;
 
   const statusControl = allowQuickStatusChange ? (
     <div className={isCompactView ? "w-[140px]" : "w-[150px]"}>
@@ -461,7 +506,8 @@ function JobCard({
 
   if (isCompactView) {
     return (
-      <div draggable={draggable} onDragStart={handleDragStart} onDoubleClick={handleCardDoubleClick} title="Double-click to open job">
+      <div className="group relative" draggable={draggable} onDragStart={handleDragStart} onDoubleClick={handleCardDoubleClick} title="Double-click to open job">
+        {tomorrowAction}
         <Card className={cardClassName}>
           <CardContent className={cardContentClassName}>
             <button
@@ -533,12 +579,13 @@ function JobCard({
 
   return (
     <div
-      className={isGridView ? "h-full" : undefined}
+      className={`group relative ${isGridView ? "h-full" : ""}`}
       draggable={draggable}
       onDragStart={handleDragStart}
       onDoubleClick={handleCardDoubleClick}
       title="Double-click to open job"
     >
+      {tomorrowAction}
       <Card className={cardClassName}>
         <CardContent className={cardContentClassName}>
           <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="mb-2" />
@@ -640,11 +687,13 @@ export function OfficeBoard({
   columnViewModes = {},
   onColumnSortModeChange,
   onColumnViewModeChange,
+  onPlanJobForTomorrow,
   showTagLabels = false,
   findSupplierManualMatches,
   getCustomerSiteAccessNote,
   getInvoiceStatus,
   formatDate,
+  tomorrowPlanningDate = "",
 }) {
   const manualMatchesByJobId = useMemo(() => {
     return new Map(jobs.map((job) => [job.id, findSupplierManualMatches(job, supplierManuals, 3)]));
@@ -709,6 +758,12 @@ export function OfficeBoard({
                       allowQuickStatusChange={allowQuickStatusChange}
                       viewMode={viewMode}
                       showTagLabels={showTagLabels}
+                      isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
+                      onPlanForTomorrow={
+                        onPlanJobForTomorrow && job.serviceBoardTomorrowDate !== tomorrowPlanningDate
+                          ? onPlanJobForTomorrow
+                          : null
+                      }
                       formatDate={formatDate}
                       getInvoiceStatus={getInvoiceStatus}
                     />

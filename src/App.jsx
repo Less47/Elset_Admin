@@ -31,6 +31,7 @@ export default function App() {
   const [officeSearch, setOfficeSearch] = useState("");
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
   const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);
+  const [serviceBoardTomorrowPanelOpen, setServiceBoardTomorrowPanelOpen] = useState(false);
   const [showServiceBoardTagLabels, setShowServiceBoardTagLabels] = useState(false);
   const [serviceBoardColumnViews, setServiceBoardColumnViews] = useState(() =>
     Object.fromEntries(statuses.map((status) => [status, "list"]))
@@ -66,6 +67,7 @@ export default function App() {
     setOfficeSearch("");
     setShowHighUrgencyOnly(false);
     setServiceBoardFullScreen(false);
+    setServiceBoardTomorrowPanelOpen(false);
     setServiceBoardColumnSorts(Object.fromEntries(statuses.map((status) => [status, "recent"])));
     resetSupplierManualState();
   }, [resetSupplierManualState]);
@@ -78,6 +80,7 @@ export default function App() {
     setActiveSection(nextSection);
     if (nextSection !== "service-board") {
       setServiceBoardFullScreen(false);
+      setServiceBoardTomorrowPanelOpen(false);
     }
   }, []);
 
@@ -149,6 +152,7 @@ export default function App() {
           serviceBoardColumnSorts,
           serviceBoardColumnViews,
           serviceBoardFullScreen,
+          serviceBoardTomorrowPanelOpen,
           setActiveSection: handleActiveSectionChange,
           setActiveSettingsTab,
           setActiveTemplateType,
@@ -158,6 +162,7 @@ export default function App() {
           setServiceBoardColumnSorts,
           setServiceBoardColumnViews,
           setServiceBoardFullScreen,
+          setServiceBoardTomorrowPanelOpen,
           setShowHighUrgencyOnly,
           setShowServiceBoardTagLabels,
           showHighUrgencyOnly,

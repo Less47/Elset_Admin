@@ -7,7 +7,7 @@ import JobHistoryManager from "@/components/jobs/JobHistoryManager";
 import MaintenanceManager from "@/components/maintenance/MaintenanceManager";
 import JobsMapManager from "@/components/map/JobsMapManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
-import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPlanner } from "@/components/service-board/OfficeBoard";
+import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPanel } from "@/components/service-board/OfficeBoard";
 import SettingsManager from "@/components/settings/SettingsManager";
 import StaffManager from "@/components/staff/StaffManager";
 import SiteManager from "@/components/sites/SiteManager";
@@ -47,6 +47,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     officeSearch,
     serviceBoardColumnSorts,
     serviceBoardColumnViews,
+    serviceBoardTomorrowPanelOpen,
     setActiveSection,
     setActiveSettingsTab,
     setActiveTemplateType,
@@ -56,6 +57,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     setServiceBoardColumnSorts,
     setServiceBoardColumnViews,
     setServiceBoardFullScreen,
+    setServiceBoardTomorrowPanelOpen,
     setShowHighUrgencyOnly,
     setShowServiceBoardTagLabels,
     showHighUrgencyOnly,
@@ -109,6 +111,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     : isAdmin
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
+  const handlePlanJobForTomorrowFromBoard = (jobId) => {
+    const changed = handlePlanJobForTomorrow(jobId);
+    if (changed) {
+      setServiceBoardTomorrowPanelOpen(true);
+    }
+  };
 
   const renderServiceBoardControls = (tone = "panel") => {
     const isHeroTone = tone === "hero";
@@ -365,10 +373,11 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               </Card>
             ) : null}
 
-            <ServiceBoardTomorrowPlanner
+            <ServiceBoardTomorrowPanel
               jobs={derived.tomorrowJobs}
+              open={serviceBoardTomorrowPanelOpen}
               tomorrowDate={derived.tomorrowPlanningDate}
-              onDropJob={handlePlanJobForTomorrow}
+              onOpenChange={setServiceBoardTomorrowPanelOpen}
               onOpenJob={handleOpenJob}
               onRemoveJob={handleRemoveJobFromTomorrow}
               formatDate={formatDate}
@@ -384,11 +393,13 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               allowDragging
               columnSortModes={serviceBoardColumnSorts}
               columnViewModes={serviceBoardColumnViews}
+              onPlanJobForTomorrow={handlePlanJobForTomorrowFromBoard}
               showTagLabels={showServiceBoardTagLabels}
               findSupplierManualMatches={findSupplierManualMatches}
               getCustomerSiteAccessNote={getCustomerSiteAccessNote}
               getInvoiceStatus={getInvoiceStatus}
               formatDate={formatDate}
+              tomorrowPlanningDate={derived.tomorrowPlanningDate}
               onColumnSortModeChange={(status, sortMode) =>
                 setServiceBoardColumnSorts((prev) =>
                   prev[status] === sortMode
