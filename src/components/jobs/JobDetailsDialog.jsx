@@ -46,7 +46,7 @@ export default function JobDetailsDialog({
       if (!nextOpen) setSelectedPhoto(null);
       onOpenChange(nextOpen);
     }}>
-      <DialogContent className="max-h-[90vh] rounded-3xl sm:max-w-4xl">
+      <DialogContent className="max-h-[92vh] rounded-3xl sm:max-w-[96vw] xl:max-w-[1560px] 2xl:max-w-[1720px]">
         <DialogHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -78,260 +78,262 @@ export default function JobDetailsDialog({
         </DialogHeader>
 
         <DialogBody>
-        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
-          <div className="grid gap-5">
-            <Card className="rounded-2xl">
-              <CardContent className="grid gap-4 p-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Job Number</p>
-                    <p className="font-medium">#{job.jobNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Customer</p>
-                    <p className="font-medium">{job.customerName}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Assigned Technician</p>
-                    <p className="font-medium">{job.assignedTechnicianName}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Phone</p>
-                    <p className="font-medium">{job.customerPhone}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Urgency</p>
-                    <p className="font-medium">{job.urgency}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Scheduled Date</p>
-                    <p className="font-medium">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+          <div className={`grid gap-6 ${showCommercialDocuments ? "xl:grid-cols-[minmax(360px,1.1fr)_minmax(320px,0.92fr)_minmax(320px,0.92fr)]" : "xl:grid-cols-[minmax(360px,1.18fr)_minmax(320px,0.92fr)]"}`}>
+            <div className="grid content-start gap-5">
+              <Card className="rounded-2xl">
+                <CardContent className="grid gap-4 p-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Job Number</p>
+                      <p className="font-medium">#{job.jobNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Customer</p>
+                      <p className="font-medium">{job.customerName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Assigned Technician</p>
+                      <p className="font-medium">{job.assignedTechnicianName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Phone</p>
+                      <p className="font-medium">{job.customerPhone}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Urgency</p>
+                      <p className="font-medium">{job.urgency}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Scheduled Date</p>
+                      <p className="font-medium">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+                    </div>
+                    {job.maintenancePlanName ? (
+                      <div>
+                        <p className="text-xs uppercase text-muted-foreground">Maintenance Due</p>
+                        <p className="font-medium">{job.maintenanceDueDate ? formatDate(job.maintenanceDueDate) : "Not set"}</p>
+                      </div>
+                    ) : null}
                   </div>
                   {job.maintenancePlanName ? (
                     <div>
-                      <p className="text-xs uppercase text-muted-foreground">Maintenance Due</p>
-                      <p className="font-medium">{job.maintenanceDueDate ? formatDate(job.maintenanceDueDate) : "Not set"}</p>
+                      <p className="text-xs uppercase text-muted-foreground">Maintenance Plan</p>
+                      <p className="font-medium">{job.maintenancePlanName}</p>
                     </div>
                   ) : null}
-                </div>
-                {job.maintenancePlanName ? (
                   <div>
-                    <p className="text-xs uppercase text-muted-foreground">Maintenance Plan</p>
-                    <p className="font-medium">{job.maintenancePlanName}</p>
-                  </div>
-                ) : null}
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground">Job Address</p>
-                  <p className="font-medium">{job.jobAddress}</p>
-                  {customer && (onOpenCustomerProfile || onOpenSiteProfile) ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {onOpenCustomerProfile ? (
-                        <Button variant="outline" size="sm" className="rounded-lg" onClick={() => onOpenCustomerProfile?.(customer.id)}>
-                          Open Customer Profile
-                        </Button>
-                      ) : null}
-                      {onOpenSiteProfile ? (
-                        <Button variant="outline" size="sm" className="rounded-lg" onClick={() => onOpenSiteProfile?.(customer.id, normalizeSiteAddress(job.jobAddress).toLowerCase())}>
-                          Open Site Profile
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-                {jobSiteAccessNote?.notes ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Site access notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{jobSiteAccessNote.notes}</p>
-                    {jobSiteAccessNote.updatedAt ? (
-                      <p className="mt-2 text-xs text-amber-700">Updated {formatDate(jobSiteAccessNote.updatedAt)}</p>
+                    <p className="text-xs uppercase text-muted-foreground">Job Address</p>
+                    <p className="font-medium">{job.jobAddress}</p>
+                    {customer && (onOpenCustomerProfile || onOpenSiteProfile) ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {onOpenCustomerProfile ? (
+                          <Button variant="outline" size="sm" className="rounded-lg" onClick={() => onOpenCustomerProfile?.(customer.id)}>
+                            Open Customer Profile
+                          </Button>
+                        ) : null}
+                        {onOpenSiteProfile ? (
+                          <Button variant="outline" size="sm" className="rounded-lg" onClick={() => onOpenSiteProfile?.(customer.id, normalizeSiteAddress(job.jobAddress).toLowerCase())}>
+                            Open Site Profile
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
-                <div>
-                  <p className="text-xs uppercase text-muted-foreground">Description</p>
-                  <p className="text-sm leading-6 text-slate-700">{job.description}</p>
-                </div>
-                <div className="grid gap-2 sm:max-w-[240px]">
-                  <Label>Update Status</Label>
-                  <Select value={job.status} onValueChange={(value) => onStatusChange(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statuses.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base">Job Notes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add site notes, faults found, parts needed..." />
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    onClick={() => {
-                      if (!note.trim()) return;
-                      onAddNote(note);
-                      setNote("");
-                    }}
-                  >
-                    Add Note
-                  </Button>
-                </div>
-                <div className="grid gap-3">
-                  {(job.notes || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No notes yet.</p>
-                  ) : (
-                    job.notes.map((n) => (
-                      <div key={n.id} className="rounded-2xl border bg-slate-50 p-3 text-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{n.author}</span>
-                          <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
-                        </div>
-                        <p className="mt-2 text-slate-700">{n.text}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-5">
-            <SupplierManualMatches
-              matches={supplierManualMatches}
-              status={supplierManualStatus}
-              error={supplierManualError}
-            />
-
-            {showCommercialDocuments ? (
-              <Card className="rounded-2xl">
-                <CardHeader>
-                  <CardTitle className="text-base">Commercial Documents</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  <div className="rounded-2xl border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">Quote</p>
-                        <p className="mt-1 text-muted-foreground">
-                          {job.quote ? `Saved - ${money(calculateDocTotal(job.quote.items))}` : "No quote saved yet"}
-                        </p>
-                        {job.quote?.sentHistory?.length ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Sent {job.quote.sentHistory.length} {job.quote.sentHistory.length === 1 ? "time" : "times"}
-                          </p>
-                        ) : null}
-                      </div>
-                      {job.quote?.sentHistory?.length && onOpenSentDocument ? (
-                        <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => onOpenSentDocument("quote")}>
-                          Open Quote
-                        </Button>
+                  {jobSiteAccessNote?.notes ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Site access notes</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{jobSiteAccessNote.notes}</p>
+                      {jobSiteAccessNote.updatedAt ? (
+                        <p className="mt-2 text-xs text-amber-700">Updated {formatDate(jobSiteAccessNote.updatedAt)}</p>
                       ) : null}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">Invoice</p>
-                        <p className="mt-1 text-muted-foreground">
-                          {job.invoice ? `Saved - ${money(calculateDocTotal(job.invoice.items))}` : "No invoice saved yet"}
-                        </p>
-                        {job.invoice ? (
-                          <div className="mt-2 space-y-2">
-                            <div className="flex flex-wrap gap-2">
-                              <Badge className={jobInvoiceStatus.className}>{jobInvoiceStatus.label}</Badge>
-                              <Badge variant="secondary">Due {formatDate(job.invoice.dueDate)}</Badge>
-                            </div>
-                            <div className="text-xs text-slate-600">
-                              <p>Paid {money(jobInvoicePaymentSummary.paidAmount)} of {money(jobInvoicePaymentSummary.total)}</p>
-                              <p>Balance {money(jobInvoicePaymentSummary.balanceAmount)}</p>
-                            </div>
-                          </div>
-                        ) : null}
-                        {job.invoice?.sentHistory?.length ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Sent {job.invoice.sentHistory.length} {job.invoice.sentHistory.length === 1 ? "time" : "times"}
-                          </p>
-                        ) : null}
-                      </div>
-                      {job.invoice?.sentHistory?.length && onOpenSentDocument ? (
-                        <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => onOpenSentDocument("invoice")}>
-                          Open Invoice
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  {onOpenDocument ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("quote")}>
-                        Open Quote Editor
-                      </Button>
-                      <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("invoice")}>
-                        Open Invoice Editor
-                      </Button>
                     </div>
                   ) : null}
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Description</p>
+                    <p className="text-sm leading-6 text-slate-700">{job.description}</p>
+                  </div>
+                  <div className="grid gap-2 sm:max-w-[240px]">
+                    <Label>Update Status</Label>
+                    <Select value={job.status} onValueChange={(value) => onStatusChange(value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statuses.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </CardContent>
               </Card>
-            ) : null}
 
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base">Photos</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Label htmlFor="photo-upload" className="cursor-pointer">
-                  <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed p-4 text-sm text-muted-foreground hover:bg-slate-50">
-                    <Camera className="h-4 w-4" /> Upload job photos
+              <SupplierManualMatches
+                matches={supplierManualMatches}
+                status={supplierManualStatus}
+                error={supplierManualError}
+              />
+            </div>
+
+            <div className="grid content-start gap-5">
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-base">Job Notes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add site notes, faults found, parts needed..." />
                   </div>
-                </Label>
-                <Input
-                  id="photo-upload"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length) onAddPhotos(files);
-                    e.target.value = "";
-                  }}
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  {(job.photos || []).length === 0 ? (
-                    <p className="col-span-2 text-sm text-muted-foreground">No photos uploaded yet.</p>
-                  ) : (
-                    job.photos.map((photo, index) => (
-                      <button
-                        key={photo.id}
-                        type="button"
-                        className="overflow-hidden rounded-2xl border text-left transition hover:border-slate-300 hover:bg-slate-50"
-                        onClick={() => setSelectedPhoto(photo)}
-                      >
-                        <img src={photo.url} alt={photo.name} className="h-28 w-full object-cover" />
-                        <div className="space-y-1 border-t bg-white px-3 py-2">
-                          <p className="truncate text-sm font-medium text-slate-900">{photo.name || `Photo ${index + 1}`}</p>
-                          <p className="text-xs text-slate-500">Open full size</p>
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={() => {
+                        if (!note.trim()) return;
+                        onAddNote(note);
+                        setNote("");
+                      }}
+                    >
+                      Add Note
+                    </Button>
+                  </div>
+                  <div className="grid gap-3">
+                    {(job.notes || []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No notes yet.</p>
+                    ) : (
+                      job.notes.map((n) => (
+                        <div key={n.id} className="rounded-2xl border bg-slate-50 p-3 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium">{n.author}</span>
+                            <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
+                          </div>
+                          <p className="mt-2 text-slate-700">{n.text}</p>
                         </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-base">Photos</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Label htmlFor="photo-upload" className="cursor-pointer">
+                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed p-4 text-sm text-muted-foreground hover:bg-slate-50">
+                      <Camera className="h-4 w-4" /> Upload job photos
+                    </div>
+                  </Label>
+                  <Input
+                    id="photo-upload"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length) onAddPhotos(files);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                    {(job.photos || []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground xl:col-span-1 2xl:col-span-2">No photos uploaded yet.</p>
+                    ) : (
+                      job.photos.map((photo, index) => (
+                        <button
+                          key={photo.id}
+                          type="button"
+                          className="overflow-hidden rounded-2xl border text-left transition hover:border-slate-300 hover:bg-slate-50"
+                          onClick={() => setSelectedPhoto(photo)}
+                        >
+                          <img src={photo.url} alt={photo.name} className="h-28 w-full object-cover" />
+                          <div className="space-y-1 border-t bg-white px-3 py-2">
+                            <p className="truncate text-sm font-medium text-slate-900">{photo.name || `Photo ${index + 1}`}</p>
+                            <p className="text-xs text-slate-500">Open full size</p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {showCommercialDocuments ? (
+              <div className="grid content-start gap-5">
+                <Card className="rounded-2xl">
+                  <CardHeader>
+                    <CardTitle className="text-base">Commercial Documents</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div className="rounded-2xl border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium">Quote</p>
+                          <p className="mt-1 text-muted-foreground">
+                            {job.quote ? `Saved - ${money(calculateDocTotal(job.quote.items))}` : "No quote saved yet"}
+                          </p>
+                          {job.quote?.sentHistory?.length ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Sent {job.quote.sentHistory.length} {job.quote.sentHistory.length === 1 ? "time" : "times"}
+                            </p>
+                          ) : null}
+                        </div>
+                        {job.quote?.sentHistory?.length && onOpenSentDocument ? (
+                          <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => onOpenSentDocument("quote")}>
+                            Open Quote
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium">Invoice</p>
+                          <p className="mt-1 text-muted-foreground">
+                            {job.invoice ? `Saved - ${money(calculateDocTotal(job.invoice.items))}` : "No invoice saved yet"}
+                          </p>
+                          {job.invoice ? (
+                            <div className="mt-2 space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                <Badge className={jobInvoiceStatus.className}>{jobInvoiceStatus.label}</Badge>
+                                <Badge variant="secondary">Due {formatDate(job.invoice.dueDate)}</Badge>
+                              </div>
+                              <div className="text-xs text-slate-600">
+                                <p>Paid {money(jobInvoicePaymentSummary.paidAmount)} of {money(jobInvoicePaymentSummary.total)}</p>
+                                <p>Balance {money(jobInvoicePaymentSummary.balanceAmount)}</p>
+                              </div>
+                            </div>
+                          ) : null}
+                          {job.invoice?.sentHistory?.length ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Sent {job.invoice.sentHistory.length} {job.invoice.sentHistory.length === 1 ? "time" : "times"}
+                            </p>
+                          ) : null}
+                        </div>
+                        {job.invoice?.sentHistory?.length && onOpenSentDocument ? (
+                          <Button variant="outline" size="sm" className="shrink-0 rounded-xl" onClick={() => onOpenSentDocument("invoice")}>
+                            Open Invoice
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                    {onOpenDocument ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("quote")}>
+                          Open Quote Editor
+                        </Button>
+                        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("invoice")}>
+                          Open Invoice Editor
+                        </Button>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
           </div>
-        </div>
         </DialogBody>
       </DialogContent>
 
