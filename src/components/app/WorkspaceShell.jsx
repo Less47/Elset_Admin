@@ -64,7 +64,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     showServiceBoardTagLabels,
   } = chrome;
   const {
-    currentSection,
     dashboard,
     filteredJobs,
     isServiceBoardFullScreen,
@@ -322,45 +321,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
           </Card>
         ) : null}
 
-        {!isServiceBoardFullScreen ? (
-          activeSection === "service-board" ? (
-            <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
-              <CardContent className="p-4 md:px-5 md:py-5">
-                {renderServiceBoardControls("hero")}
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
-              <CardContent className="p-4 md:px-5 md:py-5">
-                <div className="grid gap-4 md:grid-cols-[minmax(140px,1fr)_minmax(0,2.1fr)_minmax(140px,1fr)] md:items-center md:gap-6">
-                  <div className="flex justify-center md:justify-start">
-                    <button
-                      type="button"
-                      onClick={() => setActiveSection("service-board")}
-                      className="rounded-2xl border border-black/5 bg-white px-3 py-2 shadow-lg shadow-slate-950/15 transition hover:scale-[1.01] hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                      aria-label="Go to service board"
-                    >
-                      <img src={LOGO_SRC} alt="Elset logo" className="h-10 w-auto md:h-12" />
-                    </button>
-                  </div>
-
-                  <div className="text-center">
-                    <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{currentSection.title}</h1>
-                  </div>
-
-                  <div className="flex justify-center md:justify-end">
-                    {canManageBusiness ? (
-                      <Button className="rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
-                        <Plus className="mr-2 h-4 w-4" /> New Job
-                      </Button>
-                    ) : (
-                      <div className="hidden h-11 md:block" aria-hidden="true" />
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
+        {!isServiceBoardFullScreen && activeSection === "service-board" ? (
+          <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
+            <CardContent className="p-4 md:px-5 md:py-5">
+              {renderServiceBoardControls("hero")}
+            </CardContent>
+          </Card>
         ) : null}
 
         {activeSection === "service-board" ? (
