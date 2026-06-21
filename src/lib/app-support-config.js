@@ -66,7 +66,7 @@ export const defaultThemeSettings = {
   heroSurface: "#0F90CD",
   actionColor: "#F69320",
   borderColor: "#1E293B",
-  dialogSurface: "#F8FAFC",
+  dialogSurface: "#9FE4FB",
   sidebarWidth: "standard",
   contentDensity: "comfortable",
   companyName: "Elset",
