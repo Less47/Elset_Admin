@@ -1,4 +1,5 @@
 import {
+  addDaysToDateInput,
   buildMaintenanceJobDescription,
   defaultThemeSettings,
   getNextJobNumber,
@@ -51,6 +52,22 @@ export function useWorkspaceActions({
   setSiteProfileOpen,
   themeSettings,
 }) {
+  function getTomorrowPlanningDate() {
+    return addDaysToDateInput(toDateInputValue(new Date()), 1);
+  }
+
+  function getNextTomorrowPlanningOrder(jobs, tomorrowDate) {
+    return jobs.reduce((maxOrder, job) => {
+      if (job.serviceBoardTomorrowDate !== tomorrowDate) return maxOrder;
+
+      const nextOrder = Number.isFinite(Number(job.serviceBoardTomorrowOrder))
+        ? Number(job.serviceBoardTomorrowOrder)
+        : 0;
+
+      return Math.max(maxOrder, nextOrder);
+    }, 0) + 1;
+  }
+
   function createJob({ job, customerMode, customer, technician, siteInput = null }) {
     if (!canManageBusiness) return;
 
@@ -426,10 +443,23 @@ export function useWorkspaceActions({
     }
 
     const now = new Date().toISOString();
+    const shouldClearTomorrowPlan = nextStatus === "Completed";
     setData((prev) => ({
       ...prev,
       jobs: prev.jobs.map((entry) =>
-        entry.id === jobId ? { ...entry, status: nextStatus, updatedAt: now } : entry
+        entry.id === jobId
+          ? {
+              ...entry,
+              status: nextStatus,
+              updatedAt: now,
+              ...(shouldClearTomorrowPlan
+                ? {
+                    serviceBoardTomorrowDate: "",
+                    serviceBoardTomorrowOrder: null,
+                  }
+                : {}),
+            }
+          : entry
       ),
       maintenancePlans: nextStatus === "Completed" && job.maintenancePlanId
         ? (prev.maintenancePlans || []).map((plan) =>
@@ -439,6 +469,62 @@ export function useWorkspaceActions({
           )
         : prev.maintenancePlans,
     }));
+    return true;
+  }
+
+  function handlePlanJobForTomorrow(jobId) {
+    if (!jobId) return false;
+
+    const tomorrowDate = getTomorrowPlanningDate();
+
+    setData((prev) => {
+      const existingJob = prev.jobs.find((entry) => entry.id === jobId);
+      if (!existingJob) return prev;
+      if (existingJob.serviceBoardTomorrowDate === tomorrowDate) return prev;
+
+      const nextOrder = getNextTomorrowPlanningOrder(prev.jobs, tomorrowDate);
+      const now = new Date().toISOString();
+
+      return {
+        ...prev,
+        jobs: prev.jobs.map((entry) =>
+          entry.id === jobId
+            ? {
+                ...entry,
+                serviceBoardTomorrowDate: tomorrowDate,
+                serviceBoardTomorrowOrder: nextOrder,
+                updatedAt: now,
+              }
+            : entry
+        ),
+      };
+    });
+
+    return true;
+  }
+
+  function handleRemoveJobFromTomorrow(jobId) {
+    if (!jobId) return false;
+
+    setData((prev) => {
+      const existingJob = prev.jobs.find((entry) => entry.id === jobId);
+      if (!existingJob?.serviceBoardTomorrowDate) return prev;
+
+      return {
+        ...prev,
+        jobs: prev.jobs.map((entry) =>
+          entry.id === jobId
+            ? {
+                ...entry,
+                serviceBoardTomorrowDate: "",
+                serviceBoardTomorrowOrder: null,
+                updatedAt: new Date().toISOString(),
+              }
+            : entry
+        ),
+      };
+    });
+
     return true;
   }
 
@@ -1102,7 +1188,9 @@ export function useWorkspaceActions({
     handleOpenDoc,
     handleOpenSentDocumentCopy,
     handleOpenJob,
+    handlePlanJobForTomorrow,
     handleOpenSiteProfile,
+    handleRemoveJobFromTomorrow,
     handleResetDocumentTemplate,
     handleResetPreferences,
     handleResetUiSettings,

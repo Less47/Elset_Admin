@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronRight, LayoutGrid, List, Rows3 } from "lucide-react";
+import { ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -236,23 +236,135 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
   );
 }
 
-export function ServiceBoardTagLegend({ showTagLabels, onToggleShowTagLabels }) {
+export function ServiceBoardTagLegend({ showTagLabels, onToggleShowTagLabels, tone = "default" }) {
+  const isHeroTone = tone === "hero";
+
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-slate-200/80 pt-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Legend</p>
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 ${isHeroTone ? "border-white/20" : "border-slate-200/80"}`}>
+      <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${isHeroTone ? "text-white/70" : "text-slate-500"}`}>Legend</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {serviceBoardIndicatorLegend.map((indicator) => (
-          <div key={indicator.id} className="inline-flex items-center gap-1.5 text-[11px] text-slate-700">
+          <div key={indicator.id} className={`inline-flex items-center gap-1.5 text-[11px] ${isHeroTone ? "text-white/90" : "text-slate-700"}`}>
             <span className={`h-2 w-2 rounded-full ${indicator.dotClassName}`} />
             <span>{indicator.label}</span>
           </div>
         ))}
       </div>
-      <div className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+      <div className={`ml-auto flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${isHeroTone ? "border-white/20 bg-white/10" : "border-slate-200 bg-slate-50"}`}>
         <Checkbox checked={showTagLabels} onCheckedChange={(checked) => onToggleShowTagLabels(Boolean(checked))} />
-        <span className="text-[11px] text-slate-700">Show tag info</span>
+        <span className={`text-[11px] ${isHeroTone ? "text-white/90" : "text-slate-700"}`}>Show tag info</span>
       </div>
     </div>
+  );
+}
+
+function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob }) {
+  const urgencyTone = {
+    Low: "bg-slate-100 text-slate-700",
+    Medium: "bg-amber-100 text-amber-800",
+    High: "bg-rose-100 text-rose-800",
+  };
+  const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${statusTheme.card}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
+          <p className="mt-1 font-semibold leading-5 text-slate-950">{job.customerName}</p>
+          <p className="mt-1 text-sm text-slate-700">{job.title}</p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <Badge className={statusTheme.badge}>{job.status}</Badge>
+          {job.status !== "Completed" ? <Badge className={urgencyTone[job.urgency] || urgencyTone.Low}>{job.urgency}</Badge> : null}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 text-xs text-slate-600">
+        <div className="flex items-start justify-between gap-3">
+          <span className="shrink-0">Site</span>
+          <span className="line-clamp-2 max-w-[240px] text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span>Tech</span>
+          <span className="text-right font-medium text-slate-800">{job.assignedTechnicianName || "Unassigned"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span>Scheduled</span>
+          <span className="text-right font-medium text-slate-800">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
+        <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => onRemoveJob(job.id)}>
+          <X className="mr-1.5 h-3.5 w-3.5" /> Remove
+        </Button>
+        <Button type="button" size="sm" variant="secondary" className="rounded-xl" onClick={() => onOpenJob(job)}>
+          View Job
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function ServiceBoardTomorrowPlanner({
+  jobs,
+  tomorrowDate,
+  onDropJob,
+  onOpenJob,
+  onRemoveJob,
+  formatDate,
+}) {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  return (
+    <Card
+      className={`rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur transition ${isDragOver ? "ring-2 ring-sky-300/80" : ""}`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        const jobId = event.dataTransfer.getData("jobId");
+        setIsDragOver(false);
+        onDropJob(jobId);
+      }}
+    >
+      <CardContent className="grid gap-4 p-4 md:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Tomorrow</p>
+            <p className="mt-1 text-lg font-semibold text-slate-950">{formatDate(tomorrowDate)}</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Drag jobs here to line up tomorrow&apos;s run sheet without changing their current status on the board.
+            </p>
+          </div>
+          <Badge className="w-fit bg-sky-100 text-sky-800">
+            {jobs.length} planned
+          </Badge>
+        </div>
+
+        {jobs.length === 0 ? (
+          <div className={`rounded-2xl border-2 border-dashed px-5 py-8 text-center text-sm transition ${isDragOver ? "border-sky-400 bg-sky-50 text-sky-900" : "border-slate-300 bg-slate-50 text-slate-600"}`}>
+            Drop jobs here to build tomorrow&apos;s list.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+            {jobs.map((job) => (
+              <TomorrowJobCard
+                key={job.id}
+                job={job}
+                formatDate={formatDate}
+                onOpenJob={onOpenJob}
+                onRemoveJob={onRemoveJob}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

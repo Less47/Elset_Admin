@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import {
+  addDaysToDateInput,
   buildCustomerSites,
   findSupplierManualMatches,
   getInventoryStockStatus,
@@ -10,6 +11,7 @@ import {
   settingsTabMeta,
   sideNavItems,
   toDateInputValue,
+  toTimestamp,
 } from "@/lib/app-support";
 import { calculateDocTotal } from "@/lib/quote-template";
 
@@ -27,6 +29,8 @@ export function useWorkspaceViewModel({
   showHighUrgencyOnly,
   supplierManuals,
 }) {
+  const tomorrowPlanningDate = addDaysToDateInput(toDateInputValue(new Date()), 1);
+
   const filteredJobs = useMemo(() => {
     const q = officeSearch.toLowerCase();
     return data.jobs.filter((job) => {
@@ -38,6 +42,19 @@ export function useWorkspaceViewModel({
       return matchesText && matchesUrgency;
     });
   }, [data.jobs, officeSearch, showHighUrgencyOnly]);
+
+  const tomorrowJobs = useMemo(() => {
+    return [...data.jobs]
+      .filter((job) => job.serviceBoardTomorrowDate === tomorrowPlanningDate)
+      .sort((a, b) => {
+        const aOrder = Number.isFinite(Number(a.serviceBoardTomorrowOrder)) ? Number(a.serviceBoardTomorrowOrder) : Number.MAX_SAFE_INTEGER;
+        const bOrder = Number.isFinite(Number(b.serviceBoardTomorrowOrder)) ? Number(b.serviceBoardTomorrowOrder) : Number.MAX_SAFE_INTEGER;
+        return aOrder - bOrder
+          || toTimestamp(a.scheduledDate) - toTimestamp(b.scheduledDate)
+          || toTimestamp(a.updatedAt) - toTimestamp(b.updatedAt)
+          || (a.jobNumber || 0) - (b.jobNumber || 0);
+      });
+  }, [data.jobs, tomorrowPlanningDate]);
 
   const dashboard = useMemo(() => {
     const quotesValue = data.jobs.reduce((sum, job) => sum + (job.quote ? calculateDocTotal(job.quote.items) : 0), 0);
@@ -175,6 +192,8 @@ export function useWorkspaceViewModel({
     isServiceBoardFullScreen,
     noteAuthor,
     selectedSupplierManualMatches,
+    tomorrowJobs,
+    tomorrowPlanningDate,
     visibleSideNavItems,
     ...selection,
   };

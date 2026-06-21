@@ -1021,6 +1021,10 @@ export function getInvoiceStatus(job) {
 }
 
 export function normalizeJobRecord(job) {
+  const rawTomorrowOrder = job?.serviceBoardTomorrowOrder;
+  const tomorrowOrderValue = Number(rawTomorrowOrder);
+  const hasTomorrowOrder = rawTomorrowOrder !== null && rawTomorrowOrder !== undefined && Number.isFinite(tomorrowOrderValue);
+
   return {
     ...job,
     jobNumber: Number.isInteger(Number(job?.jobNumber)) && Number(job.jobNumber) > 0 ? Number(job.jobNumber) : null,
@@ -1028,6 +1032,8 @@ export function normalizeJobRecord(job) {
     maintenancePlanId: String(job?.maintenancePlanId || "").trim(),
     maintenancePlanName: String(job?.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job?.maintenanceDueDate),
+    serviceBoardTomorrowDate: toDateInputValue(job?.serviceBoardTomorrowDate),
+    serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
     notes: Array.isArray(job.notes) ? job.notes : [],
     photos: Array.isArray(job.photos) ? job.photos : [],
     quote: normalizeDocument("quote", job.quote),

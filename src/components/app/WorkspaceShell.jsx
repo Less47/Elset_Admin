@@ -7,7 +7,7 @@ import JobHistoryManager from "@/components/jobs/JobHistoryManager";
 import MaintenanceManager from "@/components/maintenance/MaintenanceManager";
 import JobsMapManager from "@/components/map/JobsMapManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
-import { OfficeBoard, ServiceBoardTagLegend } from "@/components/service-board/OfficeBoard";
+import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPlanner } from "@/components/service-board/OfficeBoard";
 import SettingsManager from "@/components/settings/SettingsManager";
 import StaffManager from "@/components/staff/StaffManager";
 import SiteManager from "@/components/sites/SiteManager";
@@ -84,8 +84,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     handleOpenCustomerProfile,
     handleOpenDoc,
     handleOpenJob,
+    handlePlanJobForTomorrow,
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
+    handleRemoveJobFromTomorrow,
     handleResetDocumentTemplate,
     handleResetPreferences,
     handleResetUiSettings,
@@ -107,6 +109,65 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     : isAdmin
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
+
+  const renderServiceBoardControls = (tone = "panel") => {
+    const isHeroTone = tone === "hero";
+    const searchInputClassName = isHeroTone
+      ? "border-white/70 bg-white/95 text-slate-900 placeholder:text-slate-500 shadow-sm sm:w-[320px] xl:w-[420px]"
+      : "sm:w-[320px]";
+    const urgencyContainerClassName = isHeroTone
+      ? "flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-white"
+      : "flex items-center gap-3 rounded-2xl border bg-white px-4 py-2";
+    const fullScreenButtonClassName = isHeroTone
+      ? "rounded-2xl border-white/30 bg-white/95 text-slate-900 hover:bg-white"
+      : "rounded-2xl bg-white";
+
+    return (
+      <div className="grid gap-3">
+        <div className="flex w-full flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+          <Input
+            className={searchInputClassName}
+            placeholder="Search jobs, customer, address..."
+            value={officeSearch}
+            onChange={(event) => setOfficeSearch(event.target.value)}
+          />
+
+          <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+            <div className={urgencyContainerClassName}>
+              <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
+              <span className="text-sm">High urgency only</span>
+            </div>
+            <Button
+              variant="outline"
+              className={fullScreenButtonClassName}
+              onClick={() => setServiceBoardFullScreen((prev) => !prev)}
+            >
+              {isServiceBoardFullScreen ? (
+                <>
+                  <Minimize2 className="mr-2 h-4 w-4" /> Exit Full Screen
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="mr-2 h-4 w-4" /> Full Screen
+                </>
+              )}
+            </Button>
+            {canManageBusiness ? (
+              <Button className="rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> New Job
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <ServiceBoardTagLegend
+          tone={isHeroTone ? "hero" : "default"}
+          showTagLabels={showServiceBoardTagLabels}
+          onToggleShowTagLabels={setShowServiceBoardTagLabels}
+        />
+      </div>
+    );
+  };
 
   return (
     <>
@@ -254,98 +315,64 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         ) : null}
 
         {!isServiceBoardFullScreen ? (
-          <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
-            <CardContent className="p-4 md:px-5 md:py-5">
-              <div className="grid gap-4 md:grid-cols-[minmax(140px,1fr)_minmax(0,2.1fr)_minmax(140px,1fr)] md:items-center md:gap-6">
-                <div className="flex justify-center md:justify-start">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection("service-board")}
-                    className="rounded-2xl border border-black/5 bg-white px-3 py-2 shadow-lg shadow-slate-950/15 transition hover:scale-[1.01] hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                    aria-label="Go to service board"
-                  >
-                    <img src={LOGO_SRC} alt="Elset logo" className="h-10 w-auto md:h-12" />
-                  </button>
-                </div>
+          activeSection === "service-board" ? (
+            <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
+              <CardContent className="p-4 md:px-5 md:py-5">
+                {renderServiceBoardControls("hero")}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
+              <CardContent className="p-4 md:px-5 md:py-5">
+                <div className="grid gap-4 md:grid-cols-[minmax(140px,1fr)_minmax(0,2.1fr)_minmax(140px,1fr)] md:items-center md:gap-6">
+                  <div className="flex justify-center md:justify-start">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection("service-board")}
+                      className="rounded-2xl border border-black/5 bg-white px-3 py-2 shadow-lg shadow-slate-950/15 transition hover:scale-[1.01] hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                      aria-label="Go to service board"
+                    >
+                      <img src={LOGO_SRC} alt="Elset logo" className="h-10 w-auto md:h-12" />
+                    </button>
+                  </div>
 
-                <div className="text-center">
-                  <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{currentSection.title}</h1>
-                </div>
+                  <div className="text-center">
+                    <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{currentSection.title}</h1>
+                  </div>
 
-                <div className="flex justify-center md:justify-end">
-                  {canManageBusiness ? (
-                    <Button className="rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
-                      <Plus className="mr-2 h-4 w-4" /> New Job
-                    </Button>
-                  ) : (
-                    <div className="hidden h-11 md:block" aria-hidden="true" />
-                  )}
+                  <div className="flex justify-center md:justify-end">
+                    {canManageBusiness ? (
+                      <Button className="rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" /> New Job
+                      </Button>
+                    ) : (
+                      <div className="hidden h-11 md:block" aria-hidden="true" />
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )
         ) : null}
 
         {activeSection === "service-board" ? (
           <div className="space-y-6">
-            <Card className={`${isServiceBoardFullScreen ? "sticky top-3 z-20" : ""} rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur`}>
-              <CardContent className="grid gap-3 p-3 md:p-4">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {isServiceBoardFullScreen ? "Service board full screen" : "Service workspace"}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {isServiceBoardFullScreen
-                        ? "Focused board view with search, urgency filtering, per-column sorting, per-column view modes, and quick job creation."
-                        : isTechnician
-                          ? "Review field jobs, search by site or customer, drag them between columns, and update notes and photos from the field."
-                          : "Manage the office service board, search jobs, change column views, and update status in one place."}
-                    </p>
-                  </div>
+            {isServiceBoardFullScreen ? (
+              <Card className="sticky top-3 z-20 rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+                <CardContent className="grid gap-3 p-3 md:p-4">
+                  {renderServiceBoardControls("panel")}
+                </CardContent>
+              </Card>
+            ) : null}
 
-                  <div className="flex w-full flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-end">
-                    <Input
-                      className="sm:w-[320px]"
-                      placeholder="Search jobs, customer, address..."
-                      value={officeSearch}
-                      onChange={(event) => setOfficeSearch(event.target.value)}
-                    />
-                    <div className="flex flex-wrap items-center gap-3 xl:justify-end">
-                      <div className="flex items-center gap-3 rounded-2xl border bg-white px-4 py-2">
-                        <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
-                        <span className="text-sm">High urgency only</span>
-                      </div>
-                      {canManageBusiness && isServiceBoardFullScreen ? (
-                        <Button className="rounded-2xl" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
-                          <Plus className="mr-2 h-4 w-4" /> New Job
-                        </Button>
-                      ) : null}
-                      <Button
-                        variant="outline"
-                        className="rounded-2xl bg-white"
-                        onClick={() => setServiceBoardFullScreen((prev) => !prev)}
-                      >
-                        {isServiceBoardFullScreen ? (
-                          <>
-                            <Minimize2 className="mr-2 h-4 w-4" /> Exit Full Screen
-                          </>
-                        ) : (
-                          <>
-                            <Maximize2 className="mr-2 h-4 w-4" /> Full Screen
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <ServiceBoardTagLegend
-                  showTagLabels={showServiceBoardTagLabels}
-                  onToggleShowTagLabels={setShowServiceBoardTagLabels}
-                />
-              </CardContent>
-            </Card>
+            <ServiceBoardTomorrowPlanner
+              jobs={derived.tomorrowJobs}
+              tomorrowDate={derived.tomorrowPlanningDate}
+              onDropJob={handlePlanJobForTomorrow}
+              onOpenJob={handleOpenJob}
+              onRemoveJob={handleRemoveJobFromTomorrow}
+              formatDate={formatDate}
+            />
 
             <OfficeBoard
               jobs={filteredJobs}
