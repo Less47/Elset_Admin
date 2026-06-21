@@ -462,7 +462,7 @@ function JobCard({
   const isCompactView = viewMode === "compact";
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
   const cardClassName = `${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
-  const cardContentClassName = isGridView ? "flex h-full flex-col p-3.5" : isCompactView ? "p-3.5" : "p-4";
+  const cardContentClassName = isGridView ? "flex h-full flex-col p-3.5 md:max-xl:p-3" : isCompactView ? "p-3.5" : "p-4";
   const descriptionClassName = isCompactView ? "mt-2 line-clamp-1 text-sm text-slate-700" : isGridView ? "mt-2 line-clamp-2 text-sm text-slate-700" : "mt-3 line-clamp-3 text-sm text-slate-700";
   const actionRowClassName = isGridView ? "mt-auto flex flex-wrap gap-2 pt-4" : isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
   const statusRowClassName = `flex gap-3 ${allowQuickStatusChange ? "items-start justify-between" : "items-center justify-between"}`;
@@ -623,11 +623,11 @@ function JobCard({
         <CardContent className={cardContentClassName}>
           {isGridView ? (
             <div className="flex h-full flex-col justify-between gap-4">
-              <div className="space-y-1.5 pr-10">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                <p className="text-sm font-medium leading-5 text-slate-800">{job.customerName}</p>
-                <p className="text-xs font-normal leading-4 text-slate-950">{job.title}</p>
-                <p className="line-clamp-3 text-xs leading-4 text-slate-700">{gridAddress}</p>
+              <div className="space-y-1.5 pr-10 md:max-xl:space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 md:max-xl:text-[10px]">Job #{job.jobNumber}</p>
+                <p className="text-sm font-medium leading-5 text-slate-800 md:max-xl:text-xs md:max-xl:leading-4">{job.customerName}</p>
+                <p className="text-xs font-normal leading-4 text-slate-950 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{job.title}</p>
+                <p className="line-clamp-3 text-xs leading-4 text-slate-700 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{gridAddress}</p>
               </div>
 
               <div className={actionRowClassName}>
