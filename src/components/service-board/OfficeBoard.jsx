@@ -338,13 +338,13 @@ export function ServiceBoardTomorrowPanel({
       <Button
         type="button"
         variant="outline"
-        className="fixed top-1/2 z-[60] -translate-y-1/2 rounded-r-none rounded-l-2xl border-slate-300 bg-white/95 px-3 py-6 shadow-lg transition-all duration-300 hover:bg-white"
-        style={{ right: open ? panelWidth : "0px" }}
+        className="fixed top-1/2 z-[60] flex -translate-y-1/2 rotate-90 items-center gap-2 rounded-b-none rounded-t-2xl border-slate-300 bg-white/95 px-3 py-2 shadow-lg transition-all duration-300 hover:bg-white"
+        style={{ right: open ? `calc(${panelWidth} - 20px)` : "-20px" }}
         onClick={() => onOpenChange(!open)}
       >
-        <span className="mr-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Tomorrow</span>
+        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">Tomorrow</span>
         <Badge className="bg-sky-100 text-sky-800">{jobs.length}</Badge>
-        <ChevronRight className={`ml-2 h-4 w-4 text-slate-600 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+        <ChevronRight className={`h-4 w-4 text-slate-600 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
       </Button>
 
       <div className={`fixed inset-0 z-40 transition-opacity duration-300 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}>
