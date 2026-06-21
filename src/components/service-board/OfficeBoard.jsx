@@ -367,7 +367,7 @@ export function ServiceBoardTomorrowPanel({
         ref={tabButtonRef}
         type="button"
         variant="outline"
-        className="fixed top-1/2 z-[60] flex -translate-y-1/2 rotate-90 items-center gap-2 rounded-b-none rounded-t-2xl border-slate-300 bg-white/95 px-3 py-2 shadow-lg transition-all duration-300 hover:bg-white"
+        className="fixed top-1/2 z-[60] flex -translate-y-1/2 rotate-90 items-center gap-2 rounded-b-2xl rounded-t-none border-slate-300 bg-white/95 px-3 py-2 shadow-lg transition-all duration-300 hover:bg-white"
         style={{ right: open ? `calc(${panelWidth} - ${tabEdgeOffset}px)` : `${-tabEdgeOffset}px` }}
         onClick={() => onOpenChange(!open)}
       >
