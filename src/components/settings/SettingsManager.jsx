@@ -109,7 +109,7 @@ function WorkspacePreview({ settings }) {
   const borderColor = normalizeHexColor(normalizedSettings.borderColor, "#1E293B");
   const dialogSurface = normalizeHexColor(normalizedSettings.dialogSurface, "#F8FAFC");
   const dialogText = getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT });
-  const dialogSurfaceGradient = `linear-gradient(165deg, ${mixHexColors(dialogSurface, "#FFFFFF", dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32)} 0%, ${dialogSurface} 56%, ${mixHexColors(dialogSurface, APP_TEXT_DARK, dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1)} 100%)`;
+  const dialogSurfaceGradient = `radial-gradient(190% 160% at 50% -18%, ${mixHexColors(dialogSurface, "#FFFFFF", dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32)} 0%, ${dialogSurface} 62%, ${mixHexColors(dialogSurface, APP_TEXT_DARK, dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1)} 100%)`;
 
   return (
     <Card className="overflow-hidden rounded-3xl border-slate-200 shadow-sm">

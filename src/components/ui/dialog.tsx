@@ -66,7 +66,7 @@ function DialogContent({
           className
         )}
         style={{
-          backgroundImage: "var(--dialog-surface-gradient, linear-gradient(165deg, hsl(var(--popover)), hsl(var(--popover))))",
+          backgroundImage: "var(--dialog-surface-gradient, radial-gradient(190% 160% at 50% -18%, hsl(var(--popover)), hsl(var(--popover))))",
           backgroundColor: "var(--dialog-surface, hsl(var(--popover)))",
           color: "var(--dialog-foreground, hsl(var(--popover-foreground)))",
           borderColor: "var(--dialog-border, rgba(15, 23, 42, 0.12))",

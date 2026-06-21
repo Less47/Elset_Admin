@@ -35,7 +35,7 @@ export function useThemePalette(settings) {
       APP_TEXT_DARK,
       dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1
     );
-    const dialogSurfaceGradient = `linear-gradient(165deg, ${dialogGradientStart} 0%, ${themeSettings.dialogSurface} 56%, ${dialogGradientEnd} 100%)`;
+    const dialogSurfaceGradient = `radial-gradient(190% 160% at 50% -18%, ${dialogGradientStart} 0%, ${themeSettings.dialogSurface} 62%, ${dialogGradientEnd} 100%)`;
     const dialogMutedSurface = mixHexColors(
       themeSettings.dialogSurface,
       dialogText === APP_TEXT_LIGHT ? "#FFFFFF" : APP_TEXT_DARK,
