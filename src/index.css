@@ -81,6 +81,8 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --ui-border-color: var(--border);
+    --ui-border-width: 2px;
 }
 
 .dark {
@@ -127,4 +129,66 @@
   html {
     @apply font-sans;
     }
+}
+
+@layer utilities {
+  :where([class~="border"]) {
+    border-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-x"]) {
+    border-inline-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-y"]) {
+    border-block-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-t"]) {
+    border-top-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-r"]) {
+    border-right-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-b"]) {
+    border-bottom-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-l"]) {
+    border-left-width: var(--ui-border-width) !important;
+  }
+
+  :where([class~="border-none"]) {
+    border-width: 0 !important;
+    border-style: none !important;
+  }
+
+  :where([class~="last:border-r-0"]:last-child) {
+    border-right-width: 0 !important;
+  }
+
+  :where(.border-slate-100, .border-slate-200, .border-slate-300, .border-slate-200\/80, .border-black\/5, .border-black\/10, .border-white\/80) {
+    border-color: var(--ui-border-color) !important;
+  }
+
+  :where(.hover\:border-slate-300:hover) {
+    border-color: var(--ui-border-color) !important;
+  }
+
+  [class*="after:border"]::after {
+    border-width: var(--ui-border-width) !important;
+  }
+
+  @media (min-width: 64rem) {
+    :where([class~="lg:border-y-0"]) {
+      border-top-width: 0 !important;
+      border-bottom-width: 0 !important;
+    }
+
+    :where([class~="lg:border-l-0"]) {
+      border-left-width: 0 !important;
+    }
+  }
 }

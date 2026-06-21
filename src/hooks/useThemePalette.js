@@ -21,10 +21,10 @@ export function useThemePalette(settings) {
     const actionText = getContrastTextColor(themeSettings.actionColor);
     const sidebarActiveText = getContrastTextColor(themeSettings.sidebarActive);
     const dialogText = getContrastTextColor(themeSettings.dialogSurface);
-    const dialogTone = dialogText === APP_TEXT_LIGHT ? APP_TEXT_LIGHT : APP_TEXT_DARK;
     const sidebarSize = sidebarWidthStyles[themeSettings.sidebarWidth] || sidebarWidthStyles.standard;
     const density = contentDensityStyles[themeSettings.contentDensity] || contentDensityStyles.comfortable;
-    const dialogBorder = hexToRgba(dialogTone, dialogText === APP_TEXT_LIGHT ? 0.18 : 0.12);
+    const borderColor = themeSettings.borderColor;
+    const dialogBorder = borderColor;
     const dialogMutedSurface = mixHexColors(
       themeSettings.dialogSurface,
       dialogText === APP_TEXT_LIGHT ? "#FFFFFF" : APP_TEXT_DARK,
@@ -37,6 +37,9 @@ export function useThemePalette(settings) {
         "--primary": themeSettings.actionColor,
         "--primary-foreground": actionText,
         "--ring": themeSettings.actionColor,
+        "--border": borderColor,
+        "--input": borderColor,
+        "--ui-border-color": borderColor,
         "--dialog-surface": themeSettings.dialogSurface,
         "--dialog-foreground": dialogText,
         "--dialog-border": dialogBorder,
@@ -54,7 +57,7 @@ export function useThemePalette(settings) {
       },
       sidebarShell: {
         backgroundColor: hexToRgba(themeSettings.sidebarSurface, 0.94),
-        borderColor: hexToRgba(themeSettings.sidebarHeader, 0.12),
+        borderColor,
       },
       sidebarHeader: {
         backgroundColor: themeSettings.sidebarHeader,
@@ -63,7 +66,7 @@ export function useThemePalette(settings) {
       sidebarHeaderMuted: hexToRgba(sidebarHeaderText, sidebarHeaderText === APP_TEXT_LIGHT ? 0.72 : 0.64),
       sidebarInactiveButton: {
         backgroundColor: hexToRgba(sidebarSurfaceTone, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.08 : 0.04),
-        borderColor: hexToRgba(sidebarSurfaceTone, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.12 : 0.08),
+        borderColor,
         color: sidebarSurfaceText,
       },
       sidebarInactiveIcon: {
@@ -73,7 +76,7 @@ export function useThemePalette(settings) {
       sidebarInactiveMuted: hexToRgba(sidebarSurfaceText, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.72 : 0.6),
       sidebarActiveButton: {
         backgroundColor: themeSettings.sidebarActive,
-        borderColor: themeSettings.sidebarActive,
+        borderColor,
         color: sidebarActiveText,
         boxShadow: `0 18px 34px -22px ${hexToRgba(themeSettings.sidebarActive, 0.6)}`,
       },
@@ -87,14 +90,16 @@ export function useThemePalette(settings) {
       sidebarActiveMuted: hexToRgba(sidebarActiveText, 0.76),
       heroCard: {
         backgroundColor: themeSettings.heroSurface,
+        borderColor,
         color: heroText,
       },
       primaryButton: {
         backgroundColor: themeSettings.actionColor,
-        borderColor: themeSettings.actionColor,
+        borderColor,
         color: actionText,
       },
       primaryButtonHover: mixHexColors(themeSettings.actionColor, "#000000", 0.12),
+      borderColor,
       dialogSurface: themeSettings.dialogSurface,
       dialogText,
       dialogBorder,
@@ -107,6 +112,12 @@ export function useThemePalette(settings) {
 
     const root = document.documentElement;
 
+    root.style.setProperty("--primary", themeSettings.actionColor);
+    root.style.setProperty("--primary-foreground", themePalette.rootStyle["--primary-foreground"]);
+    root.style.setProperty("--ring", themeSettings.actionColor);
+    root.style.setProperty("--border", themeSettings.borderColor);
+    root.style.setProperty("--input", themeSettings.borderColor);
+    root.style.setProperty("--ui-border-color", themeSettings.borderColor);
     root.style.setProperty("--dialog-surface", themePalette.dialogSurface);
     root.style.setProperty("--dialog-foreground", themePalette.dialogText);
     root.style.setProperty("--dialog-border", themePalette.dialogBorder);
@@ -114,13 +125,27 @@ export function useThemePalette(settings) {
     root.style.setProperty("--dialog-footer-surface", themePalette.dialogMutedSurface);
 
     return () => {
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--primary-foreground");
+      root.style.removeProperty("--ring");
+      root.style.removeProperty("--border");
+      root.style.removeProperty("--input");
+      root.style.removeProperty("--ui-border-color");
       root.style.removeProperty("--dialog-surface");
       root.style.removeProperty("--dialog-foreground");
       root.style.removeProperty("--dialog-border");
       root.style.removeProperty("--dialog-muted-surface");
       root.style.removeProperty("--dialog-footer-surface");
     };
-  }, [themePalette.dialogBorder, themePalette.dialogMutedSurface, themePalette.dialogSurface, themePalette.dialogText]);
+  }, [
+    themePalette.dialogBorder,
+    themePalette.dialogMutedSurface,
+    themePalette.dialogSurface,
+    themePalette.dialogText,
+    themePalette.rootStyle,
+    themeSettings.actionColor,
+    themeSettings.borderColor,
+  ]);
 
   return {
     themeSettings,

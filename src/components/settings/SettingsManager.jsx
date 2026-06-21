@@ -106,6 +106,7 @@ function WorkspacePreview({ settings }) {
   const sidebarActive = normalizeHexColor(normalizedSettings.sidebarActive, "#F69320");
   const heroSurface = normalizeHexColor(normalizedSettings.heroSurface, "#0F90CD");
   const actionColor = normalizeHexColor(normalizedSettings.actionColor, "#F69320");
+  const borderColor = normalizeHexColor(normalizedSettings.borderColor, "#1E293B");
   const dialogSurface = normalizeHexColor(normalizedSettings.dialogSurface, "#F8FAFC");
 
   return (
@@ -125,7 +126,7 @@ function WorkspacePreview({ settings }) {
               className="overflow-hidden rounded-2xl border shadow-sm"
               style={{
                 backgroundColor: hexToRgba(sidebarSurface, 0.94),
-                borderColor: hexToRgba(sidebarHeader, 0.12),
+                borderColor,
                 color: getContrastTextColor(sidebarSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
               }}
             >
@@ -151,7 +152,7 @@ function WorkspacePreview({ settings }) {
                   className="rounded-2xl border px-3 py-2 text-sm font-medium shadow-sm"
                   style={{
                     backgroundColor: sidebarActive,
-                    borderColor: sidebarActive,
+                    borderColor,
                     color: getContrastTextColor(sidebarActive, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
                   }}
                 >
@@ -167,7 +168,7 @@ function WorkspacePreview({ settings }) {
                 className="rounded-2xl border p-5 shadow-sm"
                 style={{
                   backgroundColor: heroSurface,
-                  borderColor: hexToRgba(heroSurface, 0.18),
+                  borderColor,
                   color: getContrastTextColor(heroSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
                 }}
               >
@@ -188,7 +189,7 @@ function WorkspacePreview({ settings }) {
                       className="rounded-2xl border px-4 py-2 text-sm font-medium shadow-sm"
                       style={{
                         backgroundColor: actionColor,
-                        borderColor: actionColor,
+                        borderColor,
                         color: getContrastTextColor(actionColor, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
                       }}
                     >
@@ -202,7 +203,7 @@ function WorkspacePreview({ settings }) {
                 className="rounded-2xl border p-5 shadow-sm"
                 style={{
                   backgroundColor: dialogSurface,
-                  borderColor: hexToRgba(dialogSurface, 0.18),
+                  borderColor,
                   color: getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
                 }}
               >
@@ -792,7 +793,7 @@ export default function SettingsManager({
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Colour Controls</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, popups, and primary action buttons.</p>
+                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, popups, primary action buttons, and shared border colour.</p>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 {themeColorFields.map((field) => (

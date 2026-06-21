@@ -121,7 +121,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                 className="overflow-hidden rounded-3xl border p-4 shadow-sm"
                 style={{
                   ...themePalette.sidebarHeader,
-                  borderColor: hexToRgba(themeSettings.sidebarHeader, 0.16),
+                  borderColor: themePalette.borderColor,
                 }}
               >
                 <div className="mx-auto grid max-w-full grid-cols-[104px_72px] items-center justify-center gap-2.5">
@@ -210,7 +210,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                 })}
               </div>
 
-              <div className="mt-6 border-t pt-4" style={{ borderColor: hexToRgba(themeSettings.sidebarHeader, 0.12) }}>
+              <div className="mt-6 border-t pt-4" style={{ borderColor: themePalette.borderColor }}>
                 <div className="rounded-2xl border p-4 text-sm" style={themePalette.sidebarInactiveButton}>
                   <p className="font-semibold">{authUser?.name || "Signed in"}</p>
                   <p className="mt-1 capitalize" style={{ color: themePalette.sidebarInactiveMuted }}>
@@ -254,7 +254,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         ) : null}
 
         {!isServiceBoardFullScreen ? (
-          <Card className="overflow-hidden rounded-3xl border-none shadow-xl" style={themePalette.heroCard}>
+          <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
             <CardContent className="p-4 md:px-5 md:py-5">
               <div className="grid gap-4 md:grid-cols-[minmax(140px,1fr)_minmax(0,2.1fr)_minmax(140px,1fr)] md:items-center md:gap-6">
                 <div className="flex justify-center md:justify-start">

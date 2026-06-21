@@ -14,8 +14,6 @@ import {
   customerTypeOptions,
   formatCustomerType,
   formatDate,
-  formatSiteType,
-  getSiteDisplayName,
   normalizeCustomerRecord,
   normalizeCustomerSiteProfiles,
   normalizeSiteAccessNotes,
