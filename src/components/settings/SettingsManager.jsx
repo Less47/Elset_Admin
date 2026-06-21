@@ -97,6 +97,14 @@ const templateFields = [
   { key: "footerText", label: "Footer text", multiline: true, rows: 3 },
 ];
 
+const presetPreviewKeys = [
+  "pageBackgroundStart",
+  "pageBackgroundEnd",
+  "sidebarHeader",
+  "actionColor",
+  "dialogSurface",
+];
+
 function WorkspacePreview({ settings }) {
   const normalizedSettings = normalizeThemeSettings(settings);
   const pageStart = normalizeHexColor(normalizedSettings.pageBackgroundStart, "#0F90CD");
@@ -779,15 +787,16 @@ export default function SettingsManager({
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-slate-950">{preset.label}</p>
                       <div className="flex gap-1.5">
-                        {Object.values(preset.values).slice(0, 4).map((value) => (
+                        {presetPreviewKeys.map((key) => (
                           <span
-                            key={`${preset.id}-${value}`}
+                            key={`${preset.id}-${key}`}
                             className="h-4 w-4 rounded-full border border-black/10"
-                            style={{ backgroundColor: value }}
+                            style={{ backgroundColor: preset.values[key] }}
                           />
                         ))}
                       </div>
                     </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{preset.description}</p>
                   </button>
                 ))}
               </CardContent>
