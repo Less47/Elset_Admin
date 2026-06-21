@@ -25,6 +25,17 @@ export function useThemePalette(settings) {
     const density = contentDensityStyles[themeSettings.contentDensity] || contentDensityStyles.comfortable;
     const borderColor = themeSettings.borderColor;
     const dialogBorder = borderColor;
+    const dialogGradientStart = mixHexColors(
+      themeSettings.dialogSurface,
+      "#FFFFFF",
+      dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32
+    );
+    const dialogGradientEnd = mixHexColors(
+      themeSettings.dialogSurface,
+      APP_TEXT_DARK,
+      dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1
+    );
+    const dialogSurfaceGradient = `linear-gradient(165deg, ${dialogGradientStart} 0%, ${themeSettings.dialogSurface} 56%, ${dialogGradientEnd} 100%)`;
     const dialogMutedSurface = mixHexColors(
       themeSettings.dialogSurface,
       dialogText === APP_TEXT_LIGHT ? "#FFFFFF" : APP_TEXT_DARK,
@@ -41,6 +52,7 @@ export function useThemePalette(settings) {
         "--input": borderColor,
         "--ui-border-color": borderColor,
         "--dialog-surface": themeSettings.dialogSurface,
+        "--dialog-surface-gradient": dialogSurfaceGradient,
         "--dialog-foreground": dialogText,
         "--dialog-border": dialogBorder,
         "--dialog-muted-surface": dialogMutedSurface,
@@ -101,6 +113,7 @@ export function useThemePalette(settings) {
       primaryButtonHover: mixHexColors(themeSettings.actionColor, "#000000", 0.12),
       borderColor,
       dialogSurface: themeSettings.dialogSurface,
+      dialogSurfaceGradient,
       dialogText,
       dialogBorder,
       dialogMutedSurface,
@@ -119,6 +132,7 @@ export function useThemePalette(settings) {
     root.style.setProperty("--input", themeSettings.borderColor);
     root.style.setProperty("--ui-border-color", themeSettings.borderColor);
     root.style.setProperty("--dialog-surface", themePalette.dialogSurface);
+    root.style.setProperty("--dialog-surface-gradient", themePalette.dialogSurfaceGradient);
     root.style.setProperty("--dialog-foreground", themePalette.dialogText);
     root.style.setProperty("--dialog-border", themePalette.dialogBorder);
     root.style.setProperty("--dialog-muted-surface", themePalette.dialogMutedSurface);
@@ -132,6 +146,7 @@ export function useThemePalette(settings) {
       root.style.removeProperty("--input");
       root.style.removeProperty("--ui-border-color");
       root.style.removeProperty("--dialog-surface");
+      root.style.removeProperty("--dialog-surface-gradient");
       root.style.removeProperty("--dialog-foreground");
       root.style.removeProperty("--dialog-border");
       root.style.removeProperty("--dialog-muted-surface");
@@ -141,6 +156,7 @@ export function useThemePalette(settings) {
     themePalette.dialogBorder,
     themePalette.dialogMutedSurface,
     themePalette.dialogSurface,
+    themePalette.dialogSurfaceGradient,
     themePalette.dialogText,
     themePalette.rootStyle,
     themeSettings.actionColor,

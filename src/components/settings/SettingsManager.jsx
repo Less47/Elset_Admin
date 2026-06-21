@@ -108,6 +108,8 @@ function WorkspacePreview({ settings }) {
   const actionColor = normalizeHexColor(normalizedSettings.actionColor, "#F69320");
   const borderColor = normalizeHexColor(normalizedSettings.borderColor, "#1E293B");
   const dialogSurface = normalizeHexColor(normalizedSettings.dialogSurface, "#F8FAFC");
+  const dialogText = getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT });
+  const dialogSurfaceGradient = `linear-gradient(165deg, ${mixHexColors(dialogSurface, "#FFFFFF", dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32)} 0%, ${dialogSurface} 56%, ${mixHexColors(dialogSurface, APP_TEXT_DARK, dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1)} 100%)`;
 
   return (
     <Card className="overflow-hidden rounded-3xl border-slate-200 shadow-sm">
@@ -202,14 +204,15 @@ function WorkspacePreview({ settings }) {
               <div
                 className="rounded-2xl border p-5 shadow-sm"
                 style={{
+                  backgroundImage: dialogSurfaceGradient,
                   backgroundColor: dialogSurface,
                   borderColor,
-                  color: getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
+                  color: dialogText,
                 }}
               >
-                <p className="text-sm font-semibold">Dialog Surface Preview</p>
+                <p className="text-sm font-semibold">Dialog Gradient Preview</p>
                 <p className="mt-2 text-sm opacity-80">
-                  Popups, editors, and modals will use this surface for a consistent branded feel.
+                  Popups, editors, and modals will use a generated gradient based on this one popup colour.
                 </p>
               </div>
             </div>
@@ -793,7 +796,7 @@ export default function SettingsManager({
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Colour Controls</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, popups, primary action buttons, and shared border colour.</p>
+                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, popup gradients, primary action buttons, and shared border colour.</p>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 {themeColorFields.map((field) => (

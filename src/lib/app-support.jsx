@@ -191,7 +191,7 @@ export const themeColorFields = [
   {
     key: "dialogSurface",
     label: "Popup surface",
-    description: "Background color used for popup windows throughout the app.",
+    description: "Base color used to generate popup gradients throughout the app.",
   },
 ];
 
