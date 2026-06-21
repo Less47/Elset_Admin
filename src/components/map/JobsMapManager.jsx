@@ -496,8 +496,8 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
   }, [isMapReady]);
 
   return (
-    <div className="flex min-h-[calc(100vh-7rem)] flex-col lg:min-h-[calc(100vh-5rem)]">
-      <Card className="flex min-h-0 flex-1 flex-col rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+    <div className="space-y-4">
+      <Card className="rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
         <CardHeader>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -522,7 +522,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+        <CardContent className="grid gap-3">
           <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
             <Input
               placeholder="Search job number, customer, title, or address..."
@@ -595,14 +595,14 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             </div>
           ) : null}
 
-          <div className="flex min-h-[420px] flex-1 overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
             {isLoadingMapConfig ? (
-              <div className="flex h-full w-full items-center justify-center gap-3 text-sm text-slate-500">
+              <div className="flex h-[60vh] min-h-[420px] items-center justify-center gap-3 text-sm text-slate-500 md:h-[64vh] md:min-h-[520px] xl:h-[calc(100vh-18rem)]">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
                 <span>Loading map tiles...</span>
               </div>
             ) : (
-              <div ref={mapContainerRef} className="h-full w-full" />
+              <div ref={mapContainerRef} className="h-[60vh] min-h-[420px] w-full md:h-[64vh] md:min-h-[520px] xl:h-[calc(100vh-18rem)]" />
             )}
           </div>
 
