@@ -458,6 +458,7 @@ function JobCard({
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
   const handleCardDoubleClick = () => onOpen(job);
   const shouldShowHeaderMeta = Boolean(jobValueMeta) || job.status !== "Completed";
+  const gridAddress = job.jobAddress || "Not set";
   const tomorrowActionPositionClassName = isCompactView ? "right-12 top-2" : "right-2 top-2";
   const tomorrowAction = isPlannedForTomorrow ? (
     <span className={`absolute z-10 rounded-full bg-sky-500/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm ${tomorrowActionPositionClassName}`}>
@@ -588,6 +589,22 @@ function JobCard({
       {tomorrowAction}
       <Card className={cardClassName}>
         <CardContent className={cardContentClassName}>
+          {isGridView ? (
+            <div className="flex h-full flex-col justify-between gap-4">
+              <div className="space-y-3 pr-10">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
+                <p className="text-sm font-semibold leading-5 text-slate-950">{job.title}</p>
+                <p className="line-clamp-3 text-sm leading-5 text-slate-700">{gridAddress}</p>
+              </div>
+
+              <div className={actionRowClassName}>
+                <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => onOpen(job)} onDoubleClick={stopDoubleClickPropagation}>
+                  View Job
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
           <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="mb-2" />
 
           <div className="flex items-start justify-between gap-3">
@@ -668,6 +685,8 @@ function JobCard({
               View Job
             </Button>
           </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
