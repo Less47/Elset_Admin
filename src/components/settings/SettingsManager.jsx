@@ -19,6 +19,7 @@ import {
   mixHexColors,
   normalizeHexColor,
   normalizeThemeSettings,
+  settingsTabs,
   settingsTabMeta,
   sidebarWidthOptions,
   templateTypeOptions,
@@ -105,6 +106,8 @@ const presetPreviewKeys = [
   "dialogSurface",
 ];
 
+const FAVICON_SRC = "/favicon.png";
+
 function WorkspacePreview({ settings }) {
   const normalizedSettings = normalizeThemeSettings(settings);
   const pageStart = normalizeHexColor(normalizedSettings.pageBackgroundStart, "#0F90CD");
@@ -118,6 +121,7 @@ function WorkspacePreview({ settings }) {
   const dialogSurface = normalizeHexColor(normalizedSettings.dialogSurface, "#F8FAFC");
   const dialogText = getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT });
   const dialogSurfaceGradient = `radial-gradient(190% 160% at 50% -18%, ${mixHexColors(dialogSurface, "#FFFFFF", dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32)} 0%, ${dialogSurface} 62%, ${mixHexColors(dialogSurface, APP_TEXT_DARK, dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1)} 100%)`;
+  const isIconOnlySidebar = normalizedSettings.sidebarWidth === "icon-only";
 
   return (
     <Card className="overflow-hidden rounded-3xl border-slate-200 shadow-sm">
@@ -131,7 +135,7 @@ function WorkspacePreview({ settings }) {
             backgroundImage: `linear-gradient(135deg, ${pageStart} 0%, ${mixHexColors(pageStart, "#FFFFFF", 0.5)} 48%, ${pageEnd} 100%)`,
           }}
         >
-          <div className="grid gap-4 p-4 lg:grid-cols-[220px_1fr]">
+          <div className={isIconOnlySidebar ? "grid gap-4 p-4 lg:grid-cols-[72px_1fr]" : "grid gap-4 p-4 lg:grid-cols-[220px_1fr]"}>
             <div
               className="overflow-hidden rounded-2xl border shadow-sm"
               style={{
@@ -141,35 +145,50 @@ function WorkspacePreview({ settings }) {
               }}
             >
               <div
-                className="p-4"
+                className={isIconOnlySidebar ? "flex justify-center p-3" : "p-4"}
                 style={{
                   backgroundColor: sidebarHeader,
                   color: getContrastTextColor(sidebarHeader, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
                 }}
               >
-                <div className="mx-auto grid max-w-full grid-cols-[84px_56px] items-center justify-center gap-2.5">
-                  <div className="flex h-12 w-[84px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white px-1 shadow-sm">
-                    <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
+                {isIconOnlySidebar ? (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/5 bg-white p-2 shadow-sm">
+                    <img src={FAVICON_SRC} alt="Elset Admin" className="block h-full w-full object-contain" />
                   </div>
-                  <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
-                    <span className="block text-[0.65rem]">Admin</span>
-                    <span className="mt-1 block text-[0.8rem]">Menu</span>
+                ) : (
+                  <div className="mx-auto grid max-w-full grid-cols-[84px_56px] items-center justify-center gap-2.5">
+                    <div className="flex h-12 w-[84px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white px-1 shadow-sm">
+                      <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
+                    </div>
+                    <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
+                      <span className="block text-[0.65rem]">Admin</span>
+                      <span className="mt-1 block text-[0.8rem]">Menu</span>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-              <div className="grid gap-2 p-3">
+              <div className={isIconOnlySidebar ? "grid justify-center gap-2 p-3" : "grid gap-2 p-3"}>
                 <div
-                  className="rounded-2xl border px-3 py-2 text-sm font-medium shadow-sm"
+                  className={isIconOnlySidebar ? "flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-medium shadow-sm" : "rounded-2xl border px-3 py-2 text-sm font-medium shadow-sm"}
                   style={{
                     backgroundColor: sidebarActive,
                     borderColor,
                     color: getContrastTextColor(sidebarActive, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
                   }}
                 >
-                  Active section
+                  {isIconOnlySidebar ? "A" : "Active section"}
                 </div>
-                <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm">Customers</div>
-                <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm">Invoices</div>
+                {isIconOnlySidebar ? (
+                  <>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/70 text-sm">C</div>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/70 text-sm">I</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm">Customers</div>
+                    <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm">Invoices</div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -331,6 +350,7 @@ function ExactDocumentPreview({ requestBody }) {
 
 export default function SettingsManager({
   activeSettingsTab,
+  onActiveSettingsTabChange,
   settings,
   onSettingChange,
   onApplyPreset,
@@ -541,6 +561,25 @@ export default function SettingsManager({
             {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
         </CardHeader>
+        <CardContent className="border-t border-slate-100 pt-4">
+          <div className="flex flex-wrap gap-2">
+            {settingsTabs.map((tab) => {
+              const isActive = activeSettingsTab === tab.value;
+
+              return (
+                <Button
+                  key={tab.value}
+                  type="button"
+                  variant={isActive ? "default" : "outline"}
+                  className="rounded-xl"
+                  onClick={() => onActiveSettingsTabChange?.(tab.value)}
+                >
+                  {tab.label}
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
       </Card>
 
       {activeSettingsTab === "preferences" && (

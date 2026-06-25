@@ -117,6 +117,7 @@ export const preferenceSettingKeys = [
 ];
 
 export const sidebarWidthOptions = [
+  { value: "icon-only", label: "Icon only", description: "Collapses the sidebar to icons, hides menu titles, and shows only the app favicon at the top." },
   { value: "compact", label: "Compact", description: "Keeps the sidebar tighter and leaves more room for content." },
   { value: "standard", label: "Standard", description: "Balanced spacing for everyday admin work." },
   { value: "wide", label: "Wide", description: "Gives the menu more breathing room and presence." },
@@ -131,6 +132,7 @@ export const contentDensityOptions = [
 export const inventoryCategories = ["Automation", "Access Control", "Electrical", "Hardware", "Consumables", "Tools", "Other"];
 
 export const sidebarWidthStyles = {
+  "icon-only": { width: "84px", offset: "108px" },
   compact: { width: "248px", offset: "272px" },
   standard: { width: "280px", offset: "304px" },
   wide: { width: "320px", offset: "344px" },

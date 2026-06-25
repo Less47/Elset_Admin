@@ -38,6 +38,8 @@ import {
   toTimestamp,
 } from "@/lib/app-support";
 
+const FAVICON_SRC = "/favicon.png";
+
 export default function WorkspaceShell({ auth, chrome, data, derived, supplierManualState, actions }) {
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
@@ -110,6 +112,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     : isAdmin
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
+  const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
   const handlePlanJobForTomorrowFromBoard = (jobId) => {
     const changed = handlePlanJobForTomorrow(jobId);
     if (changed) {
@@ -179,41 +182,49 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
   return (
     <>
       {!isServiceBoardFullScreen && (
-        <aside className="lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]">
+        <aside className={isIconOnlySidebar ? "mx-auto w-[var(--sidebar-width)] lg:fixed lg:inset-y-0 lg:left-0 lg:mx-0" : "lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]"}>
           <div
             className="overflow-hidden border shadow-sm backdrop-blur lg:flex lg:h-screen lg:flex-col lg:rounded-none lg:border-y-0 lg:border-r lg:border-l-0"
             style={themePalette.sidebarShell}
           >
-            <div className="p-4 lg:flex-1 lg:overflow-y-auto lg:p-5">
+            <div className={isIconOnlySidebar ? "p-2 lg:flex-1 lg:overflow-y-auto" : "p-4 lg:flex-1 lg:overflow-y-auto lg:p-5"}>
               <div
-                className="overflow-hidden rounded-3xl border p-4 shadow-sm"
+                className={isIconOnlySidebar ? "mx-auto flex h-12 w-12 justify-center overflow-hidden rounded-2xl border p-0 shadow-sm" : "overflow-hidden rounded-3xl border p-4 shadow-sm"}
                 style={{
                   ...themePalette.sidebarHeader,
                   borderColor: themePalette.borderColor,
                 }}
               >
-                <div className="mx-auto grid max-w-full grid-cols-[104px_72px] items-center justify-center gap-2.5">
-                  <div className="flex h-14 w-[104px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white px-1 shadow-sm">
-                    <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
+                {isIconOnlySidebar ? (
+                  <div className="flex h-full w-full shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white p-2 shadow-sm" title="Elset Admin">
+                    <img src={FAVICON_SRC} alt="Elset Admin" className="block h-full w-full object-contain" />
                   </div>
-                  <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
-                    <span className="block text-[0.7rem]">{roleMenuLabel}</span>
-                    <span className="mt-1 block text-sm">Menu</span>
-                  </div>
-                </div>
-                <p className="mt-4 text-sm leading-6" style={{ color: themePalette.sidebarHeaderMuted }}>
-                  {roleDescription}
-                </p>
+                ) : (
+                  <>
+                    <div className="mx-auto grid max-w-full grid-cols-[104px_72px] items-center justify-center gap-2.5">
+                      <div className="flex h-14 w-[104px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white px-1 shadow-sm">
+                        <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
+                      </div>
+                      <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
+                        <span className="block text-[0.7rem]">{roleMenuLabel}</span>
+                        <span className="mt-1 block text-sm">Menu</span>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-sm leading-6" style={{ color: themePalette.sidebarHeaderMuted }}>
+                      {roleDescription}
+                    </p>
+                  </>
+                )}
               </div>
 
-              <div className="mt-4 grid gap-2">
+              <div className={isIconOnlySidebar ? "mt-4 grid justify-center gap-2" : "mt-4 grid gap-2"}>
                 {visibleSideNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeSection === item.id;
                   const isSettingsItem = item.id === "settings";
 
                   return (
-                    <div key={item.id} className="space-y-2">
+                    <div key={item.id} className={isIconOnlySidebar ? "grid justify-center" : "space-y-2"}>
                       <button
                         type="button"
                         onClick={() => {
@@ -222,8 +233,14 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                             setActiveSettingsTab("preferences");
                           }
                         }}
-                        className="flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition hover:translate-x-[1px] hover:shadow-sm"
+                        className={
+                          isIconOnlySidebar
+                            ? "flex h-12 w-12 items-center justify-center rounded-2xl border p-0 text-left transition hover:translate-x-[1px] hover:shadow-sm"
+                            : "flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition hover:translate-x-[1px] hover:shadow-sm"
+                        }
                         style={isActive ? themePalette.sidebarActiveButton : themePalette.sidebarInactiveButton}
+                        title={item.label}
+                        aria-label={item.label}
                       >
                         <div
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
@@ -231,15 +248,19 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                         >
                           <Icon className="h-5 w-5" />
                         </div>
-                        <div className="flex min-w-0 flex-1 items-center justify-between gap-3 self-center">
-                          <p className="font-semibold">{item.label}</p>
-                          {isSettingsItem ? (
-                            <ChevronRight className={`h-4 w-4 transition-transform ${isActive ? "rotate-90" : ""}`} />
-                          ) : null}
-                        </div>
+                        {isIconOnlySidebar ? (
+                          <span className="sr-only">{item.label}</span>
+                        ) : (
+                          <div className="flex min-w-0 flex-1 items-center justify-between gap-3 self-center">
+                            <p className="font-semibold">{item.label}</p>
+                            {isSettingsItem ? (
+                              <ChevronRight className={`h-4 w-4 transition-transform ${isActive ? "rotate-90" : ""}`} />
+                            ) : null}
+                          </div>
+                        )}
                       </button>
 
-                      {isSettingsItem && isActive ? (
+                      {isSettingsItem && isActive && !isIconOnlySidebar ? (
                         <div className="grid gap-1 pl-14 animate-in slide-in-from-top-1 fade-in-0 duration-200">
                           {settingsTabs.map((tab) => {
                             const isSettingsTabActive = activeSettingsTab === tab.value;
@@ -278,27 +299,44 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                 })}
               </div>
 
-              <div className="mt-6 border-t pt-4" style={{ borderColor: themePalette.borderColor }}>
-                <div className="rounded-2xl border p-4 text-sm" style={themePalette.sidebarInactiveButton}>
-                  <p className="font-semibold">{authUser?.name || "Signed in"}</p>
-                  <p className="mt-1 capitalize" style={{ color: themePalette.sidebarInactiveMuted }}>
-                    {authUser?.role || "staff"}
-                  </p>
-                  {authUser?.username ? (
-                    <p className="mt-1 text-xs uppercase tracking-[0.14em]" style={{ color: themePalette.sidebarInactiveMuted }}>
-                      {authUser.username}
-                    </p>
-                  ) : null}
-                  {isAuthenticated ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="mt-4 w-full rounded-xl bg-white/80"
-                      onClick={handleLogout}
-                    >
-                      <LogOut className="mr-2 h-4 w-4" /> Sign Out
-                    </Button>
-                  ) : null}
+              <div className={isIconOnlySidebar ? "mt-4 grid justify-center border-t pt-4" : "mt-6 border-t pt-4"} style={{ borderColor: themePalette.borderColor }}>
+                <div className={isIconOnlySidebar ? "h-12 w-12 rounded-2xl border p-1 text-sm" : "rounded-2xl border p-4 text-sm"} style={themePalette.sidebarInactiveButton}>
+                  {isIconOnlySidebar ? (
+                    isAuthenticated ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-full w-full rounded-xl bg-white/80 p-0"
+                        onClick={handleLogout}
+                        title="Sign Out"
+                        aria-label="Sign Out"
+                      >
+                        <LogOut className="h-4 w-4" />
+                      </Button>
+                    ) : null
+                  ) : (
+                    <>
+                      <p className="font-semibold">{authUser?.name || "Signed in"}</p>
+                      <p className="mt-1 capitalize" style={{ color: themePalette.sidebarInactiveMuted }}>
+                        {authUser?.role || "staff"}
+                      </p>
+                      {authUser?.username ? (
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em]" style={{ color: themePalette.sidebarInactiveMuted }}>
+                          {authUser.username}
+                        </p>
+                      ) : null}
+                      {isAuthenticated ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-4 w-full rounded-xl bg-white/80"
+                          onClick={handleLogout}
+                        >
+                          <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -511,6 +549,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         {canManageBusiness && activeSection === "settings" ? (
           <SettingsManager
             activeSettingsTab={activeSettingsTab}
+            onActiveSettingsTabChange={setActiveSettingsTab}
             settings={themeSettings}
             onSettingChange={handleThemeSettingChange}
             onApplyPreset={handleApplyThemePreset}
