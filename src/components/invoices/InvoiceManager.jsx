@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { calculateDocTotal, money } from "@/lib/quote-template";
+import { calculateInvoiceTotal, money } from "@/lib/quote-template";
 
 const invoiceTimeRangeOptions = [
   { value: "all-time", label: "All time" },
@@ -38,7 +38,7 @@ export default function InvoiceManager({
       .map((job) => {
         const invoice = normalizeDocument("invoice", job.invoice);
         const invoiceStatus = getInvoiceStatus({ ...job, invoice });
-        const total = invoice ? calculateDocTotal(invoice.items) : 0;
+        const total = invoice ? calculateInvoiceTotal(invoice.items) : 0;
         const paymentSummary = getInvoicePaymentSummary(invoice);
         return {
           job,
@@ -135,8 +135,8 @@ export default function InvoiceManager({
   }, [deferredSearch, filterBy, rangedRows, sortBy, toTimestamp]);
 
   return (
-    <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
+    <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+      <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <CardTitle className="text-lg">Invoices & Payments</CardTitle>
@@ -153,7 +153,7 @@ export default function InvoiceManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
-              className="rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               placeholder="Search invoice, customer, job, email, or address..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -163,7 +163,7 @@ export default function InvoiceManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Time range</p>
             <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -179,7 +179,7 @@ export default function InvoiceManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status filter</p>
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -199,7 +199,7 @@ export default function InvoiceManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -215,7 +215,7 @@ export default function InvoiceManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
+              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={() => {
                 setSearch("");
                 setTimeRange("all-time");
@@ -229,7 +229,7 @@ export default function InvoiceManager({
         </div>
       </CardHeader>
 
-      <div className="grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-6">
+      <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
           { label: "Not invoiced", value: invoiceStats.notInvoiced },
@@ -238,7 +238,7 @@ export default function InvoiceManager({
           { label: "Outstanding", value: money(invoiceStats.outstandingValue) },
           { label: "Received", value: money(invoiceStats.receivedValue) },
         ].map((stat) => (
-          <div key={stat.label} className="bg-white px-5 py-4">
+          <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
             <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
           </div>
@@ -252,118 +252,117 @@ export default function InvoiceManager({
           </div>
         ) : (
           <>
-            <div className="bg-white text-xs 2xl:hidden">
-              <div className="grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-                <span>Job</span>
-                <span>Invoice</span>
-                <span>Payment</span>
-                <span className="text-right">Actions</span>
-              </div>
-
-              {filteredRows.map((row, index) => (
-                <div
-                  key={row.job.id}
-                  className={`grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
-                    index !== filteredRows.length - 1 ? "border-b border-slate-200" : ""
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
-                    <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.job.title}</p>
-                  </div>
-
-                  <div className="min-w-0 text-slate-700">
-                    <Badge className={`${row.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{row.invoiceStatus.label}</Badge>
-                    <p className="mt-1 truncate text-[11px]">Issued {row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.invoice ? money(row.total) : money(0)}</p>
-                  </div>
-
-                  <div className="min-w-0 text-slate-700">
-                    <p className="truncate font-medium text-slate-900">Bal {row.invoice ? money(row.paymentSummary.balanceAmount) : money(0)}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">Paid {row.invoice ? money(row.paymentSummary.paidAmount) : money(0)}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.paymentSummary.paymentCount} payments</p>
-                  </div>
-
-                  <div className="flex flex-wrap justify-end gap-1">
-                    <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
-                      Job
-                    </Button>
-                    {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSentInvoice(row.job)}>
-                        Open
-                      </Button>
-                    ) : null}
-                    <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
-                      {row.invoice ? "Editor" : "Create"}
-                    </Button>
-                  </div>
+            <div className="text-xs 2xl:hidden">
+              <div className="data-grid grid gap-px bg-slate-200">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                  <span>Job</span>
+                  <span>Invoice</span>
+                  <span>Payment</span>
+                  <span className="text-right">Actions</span>
                 </div>
-              ))}
-            </div>
-            <div className="hidden overflow-x-auto bg-white 2xl:block">
-            <div className="min-w-[1540px]">
-              <div className="grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                <span>Job</span>
-                <span>Customer</span>
-                <span>Work</span>
-                <span>Issued</span>
-                <span>Due</span>
-                <span className="text-right">Total</span>
-                <span>Status</span>
-                <span>Payment</span>
-                <span className="text-right">Actions</span>
-              </div>
 
-              {filteredRows.map((row, index) => (
-                <div
-                  key={row.job.id}
-                  className={`grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
-                    index !== filteredRows.length - 1 ? "border-b border-slate-200" : ""
-                  }`}
-                >
-                  <p className="font-semibold text-slate-950">#{row.job.jobNumber}</p>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{row.job.customerEmail || "No email saved"}</p>
+                {filteredRows.map((row) => (
+                  <div
+                    key={row.job.id}
+                    className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
+                      <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.job.title}</p>
+                    </div>
+
+                    <div className="min-w-0 text-slate-700">
+                      <Badge className={`${row.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{row.invoiceStatus.label}</Badge>
+                      <p className="mt-1 truncate text-[11px]">Issued {row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.invoice ? money(row.total) : money(0)}</p>
+                    </div>
+
+                    <div className="min-w-0 text-slate-700">
+                      <p className="truncate font-medium text-slate-900">Bal {row.invoice ? money(row.paymentSummary.balanceAmount) : money(0)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">Paid {row.invoice ? money(row.paymentSummary.paidAmount) : money(0)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.paymentSummary.paymentCount} payments</p>
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
+                        Job
+                      </Button>
+                      {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
+                        <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSentInvoice(row.job)}>
+                          Open
+                        </Button>
+                      ) : null}
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
+                        {row.invoice ? "Editor" : "Create"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-slate-800">{row.job.title}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{row.job.jobAddress || "No address"}</p>
-                  </div>
-                  <p className="text-slate-700">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
-                  <div>
-                    {row.invoice ? (
-                      <Input
-                        type="date"
-                        className="h-8 rounded-md border-slate-300 bg-white"
-                        value={row.invoice.dueDate || ""}
-                        onChange={(e) => onUpdateInvoicePayment(row.job.id, { dueDate: e.target.value })}
-                      />
-                    ) : (
-                      <span className="text-slate-500">Not set</span>
-                    )}
-                  </div>
-                  <p className="text-right font-semibold text-slate-950">{row.invoice ? money(row.total) : money(0)}</p>
-                  <div>
-                    <Badge className={row.invoiceStatus.className}>{row.invoiceStatus.label}</Badge>
-                  </div>
-                  <div>
-                    {row.invoice ? (
-                      <div className="space-y-1">
-                        <p className="font-medium text-slate-900">
-                          Paid {money(row.paymentSummary.paidAmount)} of {money(row.total)}
-                        </p>
-                        <p className="text-xs text-slate-500">Balance {money(row.paymentSummary.balanceAmount)}</p>
-                        {row.paymentSummary.paymentCount > 0 ? (
-                          <p className="text-xs text-slate-500">
-                            {row.paymentSummary.paymentCount} {row.paymentSummary.paymentCount === 1 ? "payment" : "payments"}
-                            {row.paymentSummary.lastPaymentDate ? ` - ${formatDate(row.paymentSummary.lastPaymentDate)}` : ""}
+                ))}
+              </div>
+            </div>
+            <div className="hidden overflow-x-auto 2xl:block">
+            <div className="min-w-[1540px]">
+              <div className="data-grid grid gap-px bg-slate-200">
+                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                  <span>Job</span>
+                  <span>Customer</span>
+                  <span>Work</span>
+                  <span>Issued</span>
+                  <span>Due</span>
+                  <span className="text-right">Total</span>
+                  <span>Status</span>
+                  <span>Payment</span>
+                  <span className="text-right">Actions</span>
+                </div>
+
+                {filteredRows.map((row) => (
+                  <div
+                    key={row.job.id}
+                    className="data-grid-row grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                  >
+                    <p className="font-semibold text-slate-950">#{row.job.jobNumber}</p>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{row.job.customerEmail || "No email saved"}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-slate-800">{row.job.title}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{row.job.jobAddress || "No address"}</p>
+                    </div>
+                    <p className="text-slate-700">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
+                    <div>
+                      {row.invoice ? (
+                        <Input
+                          type="date"
+                          className="data-toolbar-field h-8 rounded-md border-slate-300 bg-white"
+                          value={row.invoice.dueDate || ""}
+                          onChange={(e) => onUpdateInvoicePayment(row.job.id, { dueDate: e.target.value })}
+                        />
+                      ) : (
+                        <span className="text-slate-500">Not set</span>
+                      )}
+                    </div>
+                    <p className="text-right font-semibold text-slate-950">{row.invoice ? money(row.total) : money(0)}</p>
+                    <div>
+                      <Badge className={row.invoiceStatus.className}>{row.invoiceStatus.label}</Badge>
+                    </div>
+                    <div>
+                      {row.invoice ? (
+                        <div className="space-y-1">
+                          <p className="font-medium text-slate-900">
+                            Paid {money(row.paymentSummary.paidAmount)} of {money(row.total)}
                           </p>
-                        ) : (
-                          <p className="text-xs text-slate-500">No payments logged</p>
-                        )}
-                      </div>
+                          <p className="text-xs text-slate-500">Balance {money(row.paymentSummary.balanceAmount)}</p>
+                          {row.paymentSummary.paymentCount > 0 ? (
+                            <p className="text-xs text-slate-500">
+                              {row.paymentSummary.paymentCount} {row.paymentSummary.paymentCount === 1 ? "payment" : "payments"}
+                              {row.paymentSummary.lastPaymentDate ? ` - ${formatDate(row.paymentSummary.lastPaymentDate)}` : ""}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-slate-500">No payments logged</p>
+                          )}
+                        </div>
                     ) : (
                       <span className="text-slate-500">No invoice</span>
                     )}
@@ -382,9 +381,10 @@ export default function InvoiceManager({
                     </Button>
                   </div>
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+            </div>
           </>
         )}
       </CardContent>

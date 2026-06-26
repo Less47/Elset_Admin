@@ -1,14 +1,18 @@
 import {
   addDaysToDateInput,
+  buildContactSnapshot,
   buildMaintenanceJobDescription,
   defaultThemeSettings,
+  getCustomerBillingContact,
   getNextJobNumber,
   getNextMaintenanceDueDate,
+  getCustomerSitePrimaryContact,
   normalizeCustomerRecord,
   normalizeCustomerSiteProfiles,
   normalizeDocument,
   normalizeInventoryRecord,
   normalizeJobRecord,
+  normalizeJobContactSnapshot,
   normalizeMaintenancePlanRecord,
   normalizeSiteAccessNotes,
   normalizeSiteAddress,
@@ -27,6 +31,8 @@ import {
   buildTemplateWithBusinessDetails,
   defaultInvoiceTemplate,
   defaultQuoteTemplate,
+  getDocumentRecipientEmail,
+  getDocumentRecipientName,
   normalizeDocumentTemplate,
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
@@ -116,6 +122,13 @@ export function useWorkspaceActions({
         }
       }
 
+      const jobAddress = normalizeSiteAddress(job.jobAddress || normalizedSiteInput?.address || customerRecord.address);
+      const billingContact = buildContactSnapshot(job.billingContact, "Billing contact")
+        || buildContactSnapshot(getCustomerBillingContact(customerRecord), "Billing contact");
+      const onsiteContact = buildContactSnapshot(job.onsiteContact, "On-site contact")
+        || buildContactSnapshot(getCustomerSitePrimaryContact(customerRecord, jobAddress), "On-site contact");
+      const requesterContact = buildContactSnapshot(job.requesterContact, "Requester");
+
       const newJob = normalizeJobRecord({
         id: crypto.randomUUID(),
         jobNumber: getNextJobNumber(prev.jobs),
@@ -128,9 +141,12 @@ export function useWorkspaceActions({
         assignedTechnicianName: technician.name,
         customerId: customerRecord.id,
         customerName: customerRecord.name,
-        customerEmail: customerRecord.email,
-        customerPhone: customerRecord.phone,
-        jobAddress: normalizeSiteAddress(job.jobAddress || normalizedSiteInput?.address || customerRecord.address),
+        customerEmail: customerRecord.email || billingContact?.email || "",
+        customerPhone: customerRecord.phone || billingContact?.phone || "",
+        jobAddress,
+        requesterContact,
+        onsiteContact,
+        billingContact,
         createdAt: now,
         updatedAt: now,
         notes: [],
@@ -356,6 +372,9 @@ export function useWorkspaceActions({
 
     const technician = data.staff.find((entry) => entry.id === plan.defaultTechnicianId) || data.staff[0] || null;
     const now = new Date().toISOString();
+    const jobAddress = plan.siteAddress || customer.address;
+    const billingContact = buildContactSnapshot(getCustomerBillingContact(customer), "Billing contact");
+    const onsiteContact = buildContactSnapshot(getCustomerSitePrimaryContact(customer, jobAddress), "On-site contact");
     const newJob = normalizeJobRecord({
       id: crypto.randomUUID(),
       jobNumber: getNextJobNumber(data.jobs),
@@ -368,9 +387,12 @@ export function useWorkspaceActions({
       assignedTechnicianName: technician?.name || "",
       customerId: customer.id,
       customerName: customer.name,
-      customerEmail: customer.email,
-      customerPhone: customer.phone,
-      jobAddress: plan.siteAddress || customer.address,
+      customerEmail: customer.email || billingContact?.email || "",
+      customerPhone: customer.phone || billingContact?.phone || "",
+      jobAddress,
+      requesterContact: null,
+      onsiteContact,
+      billingContact,
       maintenancePlanId: plan.id,
       maintenancePlanName: plan.planName,
       maintenanceDueDate: dueDate,
@@ -480,7 +502,7 @@ export function useWorkspaceActions({
     setData((prev) => {
       const existingJob = prev.jobs.find((entry) => entry.id === jobId);
       if (!existingJob) return prev;
-      if (existingJob.serviceBoardTomorrowDate === tomorrowDate) return prev;
+      if (existingJob.serviceBoardTomorrowDate === tomorrowDate && existingJob.scheduledDate === tomorrowDate) return prev;
 
       const nextOrder = getNextTomorrowPlanningOrder(prev.jobs, tomorrowDate);
       const now = new Date().toISOString();
@@ -492,7 +514,11 @@ export function useWorkspaceActions({
             ? {
                 ...entry,
                 serviceBoardTomorrowDate: tomorrowDate,
-                serviceBoardTomorrowOrder: nextOrder,
+                serviceBoardTomorrowOrder:
+                  entry.serviceBoardTomorrowDate === tomorrowDate && Number.isFinite(Number(entry.serviceBoardTomorrowOrder))
+                    ? Number(entry.serviceBoardTomorrowOrder)
+                    : nextOrder,
+                scheduledDate: tomorrowDate,
                 updatedAt: now,
               }
             : entry
@@ -509,6 +535,7 @@ export function useWorkspaceActions({
     setData((prev) => {
       const existingJob = prev.jobs.find((entry) => entry.id === jobId);
       if (!existingJob?.serviceBoardTomorrowDate) return prev;
+      const now = new Date().toISOString();
 
       return {
         ...prev,
@@ -518,7 +545,43 @@ export function useWorkspaceActions({
                 ...entry,
                 serviceBoardTomorrowDate: "",
                 serviceBoardTomorrowOrder: null,
-                updatedAt: new Date().toISOString(),
+                scheduledDate: "",
+                updatedAt: now,
+              }
+            : entry
+        ),
+      };
+    });
+
+    return true;
+  }
+
+  function handleRemoveAllJobsFromTomorrow() {
+    const tomorrowDate = getTomorrowPlanningDate();
+    const plannedJobCount = data.jobs.filter((entry) => entry.serviceBoardTomorrowDate === tomorrowDate).length;
+    if (plannedJobCount === 0) return false;
+
+    const confirmed = window.confirm(
+      `Remove all ${plannedJobCount} job${plannedJobCount === 1 ? "" : "s"} from tomorrow?`
+    );
+    if (!confirmed) return false;
+
+    setData((prev) => {
+      const hasTomorrowJobs = prev.jobs.some((entry) => entry.serviceBoardTomorrowDate === tomorrowDate);
+      if (!hasTomorrowJobs) return prev;
+
+      const now = new Date().toISOString();
+
+      return {
+        ...prev,
+        jobs: prev.jobs.map((entry) =>
+          entry.serviceBoardTomorrowDate === tomorrowDate
+            ? {
+                ...entry,
+                serviceBoardTomorrowDate: "",
+                serviceBoardTomorrowOrder: null,
+                scheduledDate: "",
+                updatedAt: now,
               }
             : entry
         ),
@@ -543,6 +606,15 @@ export function useWorkspaceActions({
     delete nextUpdates.status;
     if (Object.prototype.hasOwnProperty.call(nextUpdates, "scheduledDate")) {
       nextUpdates.scheduledDate = toDateInputValue(nextUpdates.scheduledDate);
+    }
+    if (Object.prototype.hasOwnProperty.call(nextUpdates, "requesterContact")) {
+      nextUpdates.requesterContact = normalizeJobContactSnapshot(nextUpdates.requesterContact, "Requester");
+    }
+    if (Object.prototype.hasOwnProperty.call(nextUpdates, "onsiteContact")) {
+      nextUpdates.onsiteContact = normalizeJobContactSnapshot(nextUpdates.onsiteContact, "On-site contact");
+    }
+    if (Object.prototype.hasOwnProperty.call(nextUpdates, "billingContact")) {
+      nextUpdates.billingContact = normalizeJobContactSnapshot(nextUpdates.billingContact, "Billing contact");
     }
     if (Object.keys(nextUpdates).length > 0) {
       updateJob(jobId, nextUpdates);
@@ -777,6 +849,9 @@ export function useWorkspaceActions({
       customerEmail: job.customerEmail,
       customerPhone: job.customerPhone,
       jobAddress: job.jobAddress,
+      requesterContact: job.requesterContact || null,
+      onsiteContact: job.onsiteContact || null,
+      billingContact: job.billingContact || null,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     };
@@ -853,8 +928,10 @@ export function useWorkspaceActions({
 
   async function handleSendDocument(doc) {
     if (!canManageBusiness || !selectedFreshJob) return;
-    if (!selectedFreshJob.customerEmail) {
-      window.alert(`Add a customer email address before sending the ${docType}.`);
+    const recipientEmail = getDocumentRecipientEmail(selectedFreshJob);
+    const recipientName = getDocumentRecipientName(selectedFreshJob);
+    if (!recipientEmail) {
+      window.alert(`Add a billing or customer email address before sending the ${docType}.`);
       return;
     }
 
@@ -868,7 +945,7 @@ export function useWorkspaceActions({
       ? `\n\nThis customer already has ${priorAttempts} previous ${documentLabel} send ${priorAttempts === 1 ? "attempt" : "attempts"}.`
       : "";
     const confirmed = window.confirm(
-      `Are you sure you want to send this ${documentLabel} to ${selectedFreshJob.customerEmail}?${previousSendWarning}\n\nThis will email the customer a PDF attachment.`
+      `Are you sure you want to send this ${documentLabel} to ${recipientName} <${recipientEmail}>?${previousSendWarning}\n\nThis will email the customer a PDF attachment.`
     );
     if (!confirmed) return;
 
@@ -914,7 +991,7 @@ export function useWorkspaceActions({
             id: crypto.randomUUID(),
             sentAt: payload.sentAt || new Date().toISOString(),
             fromEmail: payload.fromEmail || ADMIN_EMAIL,
-            toEmail: selectedFreshJob.customerEmail,
+            toEmail: recipientEmail,
             messageId: payload.messageId || "",
             jobSnapshot: buildDocumentJobSnapshot(selectedFreshJob),
             documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
@@ -945,13 +1022,14 @@ export function useWorkspaceActions({
       );
       const updatedCustomer = customers.find((customer) => customer.id === customerId);
       if (!updatedCustomer) return prev;
+      const billingContact = getCustomerBillingContact(updatedCustomer);
       const jobs = prev.jobs.map((job) =>
         job.customerId === customerId
           ? {
               ...job,
               customerName: updatedCustomer.name,
-              customerEmail: updatedCustomer.email,
-              customerPhone: updatedCustomer.phone,
+              customerEmail: updatedCustomer.email || billingContact?.email || "",
+              customerPhone: updatedCustomer.phone || billingContact?.phone || "",
             }
           : job
       );
@@ -1190,6 +1268,7 @@ export function useWorkspaceActions({
     handleOpenJob,
     handlePlanJobForTomorrow,
     handleOpenSiteProfile,
+    handleRemoveAllJobsFromTomorrow,
     handleRemoveJobFromTomorrow,
     handleResetDocumentTemplate,
     handleResetPreferences,

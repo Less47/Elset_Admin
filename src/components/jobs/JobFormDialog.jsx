@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   customerTypeOptions,
   formatCustomerType,
   formatSiteType,
+  getCustomerContacts,
   getCustomerSiteAccessNote,
   getSiteDisplayName,
   normalizeSiteAddress,
@@ -36,6 +38,10 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
       siteType: "",
       accessNotes: "",
       notes: "",
+      contactId: "",
+      contactName: "",
+      contactPhone: "",
+      contactEmail: "",
     }),
     []
   );
@@ -52,6 +58,9 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
     assignedTechnicianId: defaultStaffId,
     jobAddress: orderedCustomers[0]?.address || "",
     scheduledDate: "",
+    requesterContact: null,
+    onsiteContact: null,
+    billingContact: null,
   });
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -70,6 +79,9 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
         assignedTechnicianId: defaultStaffId,
         jobAddress: orderedCustomers[0]?.address || "",
         scheduledDate: "",
+        requesterContact: null,
+        onsiteContact: null,
+        billingContact: null,
       });
     }
   }, [defaultStaffId, emptySiteDraft, open, orderedCustomers]);
@@ -86,6 +98,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
         entry.phone,
         entry.customerType,
         entry.address,
+        ...(entry.contacts || []).flatMap((contact) => [contact.name, contact.role, contact.phone, contact.email]),
         ...(entry.siteAccessNotes || []).flatMap((site) => [site.address, site.notes]),
         ...(entry.sites || []).flatMap((site) => [
           site.label,
@@ -114,6 +127,10 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
     () => (selectedExistingCustomer ? buildCustomerSites(selectedExistingCustomer, selectedExistingCustomerJobs) : []),
     [selectedExistingCustomer, selectedExistingCustomerJobs]
   );
+  const selectedExistingCustomerContacts = useMemo(
+    () => (selectedExistingCustomer ? getCustomerContacts(selectedExistingCustomer) : []),
+    [selectedExistingCustomer]
+  );
   const selectedExistingSite = useMemo(
     () =>
       selectedExistingCustomerSites.find(
@@ -121,6 +138,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
       ) || null,
     [job.jobAddress, selectedExistingCustomerSites]
   );
+  const availableJobContacts = mode === "existing" ? selectedExistingCustomerContacts : [];
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -142,6 +160,18 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
     });
     setJob((prev) => ({ ...prev, jobAddress: fallbackAddress }));
   }, [emptySiteDraft, mode, open, selectedExistingCustomer?.address, selectedExistingCustomer?.id, selectedExistingCustomerSites]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!open) return;
+    setJob((prev) => ({
+      ...prev,
+      requesterContact: null,
+      onsiteContact: null,
+      billingContact: null,
+    }));
+  }, [mode, open, selectedCustomerId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectedJobAddress = mode === "existing"
@@ -432,6 +462,13 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                             {selectedExistingSite.jobCount > 0 ? <Badge className="bg-sky-100 text-sky-800">{selectedExistingSite.jobCount} jobs</Badge> : null}
                           </div>
                         </div>
+                        {selectedExistingSite.contactName ? (
+                          <p className="mt-3 text-slate-600">
+                            Site contact: {selectedExistingSite.contactName}
+                            {selectedExistingSite.contactPhone ? ` - ${selectedExistingSite.contactPhone}` : ""}
+                            {selectedExistingSite.contactEmail ? ` - ${selectedExistingSite.contactEmail}` : ""}
+                          </p>
+                        ) : null}
                         {selectedExistingSite.profileNotes ? <p className="mt-3 text-slate-600">{selectedExistingSite.profileNotes}</p> : null}
                       </div>
                     ) : null}
@@ -464,6 +501,28 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                       </SelectContent>
                     </Select>
                   </FormField>
+                  <ContactSnapshotEditor
+                    title="Site contact"
+                    description="Optional. This becomes the default on-site contact for jobs created at this address."
+                    contacts={availableJobContacts}
+                    fallbackRole="Site contact"
+                    value={{
+                      id: siteDraft.contactId,
+                      name: siteDraft.contactName,
+                      role: "Site contact",
+                      phone: siteDraft.contactPhone,
+                      email: siteDraft.contactEmail,
+                    }}
+                    onChange={(contact) =>
+                      setSiteDraft((prev) => ({
+                        ...prev,
+                        contactId: contact?.id || "",
+                        contactName: contact?.name || "",
+                        contactPhone: contact?.phone || "",
+                        contactEmail: contact?.email || "",
+                      }))
+                    }
+                  />
                   <FormField label="Access notes">
                     <Textarea
                       rows={3}
@@ -538,6 +597,42 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                     </SelectContent>
                   </Select>
                 </FormField>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Job contacts</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Leave these blank if you want the job to fall back to the saved site contact and customer billing contact automatically.
+                </p>
+
+                <div className="mt-4 grid gap-4">
+                  <ContactSnapshotEditor
+                    title="Requester"
+                    description="Who asked for the work or booked the visit."
+                    contacts={availableJobContacts}
+                    fallbackRole="Requester"
+                    value={job.requesterContact}
+                    onChange={(contact) => setJob((prev) => ({ ...prev, requesterContact: contact }))}
+                  />
+
+                  <ContactSnapshotEditor
+                    title="On-site Contact"
+                    description="Who the technician should speak with on arrival."
+                    contacts={availableJobContacts}
+                    fallbackRole="On-site contact"
+                    value={job.onsiteContact}
+                    onChange={(contact) => setJob((prev) => ({ ...prev, onsiteContact: contact }))}
+                  />
+
+                  <ContactSnapshotEditor
+                    title="Billing Contact"
+                    description="Who quotes and invoices should go to for this job."
+                    contacts={availableJobContacts}
+                    fallbackRole="Billing contact"
+                    value={job.billingContact}
+                    onChange={(contact) => setJob((prev) => ({ ...prev, billingContact: contact }))}
+                  />
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">

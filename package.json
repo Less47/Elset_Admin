@@ -8,7 +8,7 @@
     "dev:client": "node dev-client.js",
     "start": "node server.js",
     "server": "node server.js",
-    "dev:server": "node dev-server.js",
+    "dev:server": "node --watch dev-server.js",
     "demo:data": "node scripts/generate-demo-data.mjs",
     "build": "vite build",
     "lint": "eslint .",

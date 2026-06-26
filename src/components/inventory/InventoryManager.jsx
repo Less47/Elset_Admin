@@ -234,8 +234,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
   return (
     <>
-      <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+        <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
           <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <CardTitle className="text-lg">Parts Inventory</CardTitle>
@@ -263,7 +263,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input
-                className="rounded-lg border-slate-300 bg-white"
+                className="data-toolbar-field rounded-lg border-slate-300 bg-white"
                 placeholder="Search part, SKU, supplier, or location..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -273,7 +273,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Stock filter</p>
               <Select value={filterBy} onValueChange={setFilterBy}>
-                <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+                <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -288,7 +288,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+                <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -305,7 +305,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <div className="flex items-end">
               <Button
                 variant="outline"
-                className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
+                className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
                 onClick={() => {
                   setSearch("");
                   setFilterBy("all");
@@ -318,14 +318,14 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
           </div>
         </CardHeader>
 
-        <div className="grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
+        <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
           {[
             { label: "Parts", value: inventoryStats.totalParts },
             { label: "Units on hand", value: inventoryStats.totalUnits },
             { label: "Needs reorder", value: inventoryStats.lowStock + inventoryStats.outOfStock },
             { label: "Stock value", value: money(inventoryStats.inventoryValue) },
           ].map((stat) => (
-            <div key={stat.label} className="bg-white px-5 py-4">
+            <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
             </div>
@@ -353,24 +353,23 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             </div>
           ) : (
             <>
-              <div className="bg-white text-xs 2xl:hidden">
-                <div className="grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  <span>Part</span>
-                  <span className="text-right">Stock</span>
-                  <span className="text-right">Value</span>
-                  <span className="text-right">Action</span>
-                </div>
+              <div className="text-xs 2xl:hidden">
+                <div className="data-grid grid gap-px bg-slate-200">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                    <span>Part</span>
+                    <span className="text-right">Stock</span>
+                    <span className="text-right">Value</span>
+                    <span className="text-right">Action</span>
+                  </div>
 
-                {filteredParts.map((part, index) => {
+                  {filteredParts.map((part) => {
                   const status = getInventoryStockStatus(part);
                   const stockValue = part.quantity * part.unitCost;
 
                   return (
                     <div
                       key={part.id}
-                      className={`grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
-                        index !== filteredParts.length - 1 ? "border-b border-slate-200" : ""
-                      }`}
+                      className="data-grid-row grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{part.name}</p>
@@ -409,34 +408,34 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                       </div>
                     </div>
                   );
-                })}
-              </div>
-              <div className="hidden overflow-x-auto bg-white 2xl:block">
-              <div className="min-w-[1320px]">
-                <div className="grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  <span>Part</span>
-                  <span>SKU</span>
-                  <span>Category</span>
-                  <span className="text-right">Qty</span>
-                  <span className="text-right">Reorder</span>
-                  <span className="text-right">Unit Cost</span>
-                  <span className="text-right">Value</span>
-                  <span>Supplier</span>
-                  <span>Location</span>
-                  <span>Status</span>
-                  <span className="text-right">Action</span>
+                  })}
                 </div>
+              </div>
+              <div className="hidden overflow-x-auto 2xl:block">
+              <div className="min-w-[1320px]">
+                <div className="data-grid grid gap-px bg-slate-200">
+                  <div className="data-grid-header grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                    <span>Part</span>
+                    <span>SKU</span>
+                    <span>Category</span>
+                    <span className="text-right">Qty</span>
+                    <span className="text-right">Reorder</span>
+                    <span className="text-right">Unit Cost</span>
+                    <span className="text-right">Value</span>
+                    <span>Supplier</span>
+                    <span>Location</span>
+                    <span>Status</span>
+                    <span className="text-right">Action</span>
+                  </div>
 
-                {filteredParts.map((part, index) => {
+                  {filteredParts.map((part) => {
                   const status = getInventoryStockStatus(part);
                   const stockValue = part.quantity * part.unitCost;
 
                   return (
                     <div
                       key={part.id}
-                      className={`grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
-                        index !== filteredParts.length - 1 ? "border-b border-slate-200" : ""
-                      }`}
+                      className="data-grid-row grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{part.name}</p>
@@ -476,9 +475,10 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                       </div>
                     </div>
                   );
-                })}
+                  })}
+                </div>
               </div>
-            </div>
+              </div>
             </>
           )}
         </CardContent>

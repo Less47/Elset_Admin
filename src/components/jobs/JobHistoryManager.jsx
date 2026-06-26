@@ -163,8 +163,8 @@ export default function JobHistoryManager({
   };
 
   return (
-    <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
+    <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+      <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <CardTitle className="text-lg">Job History</CardTitle>
@@ -181,7 +181,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
-              className="rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               placeholder="Search job, customer, technician, address, or status..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -191,7 +191,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -209,7 +209,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status</p>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -226,7 +226,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Urgency</p>
             <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -245,7 +245,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Technician</p>
             <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -263,7 +263,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Documents</p>
             <Select value={documentFilter} onValueChange={setDocumentFilter}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -281,7 +281,7 @@ export default function JobHistoryManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Quick range</p>
             <Select value={createdRange} onValueChange={setCreatedRange}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -297,7 +297,7 @@ export default function JobHistoryManager({
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Created from</p>
             <Input
               type="date"
-              className="rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               value={createdFrom}
               onChange={(e) => setCreatedFrom(e.target.value)}
             />
@@ -307,7 +307,7 @@ export default function JobHistoryManager({
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Created to</p>
             <Input
               type="date"
-              className="rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               value={createdTo}
               onChange={(e) => setCreatedTo(e.target.value)}
             />
@@ -316,7 +316,7 @@ export default function JobHistoryManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
+              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={resetFilters}
             >
               Reset
@@ -325,7 +325,7 @@ export default function JobHistoryManager({
         </div>
       </CardHeader>
 
-      <div className="grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
+      <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
         {[
           { label: "Jobs", value: historyStats.total },
           { label: "Open", value: historyStats.open },
@@ -333,7 +333,7 @@ export default function JobHistoryManager({
           { label: "Quoted", value: historyStats.quoted },
           { label: "Invoiced", value: historyStats.invoiced },
         ].map((stat) => (
-          <div key={stat.label} className="bg-white px-5 py-4">
+          <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
             <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
           </div>
@@ -347,118 +347,118 @@ export default function JobHistoryManager({
           </div>
         ) : (
           <>
-            <div className="bg-white text-xs 2xl:hidden">
-              <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_150px_76px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-                <span>Job</span>
-                <span>Customer</span>
-                <span>Status</span>
-                <span className="text-right">Open</span>
-              </div>
-
-              {filteredJobs.map((job, index) => (
-                <div
-                  key={job.id}
-                  onDoubleClick={() => onOpenJob(job)}
-                  title="Double-click to open job"
-                  className={`grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_150px_76px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
-                    index !== filteredJobs.length - 1 ? "border-b border-slate-200" : ""
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
-                    <p className="truncate font-semibold text-slate-950">{job.title}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.description || "No description saved."}</p>
-                  </div>
-
-                  <div className="min-w-0 text-slate-700">
-                    <p className="truncate font-medium text-slate-900">{job.customerName}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.jobAddress || "No site address saved"}</p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.assignedTechnicianName || "Unassigned"} - {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
-                  </div>
-
-                  <div className="flex min-w-0 flex-wrap gap-1">
-                    <Badge className={`${statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"} px-1.5 py-0 text-[10px]`}>{job.status}</Badge>
-                    <Badge className={`${getUrgencyBadgeClassName(job.urgency)} px-1.5 py-0 text-[10px]`}>{job.urgency || "Low"}</Badge>
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{job.hasQuote ? "Quote" : "No quote"}</Badge>
-                    <Badge className={`${job.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{job.invoiceStatus.label}</Badge>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(job)}>
-                      Open
-                    </Button>
-                  </div>
+            <div className="text-xs 2xl:hidden">
+              <div className="data-grid grid gap-px bg-slate-200">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_150px_76px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                  <span>Job</span>
+                  <span>Customer</span>
+                  <span>Status</span>
+                  <span className="text-right">Open</span>
                 </div>
-              ))}
+
+                {filteredJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    onDoubleClick={() => onOpenJob(job)}
+                    title="Double-click to open job"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_150px_76px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
+                      <p className="truncate font-semibold text-slate-950">{job.title}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.description || "No description saved."}</p>
+                    </div>
+
+                    <div className="min-w-0 text-slate-700">
+                      <p className="truncate font-medium text-slate-900">{job.customerName}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.jobAddress || "No site address saved"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.assignedTechnicianName || "Unassigned"} - {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+                    </div>
+
+                    <div className="flex min-w-0 flex-wrap gap-1">
+                      <Badge className={`${statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"} px-1.5 py-0 text-[10px]`}>{job.status}</Badge>
+                      <Badge className={`${getUrgencyBadgeClassName(job.urgency)} px-1.5 py-0 text-[10px]`}>{job.urgency || "Low"}</Badge>
+                      <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{job.hasQuote ? "Quote" : "No quote"}</Badge>
+                      <Badge className={`${job.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{job.invoiceStatus.label}</Badge>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(job)}>
+                        Open
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="hidden overflow-x-auto bg-white 2xl:block">
+            <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1520px]">
-              <div className="grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                <span>Job</span>
-                <span>Customer & Site</span>
-                <span>Status</span>
-                <span>Urgency</span>
-                <span>Scheduled</span>
-                <span>Technician</span>
-                <span>Documents</span>
-                <span>Last Activity</span>
-                <span className="text-right">Action</span>
-              </div>
-
-              {filteredJobs.map((job, index) => (
-                <div
-                  key={job.id}
-                  onDoubleClick={() => onOpenJob(job)}
-                  title="Double-click to open job"
-                  className={`grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
-                    index !== filteredJobs.length - 1 ? "border-b border-slate-200" : ""
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                    <p className="truncate font-semibold text-slate-950">{job.title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">{job.description || "No description saved."}</p>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-900">{job.customerName}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{job.jobAddress || "No site address saved"}</p>
-                  </div>
-
-                  <div>
-                    <Badge className={statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"}>{job.status}</Badge>
-                  </div>
-
-                  <div>
-                    <Badge className={getUrgencyBadgeClassName(job.urgency)}>{job.urgency || "Low"}</Badge>
-                  </div>
-
-                  <p className="text-slate-700">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
-
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-900">{job.assignedTechnicianName || "Unassigned"}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{job.customerPhone || job.customerEmail || "No contact saved"}</p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="secondary">{job.hasQuote ? "Quote saved" : "No quote"}</Badge>
-                    <Badge className={job.invoiceStatus.className}>{job.invoiceStatus.label}</Badge>
-                  </div>
-
-                  <div>
-                    <p className="font-medium text-slate-900">{formatDate(job.updatedAt)}</p>
-                    <p className="mt-1 text-xs text-slate-500">Created {formatDate(job.createdAt)}</p>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenJob(job)}>
-                      Open Job
-                    </Button>
-                  </div>
+              <div className="data-grid grid gap-px bg-slate-200">
+                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                  <span>Job</span>
+                  <span>Customer & Site</span>
+                  <span>Status</span>
+                  <span>Urgency</span>
+                  <span>Scheduled</span>
+                  <span>Technician</span>
+                  <span>Documents</span>
+                  <span>Last Activity</span>
+                  <span className="text-right">Action</span>
                 </div>
-              ))}
+
+                {filteredJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    onDoubleClick={() => onOpenJob(job)}
+                    title="Double-click to open job"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
+                      <p className="truncate font-semibold text-slate-950">{job.title}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">{job.description || "No description saved."}</p>
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-900">{job.customerName}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{job.jobAddress || "No site address saved"}</p>
+                    </div>
+
+                    <div>
+                      <Badge className={statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"}>{job.status}</Badge>
+                    </div>
+
+                    <div>
+                      <Badge className={getUrgencyBadgeClassName(job.urgency)}>{job.urgency || "Low"}</Badge>
+                    </div>
+
+                    <p className="text-slate-700">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900">{job.assignedTechnicianName || "Unassigned"}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{job.customerPhone || job.customerEmail || "No contact saved"}</p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="secondary">{job.hasQuote ? "Quote saved" : "No quote"}</Badge>
+                      <Badge className={job.invoiceStatus.className}>{job.invoiceStatus.label}</Badge>
+                    </div>
+
+                    <div>
+                      <p className="font-medium text-slate-900">{formatDate(job.updatedAt)}</p>
+                      <p className="mt-1 text-xs text-slate-500">Created {formatDate(job.createdAt)}</p>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenJob(job)}>
+                        Open Job
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+            </div>
           </>
         )}
       </CardContent>

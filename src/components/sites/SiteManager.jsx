@@ -123,7 +123,7 @@ export default function SiteManager({
           key={`${site.customer.id}-${site.id}`}
           onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
           title="Double-click to open site profile"
-          className="cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -167,8 +167,8 @@ export default function SiteManager({
 
   return (
     <>
-      <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+        <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <CardTitle className="text-lg">Site Profiles</CardTitle>
@@ -180,7 +180,7 @@ export default function SiteManager({
             <div>
               Showing <span className="font-semibold text-slate-900">{filteredSites.length}</span> of {siteRows.length} sites
             </div>
-            <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+            <div className="data-toggle-shell inline-flex rounded-lg border border-slate-300 bg-white p-1">
               <Button
                 type="button"
                 size="sm"
@@ -217,7 +217,7 @@ export default function SiteManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
-              className="rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               placeholder="Search customer, site, address, notes, or gate/project details..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -227,7 +227,7 @@ export default function SiteManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -242,7 +242,7 @@ export default function SiteManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site type</p>
             <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
@@ -260,7 +260,7 @@ export default function SiteManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
+              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={() => {
                 setSearch("");
                 setSortBy("activity");
@@ -281,108 +281,108 @@ export default function SiteManager({
           ) : (
             viewMode === "list" ? (
               <>
-                <div className="bg-white text-xs 2xl:hidden">
-                  <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    <span>Site</span>
-                    <span>Customer</span>
-                    <span>Activity</span>
-                    <span className="text-right">Work</span>
-                  </div>
-
-                  {filteredSites.map((site, index) => (
-                    <div
-                      key={`${site.customer.id}-${site.id}`}
-                      onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
-                      title="Double-click to open site profile"
-                      className={`grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
-                        index !== filteredSites.length - 1 ? "border-b border-slate-200" : ""
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <p className="truncate font-semibold text-slate-950">{getSiteDisplayName(site)}</p>
-                          {site.isPrimary ? <Badge variant="secondary" className="hidden px-1.5 py-0 text-[10px] xl:inline-flex">Primary</Badge> : null}
-                          {site.accessNotes ? <Badge className="hidden bg-amber-100 px-1.5 py-0 text-[10px] text-amber-800 xl:inline-flex">Access</Badge> : null}
-                        </div>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.address && getSiteDisplayName(site) !== site.address ? site.address : "Primary site"}</p>
-                      </div>
-                      <div className="min-w-0 text-slate-700">
-                        <p className="truncate font-medium text-slate-900">{site.customer.name}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.siteType ? formatSiteType(site.siteType) : "Type not set"}</p>
-                      </div>
-                      <div className="min-w-0 text-slate-700">
-                        <p className="truncate">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.assetCount} assets</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <p className="text-right text-[11px] text-slate-600">
-                          <span className="font-semibold text-slate-950">{site.jobCount}</span> total / <span className="font-semibold text-slate-950">{site.openJobCount}</span> open
-                        </p>
-                        <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSite(site.customer.id, site.id)}>
-                          Open
-                        </Button>
-                      </div>
+                <div className="text-xs 2xl:hidden">
+                  <div className="data-grid grid gap-px bg-slate-200">
+                    <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                      <span>Site</span>
+                      <span>Customer</span>
+                      <span>Activity</span>
+                      <span className="text-right">Work</span>
                     </div>
-                  ))}
+
+                    {filteredSites.map((site) => (
+                      <div
+                        key={`${site.customer.id}-${site.id}`}
+                        onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
+                        title="Double-click to open site profile"
+                        className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <p className="truncate font-semibold text-slate-950">{getSiteDisplayName(site)}</p>
+                            {site.isPrimary ? <Badge variant="secondary" className="hidden px-1.5 py-0 text-[10px] xl:inline-flex">Primary</Badge> : null}
+                            {site.accessNotes ? <Badge className="hidden bg-amber-100 px-1.5 py-0 text-[10px] text-amber-800 xl:inline-flex">Access</Badge> : null}
+                          </div>
+                          <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.address && getSiteDisplayName(site) !== site.address ? site.address : "Primary site"}</p>
+                        </div>
+                        <div className="min-w-0 text-slate-700">
+                          <p className="truncate font-medium text-slate-900">{site.customer.name}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.siteType ? formatSiteType(site.siteType) : "Type not set"}</p>
+                        </div>
+                        <div className="min-w-0 text-slate-700">
+                          <p className="truncate">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</p>
+                          <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.assetCount} assets</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <p className="text-right text-[11px] text-slate-600">
+                            <span className="font-semibold text-slate-950">{site.jobCount}</span> total / <span className="font-semibold text-slate-950">{site.openJobCount}</span> open
+                          </p>
+                          <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSite(site.customer.id, site.id)}>
+                            Open
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="hidden overflow-x-auto bg-white 2xl:block">
+                <div className="hidden overflow-x-auto 2xl:block">
                 <div className="min-w-[1200px]">
-                  <div className="grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    <span>Site</span>
-                    <span>Customer</span>
-                    <span>Type</span>
-                    <span>Last Activity</span>
-                    <span className="text-right">Jobs</span>
-                    <span className="text-right">Open</span>
-                    <span className="text-right">Assets</span>
-                    <span className="text-right">Action</span>
-                  </div>
-
-                  {filteredSites.map((site, index) => (
-                    <div
-                      key={`${site.customer.id}-${site.id}`}
-                      onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
-                      title="Double-click to open site profile"
-                      className={`grid cursor-pointer select-none grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
-                        index !== filteredSites.length - 1 ? "border-b border-slate-200" : ""
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate font-semibold text-slate-950">{getSiteDisplayName(site)}</p>
-                          {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
-                          {site.accessNotes ? <Badge className="bg-amber-100 text-amber-800">Access</Badge> : null}
-                        </div>
-                        <div className="mt-1 flex gap-2 text-xs text-slate-500">
-                          <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{site.id.slice(0, 8)}</span>
-                          {site.address && getSiteDisplayName(site) !== site.address ? (
-                            <span className="truncate">{site.address}</span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <p className="truncate text-slate-700">{site.customer.name}</p>
-                      <div>
-                        {site.siteType ? <Badge className="bg-emerald-100 text-emerald-800">{formatSiteType(site.siteType)}</Badge> : <span className="text-slate-500">Not set</span>}
-                      </div>
-                      <p className="text-slate-700">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</p>
-                      <div className="text-right">
-                        <span className="font-medium text-slate-950">{site.jobCount}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-medium text-slate-950">{site.openJobCount}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-medium text-slate-950">{site.assetCount}</span>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenSite(site.customer.id, site.id)}>
-                          Open Site
-                        </Button>
-                      </div>
+                  <div className="data-grid grid gap-px bg-slate-200">
+                    <div className="data-grid-header grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                      <span>Site</span>
+                      <span>Customer</span>
+                      <span>Type</span>
+                      <span>Last Activity</span>
+                      <span className="text-right">Jobs</span>
+                      <span className="text-right">Open</span>
+                      <span className="text-right">Assets</span>
+                      <span className="text-right">Action</span>
                     </div>
-                  ))}
+
+                    {filteredSites.map((site) => (
+                      <div
+                        key={`${site.customer.id}-${site.id}`}
+                        onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
+                        title="Double-click to open site profile"
+                        className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-semibold text-slate-950">{getSiteDisplayName(site)}</p>
+                            {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
+                            {site.accessNotes ? <Badge className="bg-amber-100 text-amber-800">Access</Badge> : null}
+                          </div>
+                          <div className="mt-1 flex gap-2 text-xs text-slate-500">
+                            <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{site.id.slice(0, 8)}</span>
+                            {site.address && getSiteDisplayName(site) !== site.address ? (
+                              <span className="truncate">{site.address}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <p className="truncate text-slate-700">{site.customer.name}</p>
+                        <div>
+                          {site.siteType ? <Badge className="bg-emerald-100 text-emerald-800">{formatSiteType(site.siteType)}</Badge> : <span className="text-slate-500">Not set</span>}
+                        </div>
+                        <p className="text-slate-700">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</p>
+                        <div className="text-right">
+                          <span className="font-medium text-slate-950">{site.jobCount}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-medium text-slate-950">{site.openJobCount}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-medium text-slate-950">{site.assetCount}</span>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenSite(site.customer.id, site.id)}>
+                            Open Site
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                </div>
               </>
             ) : (
               renderSiteCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")

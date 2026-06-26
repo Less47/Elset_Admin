@@ -67,6 +67,8 @@ export const defaultThemeSettings = {
   actionColor: "#F69320",
   borderColor: "#1E293B",
   dialogSurface: "#9FE4FB",
+  dataViewSurface: "#EAF7FB",
+  dataViewAccent: "#0F90CD",
   sidebarWidth: "standard",
   contentDensity: "comfortable",
   companyName: "Elset",
@@ -95,6 +97,8 @@ export const uiSettingKeys = [
   "actionColor",
   "borderColor",
   "dialogSurface",
+  "dataViewSurface",
+  "dataViewAccent",
   "sidebarWidth",
   "contentDensity",
 ];

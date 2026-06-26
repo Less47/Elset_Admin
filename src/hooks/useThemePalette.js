@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
+  buildDataViewTheme,
   contentDensityStyles,
   getContrastTextColor,
   hexToRgba,
@@ -41,6 +42,7 @@ export function useThemePalette(settings) {
       dialogText === APP_TEXT_LIGHT ? "#FFFFFF" : APP_TEXT_DARK,
       dialogText === APP_TEXT_LIGHT ? 0.08 : 0.04
     );
+    const dataViewTheme = buildDataViewTheme(themeSettings);
 
     return {
       rootStyle: {
@@ -57,6 +59,18 @@ export function useThemePalette(settings) {
         "--dialog-border": dialogBorder,
         "--dialog-muted-surface": dialogMutedSurface,
         "--dialog-footer-surface": dialogMutedSurface,
+        "--data-view-accent": dataViewTheme.accent,
+        "--data-view-surface": dataViewTheme.surface,
+        "--data-view-header-start": dataViewTheme.headerStart,
+        "--data-view-header-end": dataViewTheme.headerEnd,
+        "--data-view-border": dataViewTheme.border,
+        "--data-view-border-strong": dataViewTheme.borderStrong,
+        "--data-view-grid-line": dataViewTheme.gridLine,
+        "--data-view-header-cell": dataViewTheme.headerCell,
+        "--data-view-row": dataViewTheme.row,
+        "--data-view-row-alt": dataViewTheme.rowAlt,
+        "--data-view-row-hover": dataViewTheme.rowHover,
+        "--data-view-stat": dataViewTheme.stat,
         "--sidebar-width": sidebarSize.width,
         "--sidebar-offset": sidebarSize.offset,
         "--section-gap": density.sectionGap,
