@@ -319,8 +319,8 @@ export default function StaffManager({
 
   return (
     <>
-      <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+        <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
           <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <CardTitle className="text-lg">Staff Management</CardTitle>
@@ -350,7 +350,7 @@ export default function StaffManager({
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input
-                className="rounded-lg border-slate-300 bg-white"
+                className="data-toolbar-field rounded-lg border-slate-300 bg-white"
                 placeholder={canManageLogins ? "Search by name, role, email, phone, or username..." : "Search by name, role, email, or phone..."}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -360,7 +360,7 @@ export default function StaffManager({
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+                <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                   <SelectValue placeholder="Sort staff" />
                 </SelectTrigger>
                 <SelectContent>
@@ -376,7 +376,7 @@ export default function StaffManager({
             <div className="flex items-end">
               <Button
                 variant="outline"
-                className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
+                className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
                 onClick={() => {
                   setSearch("");
                   setSortBy("name-asc");
@@ -388,14 +388,14 @@ export default function StaffManager({
           </div>
         </CardHeader>
 
-        <div className="grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
+        <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
           {[
             { label: "Total staff", value: staffStats.totalStaff },
             { label: "With assignments", value: staffStats.assignedStaff },
             { label: "Open assignments", value: staffStats.openAssignments },
             { label: canManageLogins ? "With login access" : "Missing email", value: canManageLogins ? staffStats.withLoginAccess : staffStats.missingEmail },
           ].map((stat) => (
-            <div key={stat.label} className="bg-white px-5 py-4">
+            <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
             </div>
@@ -429,104 +429,104 @@ export default function StaffManager({
             </div>
           ) : (
             <>
-              <div className="bg-white text-xs 2xl:hidden">
-                <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  <span>Staff</span>
-                  <span>Contact</span>
-                  <span className="text-right">Jobs</span>
-                  <span className="text-right">Action</span>
-                </div>
-
-                {filteredStaff.map((staffMember, index) => (
-                  <div
-                    key={staffMember.id}
-                    className={`grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
-                      index !== filteredStaff.length - 1 ? "border-b border-slate-200" : ""
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.role || "Role not set"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</p>
-                    </div>
-                    <div className="min-w-0 text-slate-700">
-                      <p className="truncate">{staffMember.email || "No email"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.phone || "No phone"}</p>
-                    </div>
-                    <div className="min-w-0 text-right text-slate-700">
-                      <p><span className="font-semibold text-slate-950">{staffMember.assignedJobs}</span> assigned</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">{staffMember.openJobs} open</p>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 rounded-md border-slate-300 px-2 text-[11px]"
-                        onClick={() => {
-                          setEditingStaff(staffMember);
-                          setStaffDialogOpen(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    </div>
+              <div className="text-xs 2xl:hidden">
+                <div className="data-grid grid gap-px bg-slate-200">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                    <span>Staff</span>
+                    <span>Contact</span>
+                    <span className="text-right">Jobs</span>
+                    <span className="text-right">Action</span>
                   </div>
-                ))}
-              </div>
-              <div className="hidden overflow-x-auto bg-white 2xl:block">
-              <div className="min-w-[1120px]">
-                <div className="grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  <span>Staff Member</span>
-                  <span>Role</span>
-                  <span>Email</span>
-                  <span>Phone</span>
-                  <span>Created</span>
-                  <span className="text-right">Assigned</span>
-                  <span className="text-right">Open</span>
-                  <span className="text-right">Action</span>
-                </div>
 
-                {filteredStaff.map((staffMember, index) => (
-                  <div
-                    key={staffMember.id}
-                    className={`grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
-                      index !== filteredStaff.length - 1 ? "border-b border-slate-200" : ""
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
-                      <div className="mt-1 flex gap-2 text-xs text-slate-500">
-                        <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{staffMember.id.slice(0, 8)}</span>
-                        <span className="truncate">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</span>
+                  {filteredStaff.map((staffMember) => (
+                    <div
+                      key={staffMember.id}
+                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.role || "Role not set"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</p>
+                      </div>
+                      <div className="min-w-0 text-slate-700">
+                        <p className="truncate">{staffMember.email || "No email"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.phone || "No phone"}</p>
+                      </div>
+                      <div className="min-w-0 text-right text-slate-700">
+                        <p><span className="font-semibold text-slate-950">{staffMember.assignedJobs}</span> assigned</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">{staffMember.openJobs} open</p>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-md border-slate-300 px-2 text-[11px]"
+                          onClick={() => {
+                            setEditingStaff(staffMember);
+                            setStaffDialogOpen(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
                       </div>
                     </div>
-                    <p className="truncate text-slate-700">{staffMember.role || "Not set"}</p>
-                    <p className="truncate text-slate-700">{staffMember.email || "Not set"}</p>
-                    <p className="truncate text-slate-700">{staffMember.phone || "Not set"}</p>
-                    <p className="text-slate-700">{formatDate(staffMember.createdAt)}</p>
-                    <div className="text-right">
-                      <span className="font-medium text-slate-950">{staffMember.assignedJobs}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-medium text-slate-950">{staffMember.openJobs}</span>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-md border-slate-300"
-                        onClick={() => {
-                          setEditingStaff(staffMember);
-                          setStaffDialogOpen(true);
-                        }}
-                      >
-                        Edit Staff
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+              <div className="hidden overflow-x-auto 2xl:block">
+              <div className="min-w-[1120px]">
+                <div className="data-grid grid gap-px bg-slate-200">
+                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                    <span>Staff Member</span>
+                    <span>Role</span>
+                    <span>Email</span>
+                    <span>Phone</span>
+                    <span>Created</span>
+                    <span className="text-right">Assigned</span>
+                    <span className="text-right">Open</span>
+                    <span className="text-right">Action</span>
+                  </div>
+
+                  {filteredStaff.map((staffMember) => (
+                    <div
+                      key={staffMember.id}
+                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
+                        <div className="mt-1 flex gap-2 text-xs text-slate-500">
+                          <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{staffMember.id.slice(0, 8)}</span>
+                          <span className="truncate">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</span>
+                        </div>
+                      </div>
+                      <p className="truncate text-slate-700">{staffMember.role || "Not set"}</p>
+                      <p className="truncate text-slate-700">{staffMember.email || "Not set"}</p>
+                      <p className="truncate text-slate-700">{staffMember.phone || "Not set"}</p>
+                      <p className="text-slate-700">{formatDate(staffMember.createdAt)}</p>
+                      <div className="text-right">
+                        <span className="font-medium text-slate-950">{staffMember.assignedJobs}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-medium text-slate-950">{staffMember.openJobs}</span>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-md border-slate-300"
+                          onClick={() => {
+                            setEditingStaff(staffMember);
+                            setStaffDialogOpen(true);
+                          }}
+                        >
+                          Edit Staff
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </div>
             </>
           )}
         </CardContent>

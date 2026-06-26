@@ -25,6 +25,7 @@ import {
 import {
   ADMIN_EMAIL,
   buildDocumentEmail,
+  getDocumentRecipientEmail,
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
 } from "./src/lib/quote-template.js";
@@ -66,8 +67,8 @@ function validateDocumentPayload(body, { requireCustomerEmail = true } = {}) {
   const documentType = getDocumentType(body);
   const documentLabel = documentType === "invoice" ? "invoice" : "quote";
   if (!body || typeof body !== "object") return "Missing request body.";
-  if (requireCustomerEmail && !body.job?.customerEmail) {
-    return `Customer email is required before sending a ${documentLabel}.`;
+  if (requireCustomerEmail && !getDocumentRecipientEmail(body.job)) {
+    return `A billing or customer email is required before sending a ${documentLabel}.`;
   }
   if (!body.job?.customerName) return "Customer name is required.";
   if (!body.job?.title) return "Job title is required.";
@@ -681,6 +682,7 @@ export function createServerApp() {
     const { job, template, emailSettings, emailPurpose, stampText } = req.body;
     const documentType = getDocumentType(req.body);
     const document = getDocumentRequestPayload(req.body);
+    const recipientEmail = getDocumentRecipientEmail(job);
 
     try {
       const normalizedTemplate = documentType === "invoice"
@@ -705,7 +707,7 @@ export function createServerApp() {
       const ccEmail = emailSettings?.ccEmail || undefined;
       const info = await transporter.sendMail({
         from: fromEmail,
-        to: job.customerEmail,
+        to: recipientEmail,
         replyTo: replyToEmail,
         cc: ccEmail,
         subject,

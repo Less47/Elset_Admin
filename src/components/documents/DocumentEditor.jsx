@@ -10,7 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { buildDefaultDoc, formatDate, getInvoicePaymentSummary, getInvoiceStatus, normalizeDocument, slugDate } from "@/lib/app-support";
-import { ADMIN_EMAIL, calculateDocTotal, money } from "@/lib/quote-template";
+import {
+  ADMIN_EMAIL,
+  calculateDocTotal,
+  calculateQuoteGst,
+  calculateQuoteTotal,
+  getDocumentRecipientEmail,
+  getDocumentRecipientName,
+  money,
+} from "@/lib/quote-template";
 
 export default function DocumentEditor({
   open,
@@ -45,11 +53,16 @@ export default function DocumentEditor({
 
   if (!job || !docState) return null;
 
-  const total = calculateDocTotal(docState.items);
+  const subtotal = calculateDocTotal(docState.items);
+  const hasGst = type === "invoice" || type === "quote";
+  const gst = hasGst ? calculateQuoteGst(docState.items) : 0;
+  const total = hasGst ? calculateQuoteTotal(docState.items) : subtotal;
   const paymentSummary = type === "invoice" ? getInvoicePaymentSummary(docState) : null;
   const invoiceStatus = type === "invoice" ? getInvoiceStatus({ ...job, invoice: docState }) : null;
   const sentCount = docState.sentHistory?.length || 0;
   const documentLabel = type === "quote" ? "Quote" : "Invoice";
+  const recipientEmail = getDocumentRecipientEmail(job);
+  const recipientName = getDocumentRecipientName(job);
   const paymentReceiptStamp = type === "invoice" && paymentSummary?.paidAmount > 0 && paymentSummary?.total > 0
     ? paymentSummary.balanceAmount > 0
       ? "PART PAYMENT"
@@ -81,8 +94,14 @@ export default function DocumentEditor({
   };
 
   const handlePreviewBeforeSend = async (options = {}) => {
-    if (!onPreviewDocument) return;
-    if (!job.customerEmail) return;
+    if (!recipientEmail) {
+      window.alert(`Add a billing or customer email address before sending the ${documentLabel.toLowerCase()}.`);
+      return;
+    }
+    if (!onPreviewDocument) {
+      await onSendDocument?.(docState, options);
+      return;
+    }
 
     if (sendPreview?.previewUrl) URL.revokeObjectURL(sendPreview.previewUrl);
     setSendPreview(null);
@@ -362,8 +381,12 @@ export default function DocumentEditor({
                 <span className="max-w-[140px] text-right font-medium">{job.customerName}</span>
               </div>
               <div className="flex justify-between">
+                <span>Recipient</span>
+                <span className="max-w-[140px] text-right font-medium">{recipientName}</span>
+              </div>
+              <div className="flex justify-between">
                 <span>Send to</span>
-                <span className="max-w-[140px] text-right font-medium">{job.customerEmail || "No email saved"}</span>
+                <span className="max-w-[140px] text-right font-medium">{recipientEmail || "No email saved"}</span>
               </div>
               <div className="flex justify-between">
                 <span>Send from</span>
@@ -404,10 +427,27 @@ export default function DocumentEditor({
                 </>
               )}
               <Separator />
-              <div className="flex justify-between text-base font-semibold">
-                <span>Total</span>
-                <span>{money(total)}</span>
-              </div>
+              {hasGst ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span className="font-medium">{money(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>GST</span>
+                    <span className="font-medium">{money(gst)}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-semibold">
+                    <span>Total</span>
+                    <span>{money(total)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-base font-semibold">
+                  <span>Total</span>
+                  <span>{money(total)}</span>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 {type === "quote"
                   ? "Quote emails are generated as PDF attachments and sent through the API using the active template."
@@ -430,7 +470,7 @@ export default function DocumentEditor({
           </Button>
           <Button
             variant="secondary"
-            disabled={!job.customerEmail || isSendingDocument || isPreviewingDocument}
+            disabled={!recipientEmail || isSendingDocument || isPreviewingDocument}
             onClick={() => handlePreviewBeforeSend(sendActionOptions)}
           >
             {isSendingDocument ? "Sending..." : isPreviewingDocument ? "Generating preview..." : `Preview & Send ${sendActionLabel}`}
@@ -477,7 +517,9 @@ export default function DocumentEditor({
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between gap-4">
                 <span>To</span>
-                <span className="text-right font-medium">{sendPreview?.toEmail || job.customerEmail}</span>
+                <span className="text-right font-medium">
+                  {(sendPreview?.toName || recipientName) ? `${sendPreview?.toName || recipientName} <${sendPreview?.toEmail || recipientEmail}>` : sendPreview?.toEmail || recipientEmail}
+                </span>
               </div>
               <div className="flex justify-between gap-4">
                 <span>From</span>

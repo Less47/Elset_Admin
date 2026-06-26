@@ -142,7 +142,7 @@ export default function CustomerManager({
           key={customer.id}
           onDoubleClick={() => onOpenProfile(customer.id)}
           title="Double-click to open customer profile"
-          className="cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -186,8 +186,8 @@ export default function CustomerManager({
   );
 
   return (
-    <Card className="overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
+    <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+      <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <CardTitle className="text-lg">Customer Database</CardTitle>
@@ -199,7 +199,7 @@ export default function CustomerManager({
             <div>
               Showing <span className="font-semibold text-slate-900">{filteredCustomers.length}</span> of {customerRows.length} records
             </div>
-            <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+            <div className="data-toggle-shell inline-flex rounded-lg border border-slate-300 bg-white p-1">
               <Button
                 type="button"
                 size="sm"
@@ -229,7 +229,7 @@ export default function CustomerManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
-              className="rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               placeholder="Search by name, email, phone, or address..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -239,7 +239,7 @@ export default function CustomerManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Sort customers" />
               </SelectTrigger>
               <SelectContent>
@@ -256,7 +256,7 @@ export default function CustomerManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Record filter</p>
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Filter customers" />
               </SelectTrigger>
               <SelectContent>
@@ -272,7 +272,7 @@ export default function CustomerManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Created</p>
             <Select value={createdRange} onValueChange={setCreatedRange}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Created range" />
               </SelectTrigger>
               <SelectContent>
@@ -287,7 +287,7 @@ export default function CustomerManager({
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer type</p>
             <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-              <SelectTrigger className="rounded-lg border-slate-300 bg-white">
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
@@ -305,7 +305,7 @@ export default function CustomerManager({
           <div className="flex items-end">
             <Button
               variant="outline"
-              className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
+              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
               onClick={() => {
                 setSearch("");
                 setSortBy("name-asc");
@@ -336,100 +336,100 @@ export default function CustomerManager({
         ) : (
           viewMode === "list" ? (
             <>
-              <div className="bg-white text-xs 2xl:hidden">
-                <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] border-b border-slate-200 bg-slate-100 px-3 py-2 font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  <span>Customer</span>
-                  <span>Contact</span>
-                  <span>Activity</span>
-                  <span className="text-right">Jobs</span>
-                </div>
-
-                {filteredCustomers.map((customer, index) => (
-                  <div
-                    key={customer.id}
-                    onDoubleClick={() => onOpenProfile(customer.id)}
-                    title="Double-click to open customer profile"
-                    className={`grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] items-center gap-2 px-3 py-2 transition hover:bg-slate-50 ${
-                      index !== filteredCustomers.length - 1 ? "border-b border-slate-200" : ""
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <p className="truncate font-semibold text-slate-950">{customer.name}</p>
-                        {customer.customerType ? <Badge className="hidden bg-slate-100 px-1.5 py-0 text-[10px] text-slate-700 xl:inline-flex">{formatCustomerType(customer.customerType)}</Badge> : null}
-                      </div>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.address || "No address saved"}</p>
-                    </div>
-                    <div className="min-w-0 text-slate-700">
-                      <p className="truncate">{customer.email || "No email"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.phone || "No phone"}</p>
-                    </div>
-                    <div className="min-w-0 text-slate-700">
-                      <p className="truncate">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">Created {formatDate(customer.createdAt)}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <p className="text-right text-[11px] text-slate-600">
-                        <span className="font-semibold text-slate-950">{customer.jobCount}</span> total / <span className="font-semibold text-slate-950">{customer.openJobCount}</span> open
-                      </p>
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenProfile(customer.id)}>
-                        Open
-                      </Button>
-                    </div>
+              <div className="text-xs 2xl:hidden">
+                <div className="data-grid grid gap-px bg-slate-200">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                    <span>Customer</span>
+                    <span>Contact</span>
+                    <span>Activity</span>
+                    <span className="text-right">Jobs</span>
                   </div>
-                ))}
+
+                  {filteredCustomers.map((customer) => (
+                    <div
+                      key={customer.id}
+                      onDoubleClick={() => onOpenProfile(customer.id)}
+                      title="Double-click to open customer profile"
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <p className="truncate font-semibold text-slate-950">{customer.name}</p>
+                          {customer.customerType ? <Badge className="hidden bg-slate-100 px-1.5 py-0 text-[10px] text-slate-700 xl:inline-flex">{formatCustomerType(customer.customerType)}</Badge> : null}
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.address || "No address saved"}</p>
+                      </div>
+                      <div className="min-w-0 text-slate-700">
+                        <p className="truncate">{customer.email || "No email"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.phone || "No phone"}</p>
+                      </div>
+                      <div className="min-w-0 text-slate-700">
+                        <p className="truncate">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">Created {formatDate(customer.createdAt)}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <p className="text-right text-[11px] text-slate-600">
+                          <span className="font-semibold text-slate-950">{customer.jobCount}</span> total / <span className="font-semibold text-slate-950">{customer.openJobCount}</span> open
+                        </p>
+                        <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenProfile(customer.id)}>
+                          Open
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="hidden overflow-x-auto bg-white 2xl:block">
+              <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1180px]">
-                <div className="grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] border-b border-slate-200 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  <span>Customer</span>
-                  <span>Email</span>
-                  <span>Phone</span>
-                  <span>Created</span>
-                  <span>Last Activity</span>
-                  <span className="text-right">Jobs</span>
-                  <span className="text-right">Open</span>
-                  <span className="text-right">Action</span>
-                </div>
-
-                {filteredCustomers.map((customer, index) => (
-                  <div
-                    key={customer.id}
-                    onDoubleClick={() => onOpenProfile(customer.id)}
-                    title="Double-click to open customer profile"
-                    className={`grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] items-center px-5 py-3 text-sm transition hover:bg-slate-50 ${
-                      index !== filteredCustomers.length - 1 ? "border-b border-slate-200" : ""
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-semibold text-slate-950">{customer.name}</p>
-                        {customer.customerType ? <Badge className="bg-slate-100 text-slate-700">{formatCustomerType(customer.customerType)}</Badge> : null}
-                      </div>
-                      <div className="mt-1 flex gap-2 text-xs text-slate-500">
-                        <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{customer.id.slice(0, 8)}</span>
-                        <span className="truncate">{customer.address || "No address saved"}</span>
-                      </div>
-                    </div>
-                    <p className="truncate text-slate-700">{customer.email || "Not set"}</p>
-                    <p className="truncate text-slate-700">{customer.phone || "Not set"}</p>
-                    <p className="text-slate-700">{formatDate(customer.createdAt)}</p>
-                    <p className="text-slate-700">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
-                    <div className="text-right">
-                      <span className="font-medium text-slate-950">{customer.jobCount}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-medium text-slate-950">{customer.openJobCount}</span>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenProfile(customer.id)}>
-                        Open Profile
-                      </Button>
-                    </div>
+                <div className="data-grid grid gap-px bg-slate-200">
+                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                    <span>Customer</span>
+                    <span>Email</span>
+                    <span>Phone</span>
+                    <span>Created</span>
+                    <span>Last Activity</span>
+                    <span className="text-right">Jobs</span>
+                    <span className="text-right">Open</span>
+                    <span className="text-right">Action</span>
                   </div>
-                ))}
+
+                  {filteredCustomers.map((customer) => (
+                    <div
+                      key={customer.id}
+                      onDoubleClick={() => onOpenProfile(customer.id)}
+                      title="Double-click to open customer profile"
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-semibold text-slate-950">{customer.name}</p>
+                          {customer.customerType ? <Badge className="bg-slate-100 text-slate-700">{formatCustomerType(customer.customerType)}</Badge> : null}
+                        </div>
+                        <div className="mt-1 flex gap-2 text-xs text-slate-500">
+                          <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{customer.id.slice(0, 8)}</span>
+                          <span className="truncate">{customer.address || "No address saved"}</span>
+                        </div>
+                      </div>
+                      <p className="truncate text-slate-700">{customer.email || "Not set"}</p>
+                      <p className="truncate text-slate-700">{customer.phone || "Not set"}</p>
+                      <p className="text-slate-700">{formatDate(customer.createdAt)}</p>
+                      <p className="text-slate-700">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
+                      <div className="text-right">
+                        <span className="font-medium text-slate-950">{customer.jobCount}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-medium text-slate-950">{customer.openJobCount}</span>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenProfile(customer.id)}>
+                          Open Profile
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+              </div>
             </>
           ) : (
             renderCustomerCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")

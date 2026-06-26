@@ -90,6 +90,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     handlePlanJobForTomorrow,
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
+    handleRemoveAllJobsFromTomorrow,
     handleRemoveJobFromTomorrow,
     handleResetDocumentTemplate,
     handleResetPreferences,
@@ -113,12 +114,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
-  const handlePlanJobForTomorrowFromBoard = (jobId) => {
-    const changed = handlePlanJobForTomorrow(jobId);
-    if (changed) {
-      setServiceBoardTomorrowPanelOpen(true);
-    }
-  };
 
   const renderServiceBoardControls = (tone = "panel") => {
     const isHeroTone = tone === "hero";
@@ -383,6 +378,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               tomorrowDate={derived.tomorrowPlanningDate}
               onOpenChange={setServiceBoardTomorrowPanelOpen}
               onOpenJob={handleOpenJob}
+              onRemoveAllJobs={handleRemoveAllJobsFromTomorrow}
               onRemoveJob={handleRemoveJobFromTomorrow}
               formatDate={formatDate}
             />
@@ -397,7 +393,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               allowDragging
               columnSortModes={serviceBoardColumnSorts}
               columnViewModes={serviceBoardColumnViews}
-              onPlanJobForTomorrow={handlePlanJobForTomorrowFromBoard}
+              onPlanJobForTomorrow={handlePlanJobForTomorrow}
               showTagLabels={showServiceBoardTagLabels}
               findSupplierManualMatches={findSupplierManualMatches}
               getCustomerSiteAccessNote={getCustomerSiteAccessNote}

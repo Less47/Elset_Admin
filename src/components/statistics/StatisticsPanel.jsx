@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { statuses } from "@/lib/job-status";
-import { calculateDocTotal, money } from "@/lib/quote-template";
+import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
 
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
@@ -37,8 +37,8 @@ export default function StatisticsPanel({
     const activeWeeks = Math.max(1, activeDays / 7);
     const activeMonths = Math.max(1, activeDays / 30.4375);
     const totalTrackedValue = jobs.reduce((sum, job) => {
-      if (job.invoice) return sum + calculateDocTotal(job.invoice.items);
-      if (job.quote) return sum + calculateDocTotal(job.quote.items);
+      if (job.invoice) return sum + calculateInvoiceTotal(job.invoice.items);
+      if (job.quote) return sum + calculateQuoteTotal(job.quote.items);
       return sum;
     }, 0);
 

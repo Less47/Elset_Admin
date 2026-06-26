@@ -14,6 +14,7 @@ import {
   customerTypeOptions,
   formatCustomerType,
   formatDate,
+  getContactDisplayName,
   normalizeCustomerRecord,
   normalizeCustomerSiteProfiles,
   normalizeSiteAccessNotes,
@@ -23,25 +24,72 @@ import {
 } from "@/lib/app-support";
 
 const NOT_SET_VALUE = "not-set";
+const EMPTY_DRAFT_CUSTOMER = {
+  name: "",
+  email: "",
+  phone: "",
+  customerType: "",
+  address: "",
+  contacts: [],
+  billingContactId: "",
+  useAccountBilling: false,
+  siteAccessNotes: [],
+  sites: [],
+};
+
+function getPrimaryContactId(customerId) {
+  return customerId ? `${customerId}-primary-contact` : "";
+}
+
+function buildEmptyCustomerContact() {
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    role: "",
+    phone: "",
+    email: "",
+    notes: "",
+  };
+}
+
+function buildCustomerDraft(sourceCustomer) {
+  const normalizedCustomer = normalizeCustomerRecord(sourceCustomer);
+  const primaryContactId = getPrimaryContactId(normalizedCustomer.id);
+
+  return {
+    name: normalizedCustomer.name || "",
+    email: normalizedCustomer.email || "",
+    phone: normalizedCustomer.phone || "",
+    customerType: normalizedCustomer.customerType || "",
+    address: normalizedCustomer.address || "",
+    contacts: (normalizedCustomer.contacts || []).filter((contact) => contact.id !== primaryContactId),
+    billingContactId: normalizedCustomer.billingContactId === primaryContactId ? "" : normalizedCustomer.billingContactId || "",
+    useAccountBilling: normalizedCustomer.billingContactId === primaryContactId,
+    siteAccessNotes: normalizeSiteAccessNotes(normalizedCustomer.siteAccessNotes),
+    sites: normalizeCustomerSiteProfiles(normalizedCustomer.sites, normalizedCustomer.address, normalizedCustomer.siteAccessNotes),
+  };
+}
+
+function buildCustomerSavePayload(customer, draftCustomer) {
+  return normalizeCustomerRecord({
+    ...customer,
+    ...draftCustomer,
+    billingContactId: draftCustomer.useAccountBilling ? getPrimaryContactId(customer.id) : draftCustomer.billingContactId,
+    id: customer.id,
+    createdAt: customer.createdAt,
+  });
+}
 
 export default function CustomerProfileDialog({ open, onOpenChange, customer, jobs, onOpenJob, onOpenSiteProfile, onSaveCustomer, onDeleteCustomer }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [draftCustomer, setDraftCustomer] = useState({ name: "", email: "", phone: "", customerType: "", address: "", siteAccessNotes: [], sites: [] });
+  const [draftCustomer, setDraftCustomer] = useState(EMPTY_DRAFT_CUSTOMER);
   const [newSiteDraft, setNewSiteDraft] = useState({ address: "", siteType: "", ocNumber: "", notes: "" });
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!customer || !open) return;
     setIsEditing(false);
-    setDraftCustomer({
-      name: customer.name || "",
-      email: customer.email || "",
-      phone: customer.phone || "",
-      customerType: customer.customerType || "",
-      address: customer.address || "",
-      siteAccessNotes: normalizeSiteAccessNotes(customer.siteAccessNotes),
-      sites: normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes),
-    });
+    setDraftCustomer(buildCustomerDraft(customer));
     setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
   }, [customer, open]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -52,10 +100,34 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
   const completedJobs = customerJobs.filter((job) => job.status === "Completed").length;
   const openJobs = customerJobs.length - completedJobs;
   const customerProfileRecord = isEditing
-    ? normalizeCustomerRecord({ ...customer, ...draftCustomer, id: customer.id, createdAt: customer.createdAt })
+    ? buildCustomerSavePayload(customer, draftCustomer)
     : customer;
   const customerSites = buildCustomerSites(customerProfileRecord, customerJobs);
   const savedSiteAddresses = new Set(normalizeSiteAccessNotes(draftCustomer.siteAccessNotes).map((entry) => entry.address.toLowerCase()));
+  const primaryContactId = getPrimaryContactId(customer.id);
+  const displayContacts = customerProfileRecord.contacts || [];
+  const contactCount = isEditing
+    ? draftCustomer.contacts.length + ((draftCustomer.email.trim() || draftCustomer.phone.trim()) ? 1 : 0)
+    : displayContacts.length;
+
+  const updateDraftContact = (contactId, key, value) => {
+    setDraftCustomer((prev) => ({
+      ...prev,
+      contacts: prev.contacts.map((contact) => (
+        contact.id === contactId
+          ? { ...contact, [key]: value }
+          : contact
+      )),
+    }));
+  };
+
+  const removeDraftContact = (contactId) => {
+    setDraftCustomer((prev) => ({
+      ...prev,
+      contacts: prev.contacts.filter((contact) => contact.id !== contactId),
+      billingContactId: prev.billingContactId === contactId ? "" : prev.billingContactId,
+    }));
+  };
 
   const updateDraftSiteAccessNote = (address, notes, siteType, ocNumber) => {
     const normalizedAddress = normalizeSiteAddress(address);
@@ -116,15 +188,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                     className="rounded-xl"
                     onClick={() => {
                       setIsEditing(false);
-                      setDraftCustomer({
-                        name: customer.name || "",
-                        email: customer.email || "",
-                        phone: customer.phone || "",
-                        customerType: customer.customerType || "",
-                        address: customer.address || "",
-                        siteAccessNotes: normalizeSiteAccessNotes(customer.siteAccessNotes),
-                        sites: normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes),
-                      });
+                      setDraftCustomer(buildCustomerDraft(customer));
                       setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
                     }}
                   >
@@ -133,7 +197,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                   <Button
                     className="rounded-xl"
                     onClick={() => {
-                      onSaveCustomer(customer.id, normalizeCustomerRecord({ ...customer, ...draftCustomer, id: customer.id, createdAt: customer.createdAt }));
+                      onSaveCustomer(customer.id, buildCustomerSavePayload(customer, draftCustomer));
                       setIsEditing(false);
                       setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
                     }}
@@ -172,10 +236,10 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                     <FormField label="Customer name">
                       <Input value={draftCustomer.name} onChange={(e) => setDraftCustomer((prev) => ({ ...prev, name: e.target.value }))} />
                     </FormField>
-                    <FormField label="Email">
+                    <FormField label="Account email">
                       <Input value={draftCustomer.email} onChange={(e) => setDraftCustomer((prev) => ({ ...prev, email: e.target.value }))} />
                     </FormField>
-                    <FormField label="Phone">
+                    <FormField label="Account phone">
                       <Input value={draftCustomer.phone} onChange={(e) => setDraftCustomer((prev) => ({ ...prev, phone: e.target.value }))} />
                     </FormField>
                     <FormField label="Customer type">
@@ -203,6 +267,36 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                         placeholder="Search the customer's main address"
                       />
                     </FormField>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+                      Account email and phone stay as the customer-level fallback. Add individual people below for site access, requester, and billing contacts.
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Billing default</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-600">
+                          {draftCustomer.useAccountBilling
+                            ? "The account contact will be used by default for billing and document sending."
+                            : draftCustomer.billingContactId
+                              ? "A saved contact is currently preferred for billing."
+                              : "No dedicated billing contact is selected yet."}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={draftCustomer.useAccountBilling ? "secondary" : "outline"}
+                        className="rounded-xl"
+                        disabled={!draftCustomer.email.trim() && !draftCustomer.phone.trim()}
+                        onClick={() =>
+                          setDraftCustomer((prev) => ({
+                            ...prev,
+                            useAccountBilling: true,
+                            billingContactId: "",
+                          }))
+                        }
+                      >
+                        Use Account Contact
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -211,11 +305,16 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                       <p className="mt-1 font-medium text-slate-900">{customer.name || "Not set"}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase text-muted-foreground">Email</p>
-                      <p className="mt-1 font-medium text-slate-900">{customer.email || "Not set"}</p>
+                      <p className="text-xs uppercase text-muted-foreground">Account email</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-slate-900">{customer.email || "Not set"}</p>
+                        {customerProfileRecord.billingContactId === primaryContactId ? (
+                          <Badge className="bg-sky-100 text-sky-800">Billing default</Badge>
+                        ) : null}
+                      </div>
                     </div>
                     <div>
-                      <p className="text-xs uppercase text-muted-foreground">Phone</p>
+                      <p className="text-xs uppercase text-muted-foreground">Account phone</p>
                       <p className="mt-1 font-medium text-slate-900">{customer.phone || "Not set"}</p>
                     </div>
                     <div>
@@ -231,6 +330,130 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                       <p className="mt-1 font-medium text-slate-900">{formatDate(customer.createdAt)}</p>
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-slate-200">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Contacts</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Save the people attached to this customer so sites, jobs, and billing can point to the right person.
+                    </p>
+                  </div>
+                  <Badge variant="secondary">{contactCount}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {isEditing ? (
+                  <>
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+                      The account email and phone above stay separate as the main customer fallback. Add named people here for site access, requester, or billing-specific contacts.
+                    </div>
+                    {draftCustomer.contacts.length === 0 ? (
+                      <EmptyState title="No saved contacts yet" text="Add the people who actually handle site access, work requests, or accounts for this customer." />
+                    ) : (
+                      draftCustomer.contacts.map((contact) => (
+                        <div key={contact.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap gap-2">
+                              {contact.role ? <Badge variant="secondary">{contact.role}</Badge> : null}
+                              {draftCustomer.billingContactId === contact.id && !draftCustomer.useAccountBilling ? (
+                                <Badge className="bg-sky-100 text-sky-800">Billing default</Badge>
+                              ) : null}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                              onClick={() => removeDraftContact(contact.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+
+                          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                            <FormField label="Name">
+                              <Input value={contact.name || ""} onChange={(event) => updateDraftContact(contact.id, "name", event.target.value)} />
+                            </FormField>
+                            <FormField label="Role">
+                              <Input value={contact.role || ""} onChange={(event) => updateDraftContact(contact.id, "role", event.target.value)} placeholder="Accounts, Site manager, Caretaker..." />
+                            </FormField>
+                            <FormField label="Phone">
+                              <Input value={contact.phone || ""} onChange={(event) => updateDraftContact(contact.id, "phone", event.target.value)} />
+                            </FormField>
+                            <FormField label="Email">
+                              <Input value={contact.email || ""} onChange={(event) => updateDraftContact(contact.id, "email", event.target.value)} />
+                            </FormField>
+                          </div>
+
+                          <div className="mt-4 flex justify-end">
+                            <Button
+                              type="button"
+                              variant={draftCustomer.billingContactId === contact.id && !draftCustomer.useAccountBilling ? "secondary" : "outline"}
+                              className="rounded-xl"
+                              onClick={() =>
+                                setDraftCustomer((prev) => ({
+                                  ...prev,
+                                  billingContactId: contact.id,
+                                  useAccountBilling: false,
+                                }))
+                              }
+                            >
+                              {draftCustomer.billingContactId === contact.id && !draftCustomer.useAccountBilling
+                                ? "Billing Default"
+                                : "Use For Billing"}
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() =>
+                          setDraftCustomer((prev) => ({
+                            ...prev,
+                            contacts: [...prev.contacts, buildEmptyCustomerContact()],
+                          }))
+                        }
+                      >
+                        Add Contact
+                      </Button>
+                    </div>
+                  </>
+                ) : displayContacts.length === 0 ? (
+                  <EmptyState title="No contacts saved yet" text="Edit this customer to add the people who handle access, requests, or billing." />
+                ) : (
+                  displayContacts.map((contact) => (
+                    <div key={contact.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900">{getContactDisplayName(contact)}</p>
+                          {contact.role ? <p className="mt-1 text-sm text-slate-600">{contact.role}</p> : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {contact.id === primaryContactId ? <Badge variant="secondary">Account</Badge> : null}
+                          {customerProfileRecord.billingContactId === contact.id ? <Badge className="bg-sky-100 text-sky-800">Billing</Badge> : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Phone</span>
+                          <span className="text-right font-medium text-slate-900">{contact.phone || "Not set"}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span>Email</span>
+                          <span className="text-right font-medium text-slate-900">{contact.email || "Not set"}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
                 )}
               </CardContent>
             </Card>
@@ -372,8 +595,10 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                                         !entry.siteType
                                         && !entry.ocNumber
                                         && !entry.notes
+                                        && !entry.contactId
                                         && !entry.contactName
                                         && !entry.contactPhone
+                                        && !entry.contactEmail
                                         && (!entry.assets || entry.assets.length === 0)
                                         && !site.isPrimary
                                         && site.jobCount === 0;
@@ -421,62 +646,27 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4">
+              <div className="grid gap-3">
                 {customerJobs.length === 0 ? (
                   <EmptyState title="No jobs recorded yet" text="This customer does not have any service jobs saved in the system yet." />
                 ) : (
                   customerJobs.map((job) => (
-                    <div key={job.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                          <p className="font-semibold text-slate-900">{job.title}</p>
-                          <p className="mt-1 text-sm text-slate-600">{job.description}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary">{job.status}</Badge>
-                          <Badge className={job.urgency === "High" ? "bg-rose-100 text-rose-800" : job.urgency === "Medium" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}>
-                            {job.urgency}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 md:grid-cols-2">
-                        <div className="flex items-start justify-between gap-3 md:col-span-2">
-                          <span className="shrink-0">Site</span>
-                          <span className="text-right font-medium text-slate-900">{job.jobAddress || customer.address || "Not set"}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Technician</span>
-                          <span className="font-medium text-slate-900">{job.assignedTechnicianName}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Last updated</span>
-                          <span className="font-medium text-slate-900">{new Date(job.updatedAt).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Quote</span>
-                          <span className="font-medium text-slate-900">{job.quote ? "Saved" : "Not created"}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Invoice</span>
-                          <span className="font-medium text-slate-900">{job.invoice ? "Saved" : "Not created"}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex justify-end">
-                        <Button
-                          variant="outline"
-                          className="rounded-xl"
-                          onClick={() => {
-                            onOpenChange(false);
-                            onOpenJob(job);
-                          }}
-                        >
-                          View Job
-                        </Button>
-                      </div>
-                    </div>
+                    <button
+                      key={job.id}
+                      type="button"
+                      className="w-full rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                      onClick={() => {
+                        onOpenChange(false);
+                        onOpenJob(job);
+                      }}
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{job.title}</p>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{job.description}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Site: <span className="font-medium text-slate-700">{job.jobAddress || customer.address || "Not set"}</span>
+                      </p>
+                    </button>
                   ))
                 )}
               </div>

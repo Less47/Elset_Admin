@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { statuses, statusThemes } from "@/lib/job-status";
-import { calculateDocTotal, money } from "@/lib/quote-template";
+import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
 
 const serviceBoardViewOptions = [
   { value: "list", label: "List", icon: List },
@@ -52,7 +52,7 @@ function getSiteAccessNotePreview(notes) {
 
 function getJobValueMeta(job) {
   if (job?.invoice) {
-    const total = calculateDocTotal(job.invoice.items || []);
+    const total = calculateInvoiceTotal(job.invoice.items || []);
     return {
       label: "Invoice",
       amount: money(total),
@@ -61,7 +61,7 @@ function getJobValueMeta(job) {
   }
 
   if (job?.quote) {
-    const total = calculateDocTotal(job.quote.items || []);
+    const total = calculateQuoteTotal(job.quote.items || []);
     return {
       label: "Quote",
       amount: money(total),
@@ -83,8 +83,8 @@ function getUrgencyRank(urgency) {
 }
 
 function getJobValueAmount(job) {
-  if (job?.invoice) return calculateDocTotal(job.invoice.items || []);
-  if (job?.quote) return calculateDocTotal(job.quote.items || []);
+  if (job?.invoice) return calculateInvoiceTotal(job.invoice.items || []);
+  if (job?.quote) return calculateQuoteTotal(job.quote.items || []);
   return 0;
 }
 
@@ -328,6 +328,7 @@ export function ServiceBoardTomorrowPanel({
   tomorrowDate,
   onOpenChange,
   onOpenJob,
+  onRemoveAllJobs,
   onRemoveJob,
   formatDate,
 }) {
@@ -402,9 +403,21 @@ export function ServiceBoardTomorrowPanel({
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
               <span className="text-sm text-slate-600">Planned jobs</span>
-              <Badge className="bg-sky-100 text-sky-800">{jobs.length}</Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50"
+                  onClick={() => onRemoveAllJobs?.()}
+                  disabled={jobs.length === 0}
+                >
+                  Remove all
+                </Button>
+                <Badge className="bg-sky-100 text-sky-800">{jobs.length}</Badge>
+              </div>
             </div>
           </div>
 
@@ -507,8 +520,12 @@ function JobCard({
   const gridAddress = job.jobAddress || "Not set";
   const tomorrowActionPositionClassName = isGridView ? "right-0 top-0 translate-x-1/2 -translate-y-1/2" : isCompactView ? "right-12 top-2" : "right-2 top-2";
   const tomorrowAction = isPlannedForTomorrow ? (
-    <span className={`absolute z-10 rounded-full bg-sky-500/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-sm ${tomorrowActionPositionClassName}`}>
-      Tomorrow
+    <span
+      className={`absolute z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/95 text-[10px] font-bold text-white shadow-sm ring-2 ring-white/90 ${tomorrowActionPositionClassName}`}
+      title="Planned for tomorrow"
+      aria-label="Planned for tomorrow"
+    >
+      T
     </span>
   ) : onPlanForTomorrow ? (
     <Button

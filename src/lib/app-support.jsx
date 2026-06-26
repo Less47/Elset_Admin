@@ -16,7 +16,8 @@ import {
   Users,
 } from "lucide-react";
 import {
-  calculateDocTotal,
+  calculateInvoicePaidAmount,
+  calculateInvoiceTotal,
   defaultInvoiceTemplate,
   defaultQuoteTemplate,
   normalizeInvoiceTemplate,
@@ -138,7 +139,7 @@ export const settingsTabMeta = {
   ui: {
     eyebrow: "Workspace Settings",
     title: "UI Settings",
-    description: "Adjust application colours, popup styling, layout spacing, and workspace visibility controls for the main shell.",
+    description: "Adjust application colours, table styling, popup gradients, layout spacing, and workspace visibility controls for the main shell.",
   },
   backup: {
     eyebrow: "Backup & Recovery",
@@ -193,6 +194,16 @@ export const themeColorFields = [
     label: "Popup surface",
     description: "Base color used to generate popup gradients throughout the app.",
   },
+  {
+    key: "dataViewSurface",
+    label: "Database surface",
+    description: "Base tint for the row backgrounds and database cards.",
+  },
+  {
+    key: "dataViewAccent",
+    label: "Database accent",
+    description: "Header, hover, and border accent used across database views.",
+  },
 ];
 
 export const themePresets = [
@@ -210,6 +221,8 @@ export const themePresets = [
       actionColor: "#F69320",
       borderColor: "#1E293B",
       dialogSurface: "#9FE4FB",
+      dataViewSurface: "#EAF7FB",
+      dataViewAccent: "#0F90CD",
     },
   },
   {
@@ -226,6 +239,8 @@ export const themePresets = [
       actionColor: "#E6632B",
       borderColor: "#5A2F20",
       dialogSurface: "#FFF7F1",
+      dataViewSurface: "#FFF4EC",
+      dataViewAccent: "#C96C33",
     },
   },
   {
@@ -242,6 +257,8 @@ export const themePresets = [
       actionColor: "#80C24D",
       borderColor: "#23422B",
       dialogSurface: "#F7FBF3",
+      dataViewSurface: "#F1F8EC",
+      dataViewAccent: "#5E8F51",
     },
   },
   {
@@ -258,6 +275,8 @@ export const themePresets = [
       actionColor: "#14B8A6",
       borderColor: "#38BDF8",
       dialogSurface: "#E6F7FF",
+      dataViewSurface: "#F0FBFF",
+      dataViewAccent: "#22D3EE",
     },
   },
   {
@@ -274,6 +293,8 @@ export const themePresets = [
       actionColor: "#D94C7F",
       borderColor: "#61263F",
       dialogSurface: "#FFF7FA",
+      dataViewSurface: "#FFF3F8",
+      dataViewAccent: "#D94C7F",
     },
   },
   {
@@ -290,6 +311,8 @@ export const themePresets = [
       actionColor: "#DE7E12",
       borderColor: "#4A3915",
       dialogSurface: "#FFFBEF",
+      dataViewSurface: "#FFF8EB",
+      dataViewAccent: "#D4932A",
     },
   },
 ];
@@ -832,6 +855,31 @@ export function getContrastTextColor(hex, { dark = APP_TEXT_DARK, light = APP_TE
   return luminance > 0.65 ? dark : light;
 }
 
+export function buildDataViewTheme(settings) {
+  const normalizedSettings = normalizeThemeSettings(settings);
+  const surface = normalizeHexColor(normalizedSettings.dataViewSurface, defaultThemeSettings.dataViewSurface);
+  const accent = normalizeHexColor(normalizedSettings.dataViewAccent, defaultThemeSettings.dataViewAccent);
+  const liftedSurface = mixHexColors(surface, "#FFFFFF", 0.72);
+  const airySurface = mixHexColors(surface, "#FFFFFF", 0.88);
+
+  return {
+    surface,
+    accent,
+    headerStart: mixHexColors(liftedSurface, accent, 0.18),
+    headerEnd: mixHexColors(airySurface, "#FFFFFF", 0.18),
+    border: mixHexColors(liftedSurface, accent, 0.2),
+    borderStrong: mixHexColors(accent, APP_TEXT_DARK, 0.18),
+    gridLine: mixHexColors(airySurface, accent, 0.1),
+    headerCell: mixHexColors(airySurface, accent, 0.08),
+    row: mixHexColors(airySurface, "#FFFFFF", 0.18),
+    rowAlt: mixHexColors(airySurface, accent, 0.06),
+    rowHover: mixHexColors(airySurface, accent, 0.14),
+    stat: mixHexColors(airySurface, "#FFFFFF", 0.1),
+    textTint: mixHexColors(APP_TEXT_DARK, accent, 0.2),
+    shadow: hexToRgba(accent, 0.24),
+  };
+}
+
 export function normalizeThemeSettings(settings) {
   return {
     pageBackgroundStart: normalizeHexColor(settings?.pageBackgroundStart, defaultThemeSettings.pageBackgroundStart),
@@ -843,6 +891,8 @@ export function normalizeThemeSettings(settings) {
     actionColor: normalizeHexColor(settings?.actionColor, defaultThemeSettings.actionColor),
     borderColor: normalizeHexColor(settings?.borderColor, defaultThemeSettings.borderColor),
     dialogSurface: normalizeHexColor(settings?.dialogSurface, defaultThemeSettings.dialogSurface),
+    dataViewSurface: normalizeHexColor(settings?.dataViewSurface, defaultThemeSettings.dataViewSurface),
+    dataViewAccent: normalizeHexColor(settings?.dataViewAccent, defaultThemeSettings.dataViewAccent),
     sidebarWidth: normalizeOptionValue(settings?.sidebarWidth, sidebarWidthOptions, defaultThemeSettings.sidebarWidth),
     contentDensity: normalizeOptionValue(settings?.contentDensity, contentDensityOptions, defaultThemeSettings.contentDensity),
     companyName: normalizeTextSetting(settings?.companyName, defaultThemeSettings.companyName),
@@ -918,10 +968,8 @@ export function getInvoicePaymentSummary(invoice) {
     };
   }
 
-  const total = calculateDocTotal(normalizedInvoice.items);
-  const paidAmount = Number(
-    (normalizedInvoice.payments || []).reduce((sum, payment) => sum + normalizePaymentAmount(payment.amount), 0).toFixed(2)
-  );
+  const total = calculateInvoiceTotal(normalizedInvoice.items);
+  const paidAmount = calculateInvoicePaidAmount(normalizedInvoice.payments || []);
   const balanceAmount = Math.max(Number((total - paidAmount).toFixed(2)), 0);
   const overpaidAmount = Math.max(Number((paidAmount - total).toFixed(2)), 0);
   const sortedPayments = [...(normalizedInvoice.payments || [])].sort(
@@ -952,7 +1000,7 @@ export function normalizeDocument(type, doc) {
   if (type !== "invoice") return baseDocument;
 
   const dueDate = toDateInputValue(doc.dueDate) || addDaysToDateInput(baseDocument.issueDate, 7);
-  const invoiceTotal = calculateDocTotal(baseDocument.items);
+  const invoiceTotal = calculateInvoiceTotal(baseDocument.items);
   return {
     ...baseDocument,
     dueDate,
@@ -1024,6 +1072,19 @@ export function normalizeJobRecord(job) {
   const rawTomorrowOrder = job?.serviceBoardTomorrowOrder;
   const tomorrowOrderValue = Number(rawTomorrowOrder);
   const hasTomorrowOrder = rawTomorrowOrder !== null && rawTomorrowOrder !== undefined && Number.isFinite(tomorrowOrderValue);
+  const legacyBillingContact = normalizeJobContactSnapshot(
+    job?.customerEmail || job?.customerPhone
+      ? {
+          id: String(job?.billingContact?.id || "").trim(),
+          name: job?.billingContact?.name || job?.customerName,
+          role: job?.billingContact?.role || "Billing contact",
+          phone: job?.billingContact?.phone || job?.customerPhone,
+          email: job?.billingContact?.email || job?.customerEmail,
+          notes: job?.billingContact?.notes || "",
+        }
+      : job?.billingContact,
+    "Billing contact"
+  );
 
   return {
     ...job,
@@ -1037,6 +1098,9 @@ export function normalizeJobRecord(job) {
     ocNumber: String(job?.ocNumber || "").trim(),
     notes: Array.isArray(job.notes) ? job.notes : [],
     photos: Array.isArray(job.photos) ? job.photos : [],
+    requesterContact: normalizeJobContactSnapshot(job?.requesterContact, "Requester"),
+    onsiteContact: normalizeJobContactSnapshot(job?.onsiteContact, "On-site contact"),
+    billingContact: legacyBillingContact,
     quote: normalizeDocument("quote", job.quote),
     invoice: normalizeDocument("invoice", job.invoice),
   };
@@ -1091,10 +1155,160 @@ export function getNextJobNumber(jobs) {
   );
 }
 
+function buildContactSignature(contact) {
+  return [
+    String(contact?.name || "").trim().toLowerCase(),
+    String(contact?.email || "").trim().toLowerCase(),
+    String(contact?.phone || "").trim(),
+  ].join("|");
+}
+
+export function normalizeContactRecord(contact, fallback = {}) {
+  if (!contact && !fallback) return null;
+
+  const normalized = {
+    id: String(contact?.id || fallback.id || "").trim() || crypto.randomUUID(),
+    name: String(contact?.name || fallback.name || "").trim(),
+    role: String(contact?.role || fallback.role || "").trim(),
+    phone: String(contact?.phone || fallback.phone || "").trim(),
+    email: String(contact?.email || fallback.email || "").trim(),
+    notes: String(contact?.notes || fallback.notes || "").trim(),
+  };
+
+  if (!normalized.name && !normalized.phone && !normalized.email && !normalized.notes) {
+    return null;
+  }
+
+  return normalized;
+}
+
+export function normalizeCustomerContacts(contacts, { customerId = "", customerName = "", email = "", phone = "", sites = [] } = {}) {
+  const nextContacts = [];
+
+  const addContact = (contact, fallback = {}) => {
+    const normalized = normalizeContactRecord(contact, fallback);
+    if (!normalized) return null;
+
+    const signature = buildContactSignature(normalized);
+    const existing = nextContacts.find((entry) => entry.id === normalized.id || (signature && buildContactSignature(entry) === signature));
+    if (existing) return existing;
+
+    nextContacts.push(normalized);
+    return normalized;
+  };
+
+  if (Array.isArray(contacts)) {
+    contacts.forEach((contact) => addContact(contact));
+  }
+
+  if (email || phone) {
+    addContact(
+      {
+        id: customerId ? `${customerId}-primary-contact` : "",
+        name: customerName,
+        role: "Primary contact",
+        email,
+        phone,
+      },
+      {
+        id: customerId ? `${customerId}-primary-contact` : "",
+        name: customerName,
+        role: "Primary contact",
+        email,
+        phone,
+      }
+    );
+  }
+
+  (Array.isArray(sites) ? sites : []).forEach((site) => {
+    if (!site?.contactName && !site?.contactPhone && !site?.contactEmail) return;
+
+    addContact(
+      {
+        id: String(site.contactId || "").trim() || (site.id ? `${site.id}-site-contact` : ""),
+        name: site.contactName,
+        role: "Site contact",
+        phone: site.contactPhone,
+        email: site.contactEmail,
+      },
+      {
+        id: site.id ? `${site.id}-site-contact` : "",
+        role: "Site contact",
+      }
+    );
+  });
+
+  return nextContacts.sort((a, b) => getContactDisplayName(a).localeCompare(getContactDisplayName(b)) || a.role.localeCompare(b.role));
+}
+
+export function normalizeJobContactSnapshot(contact, fallbackRole = "") {
+  return normalizeContactRecord(contact, {
+    role: fallbackRole,
+    id: String(contact?.id || "").trim(),
+  });
+}
+
+export function buildContactSnapshot(contact, fallbackRole = "") {
+  return normalizeJobContactSnapshot(
+    contact
+      ? {
+          id: contact.id,
+          name: contact.name,
+          role: contact.role || fallbackRole,
+          phone: contact.phone,
+          email: contact.email,
+          notes: contact.notes,
+        }
+      : null,
+    fallbackRole
+  );
+}
+
+export function getContactDisplayName(contact) {
+  if (!contact) return "Unnamed contact";
+  return contact.name || contact.email || contact.phone || "Unnamed contact";
+}
+
+export function getCustomerContacts(customer) {
+  return normalizeCustomerContacts(customer?.contacts, {
+    customerId: customer?.id,
+    customerName: customer?.name,
+    email: customer?.email,
+    phone: customer?.phone,
+    sites: normalizeCustomerSiteProfiles(customer?.sites, customer?.address, customer?.siteAccessNotes),
+  });
+}
+
+export function getCustomerBillingContact(customer) {
+  const contacts = getCustomerContacts(customer);
+  const billingContactId = String(customer?.billingContactId || "").trim();
+  return contacts.find((contact) => contact.id === billingContactId)
+    || contacts.find((contact) => contact.email)
+    || contacts[0]
+    || null;
+}
+
 export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
   const normalizedCustomer = customer || {};
   const address = normalizeSiteAddress(normalizedCustomer.address);
-  const sites = normalizeCustomerSiteProfiles(normalizedCustomer.sites, address, normalizedCustomer.siteAccessNotes);
+  const baseSites = normalizeCustomerSiteProfiles(normalizedCustomer.sites, address, normalizedCustomer.siteAccessNotes);
+  const contacts = normalizeCustomerContacts(normalizedCustomer.contacts, {
+    customerId: normalizedCustomer.id,
+    customerName: normalizedCustomer.name,
+    email: normalizedCustomer.email,
+    phone: normalizedCustomer.phone,
+    sites: baseSites,
+  });
+  const sites = baseSites.map((site) => {
+    const resolvedContact = resolveSiteContactRecord(site, contacts);
+    return normalizeSiteProfileRecord({
+      ...site,
+      contactId: resolvedContact?.id || site.contactId || "",
+      contactName: resolvedContact?.name || site.contactName || "",
+      contactPhone: resolvedContact?.phone || site.contactPhone || "",
+      contactEmail: resolvedContact?.email || site.contactEmail || "",
+    });
+  });
   const siteAccessNotes = normalizeSiteAccessNotes([
     ...(Array.isArray(normalizedCustomer.siteAccessNotes) ? normalizedCustomer.siteAccessNotes : []),
     ...sites
@@ -1106,6 +1320,10 @@ export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
         updatedAt: site.updatedAt,
       })),
   ]);
+  const resolvedBillingContact = contacts.find((contact) => contact.id === String(normalizedCustomer.billingContactId || "").trim())
+    || contacts.find((contact) => contact.email)
+    || contacts[0]
+    || null;
 
   return {
     ...normalizedCustomer,
@@ -1114,6 +1332,8 @@ export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
     email: String(normalizedCustomer.email || "").trim(),
     phone: String(normalizedCustomer.phone || "").trim(),
     customerType: normalizeOptionValue(normalizedCustomer.customerType, customerTypeOptions, ""),
+    contacts,
+    billingContactId: resolvedBillingContact?.id || "",
     address,
     sites,
     siteAccessNotes,
@@ -1189,6 +1409,22 @@ export function normalizeSiteAssets(assets) {
     .sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type));
 }
 
+function resolveSiteContactRecord(siteProfile, customerContacts = []) {
+  const contactId = String(siteProfile?.contactId || "").trim();
+  const linkedContact = contactId ? customerContacts.find((contact) => contact.id === contactId) || null : null;
+
+  return buildContactSnapshot(
+    linkedContact || {
+      id: contactId,
+      name: siteProfile?.contactName,
+      phone: siteProfile?.contactPhone,
+      email: siteProfile?.contactEmail,
+      role: "Site contact",
+    },
+    "Site contact"
+  );
+}
+
 export function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAccessNote = null) {
   const address = normalizeSiteAddress(site?.address || fallbackAddress || legacyAccessNote?.address);
   if (!address) return null;
@@ -1201,8 +1437,10 @@ export function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAcc
     ocNumber: String(site?.ocNumber || "").trim(),
     accessNotes: String(site?.accessNotes ?? legacyAccessNote?.notes ?? "").trim(),
     notes: String(site?.notes || "").trim(),
+    contactId: String(site?.contactId || "").trim(),
     contactName: String(site?.contactName || "").trim(),
     contactPhone: String(site?.contactPhone || "").trim(),
+    contactEmail: String(site?.contactEmail || "").trim(),
     assets: normalizeSiteAssets(site?.assets),
     createdAt: site?.createdAt || legacyAccessNote?.updatedAt || new Date().toISOString(),
     updatedAt: site?.updatedAt || legacyAccessNote?.updatedAt || site?.createdAt || new Date().toISOString(),
@@ -1224,8 +1462,10 @@ export function mergeSiteProfileRecords(existing, incoming) {
     ocNumber: hasExplicitField("ocNumber") ? incoming.ocNumber : existing.ocNumber,
     accessNotes: hasExplicitField("accessNotes") ? incoming.accessNotes : existing.accessNotes,
     notes: hasExplicitField("notes") ? incoming.notes : existing.notes,
+    contactId: hasExplicitField("contactId") ? incoming.contactId : existing.contactId,
     contactName: hasExplicitField("contactName") ? incoming.contactName : existing.contactName,
     contactPhone: hasExplicitField("contactPhone") ? incoming.contactPhone : existing.contactPhone,
+    contactEmail: hasExplicitField("contactEmail") ? incoming.contactEmail : existing.contactEmail,
     assets: hasExplicitField("assets") ? incoming.assets : existing.assets,
     createdAt: existing.createdAt || incoming.createdAt,
     updatedAt:
@@ -1254,8 +1494,10 @@ export function normalizeCustomerSiteProfiles(sites, primaryAddress = "", legacy
             ocNumber: hasOwn(site, "ocNumber"),
             accessNotes: hasOwn(site, "accessNotes"),
             notes: hasOwn(site, "notes"),
+            contactId: hasOwn(site, "contactId"),
             contactName: hasOwn(site, "contactName"),
             contactPhone: hasOwn(site, "contactPhone"),
+            contactEmail: hasOwn(site, "contactEmail"),
             assets: hasOwn(site, "assets"),
             updatedAt: hasOwn(site, "updatedAt") || hasOwn(site, "createdAt") || hasOwn(legacyAccessNote, "updatedAt"),
           })
@@ -1296,11 +1538,22 @@ export function getCustomerSiteProfile(customer, siteIdentifier) {
   if (!customer || !siteIdentifier) return null;
 
   const normalizedIdentifier = normalizeSiteAddress(siteIdentifier).toLowerCase();
-  return (
+  const siteProfile = (
     normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes).find(
       (site) => site.id === siteIdentifier || site.address.toLowerCase() === normalizedIdentifier
     ) || null
   );
+
+  if (!siteProfile) return null;
+
+  const resolvedContact = resolveSiteContactRecord(siteProfile, getCustomerContacts(customer));
+  return {
+    ...siteProfile,
+    contactId: resolvedContact?.id || siteProfile.contactId || "",
+    contactName: resolvedContact?.name || siteProfile.contactName || "",
+    contactPhone: resolvedContact?.phone || siteProfile.contactPhone || "",
+    contactEmail: resolvedContact?.email || siteProfile.contactEmail || "",
+  };
 }
 
 export function normalizeChecklistItems(items) {
@@ -1432,6 +1685,7 @@ export function buildMaintenanceJobDescription(plan) {
 export function buildCustomerSites(customer, jobs) {
   const siteMap = new Map();
   const siteProfiles = normalizeCustomerSiteProfiles(customer?.sites, customer?.address, customer?.siteAccessNotes);
+  const customerContacts = getCustomerContacts(customer);
   const primaryAddress = normalizeSiteAddress(customer?.address);
 
   const addSite = (address, { job = null, primary = false, siteProfile = null } = {}) => {
@@ -1454,8 +1708,10 @@ export function buildCustomerSites(customer, jobs) {
       profileNotes: "",
       siteType: "",
       ocNumber: "",
+      contactId: "",
       contactName: "",
       contactPhone: "",
+      contactEmail: "",
       assets: [],
       assetCount: 0,
     };
@@ -1475,13 +1731,16 @@ export function buildCustomerSites(customer, jobs) {
     }
 
     if (siteProfile) {
+      const resolvedContact = resolveSiteContactRecord(siteProfile, customerContacts);
       current.siteProfileId = siteProfile.id;
       current.label = siteProfile.label;
       current.profileNotes = siteProfile.notes;
       current.siteType = siteProfile.siteType;
       current.ocNumber = siteProfile.ocNumber;
-      current.contactName = siteProfile.contactName;
-      current.contactPhone = siteProfile.contactPhone;
+      current.contactId = resolvedContact?.id || siteProfile.contactId || "";
+      current.contactName = resolvedContact?.name || siteProfile.contactName || "";
+      current.contactPhone = resolvedContact?.phone || siteProfile.contactPhone || "";
+      current.contactEmail = resolvedContact?.email || siteProfile.contactEmail || "";
       current.assets = normalizeSiteAssets(siteProfile.assets);
       current.assetCount = current.assets.length;
       current.accessNotes = siteProfile.accessNotes;
@@ -1525,6 +1784,21 @@ export function getCustomerSiteAccessNote(customer, address) {
   };
 }
 
+export function getCustomerSitePrimaryContact(customer, siteIdentifier) {
+  const siteProfile = getCustomerSiteProfile(customer, siteIdentifier);
+  if (!siteProfile) return null;
+  return buildContactSnapshot(
+    {
+      id: siteProfile.contactId,
+      name: siteProfile.contactName,
+      phone: siteProfile.contactPhone,
+      email: siteProfile.contactEmail,
+      role: "Site contact",
+    },
+    "Site contact"
+  );
+}
+
 export function buildSiteProfileDraft(site) {
   if (!site) {
     return {
@@ -1535,8 +1809,10 @@ export function buildSiteProfileDraft(site) {
       ocNumber: "",
       accessNotes: "",
       notes: "",
+      contactId: "",
       contactName: "",
       contactPhone: "",
+      contactEmail: "",
       assets: [],
     };
   }
@@ -1549,8 +1825,10 @@ export function buildSiteProfileDraft(site) {
     ocNumber: String(site.ocNumber || "").trim(),
     accessNotes: String(site.accessNotes || "").trim(),
     notes: String(site.profileNotes || site.notes || "").trim(),
+    contactId: String(site.contactId || "").trim(),
     contactName: String(site.contactName || "").trim(),
     contactPhone: String(site.contactPhone || "").trim(),
+    contactEmail: String(site.contactEmail || "").trim(),
     assets: normalizeSiteAssets(site.assets),
   };
 }
@@ -1611,12 +1889,13 @@ export function normalizeDeletedCustomerRecord(record) {
 
 export function syncJobWithCustomer(job, customer) {
   if (!customer) return job;
+  const billingContact = getCustomerBillingContact(customer);
   return {
     ...job,
     customerId: customer.id,
     customerName: customer.name,
-    customerEmail: customer.email,
-    customerPhone: customer.phone,
+    customerEmail: customer.email || billingContact?.email || "",
+    customerPhone: customer.phone || billingContact?.phone || "",
   };
 }
 

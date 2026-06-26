@@ -13,7 +13,7 @@ import {
   toDateInputValue,
   toTimestamp,
 } from "@/lib/app-support";
-import { calculateDocTotal } from "@/lib/quote-template";
+import { calculateInvoiceTotal, calculateQuoteTotal } from "@/lib/quote-template";
 
 export function useWorkspaceViewModel({
   activeSection,
@@ -57,8 +57,8 @@ export function useWorkspaceViewModel({
   }, [data.jobs, tomorrowPlanningDate]);
 
   const dashboard = useMemo(() => {
-    const quotesValue = data.jobs.reduce((sum, job) => sum + (job.quote ? calculateDocTotal(job.quote.items) : 0), 0);
-    const invoicesValue = data.jobs.reduce((sum, job) => sum + (job.invoice ? calculateDocTotal(job.invoice.items) : 0), 0);
+    const quotesValue = data.jobs.reduce((sum, job) => sum + (job.quote ? calculateQuoteTotal(job.quote.items) : 0), 0);
+    const invoicesValue = data.jobs.reduce((sum, job) => sum + (job.invoice ? calculateInvoiceTotal(job.invoice.items) : 0), 0);
     const completedJobs = data.jobs.filter((job) => job.status === "Completed").length;
     const quotesCount = data.jobs.filter((job) => job.quote).length;
     const invoicesCount = data.jobs.filter((job) => job.invoice).length;

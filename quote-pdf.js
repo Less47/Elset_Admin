@@ -5,7 +5,15 @@ import { fileURLToPath } from "url";
 import {
   buildDocumentReference,
   buildDocumentTemplateContext,
+  calculateInvoiceBalanceDue,
   calculateDocTotal,
+  calculateInvoiceGst,
+  calculateInvoicePaidAmount,
+  calculateInvoiceSubtotal,
+  calculateInvoiceTotal,
+  calculateQuoteGst,
+  calculateQuoteSubtotal,
+  calculateQuoteTotal,
   fillTemplateText,
   money,
   normalizeDocumentTemplate,
@@ -61,19 +69,6 @@ function truncateTextToWidth(text, font, size, maxWidth) {
   }
 
   return value ? `${value}${suffix}` : suffix;
-}
-
-function calculatePaidAmount(payments = []) {
-  return (Array.isArray(payments) ? payments : []).reduce((sum, payment) => {
-    const amount = Number(payment?.amount || 0);
-    return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
-  }, 0);
-}
-
-function calculateBalanceDue(document) {
-  const total = calculateDocTotal(document?.items || []);
-  const paid = calculatePaidAmount(document?.payments || []);
-  return Math.max(0, total - paid);
 }
 
 function getVisibleDocumentNotes(type, notes = "") {
@@ -658,35 +653,118 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     y -= rowHeight + 3;
   }
 
-  ensureSpace(34);
-  const totalBoxWidth = Math.min(205, contentInnerRect.width * 0.4);
-  const totalBoxX = contentInnerRect.x + contentInnerRect.width - totalBoxWidth;
-  page.drawRectangle({
-    x: totalBoxX,
-    y: y - 21,
-    width: totalBoxWidth,
-    height: 24,
-    color: lightAccent,
-    borderWidth: 1,
-    borderColor: accent,
-  });
-  const totalLabel = type === "invoice" ? "Balance due" : `${documentLabel} Total`;
-  page.drawText(totalLabel, {
-    x: totalBoxX + 12,
-    y: y - 13,
-    font: boldFont,
-    size: 9.4,
-    color: accent,
-  });
-  const grandTotal = money(type === "invoice" ? calculateBalanceDue(document) : calculateDocTotal(document.items || []));
-  page.drawText(grandTotal, {
-    x: totalBoxX + totalBoxWidth - 12 - boldFont.widthOfTextAtSize(grandTotal, 10),
-    y: y - 13,
-    font: boldFont,
-    size: 10,
-    color: rgb(0.08, 0.08, 0.08),
-  });
-  y -= 30;
+  if (type === "invoice" || type === "quote") {
+    const subtotal = type === "invoice"
+      ? calculateInvoiceSubtotal(document.items || [])
+      : calculateQuoteSubtotal(document.items || []);
+    const gst = type === "invoice"
+      ? calculateInvoiceGst(document.items || [])
+      : calculateQuoteGst(document.items || []);
+    const total = type === "invoice"
+      ? calculateInvoiceTotal(document.items || [])
+      : calculateQuoteTotal(document.items || []);
+    const paid = type === "invoice" ? calculateInvoicePaidAmount(document.payments || []) : 0;
+    const balanceDue = type === "invoice" ? calculateInvoiceBalanceDue(document.items || [], document.payments || []) : 0;
+    const totalBoxWidth = Math.min(235, contentInnerRect.width * 0.44);
+    const totalBoxX = contentInnerRect.x + contentInnerRect.width - totalBoxWidth;
+    const totalRows = type === "invoice"
+      ? [
+          { label: "Subtotal", value: money(subtotal) },
+          { label: "GST", value: money(gst) },
+          { label: "Total", value: money(total), font: boldFont, size: 9.2 },
+          { label: "Paid", value: money(paid) },
+          {
+            label: "Balance Due",
+            value: money(balanceDue),
+            highlight: true,
+            font: boldFont,
+            labelSize: 10,
+            valueSize: 10,
+          },
+        ]
+      : [
+          { label: "Subtotal", value: money(subtotal) },
+          { label: "GST", value: money(gst) },
+          {
+            label: "Quote Total",
+            value: money(total),
+            highlight: true,
+            font: boldFont,
+            labelSize: 10,
+            valueSize: 10,
+          },
+        ];
+
+    ensureSpace(totalRows.length * 16 + 18);
+
+    totalRows.forEach((row, index) => {
+      const rowTopY = y - index * 16;
+      const labelFont = row.font || regularFont;
+      const valueFont = row.font || regularFont;
+      const labelSize = row.labelSize || 8.8;
+      const valueSize = row.valueSize || 8.8;
+
+      if (row.highlight) {
+        page.drawRectangle({
+          x: totalBoxX - 8,
+          y: rowTopY - 12,
+          width: totalBoxWidth + 8,
+          height: 18,
+          color: lightAccent,
+          borderWidth: 1,
+          borderColor: accent,
+        });
+      }
+
+      page.drawText(row.label, {
+        x: totalBoxX,
+        y: rowTopY - 7,
+        font: labelFont,
+        size: labelSize,
+        color: row.highlight ? accent : rgb(0.18, 0.18, 0.18),
+      });
+
+      page.drawText(row.value, {
+        x: totalBoxX + totalBoxWidth - valueFont.widthOfTextAtSize(row.value, valueSize),
+        y: rowTopY - 7,
+        font: valueFont,
+        size: valueSize,
+        color: rgb(0.08, 0.08, 0.08),
+      });
+    });
+
+    y -= totalRows.length * 16 + 8;
+  } else {
+    ensureSpace(34);
+    const totalBoxWidth = Math.min(205, contentInnerRect.width * 0.4);
+    const totalBoxX = contentInnerRect.x + contentInnerRect.width - totalBoxWidth;
+    page.drawRectangle({
+      x: totalBoxX,
+      y: y - 21,
+      width: totalBoxWidth,
+      height: 24,
+      color: lightAccent,
+      borderWidth: 1,
+      borderColor: accent,
+    });
+    const totalLabel = `${documentLabel} Total`;
+    page.drawText(totalLabel, {
+      x: totalBoxX + 12,
+      y: y - 13,
+      font: boldFont,
+      size: 9.4,
+      color: accent,
+    });
+    const grandTotal = money(calculateDocTotal(document.items || []));
+    page.drawText(grandTotal, {
+      x: totalBoxX + totalBoxWidth - 12 - boldFont.widthOfTextAtSize(grandTotal, 10),
+      y: y - 13,
+      font: boldFont,
+      size: 10,
+      color: rgb(0.08, 0.08, 0.08),
+    });
+    y -= 30;
+  }
 
   const documentNotes = getVisibleDocumentNotes(type, document.notes);
   if (documentNotes) {

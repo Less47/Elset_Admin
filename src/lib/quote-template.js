@@ -20,6 +20,8 @@ export const documentTemplatePlaceholders = [
   "{{quoteValidUntil}}",
   "{{quoteReplyInstructions}}",
   "{{quoteReference}}",
+  "{{subtotal}}",
+  "{{gst}}",
   "{{total}}",
 ];
 
@@ -147,6 +149,50 @@ export function calculateDocTotal(items = []) {
   }, 0);
 }
 
+export const GST_RATE = 0.1;
+
+export function roundCurrency(value) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) ? Number(amount.toFixed(2)) : 0;
+}
+
+export function calculateInvoiceSubtotal(items = []) {
+  return roundCurrency(calculateDocTotal(items));
+}
+
+export function calculateInvoiceGst(items = []) {
+  return roundCurrency(calculateInvoiceSubtotal(items) * GST_RATE);
+}
+
+export function calculateInvoiceTotal(items = []) {
+  return roundCurrency(calculateInvoiceSubtotal(items) + calculateInvoiceGst(items));
+}
+
+export function calculateQuoteSubtotal(items = []) {
+  return calculateInvoiceSubtotal(items);
+}
+
+export function calculateQuoteGst(items = []) {
+  return calculateInvoiceGst(items);
+}
+
+export function calculateQuoteTotal(items = []) {
+  return calculateInvoiceTotal(items);
+}
+
+export function calculateInvoicePaidAmount(payments = []) {
+  return roundCurrency(
+    (Array.isArray(payments) ? payments : []).reduce((sum, payment) => {
+      const amount = Number(payment?.amount || 0);
+      return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+    }, 0)
+  );
+}
+
+export function calculateInvoiceBalanceDue(items = [], payments = []) {
+  return Math.max(roundCurrency(calculateInvoiceTotal(items) - calculateInvoicePaidAmount(payments)), 0);
+}
+
 export function money(n) {
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
@@ -177,6 +223,12 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
   const normalizedTemplate = normalizeDocumentTemplate(template, type);
   const reference = buildDocumentReference(job, type);
   const issueDate = document?.issueDate || "";
+  const hasGst = type === "invoice" || type === "quote";
+  const subtotal = hasGst ? calculateQuoteSubtotal(document?.items || []) : calculateDocTotal(document?.items || []);
+  const gst = hasGst ? calculateQuoteGst(document?.items || []) : 0;
+  const total = hasGst ? calculateQuoteTotal(document?.items || []) : subtotal;
+  const paid = type === "invoice" ? calculateInvoicePaidAmount(document?.payments || []) : 0;
+  const balanceDue = type === "invoice" ? calculateInvoiceBalanceDue(document?.items || [], document?.payments || []) : total;
   const quoteContactMethods = [
     normalizedTemplate.companyEmail ? `reply to ${normalizedTemplate.companyEmail}` : "",
     normalizedTemplate.companyPhone ? `call ${normalizedTemplate.companyPhone}` : "",
@@ -199,7 +251,7 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
     bankAccountNumber: normalizedTemplate.bankAccountNumber || "",
     bankDetails: bankDetailLines.length > 0 ? bankDetailLines.join("\n") : "Bank details available on request.",
     customerName: job?.customerName || "",
-    customerEmail: job?.customerEmail || "",
+    customerEmail: getDocumentRecipientEmail(job),
     jobTitle: job?.title || "",
     jobDescription: job?.description || "",
     jobAddress: job?.jobAddress || "",
@@ -210,7 +262,11 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
       : "",
     quoteReference: reference,
     documentReference: reference,
-    total: money(calculateDocTotal(document?.items || [])),
+    subtotal: money(subtotal),
+    gst: money(gst),
+    paid: money(paid),
+    balanceDue: money(balanceDue),
+    total: money(total),
   };
 }
 
@@ -223,12 +279,20 @@ export function buildQuoteTemplateContext({ job, quote, template }) {
   });
 }
 
+export function getDocumentRecipientEmail(job) {
+  return String(job?.billingContact?.email || job?.customerEmail || "").trim();
+}
+
+export function getDocumentRecipientName(job) {
+  return String(job?.billingContact?.name || job?.customerName || "").trim() || "Customer";
+}
+
 export function fillTemplateText(text, context) {
   return String(text || "").replace(/{{\s*(\w+)\s*}}/g, (_, key) => context[key] ?? "");
 }
 
 export function buildDocumentEmail({ job, type = "quote", emailSettings = {}, emailPurpose = "" }) {
-  const customerName = job?.customerName || "Customer";
+  const customerName = getDocumentRecipientName(job);
   const siteAddress = job?.jobAddress || "Site Address";
   const normalizedPurpose = String(emailPurpose || "").trim();
   const isPartPaymentReceipt = normalizedPurpose === "part-payment-receipt";

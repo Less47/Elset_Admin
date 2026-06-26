@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,17 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { buildSiteProfileDraft, formatDate, formatSiteType, getSiteDisplayName, normalizeSiteAddress, normalizeSiteAssetRecord, siteTypeOptions, toTimestamp } from "@/lib/app-support";
+import {
+  buildSiteProfileDraft,
+  formatDate,
+  formatSiteType,
+  getCustomerContacts,
+  getSiteDisplayName,
+  normalizeSiteAddress,
+  normalizeSiteAssetRecord,
+  siteTypeOptions,
+  toTimestamp,
+} from "@/lib/app-support";
 
 const NOT_SET_VALUE = "not-set";
 
@@ -30,6 +41,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
   if (!customer) return null;
 
   const activeAddress = normalizeSiteAddress(isEditing ? draftSite.address : site.address);
+  const customerContacts = getCustomerContacts(customer);
   const siteJobs = [...jobs]
     .filter((job) => normalizeSiteAddress(job.jobAddress).toLowerCase() === activeAddress.toLowerCase())
     .sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt));
@@ -113,8 +125,8 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
           </div>
         </DialogHeader>
 
-        <DialogBody className="overflow-y-auto lg:overflow-hidden">
-        <div className="grid gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]">
+        <DialogBody className={isEditing ? "overflow-y-auto" : "overflow-y-auto lg:overflow-hidden"}>
+        <div className={isEditing ? "grid gap-6 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]" : "grid gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]"}>
           <div className="grid gap-4 lg:self-start">
             <Card className="rounded-3xl border-slate-200">
               <CardHeader>
@@ -148,20 +160,28 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                         </SelectContent>
                       </Select>
                     </FormField>
-                    <FormField label="Site contact">
-                      <Input
-                        value={draftSite.contactName}
-                        onChange={(e) => setDraftSite((prev) => ({ ...prev, contactName: e.target.value }))}
-                        placeholder="Contact on arrival"
-                      />
-                    </FormField>
-                    <FormField label="Site contact phone">
-                      <Input
-                        value={draftSite.contactPhone}
-                        onChange={(e) => setDraftSite((prev) => ({ ...prev, contactPhone: e.target.value }))}
-                        placeholder="Direct mobile or desk number"
-                      />
-                    </FormField>
+                    <ContactSnapshotEditor
+                      title="Site contact"
+                      description="Pick a saved customer contact or keep a site-specific access contact just for this address."
+                      contacts={customerContacts}
+                      fallbackRole="Site contact"
+                      value={{
+                        id: draftSite.contactId,
+                        name: draftSite.contactName,
+                        role: "Site contact",
+                        phone: draftSite.contactPhone,
+                        email: draftSite.contactEmail,
+                      }}
+                      onChange={(contact) =>
+                        setDraftSite((prev) => ({
+                          ...prev,
+                          contactId: contact?.id || "",
+                          contactName: contact?.name || "",
+                          contactPhone: contact?.phone || "",
+                          contactEmail: contact?.email || "",
+                        }))
+                      }
+                    />
                     <FormField label="OC number">
                       <Input
                         value={draftSite.ocNumber}
@@ -207,6 +227,10 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Contact phone</p>
                       <p className="mt-1 font-medium text-slate-900">{site.contactPhone || "Not set"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Contact email</p>
+                      <p className="mt-1 font-medium text-slate-900">{site.contactEmail || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">OC number</p>
@@ -260,6 +284,20 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
             </CardHeader>
             <CardContent>
               <div className="grid gap-3">
+                {!isEditing && site.accessNotes ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access notes</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{site.accessNotes}</p>
+                  </div>
+                ) : null}
+
+                {!isEditing && site.profileNotes ? (
+                  <div className="rounded-2xl border bg-white p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site notes</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{site.profileNotes}</p>
+                  </div>
+                ) : null}
+
                 {isEditing ? (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Add gate or project</p>
@@ -364,7 +402,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-slate-200 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+          <Card className={isEditing ? "rounded-3xl border-slate-200" : "rounded-3xl border-slate-200 lg:flex lg:h-full lg:min-h-0 lg:flex-col"}>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -374,63 +412,28 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                 <Badge variant="secondary">{siteJobs.length}</Badge>
               </div>
             </CardHeader>
-            <CardContent className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:pr-2">
-              <div className="grid gap-4">
-                {!isEditing && site.accessNotes ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{site.accessNotes}</p>
-                  </div>
-                ) : null}
-
-                {!isEditing && site.profileNotes ? (
-                  <div className="rounded-2xl border bg-slate-50 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{site.profileNotes}</p>
-                  </div>
-                ) : null}
-
+            <CardContent className={isEditing ? "" : "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:pr-2"}>
+              <div className="grid gap-3">
                 {siteJobs.length === 0 ? (
                   <EmptyState title="No jobs linked to this site yet" text="Jobs for this address will appear here automatically." />
                 ) : (
                   siteJobs.map((job) => (
-                    <div key={job.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                          <p className="font-semibold text-slate-900">{job.title}</p>
-                          <p className="mt-1 text-sm text-slate-600">{job.description}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary">{job.status}</Badge>
-                          <Badge className={job.urgency === "High" ? "bg-rose-100 text-rose-800" : job.urgency === "Medium" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}>
-                            {job.urgency}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 md:grid-cols-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Technician</span>
-                          <span className="font-medium text-slate-900">{job.assignedTechnicianName}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span>Last updated</span>
-                          <span className="font-medium text-slate-900">{formatDate(job.updatedAt)}</span>
-                        </div>
-                      </div>
-                      <div className="mt-4 flex justify-end">
-                        <Button
-                          variant="outline"
-                          className="rounded-xl"
-                          onClick={() => {
-                            onOpenChange(false);
-                            onOpenJob(job);
-                          }}
-                        >
-                          View Job
-                        </Button>
-                      </div>
-                    </div>
+                    <button
+                      key={job.id}
+                      type="button"
+                      className="w-full rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                      onClick={() => {
+                        onOpenChange(false);
+                        onOpenJob(job);
+                      }}
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{job.title}</p>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{job.description}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Site: <span className="font-medium text-slate-700">{job.jobAddress || site.address || "Not set"}</span>
+                      </p>
+                    </button>
                   ))
                 )}
               </div>

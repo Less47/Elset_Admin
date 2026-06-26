@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { FormField } from "@/components/shared/FormField";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +8,15 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { buildCustomerSites, formatDate, getCustomerSiteAccessNote, normalizeSiteAddress, toDateInputValue, urgencyOptions } from "@/lib/app-support";
+import {
+  buildCustomerSites,
+  formatDate,
+  getCustomerContacts,
+  getCustomerSiteAccessNote,
+  normalizeSiteAddress,
+  toDateInputValue,
+  urgencyOptions,
+} from "@/lib/app-support";
 import { statuses } from "@/lib/job-status";
 
 export default function JobEditDialog({ open, onOpenChange, job, customer = null, customerJobs = [], staff, onSave }) {
@@ -26,6 +35,19 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
       jobAddress: job.jobAddress || "",
       ocNumber: job.ocNumber || "",
       scheduledDate: toDateInputValue(job.scheduledDate),
+      requesterContact: job.requesterContact || null,
+      onsiteContact: job.onsiteContact || null,
+      billingContact: job.billingContact || (
+        job.customerEmail || job.customerPhone
+          ? {
+              id: "",
+              name: job.customerName || "",
+              role: "Billing contact",
+              phone: job.customerPhone || "",
+              email: job.customerEmail || "",
+            }
+          : null
+      ),
     });
   }, [job, open, staff]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -33,6 +55,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
   if (!job || !draftJob) return null;
 
   const customerSites = customer ? buildCustomerSites(customer, customerJobs) : [];
+  const customerContacts = customer ? getCustomerContacts(customer) : [];
   const jobSiteAccessNote = getCustomerSiteAccessNote(customer, draftJob.jobAddress);
   const canSave = draftJob.title.trim() && draftJob.description.trim() && draftJob.jobAddress.trim() && draftJob.assignedTechnicianId;
 
@@ -167,7 +190,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
 
           <Card className="rounded-2xl border-slate-200 bg-slate-50">
             <CardHeader>
-              <CardTitle className="text-base">Linked Customer</CardTitle>
+              <CardTitle className="text-base">Linked Customer & Contacts</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 text-sm">
               <div>
@@ -187,8 +210,35 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
                 <p className="mt-1 font-medium text-slate-900">{formatDate(job.createdAt)}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-600">
-                Customer contact details stay managed from the customer profile. This screen is for editing the job itself.
+                Saved customer contacts can be reused here, but the values below are job snapshots so they can differ for this one visit.
               </div>
+
+              <ContactSnapshotEditor
+                title="Requester"
+                description="Who asked for this work or raised the service request."
+                contacts={customerContacts}
+                fallbackRole="Requester"
+                value={draftJob.requesterContact}
+                onChange={(contact) => setDraftJob((prev) => ({ ...prev, requesterContact: contact }))}
+              />
+
+              <ContactSnapshotEditor
+                title="On-site Contact"
+                description="Who the technician should speak with on arrival."
+                contacts={customerContacts}
+                fallbackRole="On-site contact"
+                value={draftJob.onsiteContact}
+                onChange={(contact) => setDraftJob((prev) => ({ ...prev, onsiteContact: contact }))}
+              />
+
+              <ContactSnapshotEditor
+                title="Billing Contact"
+                description="Who quotes and invoices should be sent to for this job."
+                contacts={customerContacts}
+                fallbackRole="Billing contact"
+                value={draftJob.billingContact}
+                onChange={(contact) => setDraftJob((prev) => ({ ...prev, billingContact: contact }))}
+              />
             </CardContent>
           </Card>
         </div>

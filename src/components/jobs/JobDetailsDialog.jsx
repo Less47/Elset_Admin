@@ -1,6 +1,16 @@
 import { useState } from "react";
-import { Camera, Trash2 } from "lucide-react";
-import { SupplierManualMatches, formatDate, getCustomerSiteAccessNote, getInvoicePaymentSummary, getInvoiceStatus, normalizeSiteAddress } from "@/lib/app-support";
+import { Camera, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import {
+  SupplierManualMatches,
+  formatDate,
+  getContactDisplayName,
+  getCustomerBillingContact,
+  getCustomerSiteAccessNote,
+  getCustomerSitePrimaryContact,
+  getInvoicePaymentSummary,
+  getInvoiceStatus,
+  normalizeSiteAddress,
+} from "@/lib/app-support";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { statuses } from "@/lib/job-status";
-import { calculateDocTotal, money } from "@/lib/quote-template";
+import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
 
 export default function JobDetailsDialog({
   open,
@@ -37,10 +47,32 @@ export default function JobDetailsDialog({
   const [note, setNote] = useState("");
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   if (!job) return null;
-  const activeSelectedPhoto = selectedPhoto ? (job.photos || []).find((photo) => photo.id === selectedPhoto.id) || null : null;
+  const jobPhotos = job.photos || [];
+  const activeSelectedPhoto = selectedPhoto ? jobPhotos.find((photo) => photo.id === selectedPhoto.id) || null : null;
+  const activeSelectedPhotoIndex = activeSelectedPhoto ? jobPhotos.findIndex((photo) => photo.id === activeSelectedPhoto.id) : -1;
   const jobSiteAccessNote = getCustomerSiteAccessNote(customer, job.jobAddress);
+  const requesterContact = job.requesterContact || null;
+  const onsiteContact = job.onsiteContact || getCustomerSitePrimaryContact(customer, job.jobAddress) || null;
+  const billingContact = job.billingContact
+    || getCustomerBillingContact(customer)
+    || (job.customerEmail || job.customerPhone
+      ? {
+          id: "",
+          name: job.customerName,
+          role: "Billing contact",
+          phone: job.customerPhone,
+          email: job.customerEmail,
+        }
+      : null);
   const jobInvoiceStatus = getInvoiceStatus(job);
   const jobInvoicePaymentSummary = getInvoicePaymentSummary(job.invoice);
+  const canCyclePhotos = jobPhotos.length > 1;
+  const handleCyclePhoto = (direction) => {
+    if (!canCyclePhotos || activeSelectedPhotoIndex < 0) return;
+
+    const nextIndex = (activeSelectedPhotoIndex + direction + jobPhotos.length) % jobPhotos.length;
+    setSelectedPhoto(jobPhotos[nextIndex]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
@@ -143,6 +175,59 @@ export default function JobDetailsDialog({
                       </div>
                     ) : null}
                   </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Job contacts</p>
+                    <div className="mt-3 grid gap-3">
+                      {requesterContact ? (
+                        <div className="rounded-2xl border bg-white p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs uppercase text-muted-foreground">Requester</p>
+                              <p className="mt-1 font-medium text-slate-900">{getContactDisplayName(requesterContact)}</p>
+                            </div>
+                            {requesterContact.role ? <Badge variant="secondary">{requesterContact.role}</Badge> : null}
+                          </div>
+                          <p className="mt-2 text-sm text-slate-600">
+                            {[requesterContact.phone, requesterContact.email].filter(Boolean).join(" - ") || "No phone or email saved"}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {onsiteContact ? (
+                        <div className="rounded-2xl border bg-white p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs uppercase text-muted-foreground">On-site Contact</p>
+                              <p className="mt-1 font-medium text-slate-900">{getContactDisplayName(onsiteContact)}</p>
+                            </div>
+                            {onsiteContact.role ? <Badge variant="secondary">{onsiteContact.role}</Badge> : null}
+                          </div>
+                          <p className="mt-2 text-sm text-slate-600">
+                            {[onsiteContact.phone, onsiteContact.email].filter(Boolean).join(" - ") || "No phone or email saved"}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {billingContact ? (
+                        <div className="rounded-2xl border bg-white p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs uppercase text-muted-foreground">Billing Contact</p>
+                              <p className="mt-1 font-medium text-slate-900">{getContactDisplayName(billingContact)}</p>
+                            </div>
+                            {billingContact.role ? <Badge variant="secondary">{billingContact.role}</Badge> : null}
+                          </div>
+                          <p className="mt-2 text-sm text-slate-600">
+                            {[billingContact.phone, billingContact.email].filter(Boolean).join(" - ") || "No phone or email saved"}
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {!requesterContact && !onsiteContact && !billingContact ? (
+                        <p className="text-sm text-slate-500">No job-specific contacts saved yet.</p>
+                      ) : null}
+                    </div>
+                  </div>
                   {jobSiteAccessNote?.notes ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Site access notes</p>
@@ -220,15 +305,15 @@ export default function JobDetailsDialog({
               </Card>
 
               <Card className="rounded-2xl">
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between gap-3">
                   <CardTitle className="text-base">Photos</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
                   <Label htmlFor="photo-upload" className="cursor-pointer">
-                    <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed p-4 text-sm text-muted-foreground hover:bg-slate-50">
-                      <Camera className="h-4 w-4" /> Upload job photos
+                    <div className="flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50">
+                      <Camera className="h-3.5 w-3.5" /> Upload photos
                     </div>
                   </Label>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <Input
                     id="photo-upload"
                     type="file"
@@ -241,19 +326,19 @@ export default function JobDetailsDialog({
                       e.target.value = "";
                     }}
                   />
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                    {(job.photos || []).length === 0 ? (
-                      <p className="text-sm text-muted-foreground xl:col-span-1 2xl:col-span-2">No photos uploaded yet.</p>
+                  <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]">
+                    {jobPhotos.length === 0 ? (
+                      <p className="col-span-full text-sm text-muted-foreground">No photos uploaded yet.</p>
                     ) : (
-                      job.photos.map((photo, index) => (
+                      jobPhotos.map((photo, index) => (
                         <div key={photo.id} className="group relative">
                           <button
                             type="button"
                             className="w-full overflow-hidden rounded-2xl border text-left transition hover:border-slate-300 hover:bg-slate-50"
                             onClick={() => setSelectedPhoto(photo)}
                           >
-                            <img src={photo.url} alt={photo.name} className="h-28 w-full object-cover" />
-                            <div className="space-y-1 border-t bg-white px-3 py-2">
+                            <img src={photo.url} alt={photo.name} className="h-20 w-full object-cover" />
+                            <div className="space-y-1 border-t bg-white px-3 py-1.5">
                               <p className="truncate text-sm font-medium text-slate-900">{photo.name || `Photo ${index + 1}`}</p>
                               <p className="text-xs text-slate-500">Open full size</p>
                             </div>
@@ -299,7 +384,7 @@ export default function JobDetailsDialog({
                         <div>
                           <p className="font-medium">Quote</p>
                           <p className="mt-1 text-muted-foreground">
-                            {job.quote ? `Saved - ${money(calculateDocTotal(job.quote.items))}` : "No quote saved yet"}
+                            {job.quote ? `Saved - ${money(calculateQuoteTotal(job.quote.items))}` : "No quote saved yet"}
                           </p>
                           {job.quote?.sentHistory?.length ? (
                             <p className="mt-1 text-xs text-muted-foreground">
@@ -319,7 +404,7 @@ export default function JobDetailsDialog({
                         <div>
                           <p className="font-medium">Invoice</p>
                           <p className="mt-1 text-muted-foreground">
-                            {job.invoice ? `Saved - ${money(calculateDocTotal(job.invoice.items))}` : "No invoice saved yet"}
+                            {job.invoice ? `Saved - ${money(calculateInvoiceTotal(job.invoice.items))}` : "No invoice saved yet"}
                           </p>
                           {job.invoice ? (
                             <div className="mt-2 space-y-2">
@@ -376,12 +461,40 @@ export default function JobDetailsDialog({
 
           <DialogBody>
             {activeSelectedPhoto ? (
-              <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-slate-950 p-3">
-                <img
-                  src={activeSelectedPhoto.url}
-                  alt={activeSelectedPhoto.name || "Job photo"}
-                  className="max-h-[72vh] max-w-full rounded-xl object-contain"
-                />
+              <div className="flex min-h-[50vh] items-center justify-center gap-3">
+                {canCyclePhotos ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-lg"
+                    className="shrink-0 rounded-full border-slate-300 bg-white"
+                    onClick={() => handleCyclePhoto(-1)}
+                    aria-label="Previous photo"
+                    title="Previous photo"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                ) : null}
+                <div className="flex min-h-[50vh] flex-1 items-center justify-center rounded-2xl bg-slate-950 p-3">
+                  <img
+                    src={activeSelectedPhoto.url}
+                    alt={activeSelectedPhoto.name || "Job photo"}
+                    className="max-h-[72vh] max-w-full rounded-xl object-contain"
+                  />
+                </div>
+                {canCyclePhotos ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-lg"
+                    className="shrink-0 rounded-full border-slate-300 bg-white"
+                    onClick={() => handleCyclePhoto(1)}
+                    aria-label="Next photo"
+                    title="Next photo"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </DialogBody>

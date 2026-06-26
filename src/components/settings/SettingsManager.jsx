@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
+  buildDataViewTheme,
   contentDensityOptions,
   createTemplatePreviewFixture,
   getContrastTextColor,
@@ -104,6 +105,7 @@ const presetPreviewKeys = [
   "sidebarHeader",
   "actionColor",
   "dialogSurface",
+  "dataViewAccent",
 ];
 
 const FAVICON_SRC = "/favicon.png";
@@ -122,6 +124,7 @@ function WorkspacePreview({ settings }) {
   const dialogText = getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT });
   const dialogSurfaceGradient = `radial-gradient(190% 160% at 50% -18%, ${mixHexColors(dialogSurface, "#FFFFFF", dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32)} 0%, ${dialogSurface} 62%, ${mixHexColors(dialogSurface, APP_TEXT_DARK, dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1)} 100%)`;
   const isIconOnlySidebar = normalizedSettings.sidebarWidth === "icon-only";
+  const dataViewTheme = buildDataViewTheme(normalizedSettings);
 
   return (
     <Card className="overflow-hidden rounded-3xl border-slate-200 shadow-sm">
@@ -241,6 +244,99 @@ function WorkspacePreview({ settings }) {
                 <p className="mt-2 text-sm opacity-80">
                   Popups, editors, and modals will use a generated gradient based on this one popup colour.
                 </p>
+              </div>
+
+              <div
+                className="rounded-2xl border p-5 shadow-sm"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, ${dataViewTheme.headerStart} 0%, ${dataViewTheme.headerEnd} 100%)`,
+                  backgroundColor: dataViewTheme.surface,
+                  borderColor: dataViewTheme.borderStrong,
+                  boxShadow: `0 20px 36px -30px ${dataViewTheme.shadow}`,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: dataViewTheme.textTint }}>
+                      Database Preview
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">Table headers, row tinting, and stat tiles follow these colours.</p>
+                  </div>
+                  <span
+                    className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+                    style={{
+                      backgroundColor: mixHexColors(dataViewTheme.rowHover, "#FFFFFF", 0.08),
+                      borderColor: dataViewTheme.borderStrong,
+                      color: dataViewTheme.textTint,
+                    }}
+                  >
+                    Live
+                  </span>
+                </div>
+
+                <div
+                  className="mt-4 grid gap-px overflow-hidden rounded-2xl border text-sm shadow-sm"
+                  style={{
+                    borderColor: dataViewTheme.borderStrong,
+                    backgroundColor: dataViewTheme.gridLine,
+                  }}
+                >
+                  <div
+                    className="grid grid-cols-[1.4fr_120px_90px]"
+                    style={{ color: dataViewTheme.textTint }}
+                  >
+                    {["Record", "Status", "Open"].map((label) => (
+                      <div
+                        key={label}
+                        className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em]"
+                        style={{ backgroundColor: dataViewTheme.headerCell }}
+                      >
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+
+                  {[
+                    { name: "Springvale Site", status: "Commercial", open: "1" },
+                    { name: "Kew Residence", status: "Residential", open: "0" },
+                  ].map((row, index) => (
+                    <div key={row.name} className="grid grid-cols-[1.4fr_120px_90px] text-slate-700">
+                      <div
+                        className="px-3 py-2 font-medium text-slate-900"
+                        style={{ backgroundColor: index % 2 === 0 ? dataViewTheme.row : dataViewTheme.rowAlt }}
+                      >
+                        {row.name}
+                      </div>
+                      <div
+                        className="px-3 py-2"
+                        style={{ backgroundColor: index % 2 === 0 ? dataViewTheme.row : dataViewTheme.rowAlt }}
+                      >
+                        {row.status}
+                      </div>
+                      <div
+                        className="px-3 py-2 text-right font-medium text-slate-900"
+                        style={{ backgroundColor: index % 2 === 0 ? dataViewTheme.row : dataViewTheme.rowAlt }}
+                      >
+                        {row.open}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border shadow-sm md:grid-cols-3" style={{ borderColor: dataViewTheme.border }}>
+                  {[
+                    { label: "Records", value: "68" },
+                    { label: "Needs follow-up", value: "9" },
+                    { label: "Updated today", value: "4" },
+                  ].map((stat) => (
+                    <div key={stat.label} className="px-4 py-3" style={{ backgroundColor: dataViewTheme.stat }}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: dataViewTheme.textTint }}>
+                        {stat.label}
+                      </p>
+                      <p className="mt-2 text-xl font-semibold text-slate-950">{stat.value}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -844,7 +940,7 @@ export default function SettingsManager({
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Colour Controls</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, popup gradients, primary action buttons, and shared border colour.</p>
+                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, database tables, popup gradients, primary action buttons, and shared border colour.</p>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 {themeColorFields.map((field) => (
