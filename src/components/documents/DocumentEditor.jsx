@@ -18,13 +18,15 @@ export default function DocumentEditor({
   job,
   type,
   onSave,
+  onPreviewDocument,
   onSendDocument,
   onOpenSentDocument,
   isSendingDocument = false,
 }) {
   const [docState, setDocState] = useState(null);
+  const [isPreviewingDocument, setIsPreviewingDocument] = useState(false);
+  const [sendPreview, setSendPreview] = useState(null);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!job || !type) return;
     const document = normalizeDocument(type, job[type] || buildDefaultDoc(job, type));
@@ -33,7 +35,13 @@ export default function DocumentEditor({
       sentHistory: document?.sentHistory || [],
     });
   }, [job, type]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (open) return;
+    if (sendPreview?.previewUrl) URL.revokeObjectURL(sendPreview.previewUrl);
+    setSendPreview(null);
+    setIsPreviewingDocument(false);
+  }, [open, sendPreview?.previewUrl]);
 
   if (!job || !docState) return null;
 
@@ -42,6 +50,47 @@ export default function DocumentEditor({
   const invoiceStatus = type === "invoice" ? getInvoiceStatus({ ...job, invoice: docState }) : null;
   const sentCount = docState.sentHistory?.length || 0;
   const documentLabel = type === "quote" ? "Quote" : "Invoice";
+  const paymentReceiptStamp = type === "invoice" && paymentSummary?.paidAmount > 0 && paymentSummary?.total > 0
+    ? paymentSummary.balanceAmount > 0
+      ? "PART PAYMENT"
+      : "PAID"
+    : "";
+  const paymentReceiptPurpose = paymentReceiptStamp === "PART PAYMENT"
+    ? "part-payment-receipt"
+    : paymentReceiptStamp === "PAID"
+      ? "paid-receipt"
+      : "";
+
+  const closeSendPreview = () => {
+    if (sendPreview?.previewUrl) URL.revokeObjectURL(sendPreview.previewUrl);
+    setSendPreview(null);
+  };
+
+  const handlePreviewBeforeSend = async (options = {}) => {
+    if (!onPreviewDocument) return;
+    if (!job.customerEmail) return;
+
+    if (sendPreview?.previewUrl) URL.revokeObjectURL(sendPreview.previewUrl);
+    setSendPreview(null);
+    setIsPreviewingDocument(true);
+
+    try {
+      const preview = await onPreviewDocument(docState, options);
+      if (!preview) return;
+      setSendPreview({
+        ...preview,
+        document: normalizeDocument(type, docState),
+        previewTitle: options.previewTitle || `Preview ${documentLabel}`,
+        confirmLabel: options.confirmLabel || `Confirm & Send ${documentLabel}`,
+        sendOptions: options,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Unable to render the ${documentLabel.toLowerCase()} preview.`;
+      window.alert(message);
+    } finally {
+      setIsPreviewingDocument(false);
+    }
+  };
 
   const updateItem = (id, key, value) => {
     setDocState((prev) => ({
@@ -72,6 +121,7 @@ export default function DocumentEditor({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] rounded-3xl sm:max-w-4xl">
         <DialogHeader>
@@ -106,6 +156,14 @@ export default function DocumentEditor({
                     onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value }))}
                   />
                 </FormField>
+                <FormField label="OC number">
+                  <Input value={job.ocNumber || "Not set"} disabled />
+                </FormField>
+              </div>
+            )}
+
+            {type === "invoice" && (
+              <div className="grid gap-4">
                 <div className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Payment Snapshot</p>
                   <div className="flex items-center justify-between text-sm">
@@ -214,6 +272,35 @@ export default function DocumentEditor({
                     placeholder="General remittance notes, follow-up details, or account comments..."
                   />
                 </FormField>
+
+                {paymentReceiptStamp ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {paymentReceiptStamp === "PAID" ? "Paid invoice receipt" : "Part payment receipt"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Preview a customer copy stamped {paymentReceiptStamp} before sending it.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="rounded-xl"
+                        disabled={!job.customerEmail || isSendingDocument || isPreviewingDocument}
+                        onClick={() => handlePreviewBeforeSend({
+                          stampText: paymentReceiptStamp,
+                          emailPurpose: paymentReceiptPurpose,
+                          previewTitle: `Preview ${paymentReceiptStamp === "PAID" ? "Paid Receipt" : "Part Payment Receipt"}`,
+                          confirmLabel: `Confirm & Send ${paymentReceiptStamp === "PAID" ? "Paid Receipt" : "Part Payment Receipt"}`,
+                        })}
+                      >
+                        {isPreviewingDocument ? "Generating preview..." : `Preview & Send ${paymentReceiptStamp === "PAID" ? "Paid Receipt" : "Part Payment Receipt"}`}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -358,10 +445,10 @@ export default function DocumentEditor({
           </Button>
           <Button
             variant="secondary"
-            disabled={!job.customerEmail || isSendingDocument}
-            onClick={() => onSendDocument?.(docState)}
+            disabled={!job.customerEmail || isSendingDocument || isPreviewingDocument}
+            onClick={() => handlePreviewBeforeSend()}
           >
-            {isSendingDocument ? "Sending..." : `Send ${documentLabel} PDF`}
+            {isSendingDocument ? "Sending..." : isPreviewingDocument ? "Generating preview..." : `Preview & Send ${documentLabel}`}
           </Button>
           <Button
             disabled={isSendingDocument}
@@ -375,5 +462,85 @@ export default function DocumentEditor({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={Boolean(sendPreview)} onOpenChange={(nextOpen) => {
+      if (!nextOpen && !isSendingDocument) closeSendPreview();
+    }}>
+      <DialogContent className="h-[92vh] max-h-[92vh] rounded-3xl sm:max-w-[94vw] xl:max-w-[1180px]">
+        <DialogHeader>
+          <DialogTitle className="text-xl">{sendPreview?.previewTitle || `Preview ${documentLabel}`}</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Review the PDF that will be emailed before confirming the send.
+          </p>
+        </DialogHeader>
+
+        <DialogBody className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="min-h-[520px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+            {sendPreview?.previewUrl ? (
+              <iframe
+                title={`${documentLabel} PDF preview`}
+                src={sendPreview.previewUrl}
+                className="h-full min-h-[520px] w-full bg-white"
+              />
+            ) : null}
+          </div>
+
+          <Card className="h-fit rounded-2xl border-slate-200 bg-slate-50">
+            <CardHeader>
+              <CardTitle className="text-base">Send Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span>To</span>
+                <span className="text-right font-medium">{sendPreview?.toEmail || job.customerEmail}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span>From</span>
+                <span className="text-right font-medium">{sendPreview?.fromEmail || ADMIN_EMAIL}</span>
+              </div>
+              {sendPreview?.ccEmail ? (
+                <div className="flex justify-between gap-4">
+                  <span>CC</span>
+                  <span className="text-right font-medium">{sendPreview.ccEmail}</span>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-4">
+                <span>Document</span>
+                <span className="font-medium">
+                  {sendPreview?.stampText ? `${sendPreview.stampText} ${documentLabel}` : `${documentLabel} PDF`}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span>Job</span>
+                <span className="font-medium">#{job.jobNumber}</span>
+              </div>
+              {sendPreview?.priorAttempts > 0 ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-950">
+                  This customer already has {sendPreview.priorAttempts} previous {documentLabel.toLowerCase()} send {sendPreview.priorAttempts === 1 ? "attempt" : "attempts"}.
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </DialogBody>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={closeSendPreview} disabled={isSendingDocument}>
+            Back to Edit
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={isSendingDocument || !sendPreview?.document}
+            onClick={async () => {
+              if (!sendPreview?.document) return;
+              const sent = await onSendDocument?.(sendPreview.document, sendPreview.sendOptions || {});
+              if (sent !== false) closeSendPreview();
+            }}
+          >
+            {isSendingDocument ? "Sending..." : sendPreview?.confirmLabel || `Confirm & Send ${documentLabel}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

@@ -108,6 +108,10 @@ export default function JobDetailsDialog({
                       <p className="text-xs uppercase text-muted-foreground">Scheduled Date</p>
                       <p className="font-medium">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
                     </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">OC number</p>
+                      <p className="font-medium">{job.ocNumber || "Not set"}</p>
+                    </div>
                     {job.maintenancePlanName ? (
                       <div>
                         <p className="text-xs uppercase text-muted-foreground">Maintenance Due</p>

@@ -52,6 +52,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
     handleOpenJob,
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
+    handlePreviewDocument,
     handleSaveSiteProfile,
     handleSendDocument,
     handleStatusChange,
@@ -193,6 +194,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             job={selectedFreshJob}
             type={docType}
             isSendingDocument={isSendingDocument}
+            onPreviewDocument={handlePreviewDocument}
             onSendDocument={handleSendDocument}
             onOpenSentDocument={() => selectedFreshJob && handleOpenSentDocumentCopy(selectedFreshJob, docType)}
             onSave={(doc) => {

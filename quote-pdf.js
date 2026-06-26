@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { degrees, PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { fileURLToPath } from "url";
 import {
   buildDocumentReference,
@@ -136,7 +136,7 @@ function wrapText(text, font, size, maxWidth) {
   return lines;
 }
 
-export async function generateDocumentPdf({ job, document, template, type = "quote" }) {
+export async function generateDocumentPdf({ job, document, template, type = "quote", stampText = "" }) {
   const pdfDoc = await PDFDocument.create();
   const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -159,6 +159,7 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     Math.min(accent.green + 0.82, 0.96),
     Math.min(accent.blue + 0.82, 0.96)
   );
+  const normalizedStampText = String(stampText || "").trim().toUpperCase();
 
   let page;
   let y = 0;
@@ -573,6 +574,9 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
 
   let rightColumnEnd = drawKeyValue("Reference", context.documentReference, rightColumnX, columnWidth, metaTopY, { maxValueLines: 1 });
   rightColumnEnd = drawKeyValue("Issue date", document.issueDate || "-", rightColumnX, columnWidth, rightColumnEnd, { maxValueLines: 1 });
+  if (type === "invoice" && job.ocNumber) {
+    rightColumnEnd = drawKeyValue("OC number", job.ocNumber, rightColumnX, columnWidth, rightColumnEnd, { maxValueLines: 1 });
+  }
   if (type !== "quote") {
     rightColumnEnd = drawKeyValue("Job title", job.title || "-", rightColumnX, columnWidth, rightColumnEnd);
   }
@@ -716,6 +720,22 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     lineHeight: 11.2,
     gapAfter: 8,
   });
+
+  if (type === "invoice" && normalizedStampText) {
+    const stampSize = fitTextSize(normalizedStampText, boldFont, PAGE_WIDTH * 0.82, 92, 38);
+    const stampWidth = boldFont.widthOfTextAtSize(normalizedStampText, stampSize);
+    for (const targetPage of pdfDoc.getPages()) {
+      targetPage.drawText(normalizedStampText, {
+        x: (PAGE_WIDTH - stampWidth) / 2,
+        y: PAGE_HEIGHT * 0.48,
+        font: boldFont,
+        size: stampSize,
+        color: rgb(0.86, 0.05, 0.05),
+        rotate: degrees(32),
+        opacity: 0.34,
+      });
+    }
+  }
 
   return {
     bytes: await pdfDoc.save(),

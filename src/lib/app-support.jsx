@@ -1034,6 +1034,7 @@ export function normalizeJobRecord(job) {
     maintenanceDueDate: toDateInputValue(job?.maintenanceDueDate),
     serviceBoardTomorrowDate: toDateInputValue(job?.serviceBoardTomorrowDate),
     serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
+    ocNumber: String(job?.ocNumber || "").trim(),
     notes: Array.isArray(job.notes) ? job.notes : [],
     photos: Array.isArray(job.photos) ? job.photos : [],
     quote: normalizeDocument("quote", job.quote),
@@ -1197,6 +1198,7 @@ export function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAcc
     label: String(site?.label || "").trim(),
     address,
     siteType: normalizeOptionValue(site?.siteType, siteTypeOptions, ""),
+    ocNumber: String(site?.ocNumber || "").trim(),
     accessNotes: String(site?.accessNotes ?? legacyAccessNote?.notes ?? "").trim(),
     notes: String(site?.notes || "").trim(),
     contactName: String(site?.contactName || "").trim(),
@@ -1219,6 +1221,7 @@ export function mergeSiteProfileRecords(existing, incoming) {
     label: hasExplicitField("label") ? incoming.label : existing.label,
     address: incoming.address || existing.address,
     siteType: hasExplicitField("siteType") ? incoming.siteType : existing.siteType,
+    ocNumber: hasExplicitField("ocNumber") ? incoming.ocNumber : existing.ocNumber,
     accessNotes: hasExplicitField("accessNotes") ? incoming.accessNotes : existing.accessNotes,
     notes: hasExplicitField("notes") ? incoming.notes : existing.notes,
     contactName: hasExplicitField("contactName") ? incoming.contactName : existing.contactName,
@@ -1248,6 +1251,7 @@ export function normalizeCustomerSiteProfiles(sites, primaryAddress = "", legacy
         ? mergeSiteProfileRecords(existing, normalizedSite, {
             label: hasOwn(site, "label"),
             siteType: hasOwn(site, "siteType"),
+            ocNumber: hasOwn(site, "ocNumber"),
             accessNotes: hasOwn(site, "accessNotes"),
             notes: hasOwn(site, "notes"),
             contactName: hasOwn(site, "contactName"),
@@ -1449,6 +1453,7 @@ export function buildCustomerSites(customer, jobs) {
       accessNotesUpdatedAt: "",
       profileNotes: "",
       siteType: "",
+      ocNumber: "",
       contactName: "",
       contactPhone: "",
       assets: [],
@@ -1474,6 +1479,7 @@ export function buildCustomerSites(customer, jobs) {
       current.label = siteProfile.label;
       current.profileNotes = siteProfile.notes;
       current.siteType = siteProfile.siteType;
+      current.ocNumber = siteProfile.ocNumber;
       current.contactName = siteProfile.contactName;
       current.contactPhone = siteProfile.contactPhone;
       current.assets = normalizeSiteAssets(siteProfile.assets);
@@ -1526,6 +1532,7 @@ export function buildSiteProfileDraft(site) {
       label: "",
       address: "",
       siteType: "",
+      ocNumber: "",
       accessNotes: "",
       notes: "",
       contactName: "",
@@ -1539,6 +1546,7 @@ export function buildSiteProfileDraft(site) {
     label: "",
     address: normalizeSiteAddress(site.address),
     siteType: normalizeOptionValue(site.siteType, siteTypeOptions, ""),
+    ocNumber: String(site.ocNumber || "").trim(),
     accessNotes: String(site.accessNotes || "").trim(),
     notes: String(site.profileNotes || site.notes || "").trim(),
     contactName: String(site.contactName || "").trim(),
@@ -1860,4 +1868,3 @@ export function buildDefaultDoc(job, type) {
     ],
   };
 }
-

@@ -227,11 +227,22 @@ export function fillTemplateText(text, context) {
   return String(text || "").replace(/{{\s*(\w+)\s*}}/g, (_, key) => context[key] ?? "");
 }
 
-export function buildDocumentEmail({ job, type = "quote", emailSettings = {} }) {
+export function buildDocumentEmail({ job, type = "quote", emailSettings = {}, emailPurpose = "" }) {
   const customerName = job?.customerName || "Customer";
   const siteAddress = job?.jobAddress || "Site Address";
-  const documentLabel = type === "invoice" ? "INVOICE" : "QUOTE";
-  const bodyLabel = type === "invoice" ? "invoice" : "quote";
+  const normalizedPurpose = String(emailPurpose || "").trim();
+  const isPartPaymentReceipt = normalizedPurpose === "part-payment-receipt";
+  const isPaidReceipt = normalizedPurpose === "paid-receipt";
+  const documentLabel = isPartPaymentReceipt
+    ? "PART PAYMENT RECEIPT"
+    : isPaidReceipt
+      ? "PAID INVOICE"
+      : type === "invoice" ? "INVOICE" : "QUOTE";
+  const bodyLabel = isPartPaymentReceipt
+    ? "part payment receipt"
+    : isPaidReceipt
+      ? "paid invoice receipt"
+      : type === "invoice" ? "invoice" : "quote";
   const signature = emailSettings?.signature || "Regards, ELSET PTY LD";
   const subject = `ELSET ${documentLabel} FOR ${siteAddress}`;
   const body = [

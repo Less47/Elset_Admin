@@ -24,6 +24,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
       status: job.status || "To Do",
       assignedTechnicianId: job.assignedTechnicianId || defaultStaffId,
       jobAddress: job.jobAddress || "",
+      ocNumber: job.ocNumber || "",
       scheduledDate: toDateInputValue(job.scheduledDate),
     });
   }, [job, open, staff]);
@@ -79,7 +80,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
                         type="button"
                         variant={normalizeSiteAddress(draftJob.jobAddress) === site.address ? "secondary" : "outline"}
                         className="max-w-full rounded-xl"
-                        onClick={() => setDraftJob((prev) => ({ ...prev, jobAddress: site.address }))}
+                        onClick={() => setDraftJob((prev) => ({ ...prev, jobAddress: site.address, ocNumber: site.ocNumber || prev.ocNumber || "" }))}
                       >
                         <span className="truncate">{site.address}</span>
                       </Button>
@@ -100,6 +101,14 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
                   type="date"
                   value={draftJob.scheduledDate}
                   onChange={(e) => setDraftJob((prev) => ({ ...prev, scheduledDate: e.target.value }))}
+                />
+              </FormField>
+
+              <FormField label="OC number">
+                <Input
+                  value={draftJob.ocNumber}
+                  onChange={(e) => setDraftJob((prev) => ({ ...prev, ocNumber: e.target.value }))}
+                  placeholder="Optional invoice reference"
                 />
               </FormField>
 

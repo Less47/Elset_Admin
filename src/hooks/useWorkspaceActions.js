@@ -131,6 +131,7 @@ export function useWorkspaceActions({
         customerEmail: customerRecord.email,
         customerPhone: customerRecord.phone,
         jobAddress: normalizeSiteAddress(job.jobAddress || normalizedSiteInput?.address || customerRecord.address),
+        ocNumber: String(job.ocNumber || normalizedSiteInput?.ocNumber || "").trim(),
         createdAt: now,
         updatedAt: now,
         notes: [],
@@ -544,6 +545,9 @@ export function useWorkspaceActions({
     if (Object.prototype.hasOwnProperty.call(nextUpdates, "scheduledDate")) {
       nextUpdates.scheduledDate = toDateInputValue(nextUpdates.scheduledDate);
     }
+    if (Object.prototype.hasOwnProperty.call(nextUpdates, "ocNumber")) {
+      nextUpdates.ocNumber = String(nextUpdates.ocNumber || "").trim();
+    }
     if (Object.keys(nextUpdates).length > 0) {
       updateJob(jobId, nextUpdates);
     }
@@ -602,7 +606,7 @@ export function useWorkspaceActions({
   function handleCreateCustomer(customerInput) {
     if (!canManageBusiness) return null;
 
-    const { primarySiteType = "", ...customerFields } = customerInput || {};
+    const { primarySiteType = "", primaryOcNumber = "", ...customerFields } = customerInput || {};
     const createdAt = new Date().toISOString();
     const primaryAddress = normalizeSiteAddress(customerFields.address);
     const nextSites = primaryAddress
@@ -611,6 +615,7 @@ export function useWorkspaceActions({
             id: crypto.randomUUID(),
             address: primaryAddress,
             siteType: primarySiteType,
+            ocNumber: primaryOcNumber,
             createdAt,
             updatedAt: createdAt,
           }),
@@ -777,8 +782,58 @@ export function useWorkspaceActions({
       customerEmail: job.customerEmail,
       customerPhone: job.customerPhone,
       jobAddress: job.jobAddress,
+      ocNumber: job.ocNumber || "",
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
+    };
+  }
+
+  function getPriorDocumentSendAttempts(job, type) {
+    if (!job || !type) return 0;
+
+    return data.jobs.reduce((count, entry) => {
+      if (entry.customerId !== job.customerId) return count;
+      return count + (entry[type]?.sentHistory?.length || 0);
+    }, 0);
+  }
+
+  async function handlePreviewDocument(doc, options = {}) {
+    if (!canManageBusiness || !selectedFreshJob) return null;
+
+    const documentLabel = docType === "invoice" ? "invoice" : "quote";
+    const template = getDocumentTemplateSnapshot(docType);
+    const response = await fetch("/api/quotes/preview-pdf", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        documentType: docType,
+        job: selectedFreshJob,
+        document: {
+          ...doc,
+          sentHistory: doc.sentHistory || [],
+        },
+        template,
+        stampText: options.stampText || "",
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || `Unable to render the ${documentLabel} PDF preview.`);
+    }
+
+    const pdfBlob = await response.blob();
+    return {
+      previewUrl: URL.createObjectURL(pdfBlob),
+      documentLabel,
+      toEmail: selectedFreshJob.customerEmail,
+      fromEmail: themeSettings.defaultSenderEmail || ADMIN_EMAIL,
+      ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail,
+      priorAttempts: getPriorDocumentSendAttempts(selectedFreshJob, docType),
+      stampText: options.stampText || "",
+      emailPurpose: options.emailPurpose || "",
     };
   }
 
@@ -824,6 +879,7 @@ export function useWorkspaceActions({
           job: jobSnapshot,
           document: documentSnapshot,
           template: templateSnapshot,
+          stampText: latestSentEntry.stampText || "",
         }),
       });
 
@@ -851,26 +907,12 @@ export function useWorkspaceActions({
     }
   }
 
-  async function handleSendDocument(doc) {
-    if (!canManageBusiness || !selectedFreshJob) return;
+  async function handleSendDocument(doc, options = {}) {
+    if (!canManageBusiness || !selectedFreshJob) return false;
     if (!selectedFreshJob.customerEmail) {
       window.alert(`Add a customer email address before sending the ${docType}.`);
-      return;
+      return false;
     }
-
-    const priorAttempts = data.jobs.reduce((count, job) => {
-      if (job.customerId !== selectedFreshJob.customerId) return count;
-      return count + (job[docType]?.sentHistory?.length || 0);
-    }, 0);
-
-    const documentLabel = docType === "invoice" ? "invoice" : "quote";
-    const previousSendWarning = priorAttempts > 0
-      ? `\n\nThis customer already has ${priorAttempts} previous ${documentLabel} send ${priorAttempts === 1 ? "attempt" : "attempts"}.`
-      : "";
-    const confirmed = window.confirm(
-      `Are you sure you want to send this ${documentLabel} to ${selectedFreshJob.customerEmail}?${previousSendWarning}\n\nThis will email the customer a PDF attachment.`
-    );
-    if (!confirmed) return;
 
     try {
       setIsSendingDocument(true);
@@ -889,6 +931,8 @@ export function useWorkspaceActions({
             sentHistory: doc.sentHistory || [],
           },
           template,
+          stampText: options.stampText || "",
+          emailPurpose: options.emailPurpose || "",
           emailSettings: {
             fromEmail: themeSettings.defaultSenderEmail,
             replyToEmail: themeSettings.replyToEmail,
@@ -916,6 +960,8 @@ export function useWorkspaceActions({
             fromEmail: payload.fromEmail || ADMIN_EMAIL,
             toEmail: selectedFreshJob.customerEmail,
             messageId: payload.messageId || "",
+            stampText: options.stampText || "",
+            emailPurpose: options.emailPurpose || "",
             jobSnapshot: buildDocumentJobSnapshot(selectedFreshJob),
             documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
             templateSnapshot: template,
@@ -926,9 +972,11 @@ export function useWorkspaceActions({
       updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, documentToSave) });
       setDocEditorOpen(false);
       window.alert(`${docType === "invoice" ? "Invoice" : "Quote"} sent successfully with a PDF attachment.`);
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to send the ${docType} PDF.`;
       window.alert(message);
+      return false;
     } finally {
       setIsSendingDocument(false);
     }
@@ -1186,6 +1234,7 @@ export function useWorkspaceActions({
     handleGenerateMaintenanceJob,
     handleOpenCustomerProfile,
     handleOpenDoc,
+    handlePreviewDocument,
     handleOpenSentDocumentCopy,
     handleOpenJob,
     handlePlanJobForTomorrow,

@@ -678,7 +678,7 @@ export function createServerApp() {
       });
     }
 
-    const { job, template, emailSettings } = req.body;
+    const { job, template, emailSettings, emailPurpose, stampText } = req.body;
     const documentType = getDocumentType(req.body);
     const document = getDocumentRequestPayload(req.body);
 
@@ -691,11 +691,13 @@ export function createServerApp() {
         document,
         template: normalizedTemplate,
         type: documentType,
+        stampText,
       });
       const { subject, body, htmlBody } = buildDocumentEmail({
         job,
         type: documentType,
         emailSettings,
+        emailPurpose,
       });
       const transporter = nodemailer.createTransport(getTransportConfig());
       const fromEmail = emailSettings?.fromEmail || process.env.EMAIL_FROM || ADMIN_EMAIL;
@@ -738,7 +740,7 @@ export function createServerApp() {
       return res.status(400).json({ error: validationError });
     }
 
-    const { job, template } = req.body;
+    const { job, template, stampText } = req.body;
     const documentType = req.body.documentType === "invoice" ? "invoice" : "quote";
     const document = getDocumentRequestPayload(req.body);
 
@@ -751,6 +753,7 @@ export function createServerApp() {
         document,
         template: normalizedTemplate,
         type: documentType,
+        stampText,
       });
 
       res.setHeader("Cache-Control", "no-store");

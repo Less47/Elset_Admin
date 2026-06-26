@@ -105,6 +105,7 @@ export default function InvoiceManager({
             row.job.customerName,
             row.job.title,
             row.job.jobAddress,
+            row.job.ocNumber,
             row.job.customerEmail,
             row.invoice?.issueDate,
             row.invoice?.dueDate,
@@ -271,6 +272,7 @@ export default function InvoiceManager({
                     <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
                     <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
                     <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.job.title}</p>
+                    {row.job.ocNumber ? <p className="mt-0.5 truncate text-[11px] text-slate-500">OC {row.job.ocNumber}</p> : null}
                   </div>
 
                   <div className="min-w-0 text-slate-700">
@@ -330,6 +332,7 @@ export default function InvoiceManager({
                   <div className="min-w-0">
                     <p className="truncate text-slate-800">{row.job.title}</p>
                     <p className="mt-1 truncate text-xs text-slate-500">{row.job.jobAddress || "No address"}</p>
+                    {row.job.ocNumber ? <p className="mt-1 truncate text-xs text-slate-500">OC {row.job.ocNumber}</p> : null}
                   </div>
                   <p className="text-slate-700">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
                   <div>

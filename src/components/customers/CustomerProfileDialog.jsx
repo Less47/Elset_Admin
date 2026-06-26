@@ -27,7 +27,7 @@ const NOT_SET_VALUE = "not-set";
 export default function CustomerProfileDialog({ open, onOpenChange, customer, jobs, onOpenJob, onOpenSiteProfile, onSaveCustomer, onDeleteCustomer }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState({ name: "", email: "", phone: "", customerType: "", address: "", siteAccessNotes: [], sites: [] });
-  const [newSiteDraft, setNewSiteDraft] = useState({ address: "", siteType: "", notes: "" });
+  const [newSiteDraft, setNewSiteDraft] = useState({ address: "", siteType: "", ocNumber: "", notes: "" });
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -42,7 +42,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
       siteAccessNotes: normalizeSiteAccessNotes(customer.siteAccessNotes),
       sites: normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes),
     });
-    setNewSiteDraft({ address: "", siteType: "", notes: "" });
+    setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
   }, [customer, open]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -57,7 +57,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
   const customerSites = buildCustomerSites(customerProfileRecord, customerJobs);
   const savedSiteAddresses = new Set(normalizeSiteAccessNotes(draftCustomer.siteAccessNotes).map((entry) => entry.address.toLowerCase()));
 
-  const updateDraftSiteAccessNote = (address, notes, siteType) => {
+  const updateDraftSiteAccessNote = (address, notes, siteType, ocNumber) => {
     const normalizedAddress = normalizeSiteAddress(address);
     if (!normalizedAddress) return;
 
@@ -74,6 +74,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
         id: existingSite?.id || crypto.randomUUID(),
         address: normalizedAddress,
         siteType: siteType !== undefined ? siteType : existingSite?.siteType || "",
+        ocNumber: ocNumber !== undefined ? ocNumber : existingSite?.ocNumber || "",
         accessNotes: normalizedNotes,
         updatedAt: new Date().toISOString(),
       });
@@ -124,7 +125,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                         siteAccessNotes: normalizeSiteAccessNotes(customer.siteAccessNotes),
                         sites: normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes),
                       });
-                      setNewSiteDraft({ address: "", siteType: "", notes: "" });
+                      setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
                     }}
                   >
                     Cancel
@@ -134,7 +135,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                     onClick={() => {
                       onSaveCustomer(customer.id, normalizeCustomerRecord({ ...customer, ...draftCustomer, id: customer.id, createdAt: customer.createdAt }));
                       setIsEditing(false);
-                      setNewSiteDraft({ address: "", siteType: "", notes: "" });
+                      setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
                     }}
                   >
                     Save Changes
@@ -298,6 +299,11 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                           ))}
                         </SelectContent>
                       </Select>
+                      <Input
+                        value={newSiteDraft.ocNumber}
+                        onChange={(e) => setNewSiteDraft((prev) => ({ ...prev, ocNumber: e.target.value }))}
+                        placeholder="OC number (optional)"
+                      />
                       <Textarea
                         rows={3}
                         value={newSiteDraft.notes}
@@ -310,8 +316,8 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                           className="rounded-xl"
                           disabled={!canAddSiteAccessNote}
                           onClick={() => {
-                            updateDraftSiteAccessNote(newSiteDraft.address, newSiteDraft.notes, newSiteDraft.siteType);
-                            setNewSiteDraft({ address: "", siteType: "", notes: "" });
+                            updateDraftSiteAccessNote(newSiteDraft.address, newSiteDraft.notes, newSiteDraft.siteType, newSiteDraft.ocNumber);
+                            setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
                           }}
                         >
                           Add Site
@@ -338,6 +344,13 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                                 placeholder="Gate code, call-on-arrival contact, parking, after-hours access, alarm info..."
                               />
                             </FormField>
+                            <FormField label="OC number">
+                              <Input
+                                value={site.ocNumber || ""}
+                                onChange={(e) => updateDraftSiteAccessNote(site.address, site.accessNotes || "", site.siteType, e.target.value)}
+                                placeholder="Optional invoice reference"
+                              />
+                            </FormField>
                             <p className="mt-2 text-xs text-slate-500">
                               These notes will appear automatically on matching jobs for this site.
                             </p>
@@ -357,6 +370,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                                       if (entry.address.toLowerCase() !== site.address.toLowerCase()) return [entry];
                                       const shouldRemoveSiteProfile =
                                         !entry.siteType
+                                        && !entry.ocNumber
                                         && !entry.notes
                                         && !entry.contactName
                                         && !entry.contactPhone
@@ -380,7 +394,10 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                         </div>
                       ) : (
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="min-w-0 text-sm font-medium text-slate-900">{site.address || "No address saved"}</p>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900">{site.address || "No address saved"}</p>
+                            {site.ocNumber ? <p className="mt-1 text-xs text-slate-500">OC {site.ocNumber}</p> : null}
+                          </div>
                           <Button variant="outline" className="shrink-0 rounded-xl" onClick={() => onOpenSiteProfile(customer.id, site.id)}>
                             Open Site Profile
                           </Button>

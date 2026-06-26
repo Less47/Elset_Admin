@@ -34,6 +34,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
     () => ({
       address: "",
       siteType: "",
+      ocNumber: "",
       accessNotes: "",
       notes: "",
     }),
@@ -51,6 +52,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
     urgency: "Medium",
     assignedTechnicianId: defaultStaffId,
     jobAddress: orderedCustomers[0]?.address || "",
+    ocNumber: "",
     scheduledDate: "",
   });
 
@@ -69,6 +71,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
         urgency: "Medium",
         assignedTechnicianId: defaultStaffId,
         jobAddress: orderedCustomers[0]?.address || "",
+        ocNumber: "",
         scheduledDate: "",
       });
     }
@@ -91,6 +94,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
           site.label,
           site.address,
           site.siteType,
+          site.ocNumber,
           site.accessNotes,
           site.notes,
           ...(site.assets || []).flatMap((asset) => [asset.name, asset.type, asset.location, asset.model, asset.notes]),
@@ -131,6 +135,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
       setExistingSiteMode("select");
       setSiteDraft(emptySiteDraft);
       setJob((prev) => ({ ...prev, jobAddress: defaultSite.address }));
+      setJob((prev) => ({ ...prev, ocNumber: defaultSite.ocNumber || "" }));
       return;
     }
 
@@ -140,7 +145,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
       ...emptySiteDraft,
       address: fallbackAddress,
     });
-    setJob((prev) => ({ ...prev, jobAddress: fallbackAddress }));
+    setJob((prev) => ({ ...prev, jobAddress: fallbackAddress, ocNumber: "" }));
   }, [emptySiteDraft, mode, open, selectedExistingCustomer?.address, selectedExistingCustomer?.id, selectedExistingCustomerSites]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -341,7 +346,11 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                     onClick={() => {
                       if (selectedExistingCustomerSites.length === 0) return;
                       setExistingSiteMode("select");
-                      setJob((prev) => ({ ...prev, jobAddress: selectedExistingCustomerSites[0].address }));
+                      setJob((prev) => ({
+                        ...prev,
+                        jobAddress: selectedExistingCustomerSites[0].address,
+                        ocNumber: selectedExistingCustomerSites[0].ocNumber || "",
+                      }));
                     }}
                   >
                     Select Site
@@ -381,7 +390,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                               <button
                                 key={site.id}
                                 type="button"
-                                onClick={() => setJob((prev) => ({ ...prev, jobAddress: site.address }))}
+                                onClick={() => setJob((prev) => ({ ...prev, jobAddress: site.address, ocNumber: site.ocNumber || "" }))}
                                 className={`grid gap-2 rounded-xl border px-4 py-3 text-left transition ${
                                   isSelected
                                     ? "border-slate-900 bg-slate-900 text-white"
@@ -464,6 +473,13 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                       </SelectContent>
                     </Select>
                   </FormField>
+                  <FormField label="OC number">
+                    <Input
+                      value={siteDraft.ocNumber}
+                      onChange={(e) => setSiteDraft((prev) => ({ ...prev, ocNumber: e.target.value }))}
+                      placeholder="Optional client order/control number"
+                    />
+                  </FormField>
                   <FormField label="Access notes">
                     <Textarea
                       rows={3}
@@ -503,6 +519,13 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                   type="date"
                   value={job.scheduledDate}
                   onChange={(e) => setJob((p) => ({ ...p, scheduledDate: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="OC number">
+                <Input
+                  value={job.ocNumber}
+                  onChange={(e) => setJob((p) => ({ ...p, ocNumber: e.target.value }))}
+                  placeholder="Optional invoice reference"
                 />
               </FormField>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -572,7 +595,13 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                   }
                 : null;
               onSave({
-                job: { ...job, jobAddress },
+                job: {
+                  ...job,
+                  jobAddress,
+                  ocNumber:
+                    (job.ocNumber || "").trim()
+                    || (mode === "existing" && existingSiteMode === "select" ? selectedExistingSite?.ocNumber || "" : siteInput?.ocNumber || ""),
+                },
                 customerMode: mode,
                 customer: mode === "existing" ? existingCustomer : customer,
                 technician: tech,

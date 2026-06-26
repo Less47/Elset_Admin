@@ -162,6 +162,13 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                         placeholder="Direct mobile or desk number"
                       />
                     </FormField>
+                    <FormField label="OC number">
+                      <Input
+                        value={draftSite.ocNumber}
+                        onChange={(e) => setDraftSite((prev) => ({ ...prev, ocNumber: e.target.value }))}
+                        placeholder="Optional client order/control number"
+                      />
+                    </FormField>
                     <FormField label="Access notes">
                       <Textarea
                         rows={4}
@@ -200,6 +207,10 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Contact phone</p>
                       <p className="mt-1 font-medium text-slate-900">{site.contactPhone || "Not set"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">OC number</p>
+                      <p className="mt-1 font-medium text-slate-900">{site.ocNumber || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Last activity</p>

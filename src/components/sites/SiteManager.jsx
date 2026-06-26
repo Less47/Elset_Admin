@@ -56,7 +56,7 @@ export default function SiteManager({
         customer.customerType,
         customer.address,
         ...(customer.siteAccessNotes || []).flatMap((site) => [site.address, site.notes]),
-        ...(customer.sites || []).flatMap((site) => [site.label, site.address, site.siteType, site.accessNotes, site.notes]),
+        ...(customer.sites || []).flatMap((site) => [site.label, site.address, site.siteType, site.ocNumber, site.accessNotes, site.notes]),
       ]
         .join(" ")
         .toLowerCase()
@@ -87,6 +87,7 @@ export default function SiteManager({
             site.accessNotes,
             site.profileNotes,
             site.siteType,
+            site.ocNumber,
             site.contactName,
             site.contactPhone,
             ...(site.assets || []).flatMap((asset) => [asset.name, asset.type, asset.location, asset.model, asset.notes]),
@@ -133,6 +134,7 @@ export default function SiteManager({
             <div className="flex flex-wrap justify-end gap-2">
               {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
               {site.siteType ? <Badge className="bg-emerald-100 text-emerald-800">{formatSiteType(site.siteType)}</Badge> : null}
+              {site.ocNumber ? <Badge className="bg-violet-100 text-violet-800">OC {site.ocNumber}</Badge> : null}
               {site.assetCount > 0 ? <Badge className="bg-teal-100 text-teal-800">{site.assetCount} items</Badge> : null}
               {site.accessNotes ? <Badge className="bg-amber-100 text-amber-800">Access</Badge> : null}
             </div>
@@ -308,7 +310,9 @@ export default function SiteManager({
                       </div>
                       <div className="min-w-0 text-slate-700">
                         <p className="truncate font-medium text-slate-900">{site.customer.name}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{site.siteType ? formatSiteType(site.siteType) : "Type not set"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                          {[site.siteType ? formatSiteType(site.siteType) : "Type not set", site.ocNumber ? `OC ${site.ocNumber}` : ""].filter(Boolean).join(" - ")}
+                        </p>
                       </div>
                       <div className="min-w-0 text-slate-700">
                         <p className="truncate">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity"}</p>
@@ -352,6 +356,7 @@ export default function SiteManager({
                           <p className="truncate font-semibold text-slate-950">{getSiteDisplayName(site)}</p>
                           {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
                           {site.accessNotes ? <Badge className="bg-amber-100 text-amber-800">Access</Badge> : null}
+                          {site.ocNumber ? <Badge className="bg-violet-100 text-violet-800">OC</Badge> : null}
                         </div>
                         <div className="mt-1 flex gap-2 text-xs text-slate-500">
                           <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{site.id.slice(0, 8)}</span>

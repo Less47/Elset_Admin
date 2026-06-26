@@ -18,12 +18,13 @@ export default function CustomerCreateDialog({ open, onOpenChange, onSave }) {
     customerType: "",
     address: "",
     primarySiteType: "",
+    primaryOcNumber: "",
   });
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return;
-    setCustomer({ name: "", email: "", phone: "", customerType: "", address: "", primarySiteType: "" });
+    setCustomer({ name: "", email: "", phone: "", customerType: "", address: "", primarySiteType: "", primaryOcNumber: "" });
   }, [open]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -105,6 +106,14 @@ export default function CustomerCreateDialog({ open, onOpenChange, onSave }) {
                 value={customer.address}
                 onChange={(value) => setCustomer((prev) => ({ ...prev, address: value }))}
                 placeholder="Search the customer's main address"
+              />
+            </FormField>
+            <FormField label="Primary OC number">
+              <Input
+                className={TEXT_INPUT_CLASSNAME}
+                value={customer.primaryOcNumber}
+                onChange={(e) => setCustomer((prev) => ({ ...prev, primaryOcNumber: e.target.value }))}
+                placeholder="Optional client order/control number"
               />
             </FormField>
           </div>
