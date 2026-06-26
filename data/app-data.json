@@ -5,7 +5,7 @@
       "migratedAt": "2026-06-16T10:43:30.760Z"
     },
     "initializedAt": "2026-04-09T18:53:27.893Z",
-    "updatedAt": "2026-06-18T13:13:05.369Z"
+    "updatedAt": "2026-06-25T08:39:02.197Z"
   },
   "staff": [
     {
@@ -5621,26 +5621,27 @@
     "sidebarActive": "#F69320",
     "heroSurface": "#0F90CD",
     "actionColor": "#F69320",
-    "dialogSurface": "#F8FAFC",
-    "sidebarWidth": "standard",
+    "dialogSurface": "#9FE4FB",
+    "sidebarWidth": "icon-only",
     "contentDensity": "comfortable",
     "showHeroMetrics": true,
     "showSectionDescriptions": true,
     "showHeroEyebrow": true,
     "companyName": "Elset PTY LTD",
+    "companyAbn": "93 686 524 621",
+    "companyAcn": "686 652 621",
     "companyEmail": "admin@elset.com.au",
     "companyPhone": "0422 662 095",
     "companyAddress": "7 MOHR ST, TULLAMARINE, VIC 3043",
+    "bankAccountName": "ELSET PTY LTD",
+    "bankBsb": "",
+    "bankAccountNumber": "",
     "defaultSenderEmail": "admin@elset.com.au",
     "replyToEmail": "admin@elset.com.au",
     "quoteCcEmail": "",
     "invoiceCcEmail": "",
     "emailSignature": "Regards, ELSET PTY LD",
-    "companyAbn": "93 686 524 621",
-    "companyAcn": "686 652 621",
-    "bankAccountName": "ELSET PTY LTD",
-    "bankBsb": "",
-    "bankAccountNumber": ""
+    "borderColor": "#1E293B"
   },
   "inventoryItems": [
     {
