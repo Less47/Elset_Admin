@@ -924,7 +924,7 @@ export function OfficeBoard({
   }, [clearTouchDragHoldTimer]);
 
   return (
-    <div className="relative grid gap-4 xl:grid-cols-3">
+    <div className="relative grid gap-4 lg:grid-cols-3">
       {touchDrag?.isActive ? (
         <div
           className="pointer-events-none fixed z-[80] w-[200px] -translate-y-1/2 rounded-2xl border border-sky-300 bg-white/96 px-3 py-2 shadow-2xl backdrop-blur"
