@@ -60,6 +60,20 @@ export default function DocumentEditor({
     : paymentReceiptStamp === "PAID"
       ? "paid-receipt"
       : "";
+  const paymentReceiptLabel = paymentReceiptStamp === "PAID"
+    ? "Paid Receipt"
+    : paymentReceiptStamp === "PART PAYMENT"
+      ? "Part Payment Receipt"
+      : "";
+  const sendActionLabel = paymentReceiptLabel || documentLabel;
+  const sendActionOptions = paymentReceiptStamp
+    ? {
+        stampText: paymentReceiptStamp,
+        emailPurpose: paymentReceiptPurpose,
+        previewTitle: `Preview ${paymentReceiptLabel}`,
+        confirmLabel: `Confirm & Send ${paymentReceiptLabel}`,
+      }
+    : {};
 
   const closeSendPreview = () => {
     if (sendPreview?.previewUrl) URL.revokeObjectURL(sendPreview.previewUrl);
@@ -272,35 +286,6 @@ export default function DocumentEditor({
                     placeholder="General remittance notes, follow-up details, or account comments..."
                   />
                 </FormField>
-
-                {paymentReceiptStamp ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {paymentReceiptStamp === "PAID" ? "Paid invoice receipt" : "Part payment receipt"}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-600">
-                          Preview a customer copy stamped {paymentReceiptStamp} before sending it.
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="rounded-xl"
-                        disabled={!job.customerEmail || isSendingDocument || isPreviewingDocument}
-                        onClick={() => handlePreviewBeforeSend({
-                          stampText: paymentReceiptStamp,
-                          emailPurpose: paymentReceiptPurpose,
-                          previewTitle: `Preview ${paymentReceiptStamp === "PAID" ? "Paid Receipt" : "Part Payment Receipt"}`,
-                          confirmLabel: `Confirm & Send ${paymentReceiptStamp === "PAID" ? "Paid Receipt" : "Part Payment Receipt"}`,
-                        })}
-                      >
-                        {isPreviewingDocument ? "Generating preview..." : `Preview & Send ${paymentReceiptStamp === "PAID" ? "Paid Receipt" : "Part Payment Receipt"}`}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
               </div>
             )}
 
@@ -446,9 +431,9 @@ export default function DocumentEditor({
           <Button
             variant="secondary"
             disabled={!job.customerEmail || isSendingDocument || isPreviewingDocument}
-            onClick={() => handlePreviewBeforeSend()}
+            onClick={() => handlePreviewBeforeSend(sendActionOptions)}
           >
-            {isSendingDocument ? "Sending..." : isPreviewingDocument ? "Generating preview..." : `Preview & Send ${documentLabel}`}
+            {isSendingDocument ? "Sending..." : isPreviewingDocument ? "Generating preview..." : `Preview & Send ${sendActionLabel}`}
           </Button>
           <Button
             disabled={isSendingDocument}
