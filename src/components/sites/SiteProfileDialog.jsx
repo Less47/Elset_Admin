@@ -67,7 +67,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[92vh] max-h-[92vh] rounded-3xl sm:max-w-[96vw] lg:h-[88vh] lg:max-w-[1500px] 2xl:max-w-[1640px]">
+      <DialogContent className="max-h-[92vh] rounded-3xl sm:max-w-[96vw] lg:max-h-[88vh] lg:max-w-[1500px] 2xl:max-w-[1640px]">
         <DialogHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -125,8 +125,8 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
           </div>
         </DialogHeader>
 
-        <DialogBody className={isEditing ? "overflow-y-auto" : "overflow-y-auto lg:overflow-hidden"}>
-        <div className={isEditing ? "grid gap-6 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]" : "grid gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]"}>
+        <DialogBody className="overflow-y-auto">
+        <div className="grid gap-6 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]">
           <div className="grid gap-4 lg:self-start">
             <Card className="rounded-3xl border-slate-200">
               <CardHeader>
@@ -402,7 +402,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
             </CardContent>
           </Card>
 
-          <Card className={isEditing ? "rounded-3xl border-slate-200" : "rounded-3xl border-slate-200 lg:flex lg:h-full lg:min-h-0 lg:flex-col"}>
+          <Card className="rounded-3xl border-slate-200">
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -412,7 +412,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                 <Badge variant="secondary">{siteJobs.length}</Badge>
               </div>
             </CardHeader>
-            <CardContent className={isEditing ? "" : "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:pr-2"}>
+            <CardContent>
               <div className="grid gap-3">
                 {siteJobs.length === 0 ? (
                   <EmptyState title="No jobs linked to this site yet" text="Jobs for this address will appear here automatically." />
