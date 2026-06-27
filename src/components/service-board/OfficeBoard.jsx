@@ -964,9 +964,10 @@ export function OfficeBoard({
           const sortMode = columnSortModes[status] || "recent";
           const viewMode = columnViewModes[status] || "list";
           const isFocusedColumn = focusedColumnStatus === status;
+          const shouldAutoFillGridCards = isFocusedColumn || visibleStatuses.length < statuses.length;
           const jobLayoutClassName = viewMode === "grid"
-            ? isFocusedColumn
-              ? "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
+            ? shouldAutoFillGridCards
+              ? "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
               : "grid grid-cols-1 gap-3 sm:grid-cols-2"
             : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
           const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;

@@ -55,18 +55,19 @@ export default function CalendarManager({
     <div>
       <div>
         <Card className="overflow-hidden rounded-3xl border-slate-200">
-          <CardHeader className="border-b border-slate-200 bg-slate-50">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-lg">{monthLabel}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">Click a day to review or schedule work.</p>
+          <CardHeader className="border-b border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <CardTitle className="text-2xl font-semibold leading-8 text-slate-950">{monthLabel}</CardTitle>
+                <p className="text-sm leading-5 text-muted-foreground">Click a day to review or schedule work.</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, -1))}>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, -1))}>
                   Previous
                 </Button>
                 <Button
                   variant="outline"
+                  size="sm"
                   className="rounded-lg"
                   onClick={() => {
                     const today = new Date();
@@ -76,7 +77,7 @@ export default function CalendarManager({
                 >
                   Today
                 </Button>
-                <Button variant="outline" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, 1))}>
+                <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, 1))}>
                   Next
                 </Button>
               </div>
@@ -85,7 +86,7 @@ export default function CalendarManager({
           <CardContent className="p-0">
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-100 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <div key={day} className="border-r border-slate-200 px-2 py-3 last:border-r-0">
+                <div key={day} className="border-r border-slate-200 px-2 py-2 last:border-r-0">
                   {day}
                 </div>
               ))}
