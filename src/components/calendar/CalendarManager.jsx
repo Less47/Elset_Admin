@@ -1,15 +1,10 @@
 import { useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { statuses, statusThemes } from "@/lib/job-status";
-
-function getMonthKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
 
 export default function CalendarManager({
   jobs,
@@ -21,7 +16,8 @@ export default function CalendarManager({
   toDateInputValue,
 }) {
   const [viewMonth, setViewMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
+  const [selectedDate, setSelectedDate] = useState("");
+  const [isDayPanelOpen, setIsDayPanelOpen] = useState(false);
 
   const calendarDays = useMemo(() => getCalendarDays(viewMonth), [getCalendarDays, viewMonth]);
   const selectedDateObject = parseDateInputValue(selectedDate) || new Date();
@@ -48,58 +44,16 @@ export default function CalendarManager({
     });
   }, [scheduledJobsByDate, selectedDate]);
 
-  const unscheduledJobs = useMemo(() => {
-    return jobs
-      .filter((job) => !toDateInputValue(job.scheduledDate) && job.status !== "Completed")
-      .sort((a, b) => {
-        const urgencyRank = { High: 0, Medium: 1, Low: 2 };
-        return (urgencyRank[a.urgency] ?? 3) - (urgencyRank[b.urgency] ?? 3) || (a.jobNumber || 0) - (b.jobNumber || 0);
-      });
-  }, [jobs, toDateInputValue]);
-
-  const calendarStats = useMemo(() => {
-    const monthKey = getMonthKey(viewMonth);
-    return {
-      scheduledThisMonth: jobs.filter((job) => toDateInputValue(job.scheduledDate).startsWith(monthKey)).length,
-      scheduledToday: jobs.filter((job) => toDateInputValue(job.scheduledDate) === toDateInputValue(new Date())).length,
-      unscheduledOpen: unscheduledJobs.length,
-    };
-  }, [jobs, toDateInputValue, unscheduledJobs.length, viewMonth]);
-
   function selectDate(dateKey) {
     setSelectedDate(dateKey);
+    setIsDayPanelOpen(true);
     const parsedDate = parseDateInputValue(dateKey);
     if (parsedDate) setViewMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="rounded-3xl border-slate-200 bg-white/90">
-        <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Optional scheduling</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Keep jobs unscheduled until you need a plan. Assign a date when it helps the morning run sheet.
-            </p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[520px]">
-            <div className="rounded-2xl border bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">This month</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{calendarStats.scheduledThisMonth}</p>
-            </div>
-            <div className="rounded-2xl border bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Today</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{calendarStats.scheduledToday}</p>
-            </div>
-            <div className="rounded-2xl border bg-slate-50 p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Unscheduled</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{calendarStats.unscheduledOpen}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div>
+      <div>
         <Card className="overflow-hidden rounded-3xl border-slate-200">
           <CardHeader className="border-b border-slate-200 bg-slate-50">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -117,7 +71,7 @@ export default function CalendarManager({
                   onClick={() => {
                     const today = new Date();
                     setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-                    setSelectedDate(toDateInputValue(today));
+                    selectDate(toDateInputValue(today));
                   }}
                 >
                   Today
@@ -144,7 +98,7 @@ export default function CalendarManager({
                   <button
                     key={day.key}
                     type="button"
-                    onClick={() => setSelectedDate(day.key)}
+                    onClick={() => selectDate(day.key)}
                     className={`min-h-32 border-r border-b border-slate-200 bg-white p-2 text-left transition hover:bg-slate-50 ${
                       !day.inMonth ? "text-slate-400" : "text-slate-900"
                     } ${isSelected ? "ring-2 ring-inset ring-slate-900" : ""}`}
@@ -173,20 +127,34 @@ export default function CalendarManager({
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <div className="grid gap-6">
-          <Card className="rounded-3xl border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Selected Day</CardTitle>
-              <p className="text-sm text-muted-foreground">{selectedDateLabel}</p>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <FormField label="Jump to date">
-                <Input type="date" value={selectedDate} onChange={(e) => selectDate(e.target.value)} />
-              </FormField>
+      <div className={`fixed inset-0 z-40 transition ${isDayPanelOpen ? "pointer-events-auto" : "pointer-events-none"}`}>
+        <button
+          type="button"
+          className={`absolute inset-0 bg-slate-950/20 transition-opacity ${isDayPanelOpen ? "opacity-100" : "opacity-0"}`}
+          onClick={() => setIsDayPanelOpen(false)}
+          aria-label="Close selected day panel"
+        />
+        <aside
+          className={`absolute right-0 top-0 flex h-full w-full max-w-[420px] flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ${
+            isDayPanelOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Day</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-950">{selectedDateLabel}</h2>
+            </div>
+            <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-xl" onClick={() => setIsDayPanelOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
 
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <div className="grid gap-4">
               {selectedDateJobs.length === 0 ? (
-                <EmptyState title="No jobs scheduled" text="Assign unscheduled jobs to this date when you are ready to plan the day." />
+                <EmptyState title="No jobs scheduled" text="Jobs scheduled to this date will appear here." />
               ) : (
                 selectedDateJobs.map((job) => (
                   <div key={job.id} className="rounded-2xl border bg-white p-4">
@@ -210,45 +178,10 @@ export default function CalendarManager({
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Unscheduled Jobs</CardTitle>
-              <p className="text-sm text-muted-foreground">Open jobs can stay here until you choose a day.</p>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {unscheduledJobs.length === 0 ? (
-                <EmptyState title="No unscheduled open jobs" text="Open jobs with no date will appear here." />
-              ) : (
-                unscheduledJobs.map((job) => (
-                  <div key={job.id} className="rounded-2xl border bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                        <p className="truncate font-semibold text-slate-900">{job.customerName}</p>
-                        <p className="mt-1 text-sm text-slate-600">{job.title}</p>
-                      </div>
-                      <Badge className={job.urgency === "High" ? "bg-rose-100 text-rose-800" : job.urgency === "Medium" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}>
-                        {job.urgency}
-                      </Badge>
-                    </div>
-                    <div className="mt-4 flex flex-wrap justify-end gap-2">
-                      <Button variant="outline" size="sm" className="rounded-lg" onClick={() => onOpenJob(job)}>
-                        View
-                      </Button>
-                      <Button size="sm" className="rounded-lg" disabled={!selectedDate} onClick={() => onScheduleJob(job.id, selectedDate)}>
-                        Schedule Here
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </aside>
         </div>
-      </div>
     </div>
   );
 }

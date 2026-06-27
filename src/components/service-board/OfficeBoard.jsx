@@ -548,7 +548,7 @@ function JobCard({
       type="button"
       size="icon"
       variant="outline"
-      className={`absolute z-10 h-8 w-8 rounded-full border-sky-200 bg-white/95 text-sky-700 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100 ${tomorrowActionPositionClassName}`}
+      className={`service-board-tomorrow-action absolute z-10 h-8 w-8 rounded-full border-sky-200 bg-white/95 text-sky-700 opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100 ${tomorrowActionPositionClassName}`}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();

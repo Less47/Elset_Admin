@@ -804,47 +804,6 @@ function normalizeUserRecord(user) {
   };
 }
 
-function buildSeedUsers() {
-  return [
-    {
-      id: crypto.randomUUID(),
-      username: "admin",
-      name: "Elset Admin",
-      role: "admin",
-      staffId: null,
-      passwordHash: hashPassword("admin123"),
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: crypto.randomUUID(),
-      username: "office",
-      name: "Office Team",
-      role: "office",
-      staffId: null,
-      passwordHash: hashPassword("office123"),
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: crypto.randomUUID(),
-      username: "massimo",
-      name: "Massimo",
-      role: "technician",
-      staffId: "tech-1",
-      passwordHash: hashPassword("tech123"),
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: crypto.randomUUID(),
-      username: "domenic",
-      name: "Domenic",
-      role: "technician",
-      staffId: "tech-2",
-      passwordHash: hashPassword("tech123"),
-      createdAt: new Date().toISOString(),
-    },
-  ];
-}
-
 function buildSeedData() {
   const [c1, c2] = defaultCustomers;
   const [s1, s2] = defaultStaff;
@@ -855,7 +814,7 @@ function buildSeedData() {
       initializedAt: now,
       updatedAt: now,
     },
-    users: buildSeedUsers(),
+    users: [],
     sessions: [],
     staff: defaultStaff.map(normalizeStaffRecord),
     customers: defaultCustomers.map(normalizeCustomerRecord),
@@ -994,7 +953,7 @@ function normalizeStoredData(rawData) {
     ...data,
     users: Array.isArray(data.users)
       ? data.users.map(normalizeUserRecord).filter(Boolean)
-      : buildSeedUsers().map(normalizeUserRecord).filter(Boolean),
+      : [],
     sessions: Array.isArray(data.sessions) ? data.sessions : [],
     staff: Array.isArray(data.staff) ? data.staff.map(normalizeStaffRecord).filter(Boolean) : defaultStaff.map(normalizeStaffRecord),
     customers: Array.isArray(data.customers) ? data.customers.map(normalizeCustomerRecord).filter(Boolean) : [],
@@ -1406,13 +1365,4 @@ export function saveAdminUserAccount(requestUser, accountInput) {
 
   saveData(data);
   return sanitizeManagedUserAccount(nextAccount);
-}
-
-export function getDefaultLoginAccounts() {
-  return [
-    { username: "admin", password: "admin123", role: "admin" },
-    { username: "office", password: "office123", role: "office" },
-    { username: "massimo", password: "tech123", role: "technician" },
-    { username: "domenic", password: "tech123", role: "technician" },
-  ];
 }
