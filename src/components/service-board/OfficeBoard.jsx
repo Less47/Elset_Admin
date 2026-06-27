@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Columns3, LayoutGrid, List, Minimize2, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +86,25 @@ function getJobValueAmount(job) {
   if (job?.invoice) return calculateInvoiceTotal(job.invoice.items || []);
   if (job?.quote) return calculateQuoteTotal(job.quote.items || []);
   return 0;
+}
+
+function formatStreetAndSuburb(address) {
+  const parts = String(address || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) return "Site not set";
+
+  const street = parts[0];
+  const suburbSource = parts[1] || parts[0];
+  const suburb = suburbSource
+    .replace(/\b(VIC|NSW|QLD|SA|WA|TAS|ACT|NT)\b/gi, "")
+    .replace(/\b\d{4}\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return suburb && suburb !== street ? `${street}, ${suburb}` : street;
 }
 
 function getTrackedTouch(touchList, touchId) {
@@ -477,11 +496,9 @@ function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
 function JobCard({
   job,
   onOpen,
-  onQuickStatusChange,
   manualMatches = [],
   siteAccessNote = null,
   draggable = false,
-  allowQuickStatusChange = false,
   viewMode = "list",
   showTagLabels = false,
   isPlannedForTomorrow = false,
@@ -504,10 +521,9 @@ function JobCard({
   const isCompactView = viewMode === "compact";
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
   const cardClassName = `${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
-  const cardContentClassName = isGridView ? "flex h-full flex-col p-3.5 md:max-xl:p-3" : isCompactView ? "p-3.5" : "p-4";
+  const cardContentClassName = isGridView ? "flex h-full flex-col px-3.5 py-1 md:max-xl:px-3 md:max-xl:py-0.5" : isCompactView ? "px-2.5 py-0" : "p-4";
   const descriptionClassName = isCompactView ? "mt-2 line-clamp-1 text-sm text-slate-700" : isGridView ? "mt-2 line-clamp-2 text-sm text-slate-700" : "mt-3 line-clamp-3 text-sm text-slate-700";
-  const actionRowClassName = isGridView ? "mt-auto flex flex-wrap gap-2 pt-4" : isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
-  const statusRowClassName = `flex gap-3 ${allowQuickStatusChange ? "items-start justify-between" : "items-center justify-between"}`;
+  const actionRowClassName = isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
   const cardIndicators = buildJobCardIndicators({
     job,
     manualMatches,
@@ -517,8 +533,8 @@ function JobCard({
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
   const handleCardDoubleClick = () => onOpen(job);
   const shouldShowHeaderMeta = Boolean(jobValueMeta) || job.status !== "Completed";
-  const gridAddress = job.jobAddress || "Not set";
-  const tomorrowActionPositionClassName = isGridView ? "right-0 top-0 translate-x-1/2 -translate-y-1/2" : isCompactView ? "right-12 top-2" : "right-2 top-2";
+  const compactAddress = formatStreetAndSuburb(job.jobAddress);
+  const tomorrowActionPositionClassName = isGridView || isCompactView ? "right-0 top-0 translate-x-1/2 -translate-y-1/2" : "right-2 top-2";
   const tomorrowAction = isPlannedForTomorrow ? (
     <span
       className={`absolute z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/95 text-[10px] font-bold text-white shadow-sm ring-2 ring-white/90 ${tomorrowActionPositionClassName}`}
@@ -545,25 +561,6 @@ function JobCard({
     </Button>
   ) : null;
 
-  const statusControl = allowQuickStatusChange ? (
-    <div className={isCompactView ? "w-[140px]" : "w-[150px]"}>
-      <Select value={job.status} onValueChange={(value) => onQuickStatusChange?.(job.id, value)}>
-        <SelectTrigger className="h-8 rounded-lg border-slate-300 bg-white text-xs font-medium">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {statuses.map((status) => (
-            <SelectItem key={status} value={status}>
-              {status}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  ) : (
-    <Badge className={statusTheme.badge}>{job.status}</Badge>
-  );
-
   const handleDragStart = (event) => {
     event.dataTransfer.setData("jobId", job.id);
   };
@@ -578,28 +575,31 @@ function JobCard({
         onTouchStart={onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
         title="Double-click to open job"
       >
+        <JobCardIndicators
+          indicators={cardIndicators}
+          showTagLabels={false}
+          className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-1/2 gap-1.5"
+        />
         {tomorrowAction}
         <Card className={cardClassName}>
           <CardContent className={cardContentClassName}>
             <button
               type="button"
-              className="flex w-full items-start justify-between gap-3 text-left"
+              className="flex w-full items-start justify-between gap-2 text-left"
               onClick={() => setIsCompactExpanded((prev) => !prev)}
               aria-expanded={isCompactExpanded}
             >
               <div className="min-w-0 flex-1">
-                <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="mb-2" />
-
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                    <p className="text-sm font-semibold leading-5 text-slate-950">{job.customerName}</p>
-                    <p className="line-clamp-1 text-[11px] text-slate-600">{job.title}</p>
+                    <p className="line-clamp-1 text-sm font-semibold leading-4 text-slate-950">{job.customerName}</p>
+                    <p className="line-clamp-1 text-[11px] leading-4 text-slate-600">{job.title}</p>
+                    <p className="line-clamp-1 text-[11px] font-medium leading-4 text-slate-700">{compactAddress}</p>
                   </div>
                   {shouldShowHeaderMeta ? (
-                    <div className="flex shrink-0 flex-col items-end gap-2">
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
                       {jobValueMeta ? (
-                        <div className="rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-slate-900 shadow-sm" title={`${jobValueMeta.label} value`}>
+                        <div className="rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-slate-900 shadow-sm" title={`${jobValueMeta.label} value`}>
                           {jobValueMeta.amount}
                         </div>
                       ) : null}
@@ -607,32 +607,19 @@ function JobCard({
                     </div>
                   ) : null}
                 </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
-                  <span className="truncate font-medium text-slate-700">{job.assignedTechnicianName}</span>
-                  <span>{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
-                </div>
               </div>
 
-              <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/85 text-slate-700 shadow-sm">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/85 text-slate-700 shadow-sm">
                 <ChevronRight className={`h-4 w-4 transition-transform ${isCompactExpanded ? "rotate-90" : ""}`} />
               </span>
             </button>
 
             {isCompactExpanded ? (
               <div className="mt-3 grid gap-3 border-t border-white/80 pt-3 text-xs text-slate-600">
-                {job.description ? <p className="text-sm text-slate-700">{job.description}</p> : null}
                 <div className="rounded-xl border border-white/80 bg-white/70 px-3 py-2">
                   <div className="flex items-start justify-between gap-3">
                     <span className="shrink-0 text-slate-500">Site</span>
-                    <span className="text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
-                  </div>
-                  {siteAccessPreview ? <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-amber-900">Access: {siteAccessPreview}</p> : null}
-                </div>
-                <div className="grid gap-2">
-                  <div className={statusRowClassName}>
-                    <span>Status</span>
-                    {statusControl}
+                    <span className="text-right font-medium text-slate-800">{compactAddress}</span>
                   </div>
                 </div>
                 <div className={actionRowClassName}>
@@ -673,14 +660,9 @@ function JobCard({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 md:max-xl:text-[10px]">Job #{job.jobNumber}</p>
                 <p className="text-sm font-medium leading-5 text-slate-800 md:max-xl:text-xs md:max-xl:leading-4">{job.customerName}</p>
                 <p className="text-xs font-normal leading-4 text-slate-950 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{job.title}</p>
-                <p className="line-clamp-3 text-xs leading-4 text-slate-700 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{gridAddress}</p>
+                <p className="line-clamp-3 text-xs leading-4 text-slate-700 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{compactAddress}</p>
               </div>
 
-              <div className={actionRowClassName}>
-                <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => onOpen(job)} onDoubleClick={stopDoubleClickPropagation}>
-                  View Job
-                </Button>
-              </div>
             </div>
           ) : (
             <>
@@ -712,19 +694,9 @@ function JobCard({
                 <span className="shrink-0">Site</span>
                 <span className="line-clamp-2 max-w-[220px] text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
               </div>
-              {siteAccessPreview ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access</p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-amber-950">{siteAccessPreview}</p>
-                </div>
-              ) : null}
               <div className="flex items-center justify-between">
                 <span>Tech</span>
                 <span className="font-medium text-slate-800">{job.assignedTechnicianName}</span>
-              </div>
-              <div className={statusRowClassName}>
-                <span>Status</span>
-                {statusControl}
               </div>
               <div className="flex items-center justify-between">
                 <span>Scheduled</span>
@@ -738,17 +710,12 @@ function JobCard({
                   <span className="shrink-0 text-slate-500">Site</span>
                   <span className="line-clamp-2 text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
                 </div>
-                {siteAccessPreview ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-amber-900">Access: {siteAccessPreview}</p> : null}
               </div>
               {!isGridView ? (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between gap-3">
                     <span>Tech</span>
                     <span className="font-medium text-slate-800">{job.assignedTechnicianName}</span>
-                  </div>
-                  <div className={statusRowClassName}>
-                    <span>Status</span>
-                    {statusControl}
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span>Scheduled</span>
@@ -759,11 +726,6 @@ function JobCard({
             </div>
           )}
 
-          <div className={actionRowClassName}>
-            <Button size="sm" variant="secondary" className="rounded-xl" onClick={() => onOpen(job)} onDoubleClick={stopDoubleClickPropagation}>
-              View Job
-            </Button>
-          </div>
             </>
           )}
         </CardContent>
@@ -777,10 +739,8 @@ export function OfficeBoard({
   customers = [],
   onDropJob,
   onOpenJob,
-  onQuickStatusChange,
   supplierManuals = [],
   allowDragging = true,
-  allowQuickStatusChange = false,
   columnSortModes = {},
   columnViewModes = {},
   onColumnSortModeChange,
@@ -793,6 +753,7 @@ export function OfficeBoard({
   formatDate,
   tomorrowPlanningDate = "",
 }) {
+  const [focusedColumnStatus, setFocusedColumnStatus] = useState("");
   const [touchDrag, setTouchDrag] = useState(null);
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
   const touchDragSessionRef = useRef(null);
@@ -940,8 +901,10 @@ export function OfficeBoard({
     };
   }, [clearTouchDragHoldTimer]);
 
+  const visibleStatuses = focusedColumnStatus ? statuses.filter((status) => status === focusedColumnStatus) : statuses;
+
   return (
-    <div className="relative grid gap-4 lg:grid-cols-3">
+    <div className={`relative grid gap-4 ${focusedColumnStatus ? "grid-cols-1" : "lg:grid-cols-3"}`}>
       {touchDrag?.isActive ? (
         <div
           className="pointer-events-none fixed z-[80] w-[200px] -translate-y-1/2 rounded-2xl border border-sky-300 bg-white/96 px-3 py-2 shadow-2xl backdrop-blur"
@@ -956,13 +919,18 @@ export function OfficeBoard({
           <p className="line-clamp-2 text-xs leading-4 text-slate-600">{touchDrag.title}</p>
         </div>
       ) : null}
-      {statuses.map((status) => {
+      {visibleStatuses.map((status) => {
         const columnJobs = jobs.filter((job) => job.status === status);
         const sortedColumnJobs = sortJobsForColumn(columnJobs, columnSortModes[status] || "recent");
         const statusTheme = statusThemes[status] || statusThemes["To Do"];
         const sortMode = columnSortModes[status] || "recent";
         const viewMode = columnViewModes[status] || "list";
-        const jobLayoutClassName = viewMode === "grid" ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
+        const isFocusedColumn = focusedColumnStatus === status;
+        const jobLayoutClassName = viewMode === "grid"
+          ? isFocusedColumn
+            ? "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
+            : "grid grid-cols-1 gap-3 sm:grid-cols-2"
+          : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
         const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;
 
         return (
@@ -977,8 +945,21 @@ export function OfficeBoard({
             }}
           >
             <CardHeader className="gap-4">
-              <div className="grid gap-2 2xl:flex 2xl:items-center 2xl:justify-between 2xl:gap-3">
-                <CardTitle className="min-w-0">{status}</CardTitle>
+              <div className="grid gap-2">
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <CardTitle className="min-w-0">{status}</CardTitle>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8 shrink-0 rounded-xl bg-white/80"
+                    onClick={() => setFocusedColumnStatus(isFocusedColumn ? "" : status)}
+                    title={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
+                    aria-label={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
+                  >
+                    {isFocusedColumn ? <Columns3 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
+                  </Button>
+                </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 2xl:justify-end 2xl:gap-2">
                   <ServiceBoardSortSelect status={status} sortMode={sortMode} onChange={(nextSortMode) => onColumnSortModeChange?.(status, nextSortMode)} />
                   <ServiceBoardViewToggle status={status} viewMode={viewMode} onChange={(nextViewMode) => onColumnViewModeChange?.(status, nextViewMode)} />
@@ -1001,11 +982,9 @@ export function OfficeBoard({
                       key={`${job.id}-${viewMode}`}
                       job={job}
                       onOpen={onOpenJob}
-                      onQuickStatusChange={onQuickStatusChange}
                       manualMatches={manualMatchesByJobId.get(job.id) || []}
                       siteAccessNote={siteAccessNotesByJobId.get(job.id) || null}
                       draggable={allowDragging}
-                      allowQuickStatusChange={allowQuickStatusChange}
                       viewMode={viewMode}
                       showTagLabels={showTagLabels}
                       isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
