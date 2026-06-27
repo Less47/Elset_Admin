@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import CalendarManager from "@/components/calendar/CalendarManager";
 import CustomerManager from "@/components/customers/CustomerManager";
@@ -41,6 +42,7 @@ import {
 const FAVICON_SRC = "/favicon.png";
 
 export default function WorkspaceShell({ auth, chrome, data, derived, supplierManualState, actions }) {
+  const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useState([]);
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
     activeSection,
@@ -115,6 +117,16 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
 
+  const handleHideServiceBoardColumn = (status) => {
+    setServiceBoardHiddenColumns((currentStatuses) => (
+      currentStatuses.includes(status) ? currentStatuses : [...currentStatuses, status]
+    ));
+  };
+
+  const handleShowAllServiceBoardColumns = () => {
+    setServiceBoardHiddenColumns([]);
+  };
+
   const renderServiceBoardControls = (tone = "panel") => {
     const isHeroTone = tone === "hero";
     const searchInputClassName = isHeroTone
@@ -169,6 +181,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
           tone={isHeroTone ? "hero" : "default"}
           showTagLabels={showServiceBoardTagLabels}
           onToggleShowTagLabels={setShowServiceBoardTagLabels}
+          hiddenColumnCount={serviceBoardHiddenColumns.length}
+          onShowHiddenColumns={handleShowAllServiceBoardColumns}
         />
       </div>
     );
@@ -400,6 +414,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               getInvoiceStatus={getInvoiceStatus}
               formatDate={formatDate}
               tomorrowPlanningDate={derived.tomorrowPlanningDate}
+              hiddenColumnStatuses={serviceBoardHiddenColumns}
+              onHideColumn={handleHideServiceBoardColumn}
               onColumnSortModeChange={(status, sortMode) =>
                 setServiceBoardColumnSorts((prev) =>
                   prev[status] === sortMode

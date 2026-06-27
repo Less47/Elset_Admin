@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, ChevronRight, Columns3, LayoutGrid, List, Minimize2, Rows3, X } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Columns3, Eye, EyeOff, LayoutGrid, List, Minimize2, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -270,8 +270,15 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
   );
 }
 
-export function ServiceBoardTagLegend({ showTagLabels, onToggleShowTagLabels, tone = "default" }) {
+export function ServiceBoardTagLegend({
+  showTagLabels,
+  onToggleShowTagLabels,
+  hiddenColumnCount = 0,
+  onShowHiddenColumns = null,
+  tone = "default",
+}) {
   const isHeroTone = tone === "hero";
+  const hasHiddenColumns = hiddenColumnCount > 0;
 
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 ${isHeroTone ? "border-white/20" : "border-slate-200/80"}`}>
@@ -284,9 +291,24 @@ export function ServiceBoardTagLegend({ showTagLabels, onToggleShowTagLabels, to
           </div>
         ))}
       </div>
-      <div className={`ml-auto flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${isHeroTone ? "border-white/20 bg-white/10" : "border-slate-200 bg-slate-50"}`}>
-        <Checkbox checked={showTagLabels} onCheckedChange={(checked) => onToggleShowTagLabels(Boolean(checked))} />
-        <span className={`text-[11px] ${isHeroTone ? "text-white/90" : "text-slate-700"}`}>Show tag info</span>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={`rounded-xl ${isHeroTone ? "border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white" : "bg-slate-50"}`}
+          disabled={!hasHiddenColumns}
+          onClick={onShowHiddenColumns || undefined}
+          title={hasHiddenColumns ? "Show hidden columns" : "No hidden columns"}
+        >
+          <Eye className="h-4 w-4" />
+          Show Columns
+          {hasHiddenColumns ? <Badge variant="secondary">{hiddenColumnCount}</Badge> : null}
+        </Button>
+        <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${isHeroTone ? "border-white/20 bg-white/10" : "border-slate-200 bg-slate-50"}`}>
+          <Checkbox checked={showTagLabels} onCheckedChange={(checked) => onToggleShowTagLabels(Boolean(checked))} />
+          <span className={`text-[11px] ${isHeroTone ? "text-white/90" : "text-slate-700"}`}>Show tag info</span>
+        </div>
       </div>
     </div>
   );
@@ -752,6 +774,8 @@ export function OfficeBoard({
   getInvoiceStatus,
   formatDate,
   tomorrowPlanningDate = "",
+  hiddenColumnStatuses = [],
+  onHideColumn,
 }) {
   const [focusedColumnStatus, setFocusedColumnStatus] = useState("");
   const [touchDrag, setTouchDrag] = useState(null);
@@ -901,10 +925,23 @@ export function OfficeBoard({
     };
   }, [clearTouchDragHoldTimer]);
 
-  const visibleStatuses = focusedColumnStatus ? statuses.filter((status) => status === focusedColumnStatus) : statuses;
+  const hiddenStatusSet = useMemo(() => new Set(hiddenColumnStatuses), [hiddenColumnStatuses]);
+  const visibleStatuses = focusedColumnStatus
+    ? statuses.filter((status) => status === focusedColumnStatus)
+    : statuses.filter((status) => !hiddenStatusSet.has(status));
+  const boardGridClassName = focusedColumnStatus || visibleStatuses.length <= 1
+    ? "grid-cols-1"
+    : visibleStatuses.length === 2
+      ? "lg:grid-cols-2"
+      : "lg:grid-cols-3";
+
+  const handleHideColumn = (status) => {
+    setFocusedColumnStatus((currentStatus) => (currentStatus === status ? "" : currentStatus));
+    onHideColumn?.(status);
+  };
 
   return (
-    <div className={`relative grid gap-4 ${focusedColumnStatus ? "grid-cols-1" : "lg:grid-cols-3"}`}>
+    <div className="relative grid gap-4">
       {touchDrag?.isActive ? (
         <div
           className="pointer-events-none fixed z-[80] w-[200px] -translate-y-1/2 rounded-2xl border border-sky-300 bg-white/96 px-3 py-2 shadow-2xl backdrop-blur"
@@ -919,46 +956,60 @@ export function OfficeBoard({
           <p className="line-clamp-2 text-xs leading-4 text-slate-600">{touchDrag.title}</p>
         </div>
       ) : null}
-      {visibleStatuses.map((status) => {
-        const columnJobs = jobs.filter((job) => job.status === status);
-        const sortedColumnJobs = sortJobsForColumn(columnJobs, columnSortModes[status] || "recent");
-        const statusTheme = statusThemes[status] || statusThemes["To Do"];
-        const sortMode = columnSortModes[status] || "recent";
-        const viewMode = columnViewModes[status] || "list";
-        const isFocusedColumn = focusedColumnStatus === status;
-        const jobLayoutClassName = viewMode === "grid"
-          ? isFocusedColumn
-            ? "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
-            : "grid grid-cols-1 gap-3 sm:grid-cols-2"
-          : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
-        const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;
+      <div className={`grid gap-4 ${boardGridClassName}`}>
+        {visibleStatuses.map((status) => {
+          const columnJobs = jobs.filter((job) => job.status === status);
+          const sortedColumnJobs = sortJobsForColumn(columnJobs, columnSortModes[status] || "recent");
+          const statusTheme = statusThemes[status] || statusThemes["To Do"];
+          const sortMode = columnSortModes[status] || "recent";
+          const viewMode = columnViewModes[status] || "list";
+          const isFocusedColumn = focusedColumnStatus === status;
+          const jobLayoutClassName = viewMode === "grid"
+            ? isFocusedColumn
+              ? "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]"
+              : "grid grid-cols-1 gap-3 sm:grid-cols-2"
+            : viewMode === "compact" ? "grid gap-2" : "grid gap-4";
+          const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;
 
-        return (
-          <Card
-            key={status}
-            data-service-board-status={status}
-            className={`min-h-[520px] rounded-3xl backdrop-blur transition-shadow ${statusTheme.column} ${isTouchDropTarget ? "ring-4 ring-sky-300/80 shadow-xl shadow-sky-200/60" : ""}`}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              const jobId = event.dataTransfer.getData("jobId");
-              onDropJob(jobId, status);
-            }}
-          >
+          return (
+            <Card
+              key={status}
+              data-service-board-status={status}
+              className={`min-h-[520px] rounded-3xl backdrop-blur transition-shadow ${statusTheme.column} ${isTouchDropTarget ? "ring-4 ring-sky-300/80 shadow-xl shadow-sky-200/60" : ""}`}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                const jobId = event.dataTransfer.getData("jobId");
+                onDropJob(jobId, status);
+              }}
+            >
             <CardHeader className="gap-4">
               <div className="grid gap-2">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <CardTitle className="min-w-0">{status}</CardTitle>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    className="h-8 w-8 shrink-0 rounded-xl bg-white/80"
-                    onClick={() => setFocusedColumnStatus(isFocusedColumn ? "" : status)}
-                    title={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
-                    aria-label={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
-                  >
-                    {isFocusedColumn ? <Columns3 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 rounded-xl bg-white/80"
+                      onClick={() => setFocusedColumnStatus(isFocusedColumn ? "" : status)}
+                      title={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
+                      aria-label={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
+                    >
+                      {isFocusedColumn ? <Columns3 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 rounded-xl bg-white/80"
+                      onClick={() => handleHideColumn(status)}
+                      title={`Hide ${status}`}
+                      aria-label={`Hide ${status}`}
+                    >
+                      <EyeOff className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5 2xl:justify-end 2xl:gap-2">
                   <ServiceBoardSortSelect status={status} sortMode={sortMode} onChange={(nextSortMode) => onColumnSortModeChange?.(status, nextSortMode)} />
@@ -1004,7 +1055,8 @@ export function OfficeBoard({
             </CardContent>
           </Card>
         );
-      })}
+        })}
+      </div>
     </div>
   );
 }
