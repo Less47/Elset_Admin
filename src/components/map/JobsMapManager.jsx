@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LoaderCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -497,34 +497,10 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
 
   return (
     <div className="space-y-4">
-      <Card className="rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
-        <CardHeader>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <CardTitle className="text-base">Jobs Map</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Visualize saved job addresses around Melbourne, click a pin to zoom in, then open the job details from the popup.
-              </p>
-            </div>
-            <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-violet-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Pinned</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{pinnedJobs.length}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Unmapped</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{jobsWithLocations.filter((job) => !job.location).length}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">High Urgency</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">{filteredJobs.filter((job) => job.urgency === "High").length}</p>
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+      <div className="floating-page-toolbar px-5 py-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(360px,1fr)_180px_200px_220px] xl:items-end">
             <Input
+              className="data-toolbar-field rounded-xl"
               placeholder="Search job number, customer, title, or address..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -582,6 +558,10 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
               </Select>
             </div>
           </div>
+      </div>
+
+      <Card className="rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+        <CardContent className="grid gap-3">
 
           {mapConfigError ? (
             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">

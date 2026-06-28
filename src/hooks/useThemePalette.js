@@ -59,6 +59,8 @@ export function useThemePalette(settings) {
         "--dialog-border": dialogBorder,
         "--dialog-muted-surface": dialogMutedSurface,
         "--dialog-footer-surface": dialogMutedSurface,
+        "--workspace-hero-bg": themeSettings.heroSurface,
+        "--workspace-hero-text": heroText,
         "--data-view-accent": dataViewTheme.accent,
         "--data-view-surface": dataViewTheme.surface,
         "--data-view-header-start": dataViewTheme.headerStart,
@@ -151,6 +153,8 @@ export function useThemePalette(settings) {
     root.style.setProperty("--dialog-border", themePalette.dialogBorder);
     root.style.setProperty("--dialog-muted-surface", themePalette.dialogMutedSurface);
     root.style.setProperty("--dialog-footer-surface", themePalette.dialogMutedSurface);
+    root.style.setProperty("--workspace-hero-bg", themeSettings.heroSurface);
+    root.style.setProperty("--workspace-hero-text", themePalette.rootStyle["--workspace-hero-text"]);
 
     return () => {
       root.style.removeProperty("--primary");
@@ -165,6 +169,8 @@ export function useThemePalette(settings) {
       root.style.removeProperty("--dialog-border");
       root.style.removeProperty("--dialog-muted-surface");
       root.style.removeProperty("--dialog-footer-surface");
+      root.style.removeProperty("--workspace-hero-bg");
+      root.style.removeProperty("--workspace-hero-text");
     };
   }, [
     themePalette.dialogBorder,
@@ -175,6 +181,7 @@ export function useThemePalette(settings) {
     themePalette.rootStyle,
     themeSettings.actionColor,
     themeSettings.borderColor,
+    themeSettings.heroSurface,
   ]);
 
   return {

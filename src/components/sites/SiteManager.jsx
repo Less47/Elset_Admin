@@ -3,7 +3,7 @@ import { LayoutGrid, List, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -169,53 +169,9 @@ export default function SiteManager({
 
   return (
     <>
-      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <CardTitle className="text-lg">Site Profiles</CardTitle>
-            <p className="mt-1 text-sm text-slate-600">
-              Group multiple gates or projects under one site and review work history by address instead of only by customer.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center">
-            <div>
-              Showing <span className="font-semibold text-slate-900">{filteredSites.length}</span> of {siteRows.length} sites
-            </div>
-            <div className="data-toggle-shell inline-flex rounded-lg border border-slate-300 bg-white p-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className={`rounded-md px-3 ${viewMode === "list" ? "bg-slate-900 text-white hover:bg-slate-900 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
-                onClick={() => setViewMode("list")}
-              >
-                <List className="mr-2 h-4 w-4" /> List
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className={`rounded-md px-3 ${viewMode === "grid" ? "bg-slate-900 text-white hover:bg-slate-900 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
-                onClick={() => setViewMode("grid")}
-              >
-                <LayoutGrid className="mr-2 h-4 w-4" /> Grid
-              </Button>
-            </div>
-            <Button
-              className="rounded-lg"
-              disabled={customerOptions.length === 0}
-              onClick={() => {
-                setNewSiteCustomerSearch("");
-                setCreateSiteDialogOpen(true);
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" /> New Site
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
+      <div className="space-y-4">
+        <div className="floating-page-toolbar px-5 py-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(340px,1fr)_minmax(170px,0.38fr)_minmax(145px,0.32fr)_minmax(210px,0.42fr)_minmax(155px,0.34fr)] xl:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -259,22 +215,41 @@ export default function SiteManager({
             </Select>
           </div>
 
-          <div className="flex items-end">
+          <div className="data-toggle-shell grid h-11 grid-cols-2 gap-1 self-end rounded-lg border border-slate-300 bg-white p-1">
             <Button
-              variant="outline"
-              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
-              onClick={() => {
-                setSearch("");
-                setSortBy("activity");
-                setSiteTypeFilter("all");
-              }}
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "list" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
+              onClick={() => setViewMode("list")}
             >
-              Reset Filters
+              <List className="mr-2 h-4 w-4" /> List
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "grid" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
+              onClick={() => setViewMode("grid")}
+            >
+              <LayoutGrid className="mr-2 h-4 w-4" /> Grid
             </Button>
           </div>
-        </div>
-        </CardHeader>
 
+          <Button
+            className="h-11 self-end rounded-lg px-5"
+            disabled={customerOptions.length === 0}
+            onClick={() => {
+              setNewSiteCustomerSearch("");
+              setCreateSiteDialogOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" /> New Site
+          </Button>
+        </div>
+        </div>
+
+        <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
         <CardContent className={viewMode === "list" ? "p-0" : "p-5"}>
           {filteredSites.length === 0 ? (
             <div className={viewMode === "list" ? "p-6" : ""}>
@@ -394,7 +369,8 @@ export default function SiteManager({
             )
           )}
         </CardContent>
-      </Card>
+        </Card>
+      </div>
 
       <Dialog
         open={createSiteDialogOpen}
@@ -406,9 +382,6 @@ export default function SiteManager({
         <DialogContent className="rounded-3xl sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create New Site</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Choose the customer this site belongs to, then fill in the site profile details.
-            </p>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="space-y-1">

@@ -21,7 +21,6 @@ import {
   normalizeHexColor,
   normalizeThemeSettings,
   settingsTabs,
-  settingsTabMeta,
   sidebarWidthOptions,
   templateTypeOptions,
   themeColorFields,
@@ -465,7 +464,6 @@ export default function SettingsManager({
   onApplyServiceM8Import,
   backupSummary,
 }) {
-  const tabMeta = settingsTabMeta[activeSettingsTab] || settingsTabMeta.preferences;
   const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
   const [downloadStatus, setDownloadStatus] = useState("idle");
@@ -644,39 +642,30 @@ export default function SettingsManager({
 
   return (
     <div className="grid gap-6">
-      <Card className="rounded-3xl border-slate-200 shadow-sm">
-        <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-2">
-            <Badge className="w-fit rounded-full bg-slate-100 text-slate-700">{tabMeta.eyebrow}</Badge>
-            <div>
-              <CardTitle className="text-2xl">{tabMeta.title}</CardTitle>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{tabMeta.description}</p>
-            </div>
-          </div>
+      <div className="floating-page-toolbar flex flex-col gap-4 px-5 py-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
           <Badge className={isAuthenticated ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
             {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
-        </CardHeader>
-        <CardContent className="border-t border-slate-100 pt-4">
-          <div className="flex flex-wrap gap-2">
-            {settingsTabs.map((tab) => {
-              const isActive = activeSettingsTab === tab.value;
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {settingsTabs.map((tab) => {
+            const isActive = activeSettingsTab === tab.value;
 
-              return (
-                <Button
-                  key={tab.value}
-                  type="button"
-                  variant={isActive ? "default" : "outline"}
-                  className="rounded-xl"
-                  onClick={() => onActiveSettingsTabChange?.(tab.value)}
-                >
-                  {tab.label}
-                </Button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+            return (
+              <Button
+                key={tab.value}
+                type="button"
+                variant={isActive ? "default" : "outline"}
+                className="rounded-xl"
+                onClick={() => onActiveSettingsTabChange?.(tab.value)}
+              >
+                {tab.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
 
       {activeSettingsTab === "preferences" && (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

@@ -427,7 +427,7 @@ export const sectionMeta = {
   calendar: {
     eyebrow: "Work Planning",
     title: "Calendar",
-    description: "Plan jobs by date when it helps, while keeping unscheduled work visible for morning triage.",
+    description: "Review scheduled work by date and open a day panel when you need to inspect or adjust jobs.",
   },
   invoices: {
     eyebrow: "Payments",

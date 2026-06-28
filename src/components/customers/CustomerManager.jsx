@@ -3,7 +3,7 @@ import { LayoutGrid, List, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { customerTypeOptions, formatCustomerType } from "@/lib/app-support";
@@ -186,51 +186,14 @@ export default function CustomerManager({
   );
 
   return (
-    <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <CardTitle className="text-lg">Customer Database</CardTitle>
-            <p className="mt-1 text-sm text-slate-600">
-              Review customer records in a structured table and open a profile only when you want to edit details.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center">
-            <div>
-              Showing <span className="font-semibold text-slate-900">{filteredCustomers.length}</span> of {customerRows.length} records
-            </div>
-            <div className="data-toggle-shell inline-flex rounded-lg border border-slate-300 bg-white p-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className={`rounded-md px-3 ${viewMode === "list" ? "bg-slate-900 text-white hover:bg-slate-900 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
-                onClick={() => setViewMode("list")}
-              >
-                <List className="mr-2 h-4 w-4" /> List
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className={`rounded-md px-3 ${viewMode === "grid" ? "bg-slate-900 text-white hover:bg-slate-900 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
-                onClick={() => setViewMode("grid")}
-              >
-                <LayoutGrid className="mr-2 h-4 w-4" /> Grid
-              </Button>
-            </div>
-            <Button className="rounded-lg" onClick={onCreateCustomer}>
-              <Plus className="mr-2 h-4 w-4" /> New Customer
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_200px_200px_200px_200px_auto]">
+    <div className="space-y-4">
+      <div className="floating-page-toolbar px-5 py-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(240px,0.95fr)_160px_160px_135px_145px_190px_150px] xl:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
               className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search by name, email, phone, or address..."
+              placeholder="Search customers..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -302,24 +265,34 @@ export default function CustomerManager({
             </Select>
           </div>
 
-          <div className="flex items-end">
+          <div className="data-toggle-shell grid h-11 grid-cols-2 gap-1 self-end rounded-lg border border-slate-300 bg-white p-1">
             <Button
-              variant="outline"
-              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
-              onClick={() => {
-                setSearch("");
-                setSortBy("name-asc");
-                setFilterBy("all");
-                setCreatedRange("all-time");
-                setCustomerTypeFilter("all");
-              }}
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "list" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
+              onClick={() => setViewMode("list")}
             >
-              Reset Filters
+              <List className="mr-2 h-4 w-4" /> List
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "grid" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
+              onClick={() => setViewMode("grid")}
+            >
+              <LayoutGrid className="mr-2 h-4 w-4" /> Grid
             </Button>
           </div>
-        </div>
-      </CardHeader>
 
+          <Button className="h-11 self-end rounded-lg px-4" onClick={onCreateCustomer}>
+            <Plus className="mr-2 h-4 w-4" /> New Customer
+          </Button>
+        </div>
+      </div>
+
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
       <CardContent className={viewMode === "list" ? "p-0" : "p-5"}>
         {filteredCustomers.length === 0 ? (
           <div className={viewMode === "list" ? "p-6" : ""}>
@@ -436,6 +409,7 @@ export default function CustomerManager({
           )
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

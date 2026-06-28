@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -234,32 +234,9 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
   return (
     <>
-      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <CardTitle className="text-lg">Parts Inventory</CardTitle>
-              <p className="mt-1 text-sm text-slate-600">
-                Keep your common parts, stock levels, suppliers, and reorder points in one place.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center">
-              <div>
-                Showing <span className="font-semibold text-slate-900">{filteredParts.length}</span> of {inventoryStats.totalParts} parts
-              </div>
-              <Button
-                className="rounded-lg"
-                onClick={() => {
-                  setEditingPart(null);
-                  setPartDialogOpen(true);
-                }}
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add Part
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
+      <div className="space-y-4">
+        <div className="floating-page-toolbar px-5 py-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(320px,1fr)_190px_190px_150px] xl:items-end">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input
@@ -302,22 +279,19 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
               </Select>
             </div>
 
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
-                onClick={() => {
-                  setSearch("");
-                  setFilterBy("all");
-                  setSortBy("name-asc");
-                }}
-              >
-                Reset Filters
-              </Button>
-            </div>
+            <Button
+              className="h-11 self-end rounded-lg px-5"
+              onClick={() => {
+                setEditingPart(null);
+                setPartDialogOpen(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add Part
+            </Button>
           </div>
-        </CardHeader>
+        </div>
 
+        <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
         <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
           {[
             { label: "Parts", value: inventoryStats.totalParts },
@@ -482,7 +456,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             </>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      </div>
 
       <InventoryItemDialog
         open={partDialogOpen}

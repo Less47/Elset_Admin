@@ -369,8 +369,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         ) : null}
 
         {!isServiceBoardFullScreen && activeSection === "service-board" ? (
-          <Card className="overflow-hidden rounded-3xl shadow-xl" style={themePalette.heroCard}>
-            <CardContent className="p-4 md:px-5 md:py-5">
+          <Card className="overflow-hidden rounded-xl shadow-xl" style={themePalette.heroCard}>
+            <CardContent className="flex min-h-[104px] flex-col justify-center p-4 md:px-5 md:py-5">
               {renderServiceBoardControls("hero")}
             </CardContent>
           </Card>
@@ -379,7 +379,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         {activeSection === "service-board" ? (
           <div className="space-y-6">
             {isServiceBoardFullScreen ? (
-              <Card className="sticky top-3 z-20 rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+              <Card className="sticky top-3 z-20 rounded-xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
                 <CardContent className="grid gap-3 p-3 md:p-4">
                   {renderServiceBoardControls("panel")}
                 </CardContent>

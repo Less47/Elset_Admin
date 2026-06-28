@@ -168,6 +168,42 @@
     background: linear-gradient(135deg, var(--data-view-header-start) 0%, var(--data-view-header-end) 100%) !important;
   }
 
+  .floating-page-toolbar {
+    min-height: 104px;
+    border: 1px solid var(--ui-border-color) !important;
+    border-radius: var(--radius-xl) !important;
+    background: var(--workspace-hero-bg) !important;
+    color: var(--workspace-hero-text) !important;
+    box-shadow: 0 24px 48px -32px color-mix(in oklab, var(--workspace-hero-bg) 72%, black) !important;
+  }
+
+  .floating-page-toolbar .text-slate-500,
+  .floating-page-toolbar .text-slate-600,
+  .floating-page-toolbar .text-slate-700,
+  .floating-page-toolbar .text-muted-foreground {
+    color: color-mix(in oklab, var(--workspace-hero-text) 76%, transparent) !important;
+  }
+
+  .floating-page-toolbar .text-slate-900,
+  .floating-page-toolbar .text-slate-950 {
+    color: var(--workspace-hero-text) !important;
+  }
+
+  .floating-page-toolbar .data-toolbar-field,
+  .floating-page-toolbar input,
+  .floating-page-toolbar button[role="combobox"] {
+    background: color-mix(in oklab, white 94%, var(--workspace-hero-bg)) !important;
+    color: #0f172a !important;
+  }
+
+  .floating-page-toolbar .data-toggle-shell,
+  .floating-page-toolbar .bg-white,
+  .floating-page-toolbar .bg-white\/70,
+  .floating-page-toolbar .data-toolbar-button {
+    background: color-mix(in oklab, white 92%, var(--workspace-hero-bg)) !important;
+    color: #0f172a !important;
+  }
+
   .data-toolbar-field {
     border-color: var(--data-view-border-strong) !important;
     background: color-mix(in oklab, var(--card) 92%, var(--data-view-surface)) !important;

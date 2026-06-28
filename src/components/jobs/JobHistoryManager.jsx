@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { statuses, statusThemes } from "@/lib/job-status";
@@ -150,50 +150,10 @@ export default function JobHistoryManager({
     });
   }, [filteredJobs]);
 
-  const resetFilters = () => {
-    setSearch("");
-    setSortBy("activity-recent");
-    setStatusFilter("all");
-    setUrgencyFilter("all");
-    setTechnicianFilter("all");
-    setDocumentFilter("all");
-    setCreatedRange("all-time");
-    setCreatedFrom("");
-    setCreatedTo("");
-  };
-
-  const statSummary = [
-    `${historyStats.total} Jobs`,
-    `${historyStats.open} Open`,
-    `${historyStats.completed} Completed`,
-    `${historyStats.quoted} Quoted`,
-    `${historyStats.invoiced} Invoiced`,
-  ].join(" · ");
-
   return (
-    <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardHeader className="data-card-header space-y-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="flex flex-col gap-1 lg:flex-row lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <CardTitle className="text-lg leading-6">Job History</CardTitle>
-            <p className="mt-0.5 truncate text-xs text-slate-600">
-              Search, filter, and open saved job records.
-            </p>
-          </div>
-          <div className="shrink-0 text-xs text-slate-600">
-            Showing <span className="font-semibold text-slate-900">{filteredJobs.length}</span> of {jobRows.length} jobs
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-700">
-          {statSummary.split(" · ").map((stat, index) => (
-            <span key={stat} className={index === 0 ? "font-semibold text-slate-950" : ""}>
-              {stat}
-            </span>
-          ))}
-        </div>
-
-        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
+    <div className="space-y-4">
+      <div className="floating-page-toolbar space-y-3 px-4 py-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -222,19 +182,9 @@ export default function JobHistoryManager({
             </Select>
           </div>
 
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="data-toolbar-button rounded-lg border-slate-300 bg-white px-4"
-              onClick={resetFilters}
-            >
-              Reset
-            </Button>
-          </div>
         </div>
 
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-[180px_190px_220px_180px_170px_170px_170px]">
+        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[150px_170px_190px_150px_130px_minmax(145px,1fr)_minmax(145px,1fr)]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status</p>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -340,9 +290,25 @@ export default function JobHistoryManager({
             />
           </div>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="p-0">
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+        <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
+          {[
+            { label: "Jobs", value: historyStats.total },
+            { label: "Open", value: historyStats.open },
+            { label: "Completed", value: historyStats.completed },
+            { label: "Quoted", value: historyStats.quoted },
+            { label: "Invoiced", value: historyStats.invoiced },
+          ].map((stat) => (
+            <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <CardContent className="p-0">
         {filteredJobs.length === 0 ? (
           <div className="p-6">
             <EmptyState title="No jobs found" text="Try adjusting the search or filters to find the job you want." />
@@ -464,6 +430,7 @@ export default function JobHistoryManager({
           </>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

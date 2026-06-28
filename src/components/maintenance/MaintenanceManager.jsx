@@ -411,16 +411,51 @@ export default function MaintenanceManager({
 
   return (
     <>
-      <Card className="rounded-3xl border-slate-200 bg-white/90">
-        <CardContent className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Recurring maintenance</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Track preventive service plans by customer and site, then convert each due visit into a normal job when it is time to dispatch.
-            </p>
+      <div className="floating-page-toolbar mb-4 px-5 py-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(320px,1fr)_190px_190px_230px] xl:items-end">
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
+            <Input
+              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
+              placeholder="Search plan, customer, site, checklist, or technician..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Filter</p>
+            <Select value={filterBy} onValueChange={setFilterBy}>
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All plans</SelectItem>
+                <SelectItem value="needs-attention">Needs attention</SelectItem>
+                <SelectItem value="overdue">Overdue</SelectItem>
+                <SelectItem value="due-soon">Due soon</SelectItem>
+                <SelectItem value="active-job">Active job</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="due-date">Due date</SelectItem>
+                <SelectItem value="customer">Customer</SelectItem>
+                <SelectItem value="created-recent">Newest plan</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <Button
-            className="rounded-xl"
+            className="h-11 self-end rounded-xl px-5"
             onClick={() => {
               setEditingPlan(null);
               setPlanDialogOpen(true);
@@ -428,80 +463,11 @@ export default function MaintenanceManager({
           >
             <Plus className="mr-2 h-4 w-4" /> Add Maintenance Plan
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden rounded-3xl border-slate-200">
-          <CardHeader className="space-y-4 border-b border-slate-200 bg-slate-50">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <CardTitle className="text-lg">Maintenance Plans</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">Due visits stay here until you generate the next service job.</p>
-              </div>
-              <div className="text-sm text-slate-600">
-                Showing <span className="font-semibold text-slate-900">{filteredRows.length}</span> of {maintenanceStats.totalPlans} plans
-              </div>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_220px_220px_auto]">
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-                <Input
-                  className="rounded-lg border-slate-300 bg-white"
-                  placeholder="Search plan, customer, site, checklist, or technician..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Filter</p>
-                <Select value={filterBy} onValueChange={setFilterBy}>
-                  <SelectTrigger className="rounded-lg border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All plans</SelectItem>
-                    <SelectItem value="needs-attention">Needs attention</SelectItem>
-                    <SelectItem value="overdue">Overdue</SelectItem>
-                    <SelectItem value="due-soon">Due soon</SelectItem>
-                    <SelectItem value="active-job">Active job</SelectItem>
-                    <SelectItem value="upcoming">Upcoming</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="rounded-lg border-slate-300 bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="due-date">Due date</SelectItem>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="created-recent">Newest plan</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  className="w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
-                  onClick={() => {
-                    setSearch("");
-                    setFilterBy("all");
-                    setSortBy("due-date");
-                  }}
-                >
-                  Reset Filters
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-
           <div className="grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
             {[
               { label: "Plans", value: maintenanceStats.totalPlans },

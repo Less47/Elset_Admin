@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateInvoiceTotal, money } from "@/lib/quote-template";
@@ -136,26 +136,14 @@ export default function InvoiceManager({
   }, [deferredSearch, filterBy, rangedRows, sortBy, toTimestamp]);
 
   return (
-    <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardHeader className="data-card-header space-y-4 border-b border-slate-200 bg-slate-50 px-5 py-5">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <CardTitle className="text-lg">Invoices & Payments</CardTitle>
-            <p className="mt-1 text-sm text-slate-600">
-              Review every job here so you can raise invoices for deposits, progress claims, or final payment at any stage.
-            </p>
-          </div>
-          <div className="text-sm text-slate-600">
-            Showing <span className="font-semibold text-slate-900">{filteredRows.length}</span> of {invoiceStats.totalRows} billing records
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_200px_200px_220px_auto]">
+    <div className="space-y-4">
+      <div className="floating-page-toolbar px-5 py-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(360px,1fr)_170px_190px_210px] xl:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
               className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search invoice, customer, job, email, or address..."
+              placeholder="Search billing records..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -213,23 +201,10 @@ export default function InvoiceManager({
             </Select>
           </div>
 
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              className="data-toolbar-button w-full rounded-lg border-slate-300 bg-white 2xl:w-auto"
-              onClick={() => {
-                setSearch("");
-                setTimeRange("all-time");
-                setFilterBy("all");
-                setSortBy("status");
-              }}
-            >
-              Reset Filters
-            </Button>
-          </div>
         </div>
-      </CardHeader>
+      </div>
 
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
       <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
@@ -391,6 +366,7 @@ export default function InvoiceManager({
           </>
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }

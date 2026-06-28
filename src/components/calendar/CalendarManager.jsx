@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { statuses, statusThemes } from "@/lib/job-status";
 
 export default function CalendarManager({
@@ -52,46 +52,45 @@ export default function CalendarManager({
   }
 
   return (
-    <div>
+    <div className="space-y-4">
+      <div className="floating-page-toolbar px-5 py-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <CardTitle className="text-2xl font-semibold leading-8 text-slate-950">{monthLabel}</CardTitle>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, -1))}>
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-lg"
+              onClick={() => {
+                const today = new Date();
+                setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                selectDate(toDateInputValue(today));
+              }}
+            >
+              Today
+            </Button>
+            <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, 1))}>
+              Next
+            </Button>
+          </div>
+        </div>
+      </div>
       <div>
-        <Card className="overflow-hidden rounded-3xl border-slate-200">
-          <CardHeader className="border-b border-slate-200 bg-slate-50 px-5 py-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <CardTitle className="text-2xl font-semibold leading-8 text-slate-950">{monthLabel}</CardTitle>
-                <p className="text-sm leading-5 text-muted-foreground">Click a day to review or schedule work.</p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, -1))}>
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-lg"
-                  onClick={() => {
-                    const today = new Date();
-                    setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-                    selectDate(toDateInputValue(today));
-                  }}
-                >
-                  Today
-                </Button>
-                <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, 1))}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
+        <Card className="gap-0 overflow-hidden rounded-xl border-slate-900 py-0">
           <CardContent className="p-0">
-            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-100 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <div className="grid grid-cols-7 gap-px border-b border-slate-900 bg-slate-900 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <div key={day} className="border-r border-slate-200 px-2 py-2 last:border-r-0">
+                <div key={day} className="bg-slate-100 px-2 py-2">
                   {day}
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 bg-slate-200">
+            <div className="grid grid-cols-7 gap-px bg-slate-900">
               {calendarDays.map((day) => {
                 const dayJobs = scheduledJobsByDate.get(day.key) || [];
                 const isSelected = selectedDate === day.key;
@@ -100,7 +99,7 @@ export default function CalendarManager({
                     key={day.key}
                     type="button"
                     onClick={() => selectDate(day.key)}
-                    className={`min-h-32 border-r border-b border-slate-200 bg-white p-2 text-left transition hover:bg-slate-50 ${
+                    className={`min-h-32 bg-white p-2 text-left transition hover:bg-slate-50 ${
                       !day.inMonth ? "text-slate-400" : "text-slate-900"
                     } ${isSelected ? "ring-2 ring-inset ring-slate-900" : ""}`}
                   >
