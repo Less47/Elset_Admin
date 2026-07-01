@@ -26,12 +26,11 @@ import {
 
 const NOT_SET_VALUE = "not-set";
 
-export default function JobFormDialog({ open, onOpenChange, customers, jobs, staff, onSave }) {
+export default function JobFormDialog({ open, onOpenChange, customers, jobs, onSave }) {
   const orderedCustomers = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
     [customers]
   );
-  const defaultStaffId = staff[0]?.id || "";
   const emptySiteDraft = useMemo(
     () => ({
       address: "",
@@ -56,7 +55,6 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
     title: "",
     description: "",
     urgency: "Medium",
-    assignedTechnicianId: defaultStaffId,
     jobAddress: orderedCustomers[0]?.address || "",
     ocNumber: "",
     scheduledDate: "",
@@ -78,7 +76,6 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
         title: "",
         description: "",
         urgency: "Medium",
-        assignedTechnicianId: defaultStaffId,
         jobAddress: orderedCustomers[0]?.address || "",
         ocNumber: "",
         scheduledDate: "",
@@ -87,7 +84,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
         billingContact: null,
       });
     }
-  }, [defaultStaffId, emptySiteDraft, open, orderedCustomers]);
+  }, [emptySiteDraft, open, orderedCustomers]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const filteredExistingCustomers = useMemo(() => {
@@ -196,7 +193,6 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
   const canSave = Boolean(
     job.title.trim() &&
       job.description.trim() &&
-      job.assignedTechnicianId &&
       normalizeSiteAddress(selectedJobAddress) &&
       (mode === "existing" ? selectedCustomerId : customer.name.trim())
   );
@@ -563,7 +559,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
             <CardHeader>
               <CardTitle className="text-base">Job Details</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Capture the actual work request, schedule, urgency, and assigned technician.
+                Capture the actual work request, schedule, and urgency.
               </p>
             </CardHeader>
             <CardContent className="grid gap-4">
@@ -587,40 +583,20 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                   placeholder="Optional invoice reference"
                 />
               </FormField>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Urgency">
-                  <Select value={job.urgency} onValueChange={(value) => setJob((p) => ({ ...p, urgency: value }))}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {urgencyOptions.map((u) => (
-                        <SelectItem key={u} value={u}>
-                          {u}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Assigned technician">
-                  <Select
-                    value={job.assignedTechnicianId}
-                    onValueChange={(value) => setJob((p) => ({ ...p, assignedTechnicianId: value }))}
-                    disabled={staff.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={staff.length === 0 ? "No staff available" : "Select staff member"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {staff.map((staffMember) => (
-                        <SelectItem key={staffMember.id} value={staffMember.id}>
-                          {staffMember.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-              </div>
+              <FormField label="Urgency">
+                <Select value={job.urgency} onValueChange={(value) => setJob((p) => ({ ...p, urgency: value }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {urgencyOptions.map((u) => (
+                      <SelectItem key={u} value={u}>
+                        {u}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Job contacts</p>
@@ -640,7 +616,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
 
                   <ContactSnapshotEditor
                     title="On-site Contact"
-                    description="Who the technician should speak with on arrival."
+                  description="Who the team should speak with on arrival."
                     contacts={availableJobContacts}
                     fallbackRole="On-site contact"
                     value={job.onsiteContact}
@@ -680,7 +656,6 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
           <Button
             disabled={!canSave}
             onClick={() => {
-              const tech = staff.find((t) => t.id === job.assignedTechnicianId);
               const existingCustomer = orderedCustomers.find((c) => c.id === selectedCustomerId);
               const jobAddress = normalizeSiteAddress(selectedJobAddress);
               const siteInput = canCreateSite
@@ -699,7 +674,6 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, sta
                 },
                 customerMode: mode,
                 customer: mode === "existing" ? existingCustomer : customer,
-                technician: tech,
                 siteInput:
                   mode === "new" || (mode === "existing" && existingSiteMode === "create")
                     ? siteInput

@@ -170,8 +170,8 @@ export default function SiteManager({
   return (
     <>
       <div className="space-y-4">
-        <div className="floating-page-toolbar px-5 py-4">
-        <div className="grid gap-4 xl:grid-cols-[minmax(340px,1fr)_minmax(170px,0.38fr)_minmax(145px,0.32fr)_minmax(210px,0.42fr)_minmax(155px,0.34fr)] xl:items-end">
+        <div className="floating-page-toolbar px-4 py-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(200px,1.35fr)_minmax(130px,0.75fr)_minmax(115px,0.6fr)_minmax(190px,0.95fr)_minmax(140px,0.7fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input

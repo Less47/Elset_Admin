@@ -53,7 +53,7 @@ export default function CalendarManager({
 
   return (
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-5 py-4">
+      <div className="floating-page-toolbar px-4 py-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <CardTitle className="text-2xl font-semibold leading-8 text-slate-950">{monthLabel}</CardTitle>

@@ -70,7 +70,6 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             onOpenChange={setJobFormOpen}
             customers={data.customers}
             jobs={data.jobs}
-            staff={data.staff}
             onSave={createJob}
           />
 
@@ -209,7 +208,6 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             job={selectedFreshJob}
             customer={selectedFreshCustomer}
             customerJobs={selectedFreshCustomerJobs}
-            staff={data.staff}
             onSave={(updates) => selectedFreshJob && handleUpdateJobDetails(selectedFreshJob.id, updates)}
           />
         </>

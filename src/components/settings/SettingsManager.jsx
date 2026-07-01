@@ -642,13 +642,13 @@ export default function SettingsManager({
 
   return (
     <div className="grid gap-6">
-      <div className="floating-page-toolbar flex flex-col gap-4 px-5 py-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+      <div className="floating-page-toolbar flex flex-col gap-2 overflow-x-auto px-4 py-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
           <Badge className={isAuthenticated ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
             {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 md:flex-nowrap">
           {settingsTabs.map((tab) => {
             const isActive = activeSettingsTab === tab.value;
 

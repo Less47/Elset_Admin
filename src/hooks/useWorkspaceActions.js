@@ -74,7 +74,7 @@ export function useWorkspaceActions({
     }, 0) + 1;
   }
 
-  function createJob({ job, customerMode, customer, technician, siteInput = null }) {
+  function createJob({ job, customerMode, customer, siteInput = null }) {
     if (!canManageBusiness) return;
 
     setData((prev) => {
@@ -137,8 +137,8 @@ export function useWorkspaceActions({
         urgency: job.urgency,
         status: "To Do",
         scheduledDate: toDateInputValue(job.scheduledDate),
-        assignedTechnicianId: technician.id,
-        assignedTechnicianName: technician.name,
+        assignedTechnicianId: "",
+        assignedTechnicianName: "",
         customerId: customerRecord.id,
         customerName: customerRecord.name,
         customerEmail: customerRecord.email || billingContact?.email || "",
@@ -184,7 +184,6 @@ export function useWorkspaceActions({
   function handleUpdateStaff(staffId, updates) {
     if (!canManageBusiness) return null;
 
-    const nextUpdatedAt = new Date().toISOString();
     const updatedStaff = normalizeStaffRecord({
       ...(data.staff.find((entry) => entry.id === staffId) || {}),
       ...updates,
@@ -196,20 +195,10 @@ export function useWorkspaceActions({
           ? updatedStaff
           : entry
       ));
-      const jobs = prev.jobs.map((job) => (
-        job.assignedTechnicianId === staffId
-          ? {
-              ...job,
-              assignedTechnicianName: updatedStaff?.name || job.assignedTechnicianName,
-              updatedAt: nextUpdatedAt,
-            }
-          : job
-      ));
 
       return {
         ...prev,
         staff,
-        jobs,
       };
     });
 
@@ -371,7 +360,6 @@ export function useWorkspaceActions({
       return true;
     }
 
-    const technician = data.staff.find((entry) => entry.id === plan.defaultTechnicianId) || data.staff[0] || null;
     const now = new Date().toISOString();
     const jobAddress = plan.siteAddress || customer.address;
     const billingContact = buildContactSnapshot(getCustomerBillingContact(customer), "Billing contact");
@@ -384,8 +372,8 @@ export function useWorkspaceActions({
       urgency: "Medium",
       status: "To Do",
       scheduledDate: dueDate,
-      assignedTechnicianId: technician?.id || "",
-      assignedTechnicianName: technician?.name || "",
+      assignedTechnicianId: "",
+      assignedTechnicianName: "",
       customerId: customer.id,
       customerName: customer.name,
       customerEmail: customer.email || billingContact?.email || "",
@@ -847,8 +835,6 @@ export function useWorkspaceActions({
       urgency: job.urgency,
       status: job.status,
       scheduledDate: job.scheduledDate,
-      assignedTechnicianId: job.assignedTechnicianId,
-      assignedTechnicianName: job.assignedTechnicianName,
       customerId: job.customerId,
       customerName: job.customerName,
       customerEmail: job.customerEmail,

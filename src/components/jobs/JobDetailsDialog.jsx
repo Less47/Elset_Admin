@@ -125,10 +125,6 @@ export default function JobDetailsDialog({
                       <p className="font-medium">{job.customerName}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase text-muted-foreground">Assigned Technician</p>
-                      <p className="font-medium">{job.assignedTechnicianName}</p>
-                    </div>
-                    <div>
                       <p className="text-xs uppercase text-muted-foreground">Phone</p>
                       <p className="font-medium">{job.customerPhone}</p>
                     </div>

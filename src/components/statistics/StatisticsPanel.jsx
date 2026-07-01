@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { statuses } from "@/lib/job-status";
@@ -12,7 +11,6 @@ export default function StatisticsPanel({
   dashboard,
   jobs,
   customers,
-  staff,
   inventoryItems = [],
   getInventoryStockStatus,
   normalizeInventoryRecord,
@@ -54,16 +52,6 @@ export default function StatisticsPanel({
     const count = jobs.filter((job) => job.status === status).length;
     const share = dashboard.totalJobs === 0 ? 0 : Math.round((count / dashboard.totalJobs) * 100);
     return { status, count, share };
-  });
-
-  const technicianSummary = staff.map((technician) => {
-    const assignedJobs = jobs.filter((job) => job.assignedTechnicianId === technician.id);
-    return {
-      ...technician,
-      totalJobs: assignedJobs.length,
-      openJobs: assignedJobs.filter((job) => job.status !== "Completed").length,
-      completedJobs: assignedJobs.filter((job) => job.status === "Completed").length,
-    };
   });
 
   const lowStockParts = inventoryItems
@@ -221,34 +209,6 @@ export default function StatisticsPanel({
               </p>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-3xl border-slate-200">
-        <CardHeader>
-          <CardTitle className="text-lg">Staff Workload</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          {technicianSummary.length === 0 ? (
-            <EmptyState title="No staff records yet" text="Add staff members to track workload across the team." />
-          ) : technicianSummary.map((technician) => (
-            <div key={technician.id} className="rounded-2xl border bg-slate-50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-slate-900">{technician.name}</p>
-                <Badge variant="secondary">{technician.totalJobs} assigned</Badge>
-              </div>
-              <div className="mt-4 grid gap-2 text-sm text-slate-600">
-                <div className="flex items-center justify-between">
-                  <span>Open jobs</span>
-                  <span className="font-medium text-slate-900">{technician.openJobs}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Completed jobs</span>
-                  <span className="font-medium text-slate-900">{technician.completedJobs}</span>
-                </div>
-              </div>
-            </div>
-          ))}
         </CardContent>
       </Card>
     </div>

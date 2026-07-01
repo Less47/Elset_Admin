@@ -28,7 +28,7 @@ export default function RecycleBinPanel({
   return (
     <div className="space-y-6">
       <Tabs defaultValue="jobs" className="space-y-6">
-        <div className="floating-page-toolbar flex items-center px-5 py-4">
+        <div className="floating-page-toolbar flex items-center px-4 py-3">
           <TabsList className="grid w-full max-w-[360px] grid-cols-2 rounded-xl bg-white/90">
             <TabsTrigger value="jobs">Deleted Jobs</TabsTrigger>
             <TabsTrigger value="customers">Deleted Customers</TabsTrigger>

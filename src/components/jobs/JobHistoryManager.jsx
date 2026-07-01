@@ -18,7 +18,6 @@ function getUrgencyBadgeClassName(urgency) {
 
 export default function JobHistoryManager({
   jobs,
-  staff,
   onOpenJob,
   formatDate,
   getInvoiceStatus,
@@ -28,18 +27,12 @@ export default function JobHistoryManager({
   const [sortBy, setSortBy] = useState("activity-recent");
   const [statusFilter, setStatusFilter] = useState("all");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
-  const [technicianFilter, setTechnicianFilter] = useState("all");
   const [documentFilter, setDocumentFilter] = useState("all");
   const [createdRange, setCreatedRange] = useState("all-time");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [filterClock] = useState(() => ({ now: Date.now(), year: new Date().getFullYear() }));
   const deferredSearch = useDeferredValue(search);
-
-  const technicianOptions = useMemo(
-    () => [...staff].sort((a, b) => a.name.localeCompare(b.name)),
-    [staff]
-  );
 
   const jobRows = useMemo(() => {
     return jobs.map((job) => ({
@@ -65,7 +58,6 @@ export default function JobHistoryManager({
             job.customerEmail,
             job.customerPhone,
             job.jobAddress,
-            job.assignedTechnicianName,
             job.status,
             job.urgency,
             job.scheduledDate,
@@ -77,12 +69,6 @@ export default function JobHistoryManager({
 
       const matchesStatus = statusFilter === "all" ? true : job.status === statusFilter;
       const matchesUrgency = urgencyFilter === "all" ? true : job.urgency === urgencyFilter;
-      const matchesTechnician =
-        technicianFilter === "all"
-          ? true
-          : technicianFilter === "unassigned"
-            ? !job.assignedTechnicianId
-            : job.assignedTechnicianId === technicianFilter;
 
       const matchesDocument =
         documentFilter === "all"
@@ -114,7 +100,6 @@ export default function JobHistoryManager({
       return matchesSearch
         && matchesStatus
         && matchesUrgency
-        && matchesTechnician
         && matchesDocument
         && matchesCreatedRange
         && matchesCreatedFrom
@@ -132,7 +117,7 @@ export default function JobHistoryManager({
     });
 
     return rows;
-  }, [createdFrom, createdRange, createdTo, deferredSearch, documentFilter, filterClock, jobRows, sortBy, statusFilter, technicianFilter, urgencyFilter, toTimestamp]);
+  }, [createdFrom, createdRange, createdTo, deferredSearch, documentFilter, filterClock, jobRows, sortBy, statusFilter, urgencyFilter, toTimestamp]);
 
   const historyStats = useMemo(() => {
     return filteredJobs.reduce((stats, job) => ({
@@ -152,13 +137,13 @@ export default function JobHistoryManager({
 
   return (
     <div className="space-y-4">
-      <div className="floating-page-toolbar space-y-3 px-4 py-3">
-        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px] md:items-end">
+      <div className="floating-page-toolbar px-4 py-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(190px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)] xl:grid-cols-[minmax(200px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)_minmax(125px,0.65fr)_minmax(115px,0.6fr)_minmax(130px,0.66fr)_minmax(130px,0.66fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
               className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search job, customer, technician, address, or status..."
+              placeholder="Search job, customer, address, or status..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -181,10 +166,6 @@ export default function JobHistoryManager({
               </SelectContent>
             </Select>
           </div>
-
-        </div>
-
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[150px_170px_190px_150px_130px_minmax(145px,1fr)_minmax(145px,1fr)]">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status</p>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -213,24 +194,6 @@ export default function JobHistoryManager({
                 {urgencyOptions.map((urgency) => (
                   <SelectItem key={urgency} value={urgency}>
                     {urgency}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Technician</p>
-            <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All technicians</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {technicianOptions.map((technician) => (
-                  <SelectItem key={technician.id} value={technician.id}>
-                    {technician.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -340,7 +303,7 @@ export default function JobHistoryManager({
                     <div className="min-w-0 text-slate-700">
                       <p className="truncate font-medium text-slate-900">{job.customerName}</p>
                       <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.jobAddress || "No site address saved"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.assignedTechnicianName || "Unassigned"} - {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
                     </div>
 
                     <div className="flex min-w-0 flex-wrap items-center gap-1">
@@ -362,13 +325,12 @@ export default function JobHistoryManager({
             <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1520px]">
               <div className="data-grid grid gap-px bg-slate-200">
-                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
                   <span>Job</span>
                   <span>Customer & Site</span>
                   <span>Status</span>
                   <span>Urgency</span>
                   <span>Scheduled</span>
-                  <span>Technician</span>
                   <span>Documents</span>
                   <span>Last Activity</span>
                   <span className="text-right">Action</span>
@@ -379,7 +341,7 @@ export default function JobHistoryManager({
                     key={job.id}
                     onDoubleClick={() => onOpenJob(job)}
                     title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_170px_180px_150px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
                   >
                     <div className="min-w-0">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
@@ -401,11 +363,6 @@ export default function JobHistoryManager({
                     </div>
 
                     <p className="text-slate-700">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
-
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">{job.assignedTechnicianName || "Unassigned"}</p>
-                      <p className="mt-1 truncate text-xs text-slate-500">{job.customerPhone || job.customerEmail || "No contact saved"}</p>
-                    </div>
 
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="secondary">{job.hasQuote ? "Quote saved" : "No quote"}</Badge>

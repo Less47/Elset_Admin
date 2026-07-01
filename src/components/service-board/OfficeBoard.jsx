@@ -342,10 +342,6 @@ function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob }) {
           <span className="line-clamp-2 max-w-[240px] text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span>Tech</span>
-          <span className="text-right font-medium text-slate-800">{job.assignedTechnicianName || "Unassigned"}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
           <span>Scheduled</span>
           <span className="text-right font-medium text-slate-800">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
         </div>
@@ -641,7 +637,7 @@ function JobCard({
                 <div className="rounded-xl border border-white/80 bg-white/70 px-3 py-2">
                   <div className="flex items-start justify-between gap-3">
                     <span className="shrink-0 text-slate-500">Site</span>
-                    <span className="text-right font-medium text-slate-800">{compactAddress}</span>
+                    <span className="line-clamp-2 text-right font-medium text-slate-800">{compactAddress}</span>
                   </div>
                 </div>
                 <div className={actionRowClassName}>
@@ -682,7 +678,7 @@ function JobCard({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 md:max-xl:text-[10px]">Job #{job.jobNumber}</p>
                 <p className="text-sm font-medium leading-5 text-slate-800 md:max-xl:text-xs md:max-xl:leading-4">{job.customerName}</p>
                 <p className="text-xs font-normal leading-4 text-slate-950 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{job.title}</p>
-                <p className="line-clamp-3 text-xs leading-4 text-slate-700 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{compactAddress}</p>
+                <p className="line-clamp-2 text-xs leading-4 text-slate-700 md:max-xl:text-[11px] md:max-xl:leading-[1.1rem]">{compactAddress}</p>
               </div>
 
             </div>
@@ -717,10 +713,6 @@ function JobCard({
                 <span className="line-clamp-2 max-w-[220px] text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Tech</span>
-                <span className="font-medium text-slate-800">{job.assignedTechnicianName}</span>
-              </div>
-              <div className="flex items-center justify-between">
                 <span>Scheduled</span>
                 <span className="font-medium text-slate-800">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
               </div>
@@ -735,10 +727,6 @@ function JobCard({
               </div>
               {!isGridView ? (
                 <div className="grid gap-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Tech</span>
-                    <span className="font-medium text-slate-800">{job.assignedTechnicianName}</span>
-                  </div>
                   <div className="flex items-center justify-between gap-3">
                     <span>Scheduled</span>
                     <span className="font-medium text-slate-800">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>

@@ -238,7 +238,6 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
           job.title,
           job.description,
           job.jobAddress,
-          job.assignedTechnicianName,
           formatCustomerType(job.customerType),
           formatSiteType(job.siteType),
         ]
@@ -497,8 +496,8 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
 
   return (
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-5 py-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(360px,1fr)_180px_200px_220px] xl:items-end">
+      <div className="floating-page-toolbar px-4 py-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(140px,0.7fr)_minmax(150px,0.75fr)_minmax(165px,0.8fr)] md:items-end">
             <Input
               className="data-toolbar-field rounded-xl"
               placeholder="Search job number, customer, title, or address..."

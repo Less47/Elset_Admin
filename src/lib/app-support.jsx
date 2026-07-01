@@ -321,7 +321,7 @@ export const sideNavItems = [
   {
     id: "service-board",
     label: "Service Board",
-    description: "Manage live jobs, queues, and technician work.",
+    description: "Manage live jobs, queues, and service work.",
     icon: ClipboardList,
   },
   {
@@ -369,7 +369,7 @@ export const sideNavItems = [
   {
     id: "staff",
     label: "Staff",
-    description: "Manage staff records, contact details, and assignments.",
+    description: "Manage staff records, contact details, and login access.",
     icon: ShieldCheck,
   },
   {
@@ -412,7 +412,7 @@ export const sectionMeta = {
   "job-history": {
     eyebrow: "Service Records",
     title: "Job History",
-    description: "Review every saved job in one database view, filter by status or technician, and jump straight into the full record.",
+    description: "Review every saved job in one database view, filter by status, and jump straight into the full record.",
   },
   sites: {
     eyebrow: "Site Profiles",
@@ -612,7 +612,7 @@ export const defaultMaintenancePlans = [
     siteAddress: defaultCustomers[1].address,
     frequency: "quarterly",
     nextDueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 10).toISOString().slice(0, 10),
-    defaultTechnicianId: defaultStaffMembers[1].id,
+    defaultTechnicianId: "",
     estimatedDurationHours: 2,
     contractPrice: 295,
     checklist: [
@@ -634,7 +634,7 @@ export const defaultMaintenancePlans = [
     siteAddress: "18 Basement Ramp, Northside",
     frequency: "six-monthly",
     nextDueDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 24).toISOString().slice(0, 10),
-    defaultTechnicianId: defaultStaffMembers[0].id,
+    defaultTechnicianId: "",
     estimatedDurationHours: 1.5,
     contractPrice: 220,
     checklist: [
@@ -1090,6 +1090,8 @@ export function normalizeJobRecord(job) {
     ...job,
     jobNumber: Number.isInteger(Number(job?.jobNumber)) && Number(job.jobNumber) > 0 ? Number(job.jobNumber) : null,
     scheduledDate: toDateInputValue(job?.scheduledDate),
+    assignedTechnicianId: "",
+    assignedTechnicianName: "",
     maintenancePlanId: String(job?.maintenancePlanId || "").trim(),
     maintenancePlanName: String(job?.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job?.maintenanceDueDate),
@@ -1596,7 +1598,7 @@ export function normalizeMaintenancePlanRecord(plan) {
     siteAddress: normalizeSiteAddress(plan.siteAddress),
     frequency: normalizeOptionValue(plan.frequency, maintenanceFrequencyOptions, maintenanceFrequencyOptions[1].value),
     nextDueDate: toDateInputValue(plan.nextDueDate),
-    defaultTechnicianId: String(plan.defaultTechnicianId || "").trim(),
+    defaultTechnicianId: "",
     estimatedDurationHours: Math.max(0, normalizeNumber(plan.estimatedDurationHours, 0)),
     contractPrice: Math.max(0, normalizeNumber(plan.contractPrice, 0)),
     checklist: normalizeChecklistItems(plan.checklist),
@@ -1899,12 +1901,11 @@ export function syncJobWithCustomer(job, customer) {
   };
 }
 
-export function syncJobWithStaff(job, staffMember) {
-  if (!staffMember) return job;
+export function syncJobWithStaff(job) {
   return {
     ...job,
-    assignedTechnicianId: staffMember.id,
-    assignedTechnicianName: staffMember.name,
+    assignedTechnicianId: "",
+    assignedTechnicianName: "",
   };
 }
 
@@ -1931,9 +1932,8 @@ export function normalizeAppState(savedState) {
   const staff = Array.isArray(savedState?.staff)
     ? savedState.staff.map(normalizeStaffRecord).filter(Boolean)
     : seedData.staff.map(normalizeStaffRecord).filter(Boolean);
-  const staffById = new Map(staff.map((staffMember) => [staffMember.id, staffMember]));
   const jobs = Array.isArray(savedState?.jobs)
-    ? assignJobNumbers(savedState.jobs.map(normalizeJobRecord)).map((job) => syncJobWithStaff(job, staffById.get(job.assignedTechnicianId)))
+    ? assignJobNumbers(savedState.jobs.map(normalizeJobRecord))
     : [];
   const earliestJobByCustomerId = jobs.reduce((map, job) => {
     const existing = map.get(job.customerId);
@@ -1985,7 +1985,6 @@ export function getInitialState() {
   }
 
   const [c1, c2] = seedData.customers;
-  const [s1, s2] = seedData.staff;
   const demoJobs = [
     {
       id: crypto.randomUUID(),
@@ -1994,8 +1993,8 @@ export function getInitialState() {
       description: "Gate intermittently stops halfway. Inspect motor, control board, and limit settings.",
       urgency: "High",
       status: "To Do",
-      assignedTechnicianId: s1.id,
-      assignedTechnicianName: s1.name,
+      assignedTechnicianId: "",
+      assignedTechnicianName: "",
       customerId: c1.id,
       customerName: c1.name,
       customerEmail: c1.email,
@@ -2015,8 +2014,8 @@ export function getInitialState() {
       description: "Preventive maintenance and safety inspection for entry boom gate.",
       urgency: "Medium",
       status: "In Progress",
-      assignedTechnicianId: s2.id,
-      assignedTechnicianName: s2.name,
+      assignedTechnicianId: "",
+      assignedTechnicianName: "",
       customerId: c2.id,
       customerName: c2.name,
       customerEmail: c2.email,
@@ -2024,7 +2023,7 @@ export function getInitialState() {
       jobAddress: c2.address,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      notes: [{ id: crypto.randomUUID(), author: s2.name, text: "On site. Found worn hinge and weak battery backup.", createdAt: new Date().toISOString() }],
+      notes: [{ id: crypto.randomUUID(), author: "Office", text: "On site. Found worn hinge and weak battery backup.", createdAt: new Date().toISOString() }],
       photos: [],
       quote: {
         type: "quote",

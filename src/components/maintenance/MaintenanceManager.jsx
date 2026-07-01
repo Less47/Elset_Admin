@@ -28,20 +28,18 @@ import {
 import { statusThemes } from "@/lib/job-status";
 import { money } from "@/lib/quote-template";
 
-function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, jobs, staff, onSave }) {
+function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, jobs, onSave }) {
   const orderedCustomers = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
     [customers]
   );
   const defaultCustomer = orderedCustomers[0] || null;
-  const defaultTechnicianId = staff[0]?.id || "";
   const [draft, setDraft] = useState({
     planName: "",
     customerId: "",
     siteAddress: "",
     frequency: maintenanceFrequencyOptions[1].value,
     nextDueDate: slugDate(),
-    defaultTechnicianId,
     estimatedDurationHours: "1",
     contractPrice: "0",
     checklistText: "",
@@ -62,13 +60,12 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
       siteAddress: normalizedPlan?.siteAddress || getSuggestedMaintenanceSite(selectedCustomer, selectedCustomerJobs),
       frequency: normalizedPlan?.frequency || maintenanceFrequencyOptions[1].value,
       nextDueDate: normalizedPlan?.nextDueDate || slugDate(),
-      defaultTechnicianId: normalizedPlan?.defaultTechnicianId || defaultTechnicianId,
       estimatedDurationHours: String(normalizedPlan?.estimatedDurationHours ?? 1),
       contractPrice: String(normalizedPlan?.contractPrice ?? 0),
       checklistText: Array.isArray(normalizedPlan?.checklist) ? normalizedPlan.checklist.join("\n") : "",
       notes: normalizedPlan?.notes || "",
     });
-  }, [defaultCustomer, defaultTechnicianId, initialPlan, jobs, open, orderedCustomers]);
+  }, [defaultCustomer, initialPlan, jobs, open, orderedCustomers]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const selectedCustomer = useMemo(
@@ -201,25 +198,6 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField label="Default technician">
-                    <Select
-                      value={draft.defaultTechnicianId}
-                      onValueChange={(value) => setDraft((prev) => ({ ...prev, defaultTechnicianId: value }))}
-                      disabled={staff.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={staff.length === 0 ? "No staff available" : "Select technician"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {staff.map((staffMember) => (
-                          <SelectItem key={staffMember.id} value={staffMember.id}>
-                            {staffMember.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-
                   <FormField label="Estimated hours">
                     <Input
                       type="number"
@@ -276,7 +254,7 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
                 siteAddress: normalizeSiteAddress(draft.siteAddress),
                 frequency: draft.frequency,
                 nextDueDate: toDateInputValue(draft.nextDueDate),
-                defaultTechnicianId: draft.defaultTechnicianId,
+                defaultTechnicianId: "",
                 estimatedDurationHours: normalizeNumber(draft.estimatedDurationHours, 0),
                 contractPrice: normalizeNumber(draft.contractPrice, 0),
                 checklist: normalizeChecklistItems(draft.checklistText),
@@ -296,7 +274,6 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
 export default function MaintenanceManager({
   maintenancePlans,
   customers,
-  staff,
   jobs,
   onCreatePlan,
   onUpdatePlan,
@@ -312,7 +289,6 @@ export default function MaintenanceManager({
   const deferredSearch = useDeferredValue(search);
 
   const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
-  const staffById = useMemo(() => new Map(staff.map((staffMember) => [staffMember.id, staffMember])), [staff]);
 
   const planRows = useMemo(() => {
     return (maintenancePlans || [])
@@ -320,7 +296,6 @@ export default function MaintenanceManager({
       .filter(Boolean)
       .map((plan) => {
         const customer = customersById.get(plan.customerId) || null;
-        const technician = staffById.get(plan.defaultTechnicianId) || null;
         const linkedJobs = getMaintenancePlanJobs(plan.id, jobs);
         const activeJobs = linkedJobs.filter((job) => job.status !== "Completed");
         const activeJob = activeJobs[0] || null;
@@ -329,7 +304,6 @@ export default function MaintenanceManager({
         return {
           plan,
           customer,
-          technician,
           linkedJobs,
           activeJob,
           activeJobCount: activeJobs.length,
@@ -337,7 +311,7 @@ export default function MaintenanceManager({
           frequencyLabel: getMaintenanceFrequencyMeta(plan.frequency).label,
         };
       });
-  }, [customersById, jobs, maintenancePlans, staffById]);
+  }, [customersById, jobs, maintenancePlans]);
 
   const maintenanceStats = useMemo(() => {
     return planRows.reduce((stats, row) => ({
@@ -364,7 +338,6 @@ export default function MaintenanceManager({
             row.customer?.name,
             row.plan.siteAddress,
             row.frequencyLabel,
-            row.technician?.name,
             row.plan.notes,
             row.plan.checklist.join(" "),
           ].join(" ").toLowerCase().includes(query)
@@ -411,13 +384,13 @@ export default function MaintenanceManager({
 
   return (
     <>
-      <div className="floating-page-toolbar mb-4 px-5 py-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(320px,1fr)_190px_190px_230px] xl:items-end">
+      <div className="floating-page-toolbar mb-4 px-4 py-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.7fr)_minmax(145px,0.7fr)_minmax(190px,0.9fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
               className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search plan, customer, site, checklist, or technician..."
+              placeholder="Search plan, customer, site, or checklist..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -532,14 +505,10 @@ export default function MaintenanceManager({
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
                     <div className="rounded-2xl border bg-slate-50 p-4">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next due</p>
                       <p className="mt-2 font-semibold text-slate-950">{row.plan.nextDueDate ? formatDate(row.plan.nextDueDate) : "Not set"}</p>
-                    </div>
-                    <div className="rounded-2xl border bg-slate-50 p-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Technician</p>
-                      <p className="mt-2 font-semibold text-slate-950">{row.technician?.name || "Unassigned"}</p>
                     </div>
                     <div className="rounded-2xl border bg-slate-50 p-4">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Estimated time</p>
@@ -653,7 +622,6 @@ export default function MaintenanceManager({
         initialPlan={editingPlan}
         customers={customers}
         jobs={jobs}
-        staff={staff}
         onSave={(planInput) => {
           if (editingPlan) {
             return onUpdatePlan(editingPlan.id, planInput);

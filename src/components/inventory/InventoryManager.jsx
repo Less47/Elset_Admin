@@ -235,8 +235,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
   return (
     <>
       <div className="space-y-4">
-        <div className="floating-page-toolbar px-5 py-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(320px,1fr)_190px_190px_150px] xl:items-end">
+        <div className="floating-page-toolbar px-4 py-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.75fr)_minmax(145px,0.75fr)_minmax(130px,0.65fr)] md:items-end">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input

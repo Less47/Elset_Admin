@@ -19,19 +19,17 @@ import {
 } from "@/lib/app-support";
 import { statuses } from "@/lib/job-status";
 
-export default function JobEditDialog({ open, onOpenChange, job, customer = null, customerJobs = [], staff, onSave }) {
+export default function JobEditDialog({ open, onOpenChange, job, customer = null, customerJobs = [], onSave }) {
   const [draftJob, setDraftJob] = useState(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open || !job) return;
-    const defaultStaffId = staff[0]?.id || "";
     setDraftJob({
       title: job.title || "",
       description: job.description || "",
       urgency: job.urgency || "Medium",
       status: job.status || "To Do",
-      assignedTechnicianId: job.assignedTechnicianId || defaultStaffId,
       jobAddress: job.jobAddress || "",
       ocNumber: job.ocNumber || "",
       scheduledDate: toDateInputValue(job.scheduledDate),
@@ -49,7 +47,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
           : null
       ),
     });
-  }, [job, open, staff]);
+  }, [job, open]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!job || !draftJob) return null;
@@ -57,7 +55,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
   const customerSites = customer ? buildCustomerSites(customer, customerJobs) : [];
   const customerContacts = customer ? getCustomerContacts(customer) : [];
   const jobSiteAccessNote = getCustomerSiteAccessNote(customer, draftJob.jobAddress);
-  const canSave = draftJob.title.trim() && draftJob.description.trim() && draftJob.jobAddress.trim() && draftJob.assignedTechnicianId;
+  const canSave = draftJob.title.trim() && draftJob.description.trim() && draftJob.jobAddress.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -135,7 +133,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
                 />
               </FormField>
 
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="Urgency">
                   <Select value={draftJob.urgency} onValueChange={(value) => setDraftJob((prev) => ({ ...prev, urgency: value }))}>
                     <SelectTrigger>
@@ -166,24 +164,6 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
                   </Select>
                 </FormField>
 
-                <FormField label="Assigned technician">
-                  <Select
-                    value={draftJob.assignedTechnicianId}
-                    onValueChange={(value) => setDraftJob((prev) => ({ ...prev, assignedTechnicianId: value }))}
-                    disabled={staff.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={staff.length === 0 ? "No staff available" : "Select staff member"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {staff.map((staffMember) => (
-                        <SelectItem key={staffMember.id} value={staffMember.id}>
-                          {staffMember.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
               </div>
             </CardContent>
           </Card>
@@ -224,7 +204,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
 
               <ContactSnapshotEditor
                 title="On-site Contact"
-                description="Who the technician should speak with on arrival."
+                description="Who the team should speak with on arrival."
                 contacts={customerContacts}
                 fallbackRole="On-site contact"
                 value={draftJob.onsiteContact}
@@ -252,11 +232,7 @@ export default function JobEditDialog({ open, onOpenChange, job, customer = null
           <Button
             disabled={!canSave}
             onClick={() => {
-              const technician = staff.find((entry) => entry.id === draftJob.assignedTechnicianId);
-              const didSave = onSave({
-                ...draftJob,
-                assignedTechnicianName: technician?.name || job.assignedTechnicianName,
-              });
+              const didSave = onSave(draftJob);
               if (didSave !== false) onOpenChange(false);
             }}
           >

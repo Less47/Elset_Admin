@@ -187,8 +187,8 @@ export default function CustomerManager({
 
   return (
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-5 py-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(240px,0.95fr)_160px_160px_135px_145px_190px_150px] xl:items-end">
+      <div className="floating-page-toolbar px-4 py-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(210px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.85fr)_minmax(120px,0.65fr)_minmax(130px,0.7fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -265,7 +265,10 @@ export default function CustomerManager({
             </Select>
           </div>
 
-          <div className="data-toggle-shell grid h-11 grid-cols-2 gap-1 self-end rounded-lg border border-slate-300 bg-white p-1">
+        </div>
+
+        <div className="mt-2 grid gap-2 md:grid-cols-[minmax(240px,1fr)_minmax(145px,0.32fr)] md:items-end">
+          <div className="data-toggle-shell grid h-11 grid-cols-2 gap-1 rounded-lg border border-slate-300 bg-white p-1">
             <Button
               type="button"
               size="sm"
@@ -286,7 +289,7 @@ export default function CustomerManager({
             </Button>
           </div>
 
-          <Button className="h-11 self-end rounded-lg px-4" onClick={onCreateCustomer}>
+          <Button className="h-11 rounded-lg px-4" onClick={onCreateCustomer}>
             <Plus className="mr-2 h-4 w-4" /> New Customer
           </Button>
         </div>

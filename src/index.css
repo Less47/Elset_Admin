@@ -169,7 +169,7 @@
   }
 
   .floating-page-toolbar {
-    min-height: 104px;
+    min-height: 0;
     border: 1px solid var(--ui-border-color) !important;
     border-radius: var(--radius-xl) !important;
     background: var(--workspace-hero-bg) !important;

@@ -225,7 +225,6 @@ function StaffFormDialog({
 
 export default function StaffManager({
   staff,
-  jobs,
   onCreateStaff,
   onUpdateStaff,
   canManageLogins = false,
@@ -247,43 +246,12 @@ export default function StaffManager({
     );
   }, [loginAccounts]);
 
-  const jobMetricsByStaffId = useMemo(() => {
-    return jobs.reduce((map, job) => {
-      if (!job.assignedTechnicianId) return map;
-      const current = map.get(job.assignedTechnicianId) || {
-        assignedJobs: 0,
-        openJobs: 0,
-        latestUpdatedAt: "",
-      };
-      const latestUpdatedAt = toTimestamp(job.updatedAt) > toTimestamp(current.latestUpdatedAt)
-        ? job.updatedAt
-        : current.latestUpdatedAt;
-      map.set(job.assignedTechnicianId, {
-        assignedJobs: current.assignedJobs + 1,
-        openJobs: current.openJobs + (job.status === "Completed" ? 0 : 1),
-        latestUpdatedAt,
-      });
-      return map;
-    }, new Map());
-  }, [jobs]);
-
   const staffRows = useMemo(() => {
-    return staff.map((staffMember) => {
-      const metrics = jobMetricsByStaffId.get(staffMember.id) || {
-        assignedJobs: 0,
-        openJobs: 0,
-        latestUpdatedAt: "",
-      };
-
-      return {
-        ...staffMember,
-        assignedJobs: metrics.assignedJobs,
-        openJobs: metrics.openJobs,
-        latestUpdatedAt: metrics.latestUpdatedAt,
-        loginAccount: loginAccountsByStaffId.get(staffMember.id) || null,
-      };
-    });
-  }, [jobMetricsByStaffId, loginAccountsByStaffId, staff]);
+    return staff.map((staffMember) => ({
+      ...staffMember,
+      loginAccount: loginAccountsByStaffId.get(staffMember.id) || null,
+    }));
+  }, [loginAccountsByStaffId, staff]);
 
   const filteredStaff = useMemo(() => {
     const query = deferredSearch.toLowerCase().trim();
@@ -299,8 +267,7 @@ export default function StaffManager({
     rows.sort((a, b) => {
       if (sortBy === "name-desc") return b.name.localeCompare(a.name);
       if (sortBy === "role") return (a.role || "").localeCompare(b.role || "") || a.name.localeCompare(b.name);
-      if (sortBy === "jobs-most") return b.assignedJobs - a.assignedJobs || a.name.localeCompare(b.name);
-      if (sortBy === "activity-recent") return toTimestamp(b.latestUpdatedAt) - toTimestamp(a.latestUpdatedAt);
+      if (sortBy === "created-recent") return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
       return a.name.localeCompare(b.name);
     });
 
@@ -310,9 +277,9 @@ export default function StaffManager({
   const staffStats = useMemo(() => {
     return {
       totalStaff: staffRows.length,
-      assignedStaff: staffRows.filter((staffMember) => staffMember.assignedJobs > 0).length,
-      openAssignments: staffRows.reduce((total, staffMember) => total + staffMember.openJobs, 0),
       missingEmail: staffRows.filter((staffMember) => !staffMember.email).length,
+      missingPhone: staffRows.filter((staffMember) => !staffMember.phone).length,
+      completeProfiles: staffRows.filter((staffMember) => staffMember.email && staffMember.phone).length,
       withLoginAccess: staffRows.filter((staffMember) => staffMember.loginAccount).length,
     };
   }, [staffRows]);
@@ -320,8 +287,8 @@ export default function StaffManager({
   return (
     <>
       <div className="space-y-4">
-        <div className="floating-page-toolbar px-5 py-4">
-          <div className="grid gap-3 xl:grid-cols-[minmax(360px,1fr)_220px_150px] xl:items-end">
+        <div className="floating-page-toolbar px-4 py-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(155px,0.75fr)_minmax(130px,0.65fr)] md:items-end">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
               <Input
@@ -342,8 +309,7 @@ export default function StaffManager({
                   <SelectItem value="name-asc">Alphabetical A-Z</SelectItem>
                   <SelectItem value="name-desc">Alphabetical Z-A</SelectItem>
                   <SelectItem value="role">Role</SelectItem>
-                  <SelectItem value="jobs-most">Most assignments</SelectItem>
-                  <SelectItem value="activity-recent">Recent activity</SelectItem>
+                  <SelectItem value="created-recent">Newest staff</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -364,9 +330,9 @@ export default function StaffManager({
         <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
           {[
             { label: "Total staff", value: staffStats.totalStaff },
-            { label: "With assignments", value: staffStats.assignedStaff },
-            { label: "Open assignments", value: staffStats.openAssignments },
-            { label: canManageLogins ? "With login access" : "Missing email", value: canManageLogins ? staffStats.withLoginAccess : staffStats.missingEmail },
+            { label: "Missing email", value: staffStats.missingEmail },
+            { label: "Missing phone", value: staffStats.missingPhone },
+            { label: canManageLogins ? "With login access" : "Complete profiles", value: canManageLogins ? staffStats.withLoginAccess : staffStats.completeProfiles },
           ].map((stat) => (
             <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
@@ -386,7 +352,7 @@ export default function StaffManager({
             <div className="p-6">
               <EmptyState
                 title="No staff found"
-                text="Try adjusting the search, or add a new staff member to start assigning jobs."
+                text="Try adjusting the search, or add a new staff member."
                 action={(
                   <Button
                     className="rounded-lg"
@@ -404,30 +370,24 @@ export default function StaffManager({
             <>
               <div className="text-xs 2xl:hidden">
                 <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                     <span>Staff</span>
                     <span>Contact</span>
-                    <span className="text-right">Jobs</span>
                     <span className="text-right">Action</span>
                   </div>
 
                   {filteredStaff.map((staffMember) => (
                     <div
                       key={staffMember.id}
-                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_112px_82px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
                         <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.role || "Role not set"}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</p>
                       </div>
                       <div className="min-w-0 text-slate-700">
                         <p className="truncate">{staffMember.email || "No email"}</p>
                         <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.phone || "No phone"}</p>
-                      </div>
-                      <div className="min-w-0 text-right text-slate-700">
-                        <p><span className="font-semibold text-slate-950">{staffMember.assignedJobs}</span> assigned</p>
-                        <p className="mt-0.5 text-[11px] text-slate-500">{staffMember.openJobs} open</p>
                       </div>
                       <div className="flex justify-end">
                         <Button
@@ -449,39 +409,30 @@ export default function StaffManager({
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1120px]">
                 <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
                     <span>Staff Member</span>
                     <span>Role</span>
                     <span>Email</span>
                     <span>Phone</span>
                     <span>Created</span>
-                    <span className="text-right">Assigned</span>
-                    <span className="text-right">Open</span>
                     <span className="text-right">Action</span>
                   </div>
 
                   {filteredStaff.map((staffMember) => (
                     <div
                       key={staffMember.id}
-                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_90px_90px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
                         <div className="mt-1 flex gap-2 text-xs text-slate-500">
                           <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{staffMember.id.slice(0, 8)}</span>
-                          <span className="truncate">{staffMember.latestUpdatedAt ? `Last active ${formatDate(staffMember.latestUpdatedAt)}` : "No job activity yet"}</span>
                         </div>
                       </div>
                       <p className="truncate text-slate-700">{staffMember.role || "Not set"}</p>
                       <p className="truncate text-slate-700">{staffMember.email || "Not set"}</p>
                       <p className="truncate text-slate-700">{staffMember.phone || "Not set"}</p>
                       <p className="text-slate-700">{formatDate(staffMember.createdAt)}</p>
-                      <div className="text-right">
-                        <span className="font-medium text-slate-950">{staffMember.assignedJobs}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-medium text-slate-950">{staffMember.openJobs}</span>
-                      </div>
                       <div className="flex justify-end">
                         <Button
                           variant="outline"

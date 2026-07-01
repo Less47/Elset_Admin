@@ -130,18 +130,18 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
   const renderServiceBoardControls = (tone = "panel") => {
     const isHeroTone = tone === "hero";
     const searchInputClassName = isHeroTone
-      ? "border-white/70 bg-white/95 text-slate-900 placeholder:text-slate-500 shadow-sm sm:w-[320px] xl:w-[420px]"
-      : "sm:w-[320px]";
+      ? "min-w-0 flex-1 border-white/70 bg-white/95 text-slate-900 placeholder:text-slate-500 shadow-sm"
+      : "min-w-0 flex-1";
     const urgencyContainerClassName = isHeroTone
-      ? "flex items-center gap-3 rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-white"
-      : "flex items-center gap-3 rounded-2xl border bg-white px-4 py-2";
+      ? "flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-3 py-2 text-white"
+      : "flex items-center gap-2 rounded-2xl border bg-white px-3 py-2";
     const fullScreenButtonClassName = isHeroTone
       ? "rounded-2xl border-white/30 bg-white/95 text-slate-900 hover:bg-white"
       : "rounded-2xl bg-white";
 
     return (
       <div className="grid gap-3">
-        <div className="flex w-full flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex w-full flex-col gap-2 md:flex-row md:items-center">
           <Input
             className={searchInputClassName}
             placeholder="Search jobs, customer, address..."
@@ -149,14 +149,14 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             onChange={(event) => setOfficeSearch(event.target.value)}
           />
 
-          <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+          <div className="flex shrink-0 flex-nowrap items-center gap-2 md:justify-end">
             <div className={urgencyContainerClassName}>
               <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
-              <span className="text-sm">High urgency only</span>
+              <span className="whitespace-nowrap text-sm">High urgency only</span>
             </div>
             <Button
               variant="outline"
-              className={fullScreenButtonClassName}
+              className={`${fullScreenButtonClassName} whitespace-nowrap px-3`}
               onClick={() => setServiceBoardFullScreen((prev) => !prev)}
             >
               {isServiceBoardFullScreen ? (
@@ -170,7 +170,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               )}
             </Button>
             {canManageBusiness ? (
-              <Button className="rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
+              <Button className="whitespace-nowrap rounded-2xl px-3 hover:opacity-95" style={themePalette.primaryButton} onClick={() => setJobFormOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" /> New Job
               </Button>
             ) : null}
@@ -191,14 +191,14 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
   return (
     <>
       {!isServiceBoardFullScreen && (
-        <aside className={isIconOnlySidebar ? "mx-auto w-[var(--sidebar-width)] lg:fixed lg:inset-y-0 lg:left-0 lg:mx-0" : "lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]"}>
+        <aside className={isIconOnlySidebar ? "w-full lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]" : "lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]"}>
           <div
             className="overflow-hidden border shadow-sm backdrop-blur lg:flex lg:h-screen lg:flex-col lg:rounded-none lg:border-y-0 lg:border-r lg:border-l-0"
             style={themePalette.sidebarShell}
           >
-            <div className={isIconOnlySidebar ? "p-2 lg:flex-1 lg:overflow-y-auto" : "p-4 lg:flex-1 lg:overflow-y-auto lg:p-5"}>
+            <div className={isIconOnlySidebar ? "flex items-center gap-2 overflow-x-auto p-2 lg:block lg:flex-1 lg:overflow-y-auto" : "p-4 lg:flex-1 lg:overflow-y-auto lg:p-5"}>
               <div
-                className={isIconOnlySidebar ? "mx-auto flex h-12 w-12 justify-center overflow-hidden rounded-2xl border p-0 shadow-sm" : "overflow-hidden rounded-3xl border p-4 shadow-sm"}
+                className={isIconOnlySidebar ? "flex h-12 w-12 shrink-0 justify-center overflow-hidden rounded-2xl border p-0 shadow-sm lg:mx-auto" : "overflow-hidden rounded-3xl border p-4 shadow-sm"}
                 style={{
                   ...themePalette.sidebarHeader,
                   borderColor: themePalette.borderColor,
@@ -226,14 +226,14 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                 )}
               </div>
 
-              <div className={isIconOnlySidebar ? "mt-4 grid justify-center gap-2" : "mt-4 grid gap-2"}>
+              <div className={isIconOnlySidebar ? "flex flex-1 items-center gap-2 overflow-x-auto lg:mt-4 lg:grid lg:justify-center" : "mt-4 grid gap-2"}>
                 {visibleSideNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeSection === item.id;
                   const isSettingsItem = item.id === "settings";
 
                   return (
-                    <div key={item.id} className={isIconOnlySidebar ? "grid justify-center" : "space-y-2"}>
+                    <div key={item.id} className={isIconOnlySidebar ? "shrink-0 lg:grid lg:justify-center" : "space-y-2"}>
                       <button
                         type="button"
                         onClick={() => {
@@ -308,7 +308,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                 })}
               </div>
 
-              <div className={isIconOnlySidebar ? "mt-4 grid justify-center border-t pt-4" : "mt-6 border-t pt-4"} style={{ borderColor: themePalette.borderColor }}>
+              <div className={isIconOnlySidebar ? "ml-2 shrink-0 border-l pl-2 lg:ml-0 lg:mt-4 lg:grid lg:justify-center lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4" : "mt-6 border-t pt-4"} style={{ borderColor: themePalette.borderColor }}>
                 <div className={isIconOnlySidebar ? "h-12 w-12 rounded-2xl border p-1 text-sm" : "rounded-2xl border p-4 text-sm"} style={themePalette.sidebarInactiveButton}>
                   {isIconOnlySidebar ? (
                     isAuthenticated ? (
@@ -454,7 +454,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         {canManageBusiness && activeSection === "job-history" ? (
           <JobHistoryManager
             jobs={data.jobs}
-            staff={data.staff}
             onOpenJob={handleOpenJob}
             formatDate={formatDate}
             getInvoiceStatus={getInvoiceStatus}
@@ -514,7 +513,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
           <MaintenanceManager
             maintenancePlans={data.maintenancePlans || []}
             customers={data.customers}
-            staff={data.staff}
             jobs={data.jobs}
             onCreatePlan={handleCreateMaintenancePlan}
             onUpdatePlan={handleUpdateMaintenancePlan}
@@ -527,7 +525,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         {canManageBusiness && activeSection === "staff" ? (
           <StaffManager
             staff={data.staff}
-            jobs={data.jobs}
             onCreateStaff={handleCreateStaff}
             onUpdateStaff={handleUpdateStaff}
             canManageLogins={isAdmin}
@@ -551,7 +548,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             dashboard={dashboard}
             jobs={data.jobs}
             customers={data.customers}
-            staff={data.staff}
             inventoryItems={data.inventoryItems}
             getInventoryStockStatus={getInventoryStockStatus}
             normalizeInventoryRecord={normalizeInventoryRecord}
