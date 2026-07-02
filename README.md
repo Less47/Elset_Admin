@@ -2,7 +2,7 @@
 
 <img src="public/elset-logo.png" alt="Elset logo" width="320" />
 
-Elset Admin is a Vite + React service management app for tracking jobs, customers, quotes, invoices, and technician activity.
+Elset Admin is a Vite + React service management app for tracking jobs, customers, sites, quotes, invoices, and payments.
 
 ## Run the app
 
@@ -77,6 +77,18 @@ EMAIL_FROM=admin@elset.com.au
 `GEOAPIFY_API_KEY` enables address autocomplete and map geocoding.
 `GEOAPIFY_MAPS_API_KEY` is optional because the server falls back to `GEOAPIFY_API_KEY` for map tiles.
 `EMAIL_FROM` must use a domain you have verified in Resend, so `admin@elset.com.au` will work once `elset.com.au` is verified in your Resend account.
+
+## Live Data Backups
+
+The Fly app stores live workspace data on the `elset_admin_data` volume mounted at `/app/data`.
+
+Create a local raw backup from Fly:
+
+```bash
+npm run backup:fly
+```
+
+That downloads `app-data.json`, `auth.db`, `auth.db-wal`, and `auth.db-shm` into `backups/`, then creates a `.tar.gz` archive with a SHA-256 checksum. The `backups/` folder is ignored by git.
 
 When the API is running, quote sends:
 

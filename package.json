@@ -9,6 +9,7 @@
     "start": "node server.js",
     "server": "node server.js",
     "dev:server": "node --watch dev-server.js",
+    "backup:fly": "node scripts/backup-fly-data.mjs",
     "demo:data": "node scripts/generate-demo-data.mjs",
     "build": "vite build",
     "lint": "eslint .",

@@ -15,6 +15,7 @@ dist-ssr
 auth.db
 data/auth.db
 data/auth.db-*
+backups/
 
 # Editor directories and files
 .vscode/*
