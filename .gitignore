@@ -13,8 +13,16 @@ dist-ssr
 *.local
 .env
 auth.db
+data/app-data.json
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.db-journal
 data/auth.db
 data/auth.db-*
+tmp/
+uploads/
+generated-documents/
 backups/
 
 # Editor directories and files

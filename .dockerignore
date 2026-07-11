@@ -6,3 +6,12 @@ fly.toml
 .env
 .env.*
 !.env.example
+data/
+tmp/
+uploads/
+generated-documents/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal

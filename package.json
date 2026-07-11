@@ -10,9 +10,12 @@
     "server": "node server.js",
     "dev:server": "node --watch dev-server.js",
     "backup:fly": "node scripts/backup-fly-data.mjs",
+    "backup:workspace": "node scripts/backup-workspace-sqlite.mjs",
+    "migrate:workspace": "node scripts/migrate-workspace.mjs",
     "demo:data": "node scripts/generate-demo-data.mjs",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "dependencies": {

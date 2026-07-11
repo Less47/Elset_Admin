@@ -30,11 +30,12 @@ import {
   normalizeQuoteTemplate,
 } from "./src/lib/quote-template.js";
 import {
-  getAuthorizedAppState,
-  loadData,
-  saveData,
-  saveAuthorizedAppState,
-} from "./server-store.js";
+  getAuthorizedWorkspaceState,
+  getWorkspaceStorageStatus,
+  loadWorkspaceState,
+  saveAuthorizedWorkspaceState,
+  saveWorkspaceState,
+} from "./server-workspace-storage.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -492,7 +493,7 @@ export function createServerApp() {
     try {
       return res.json({
         ok: true,
-        state: getAuthorizedAppState(req.user),
+        state: getAuthorizedWorkspaceState(req.user),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load the shared workspace data.";
@@ -502,7 +503,7 @@ export function createServerApp() {
 
   app.put("/api/app-state", requireAuth, (req, res) => {
     try {
-      const state = saveAuthorizedAppState(req.user, req.body);
+      const state = saveAuthorizedWorkspaceState(req.user, req.body);
       if (req.user.role !== "technician") {
         syncManagedUserNamesWithStaff(state.staff);
       }
@@ -519,7 +520,7 @@ export function createServerApp() {
 
   app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {
-      const data = loadData();
+      const data = loadWorkspaceState();
       return res.json({
         ok: true,
         accounts: getManagedUserAccounts(data.staff),
@@ -532,7 +533,7 @@ export function createServerApp() {
 
   app.put("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), async (req, res) => {
     try {
-      const data = loadData();
+      const data = loadWorkspaceState();
       const account = await saveManagedUserAccount({
         requestHeaders: fromNodeHeaders(req.headers),
         accountInput: req.body,
@@ -551,7 +552,7 @@ export function createServerApp() {
 
   app.get("/api/admin/data-backup", requireAuth, requireRole(["admin"]), (req, res) => {
     try {
-      const data = loadData();
+      const data = loadWorkspaceState();
       const backup = {
         ...data,
         users: [],
@@ -593,11 +594,11 @@ export function createServerApp() {
         return res.status(403).json({ error: "The admin password you entered is incorrect." });
       }
 
-      const workspaceData = saveData(prepareWorkspaceBackupImportData(backupInput));
+      const workspaceData = saveWorkspaceState(prepareWorkspaceBackupImportData(backupInput));
       const restoredAuth = restoreAuthBackup(backupInput, req.user);
       syncManagedUserNamesWithStaff(workspaceData.staff);
       const resolvedUser = restoredAuth.user || req.user;
-      const state = getAuthorizedAppState(resolvedUser);
+      const state = getAuthorizedWorkspaceState(resolvedUser);
 
       return res.json({
         ok: true,
@@ -617,7 +618,7 @@ export function createServerApp() {
     try {
       const plan = await previewServiceM8Import({
         apiKey: req.body?.apiKey,
-        existingData: loadData(),
+        existingData: loadWorkspaceState(),
         options: req.body?.options,
       });
       const previewId = createServiceM8ImportPreview(req.user, plan);
@@ -637,7 +638,7 @@ export function createServerApp() {
 
   app.post("/api/admin/servicem8-import/apply", requireAuth, requireRole(["admin"]), async (req, res) => {
     try {
-      const existingData = loadData();
+      const existingData = loadWorkspaceState();
       const cachedPlan = takeServiceM8ImportPreview(req.user, req.body?.previewId);
       const { plan, nextData } = cachedPlan
         ? {
@@ -649,7 +650,7 @@ export function createServerApp() {
             existingData,
             options: req.body?.options,
           });
-      const savedData = saveData(nextData);
+      const savedData = saveWorkspaceState(nextData);
 
       syncManagedUserNamesWithStaff(savedData.staff);
 
@@ -658,10 +659,22 @@ export function createServerApp() {
         ok: true,
         importedAt: plan.importedAt,
         summary: plan.summary,
-        state: getAuthorizedAppState(req.user),
+        state: getAuthorizedWorkspaceState(req.user),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to import ServiceM8 data.";
+      return res.status(400).json({ error: message });
+    }
+  });
+
+  app.get("/api/admin/workspace-storage", requireAuth, requireRole(["admin"]), (_req, res) => {
+    try {
+      return res.json({
+        ok: true,
+        storage: getWorkspaceStorageStatus(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to inspect workspace storage.";
       return res.status(400).json({ error: message });
     }
   });

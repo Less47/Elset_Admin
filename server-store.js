@@ -947,7 +947,7 @@ function normalizeAuthMigrationMeta(meta) {
   };
 }
 
-function normalizeStoredData(rawData) {
+export function normalizeStoredData(rawData) {
   const data = rawData || buildSeedData();
   return syncUsersWithStaff(pruneExpiredSessions({
     ...data,

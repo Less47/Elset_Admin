@@ -1,0 +1,191 @@
+{
+  "meta": {
+    "initializedAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "staff": [
+    {
+      "id": "demo-staff-admin",
+      "name": "Jordan Vale",
+      "role": "Office Manager",
+      "email": "jordan.vale@example.test",
+      "phone": "0400 000 101",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "customers": [
+    {
+      "id": "demo-customer-arcadia",
+      "name": "Arcadia Example Apartments",
+      "email": "accounts@arcadia-example.test",
+      "phone": "0400 000 201",
+      "customerType": "strata",
+      "address": "10 Example Lane, Sampleton VIC 3000",
+      "sites": [
+        {
+          "id": "demo-site-front-entry",
+          "label": "Front Entry",
+          "address": "10 Example Lane, Sampleton VIC 3000",
+          "siteType": "residential",
+          "accessNotes": "Use the visitor bay and call the sample building manager.",
+          "notes": "Synthetic demo site for development only.",
+          "contactName": "Taylor Example",
+          "contactPhone": "0400 000 202",
+          "assets": [
+            {
+              "id": "demo-asset-sliding-gate",
+              "name": "Front sliding gate",
+              "type": "Sliding Gate",
+              "location": "Driveway",
+              "model": "Demo Motor 1000",
+              "notes": "Synthetic asset."
+            }
+          ],
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "siteAccessNotes": [],
+      "externalRefs": {},
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "demo-job-1001",
+      "jobNumber": 1001,
+      "title": "Synthetic gate service",
+      "description": "Replace demo controller and test safety edge.",
+      "urgency": "Medium",
+      "status": "To Do",
+      "scheduledDate": "2026-01-15",
+      "assignedTechnicianId": "",
+      "assignedTechnicianName": "",
+      "customerId": "demo-customer-arcadia",
+      "customerName": "Arcadia Example Apartments",
+      "customerEmail": "accounts@arcadia-example.test",
+      "customerPhone": "0400 000 201",
+      "jobAddress": "10 Example Lane, Sampleton VIC 3000",
+      "ocNumber": "OC-DEMO-001",
+      "maintenancePlanId": "",
+      "maintenancePlanName": "",
+      "maintenanceDueDate": "",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "notes": [
+        {
+          "id": "demo-note-1",
+          "author": "Jordan Vale",
+          "text": "Synthetic note for migration tests.",
+          "createdAt": "2026-01-01T00:00:00.000Z"
+        }
+      ],
+      "photos": [],
+      "quote": {
+        "type": "quote",
+        "issueDate": "2026-01-01",
+        "notes": "Synthetic quote.",
+        "items": [
+          {
+            "id": "demo-quote-item-1",
+            "description": "Demo controller",
+            "qty": 1,
+            "rate": 500
+          }
+        ],
+        "sentHistory": []
+      },
+      "invoice": {
+        "type": "invoice",
+        "issueDate": "2026-01-02",
+        "dueDate": "2026-01-09",
+        "notes": "Synthetic invoice.",
+        "paymentNotes": "",
+        "items": [
+          {
+            "id": "demo-invoice-item-1",
+            "description": "Demo controller",
+            "qty": 1,
+            "rate": 500
+          }
+        ],
+        "payments": [
+          {
+            "id": "demo-payment-1",
+            "amount": 250,
+            "date": "2026-01-03",
+            "method": "Demo EFT",
+            "reference": "DEMO-PART",
+            "notes": "Synthetic partial payment.",
+            "createdAt": "2026-01-03T00:00:00.000Z"
+          }
+        ],
+        "sentHistory": []
+      },
+      "externalRefs": {}
+    }
+  ],
+  "deletedJobs": [],
+  "deletedCustomers": [],
+  "quoteTemplate": {
+    "companyName": "ELSET Demo Pty Ltd",
+    "companyAbn": "00 000 000 000",
+    "companyAcn": "000 000 000",
+    "companyEmail": "admin@example.test",
+    "companyPhone": "0400 000 001",
+    "companyAddress": "1 Demo Street, Example VIC 3000",
+    "bankAccountName": "ELSET Demo Pty Ltd",
+    "bankBsb": "000-000",
+    "bankAccountNumber": "000000",
+    "accentColor": "#0f172a",
+    "quoteHeading": "Service Quote",
+    "introText": "{{jobDescription}}",
+    "notesHeading": "",
+    "termsHeading": "Quote Validity",
+    "termsText": "Synthetic fixture quote terms.",
+    "footerText": ""
+  },
+  "invoiceTemplate": {
+    "companyName": "ELSET Demo Pty Ltd",
+    "companyAbn": "00 000 000 000",
+    "companyAcn": "000 000 000",
+    "companyEmail": "admin@example.test",
+    "companyPhone": "0400 000 001",
+    "companyAddress": "1 Demo Street, Example VIC 3000",
+    "bankAccountName": "ELSET Demo Pty Ltd",
+    "bankBsb": "000-000",
+    "bankAccountNumber": "000000",
+    "accentColor": "#0f172a",
+    "quoteHeading": "Service Invoice",
+    "introText": "Synthetic fixture invoice intro.",
+    "notesHeading": "Work Completed",
+    "termsHeading": "How to Pay",
+    "termsText": "Synthetic fixture payment terms.",
+    "footerText": "Synthetic fixture footer."
+  },
+  "settings": {
+    "companyName": "ELSET Demo Pty Ltd",
+    "companyEmail": "admin@example.test",
+    "defaultSenderEmail": "admin@example.test",
+    "replyToEmail": "admin@example.test"
+  },
+  "inventoryItems": [
+    {
+      "id": "demo-inventory-controller",
+      "name": "Demo controller",
+      "sku": "DEMO-CONTROLLER",
+      "category": "Automation",
+      "supplier": "Example Supplier",
+      "location": "Demo shelf",
+      "quantity": 3,
+      "reorderLevel": 1,
+      "unitCost": 100,
+      "notes": "Synthetic stock item.",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "maintenancePlans": [],
+  "users": [],
+  "sessions": []
+}
