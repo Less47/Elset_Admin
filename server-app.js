@@ -36,6 +36,7 @@ import {
   saveAuthorizedWorkspaceState,
   saveWorkspaceState,
 } from "./server-workspace-storage.js";
+import { registerCustomerRoutes } from "./server-customer-routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -517,6 +518,8 @@ export function createServerApp() {
       return res.status(500).json({ error: message });
     }
   });
+
+  registerCustomerRoutes(app, { requireAuth, requireRole });
 
   app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {
