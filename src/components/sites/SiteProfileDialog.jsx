@@ -97,8 +97,8 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                   <Button
                     className="rounded-xl"
                     disabled={!canSave}
-                    onClick={() => {
-                      const saved = onSaveSite(customer.id, draftSite, site?.address || "");
+                    onClick={async () => {
+                      const saved = await onSaveSite(customer.id, draftSite, site?.address || "");
                       if (saved) setIsEditing(false);
                     }}
                   >

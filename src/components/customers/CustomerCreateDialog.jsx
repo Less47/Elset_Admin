@@ -126,9 +126,11 @@ export default function CustomerCreateDialog({ open, onOpenChange, onSave }) {
           </Button>
           <Button
             disabled={!canSave}
-            onClick={() => {
-              onSave(customer);
-              onOpenChange(false);
+            onClick={async () => {
+              const saved = await onSave(customer);
+              if (saved) {
+                onOpenChange(false);
+              }
             }}
           >
             Create Customer

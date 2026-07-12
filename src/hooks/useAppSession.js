@@ -68,6 +68,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [adminUserAccounts, setAdminUserAccounts] = useState([]);
   const [adminUserAccountsError, setAdminUserAccountsError] = useState("");
+  const [workspaceStorageMode, setWorkspaceStorageMode] = useState("json");
   const lastSyncedDataRef = useRef("");
   const saveTimeoutRef = useRef(null);
   const syncErrorRef = useRef("");
@@ -91,6 +92,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     setAuthError(message);
     setAuthUser(null);
     setAuthStatus("logged_out");
+    setWorkspaceStorageMode("json");
     setLoginForm((prev) => ({ ...prev, password: "" }));
     setAdminUserAccounts([]);
     setAdminUserAccountsError("");
@@ -110,6 +112,16 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       headers,
     });
   }, []);
+
+  const applyServerWorkspaceState = useCallback((incomingState) => {
+    const nextState = normalizeAppState(incomingState);
+    hasLoadedServerStateRef.current = true;
+    lastSyncedDataRef.current = JSON.stringify(nextState);
+    syncErrorRef.current = "";
+    setData(nextState);
+    setAuthError("");
+    return nextState;
+  }, [setData]);
 
   useEffect(() => {
     return () => {
@@ -159,9 +171,10 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
           throw new Error(statePayload.error || "Failed to load the shared workspace data.");
         }
 
+        const nextStorageMode = statePayload.storageMode === "sqlite" ? "sqlite" : "json";
         let nextState = normalizeAppState(statePayload.state);
 
-        if (user?.role !== "technician" && !hasCompletedServerMigration()) {
+        if (nextStorageMode !== "sqlite" && user?.role !== "technician" && !hasCompletedServerMigration()) {
           const legacyState = getLegacyPersistedState();
           if (legacyState && countBusinessRecords(legacyState) > countBusinessRecords(nextState)) {
             const migrateResponse = await fetchWithAuth("/api/app-state", {
@@ -188,6 +201,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         lastSyncedDataRef.current = JSON.stringify(nextState);
         syncErrorRef.current = "";
         setData(nextState);
+        setWorkspaceStorageMode(nextStorageMode);
         setAuthUser(user);
         setAuthStatus("authenticated");
         setAuthError("");
@@ -634,10 +648,12 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   return {
     adminUserAccounts,
     adminUserAccountsError,
+    applyServerWorkspaceState,
     authError,
     authStatus,
     authUser,
     canManageBusiness,
+    fetchWithAuth,
     handleDownloadBackup,
     handleApplyServiceM8Import,
     handleLogin,
@@ -651,5 +667,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     isAuthenticated,
     isTechnician,
     loginForm,
+    workspaceStorageMode,
   };
 }

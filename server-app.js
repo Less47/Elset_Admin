@@ -31,6 +31,7 @@ import {
 } from "./src/lib/quote-template.js";
 import {
   getAuthorizedWorkspaceState,
+  getWorkspaceStorageMode,
   getWorkspaceStorageStatus,
   loadWorkspaceState,
   saveAuthorizedWorkspaceState,
@@ -494,6 +495,7 @@ export function createServerApp() {
     try {
       return res.json({
         ok: true,
+        storageMode: getWorkspaceStorageMode(),
         state: getAuthorizedWorkspaceState(req.user),
       });
     } catch (error) {

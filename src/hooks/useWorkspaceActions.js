@@ -37,11 +37,14 @@ import {
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
 } from "@/lib/quote-template";
+import { isSqliteWorkspaceMode, requestCustomerWorkspaceUpdate } from "./workspace-customer-api";
 
 export function useWorkspaceActions({
+  applyServerWorkspaceState,
   canManageBusiness,
   data,
   docType,
+  fetchWithAuth,
   selectedFreshJob,
   selectedJob,
   selectedSiteContext,
@@ -57,7 +60,45 @@ export function useWorkspaceActions({
   setSelectedSiteContext,
   setSiteProfileOpen,
   themeSettings,
+  workspaceStorageMode = "json",
 }) {
+  const useCustomerSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
+
+  function applyCustomerServerState(state) {
+    if (typeof applyServerWorkspaceState === "function") {
+      return applyServerWorkspaceState(state);
+    }
+
+    setData(state);
+    return state;
+  }
+
+  async function saveCustomerApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update the customer records.",
+  }) {
+    try {
+      const payload = await requestCustomerWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyCustomerServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
+  function customerPath(customerId, suffix = "") {
+    return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
+  }
+
   function getTomorrowPlanningDate() {
     return addDaysToDateInput(toDateInputValue(new Date()), 1);
   }
@@ -663,7 +704,7 @@ export function useWorkspaceActions({
     setSiteProfileOpen(true);
   }
 
-  function handleCreateCustomer(customerInput) {
+  async function handleCreateCustomer(customerInput) {
     if (!canManageBusiness) return null;
 
     const { primarySiteType = "", primaryOcNumber = "", ...customerFields } = customerInput || {};
@@ -689,6 +730,21 @@ export function useWorkspaceActions({
       createdAt,
     });
 
+    if (useCustomerSqliteApi) {
+      const saved = await saveCustomerApiRequest({
+        path: "/api/customers",
+        method: "POST",
+        body: { customer: createdCustomer },
+        errorMessage: "Unable to create the customer.",
+      });
+      if (!saved.ok) return null;
+
+      const savedCustomer = saved.result || createdCustomer;
+      setSelectedCustomerId(savedCustomer.id);
+      setCustomerProfileOpen(true);
+      return savedCustomer;
+    }
+
     setData((prev) => ({
       ...prev,
       customers: [createdCustomer, ...prev.customers.filter((entry) => entry.id !== createdCustomer.id)],
@@ -698,12 +754,46 @@ export function useWorkspaceActions({
     return createdCustomer;
   }
 
-  function handleSaveSiteProfile(customerId, siteInput, previousAddress = "") {
+  async function handleSaveSiteProfile(customerId, siteInput, previousAddress = "") {
     if (!canManageBusiness) return false;
 
     const normalizedPreviousAddress = normalizeSiteAddress(previousAddress);
     const normalizedSite = normalizeSiteProfileRecord(siteInput);
     if (!normalizedSite) return false;
+
+    if (useCustomerSqliteApi) {
+      const customer = data.customers.find((entry) => entry.id === customerId);
+      if (!customer) {
+        window.alert("Customer not found.");
+        return false;
+      }
+
+      const previousAddressKey = normalizedPreviousAddress.toLowerCase();
+      const existingSite = (customer.sites || []).find((site) =>
+        site.id === normalizedSite.id
+        || (previousAddressKey && normalizeSiteAddress(site.address).toLowerCase() === previousAddressKey)
+      );
+      const siteForSave = {
+        ...normalizedSite,
+        id: existingSite?.id || normalizedSite.id,
+      };
+      const saved = await saveCustomerApiRequest({
+        path: existingSite
+          ? customerPath(customerId, `/sites/${encodeURIComponent(existingSite.id)}`)
+          : customerPath(customerId, "/sites"),
+        method: existingSite ? "PATCH" : "POST",
+        body: {
+          site: siteForSave,
+          previousAddress: normalizedPreviousAddress,
+        },
+        errorMessage: "Unable to save the site profile.",
+      });
+      if (!saved.ok) return false;
+
+      const savedSite = saved.result || siteForSave;
+      setSelectedSiteContext({ customerId, siteKey: savedSite.id || savedSite.address.toLowerCase() });
+      return true;
+    }
 
     setData((prev) => {
       const customer = prev.customers.find((entry) => entry.id === customerId);
@@ -775,7 +865,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleDeleteSiteProfile(customerId, site) {
+  async function handleDeleteSiteProfile(customerId, site) {
     if (!canManageBusiness || !site) return false;
 
     const confirmed = window.confirm(
@@ -784,6 +874,24 @@ export function useWorkspaceActions({
         : "Delete this saved site profile?"
     );
     if (!confirmed) return false;
+
+    if (useCustomerSqliteApi) {
+      const siteId = site.siteProfileId || site.id;
+      if (!siteId) {
+        window.alert("Site profile not found.");
+        return false;
+      }
+
+      const saved = await saveCustomerApiRequest({
+        path: customerPath(customerId, `/sites/${encodeURIComponent(siteId)}`),
+        method: "DELETE",
+        errorMessage: "Unable to delete the site profile.",
+      });
+      if (!saved.ok) return false;
+
+      setSelectedSiteContext({ customerId, siteKey: normalizeSiteAddress(site.address).toLowerCase() });
+      return true;
+    }
 
     setData((prev) => {
       const customer = prev.customers.find((entry) => entry.id === customerId);
@@ -1048,8 +1156,18 @@ export function useWorkspaceActions({
     }
   }
 
-  function handleUpdateCustomer(customerId, updates) {
-    if (!canManageBusiness) return;
+  async function handleUpdateCustomer(customerId, updates) {
+    if (!canManageBusiness) return false;
+
+    if (useCustomerSqliteApi) {
+      const saved = await saveCustomerApiRequest({
+        path: customerPath(customerId),
+        method: "PATCH",
+        body: { customer: updates },
+        errorMessage: "Unable to save the customer.",
+      });
+      return saved.ok ? (saved.result || true) : false;
+    }
 
     setData((prev) => {
       const customers = prev.customers.map((customer) =>
@@ -1072,9 +1190,11 @@ export function useWorkspaceActions({
       );
       return { ...prev, customers, jobs };
     });
+
+    return true;
   }
 
-  function handleDeleteCustomer(customerId) {
+  async function handleDeleteCustomer(customerId) {
     if (!canManageBusiness) return false;
 
     const customer = data.customers.find((entry) => entry.id === customerId);
@@ -1088,6 +1208,31 @@ export function useWorkspaceActions({
         : `Delete ${customer.name} from the customer database?`
     );
     if (!confirmed) return false;
+
+    if (useCustomerSqliteApi) {
+      const saved = await saveCustomerApiRequest({
+        path: customerPath(customerId),
+        method: "DELETE",
+        errorMessage: "Unable to delete the customer.",
+      });
+      if (!saved.ok) return false;
+
+      if (selectedJob?.customerId === customerId) {
+        setSelectedJob(null);
+        setJobDetailsOpen(false);
+        setJobEditOpen(false);
+        setDocEditorOpen(false);
+      }
+
+      if (selectedSiteContext?.customerId === customerId) {
+        setSelectedSiteContext(null);
+        setSiteProfileOpen(false);
+      }
+
+      setSelectedCustomerId(null);
+      setCustomerProfileOpen(false);
+      return true;
+    }
 
     setData((prev) => {
       const deletedAt = new Date().toISOString();
@@ -1177,8 +1322,17 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleRestoreDeletedCustomer(customerId) {
+  async function handleRestoreDeletedCustomer(customerId) {
     if (!canManageBusiness) return false;
+
+    if (useCustomerSqliteApi) {
+      const saved = await saveCustomerApiRequest({
+        path: customerPath(customerId, "/restore"),
+        method: "POST",
+        errorMessage: "Unable to restore the customer.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => {
       const deletedRecord = prev.deletedCustomers.find((entry) => entry.customer.id === customerId);
