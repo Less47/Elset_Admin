@@ -38,6 +38,7 @@ import {
   saveWorkspaceState,
 } from "./server-workspace-storage.js";
 import { registerCustomerRoutes } from "./server-customer-routes.js";
+import { registerJobRoutes } from "./server-job-routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -522,6 +523,7 @@ export function createServerApp() {
   });
 
   registerCustomerRoutes(app, { requireAuth, requireRole });
+  registerJobRoutes(app, { requireAuth, requireRole });
 
   app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {
