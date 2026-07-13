@@ -2,7 +2,7 @@ export function isSqliteWorkspaceMode(mode) {
   return String(mode || "").trim().toLowerCase() === "sqlite";
 }
 
-export async function requestCustomerWorkspaceUpdate({
+export async function requestWorkspaceUpdate({
   fetchWithAuth,
   path,
   method = "POST",
@@ -32,4 +32,8 @@ export async function requestCustomerWorkspaceUpdate({
   }
 
   return payload;
+}
+
+export function requestCustomerWorkspaceUpdate(options) {
+  return requestWorkspaceUpdate(options);
 }

@@ -43,9 +43,12 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
   } = selection;
   const {
     createJob,
+    handleAddJobNote,
+    handleAddJobPhotos,
     handleCreateCustomer,
     handleDeleteCustomer,
     handleDeleteJob,
+    handleDeleteJobPhoto,
     handleDeleteSiteProfile,
     handleOpenCustomerProfile,
     handleOpenDoc,
@@ -145,12 +148,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
         onAddNote={(text) => {
           if (!selectedFreshJob) return;
 
-          updateJob(selectedFreshJob.id, {
-            notes: [
-              ...(selectedFreshJob.notes || []),
-              { id: crypto.randomUUID(), author: noteAuthor, text, createdAt: new Date().toISOString() },
-            ],
-          });
+          return handleAddJobNote(selectedFreshJob.id, text, noteAuthor);
         }}
         onAddPhotos={async (files) => {
           if (!selectedFreshJob) return;
@@ -164,9 +162,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
               }))
             );
 
-            updateJob(selectedFreshJob.id, {
-              photos: [...(selectedFreshJob.photos || []), ...photos],
-            });
+            return handleAddJobPhotos(selectedFreshJob.id, photos);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to read the selected image files.";
             window.alert(message);
@@ -179,9 +175,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
           const confirmed = window.confirm(`Delete ${photoLabel} from this job? This cannot be undone.`);
           if (!confirmed) return;
 
-          updateJob(selectedFreshJob.id, {
-            photos: (selectedFreshJob.photos || []).filter((entry) => entry.id !== photo.id),
-          });
+          return handleDeleteJobPhoto(selectedFreshJob.id, photo);
         }}
       />
 

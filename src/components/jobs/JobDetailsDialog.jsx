@@ -273,9 +273,11 @@ export default function JobDetailsDialog({
                   </div>
                   <div className="flex justify-end">
                     <Button
-                      onClick={() => {
-                        if (!note.trim()) return;
-                        onAddNote(note);
+                      onClick={async () => {
+                        const noteText = note.trim();
+                        if (!noteText) return;
+                        const saved = await onAddNote(noteText);
+                        if (saved === false) return;
                         setNote("");
                       }}
                     >

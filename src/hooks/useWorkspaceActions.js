@@ -37,7 +37,7 @@ import {
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
 } from "@/lib/quote-template";
-import { isSqliteWorkspaceMode, requestCustomerWorkspaceUpdate } from "./workspace-customer-api";
+import { isSqliteWorkspaceMode, requestCustomerWorkspaceUpdate, requestWorkspaceUpdate } from "./workspace-customer-api";
 
 export function useWorkspaceActions({
   applyServerWorkspaceState,
@@ -62,9 +62,10 @@ export function useWorkspaceActions({
   themeSettings,
   workspaceStorageMode = "json",
 }) {
-  const useCustomerSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
+  const useSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
+  const useCustomerSqliteApi = useSqliteApi;
 
-  function applyCustomerServerState(state) {
+  function applyServerState(state) {
     if (typeof applyServerWorkspaceState === "function") {
       return applyServerWorkspaceState(state);
     }
@@ -72,6 +73,8 @@ export function useWorkspaceActions({
     setData(state);
     return state;
   }
+
+  const applyCustomerServerState = applyServerState;
 
   async function saveCustomerApiRequest({
     path,
@@ -95,8 +98,34 @@ export function useWorkspaceActions({
     }
   }
 
+  async function saveJobApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update the job records.",
+  }) {
+    try {
+      const payload = await requestWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
   function customerPath(customerId, suffix = "") {
     return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
+  }
+
+  function jobPath(jobId, suffix = "") {
+    return `/api/jobs/${encodeURIComponent(String(jobId || ""))}${suffix}`;
   }
 
   function getTomorrowPlanningDate() {
@@ -115,8 +144,23 @@ export function useWorkspaceActions({
     }, 0) + 1;
   }
 
-  function createJob({ job, customerMode, customer, siteInput = null }) {
+  async function createJob({ job, customerMode, customer, siteInput = null }) {
     if (!canManageBusiness) return;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: "/api/jobs",
+        method: "POST",
+        body: {
+          job,
+          customerMode,
+          customer,
+          siteInput,
+        },
+        errorMessage: "Unable to create the job.",
+      });
+      return saved.ok ? saved.result : null;
+    }
 
     setData((prev) => {
       let customerRecord = customer;
@@ -455,8 +499,19 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleScheduleJob(jobId, scheduledDate) {
+  async function handleScheduleJob(jobId, scheduledDate) {
     if (!canManageBusiness) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/schedule"),
+        method: "PATCH",
+        body: { scheduledDate: toDateInputValue(scheduledDate) },
+        errorMessage: "Unable to update the job schedule.",
+      });
+      return saved.ok;
+    }
+
     updateJob(jobId, { scheduledDate: toDateInputValue(scheduledDate) });
     return true;
   }
@@ -485,13 +540,27 @@ export function useWorkspaceActions({
     }));
   }
 
-  function handleStatusChange(jobId, nextStatus) {
+  function confirmJobStatusChange(job, nextStatus) {
+    if (job.status === "Completed" && nextStatus !== "Completed") {
+      return window.confirm("Are you sure? This job has already been marked as completed.");
+    }
+    return true;
+  }
+
+  async function handleStatusChange(jobId, nextStatus) {
     const job = data.jobs.find((entry) => entry.id === jobId);
     if (!job || !nextStatus || job.status === nextStatus) return false;
 
-    if (job.status === "Completed" && nextStatus !== "Completed") {
-      const confirmed = window.confirm("Are you sure? This job has already been marked as completed.");
-      if (!confirmed) return false;
+    if (!confirmJobStatusChange(job, nextStatus)) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/status"),
+        method: "PATCH",
+        body: { status: nextStatus },
+        errorMessage: "Unable to update the job status.",
+      });
+      return saved.ok;
     }
 
     const now = new Date().toISOString();
@@ -524,10 +593,20 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handlePlanJobForTomorrow(jobId) {
+  async function handlePlanJobForTomorrow(jobId) {
     if (!jobId) return false;
 
     const tomorrowDate = getTomorrowPlanningDate();
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/tomorrow"),
+        method: "POST",
+        body: { tomorrowDate },
+        errorMessage: "Unable to add the job to tomorrow.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => {
       const existingJob = prev.jobs.find((entry) => entry.id === jobId);
@@ -559,8 +638,17 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleRemoveJobFromTomorrow(jobId) {
+  async function handleRemoveJobFromTomorrow(jobId) {
     if (!jobId) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/tomorrow"),
+        method: "DELETE",
+        errorMessage: "Unable to remove the job from tomorrow.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => {
       const existingJob = prev.jobs.find((entry) => entry.id === jobId);
@@ -586,7 +674,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleRemoveAllJobsFromTomorrow() {
+  async function handleRemoveAllJobsFromTomorrow() {
     const tomorrowDate = getTomorrowPlanningDate();
     const plannedJobCount = data.jobs.filter((entry) => entry.serviceBoardTomorrowDate === tomorrowDate).length;
     if (plannedJobCount === 0) return false;
@@ -595,6 +683,16 @@ export function useWorkspaceActions({
       `Remove all ${plannedJobCount} job${plannedJobCount === 1 ? "" : "s"} from tomorrow?`
     );
     if (!confirmed) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: "/api/jobs/tomorrow",
+        method: "DELETE",
+        body: { tomorrowDate },
+        errorMessage: "Unable to clear tomorrow's plan.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => {
       const hasTomorrowJobs = prev.jobs.some((entry) => entry.serviceBoardTomorrowDate === tomorrowDate);
@@ -621,19 +719,23 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleUpdateJobDetails(jobId, updates) {
+  async function handleUpdateJobDetails(jobId, updates) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
     if (!job) return false;
 
-    if (updates.status && updates.status !== job.status) {
-      const statusUpdated = handleStatusChange(jobId, updates.status);
-      if (!statusUpdated) return false;
+    const isStatusChanging = Boolean(updates.status && updates.status !== job.status);
+    if (isStatusChanging) {
+      if (useSqliteApi) {
+        if (!confirmJobStatusChange(job, updates.status)) return false;
+      } else {
+        const statusUpdated = await handleStatusChange(jobId, updates.status);
+        if (!statusUpdated) return false;
+      }
     }
 
     const nextUpdates = { ...updates };
-    delete nextUpdates.status;
     if (Object.prototype.hasOwnProperty.call(nextUpdates, "scheduledDate")) {
       nextUpdates.scheduledDate = toDateInputValue(nextUpdates.scheduledDate);
     }
@@ -649,6 +751,22 @@ export function useWorkspaceActions({
     if (Object.prototype.hasOwnProperty.call(nextUpdates, "billingContact")) {
       nextUpdates.billingContact = normalizeJobContactSnapshot(nextUpdates.billingContact, "Billing contact");
     }
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId),
+        method: "PATCH",
+        body: { job: nextUpdates },
+        errorMessage: "Unable to save the job details.",
+      });
+      if (!saved.ok) return false;
+
+      setJobEditOpen(false);
+      setJobDetailsOpen(true);
+      return true;
+    }
+
+    delete nextUpdates.status;
     if (Object.keys(nextUpdates).length > 0) {
       updateJob(jobId, nextUpdates);
     }
@@ -658,7 +776,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleDeleteJob(jobId) {
+  async function handleDeleteJob(jobId) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
@@ -668,6 +786,21 @@ export function useWorkspaceActions({
       `Delete Job #${job.jobNumber}? This will remove the job, saved quote/invoice data, notes, and photos.`
     );
     if (!confirmed) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId),
+        method: "DELETE",
+        errorMessage: "Unable to delete the job.",
+      });
+      if (!saved.ok) return false;
+
+      setSelectedJob(null);
+      setJobDetailsOpen(false);
+      setJobEditOpen(false);
+      setDocEditorOpen(false);
+      return true;
+    }
 
     setData((prev) => ({
       ...prev,
@@ -681,6 +814,77 @@ export function useWorkspaceActions({
     setJobDetailsOpen(false);
     setJobEditOpen(false);
     setDocEditorOpen(false);
+    return true;
+  }
+
+  async function handleAddJobNote(jobId, text, author = "") {
+    if (!jobId) return false;
+    const noteText = String(text || "").trim();
+    if (!noteText) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/notes"),
+        method: "POST",
+        body: {
+          note: {
+            text: noteText,
+            author,
+          },
+        },
+        errorMessage: "Unable to add the job note.",
+      });
+      return saved.ok;
+    }
+
+    updateJob(jobId, {
+      notes: [
+        ...((data.jobs.find((entry) => entry.id === jobId)?.notes) || []),
+        { id: crypto.randomUUID(), author, text: noteText, createdAt: new Date().toISOString() },
+      ],
+    });
+    return true;
+  }
+
+  async function handleAddJobPhotos(jobId, photos = []) {
+    if (!jobId) return false;
+    const nextPhotos = Array.isArray(photos) ? photos.filter(Boolean) : [];
+    if (nextPhotos.length === 0) return false;
+
+    if (useSqliteApi) {
+      for (const photo of nextPhotos) {
+        const saved = await saveJobApiRequest({
+          path: jobPath(jobId, "/photos"),
+          method: "POST",
+          body: { photo },
+          errorMessage: "Unable to add the job photo.",
+        });
+        if (!saved.ok) return false;
+      }
+      return true;
+    }
+
+    updateJob(jobId, {
+      photos: [...((data.jobs.find((entry) => entry.id === jobId)?.photos) || []), ...nextPhotos],
+    });
+    return true;
+  }
+
+  async function handleDeleteJobPhoto(jobId, photo) {
+    if (!jobId || !photo?.id) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, `/photos/${encodeURIComponent(photo.id)}`),
+        method: "DELETE",
+        errorMessage: "Unable to delete the job photo.",
+      });
+      return saved.ok;
+    }
+
+    updateJob(jobId, {
+      photos: ((data.jobs.find((entry) => entry.id === jobId)?.photos) || []).filter((entry) => entry.id !== photo.id),
+    });
     return true;
   }
 
@@ -1271,8 +1475,17 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleRestoreDeletedJob(jobId) {
+  async function handleRestoreDeletedJob(jobId) {
     if (!canManageBusiness) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/restore"),
+        method: "POST",
+        errorMessage: "Unable to restore the job.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => {
       const deletedRecord = prev.deletedJobs.find((entry) => entry.job.id === jobId);
@@ -1354,11 +1567,20 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleEmptyDeletedJobs() {
+  async function handleEmptyDeletedJobs() {
     if (!canManageBusiness) return false;
     if (data.deletedJobs.length === 0) return false;
     const confirmed = window.confirm("Empty the deleted jobs recycle bin? This cannot be undone.");
     if (!confirmed) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveJobApiRequest({
+        path: "/api/deleted-jobs",
+        method: "DELETE",
+        errorMessage: "Unable to empty deleted jobs.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => ({ ...prev, deletedJobs: [] }));
     return true;
@@ -1439,6 +1661,8 @@ export function useWorkspaceActions({
 
   return {
     createJob,
+    handleAddJobNote,
+    handleAddJobPhotos,
     handleApplyThemePreset,
     handleCreateCustomer,
     handleCreateInventoryItem,
@@ -1448,6 +1672,7 @@ export function useWorkspaceActions({
     handleDeleteCustomer,
     handleDeleteInventoryItem,
     handleDeleteJob,
+    handleDeleteJobPhoto,
     handleDeleteMaintenancePlan,
     handleDeleteSiteProfile,
     handleEmptyDeletedCustomers,
