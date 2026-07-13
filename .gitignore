@@ -24,6 +24,8 @@ tmp/
 uploads/
 generated-documents/
 backups/
+test-results/
+playwright-report/
 
 # Editor directories and files
 .vscode/*

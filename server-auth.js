@@ -13,6 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const AUTH_MIGRATION_VERSION = "better-auth-v1";
+const AUTH_MIN_PASSWORD_LENGTH = 6;
 const SYNTHETIC_EMAIL_DOMAIN = "auth.elset.local";
 const WORKSPACE_ROLE_VALUES = new Set(["admin", "office", "technician"]);
 const AUTH_ROLE_VALUES = new Set(["admin", "user"]);
@@ -130,7 +131,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    minPasswordLength: 6,
+    minPasswordLength: AUTH_MIN_PASSWORD_LENGTH,
     maxPasswordLength: 128,
     password: {
       hash: async (password) => hashLegacyPassword(password),
@@ -258,6 +259,24 @@ function getRawAuthUserRowById(userId) {
     WHERE u.id = ?
     LIMIT 1
   `).get(String(userId)) || null;
+}
+
+function getRawAuthUserRowByUsername(username) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return null;
+
+  return authDb.prepare(`
+    SELECT
+      u.id,
+      u.username,
+      a.password AS passwordHash
+    FROM "user" u
+    LEFT JOIN "account" a
+      ON a.userId = u.id
+     AND a.providerId = 'credential'
+    WHERE lower(u.username) = ?
+    LIMIT 1
+  `).get(normalizedUsername) || null;
 }
 
 function getCurrentUserSessions(userId) {
@@ -520,6 +539,50 @@ export function verifyUserPassword(userId, password) {
   });
 }
 
+export function getAuthDatabasePath() {
+  return AUTH_DB_PATH;
+}
+
+export function getAuthMinimumPasswordLength() {
+  return AUTH_MIN_PASSWORD_LENGTH;
+}
+
+export async function resetExistingAuthUserPassword({ username = "admin", newPassword } = {}) {
+  const normalizedUsername = normalizeUsername(username);
+  const passwordValue = String(newPassword || "");
+
+  if (!normalizedUsername) {
+    throw new Error("Username is required.");
+  }
+
+  if (passwordValue.length < AUTH_MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`);
+  }
+
+  const userRow = getRawAuthUserRowByUsername(normalizedUsername);
+  if (!userRow) {
+    throw new Error(`Existing user "${normalizedUsername}" was not found. No account was created.`);
+  }
+
+  if (!userRow.passwordHash) {
+    throw new Error(`Existing user "${normalizedUsername}" does not have a credential password account.`);
+  }
+
+  const context = await auth.$context;
+  const revokedSessionCount = getCurrentUserSessions(userRow.id).length;
+  const passwordHash = await context.password.hash(passwordValue);
+
+  await context.internalAdapter.updatePassword(userRow.id, passwordHash);
+  await context.internalAdapter.deleteUserSessions(userRow.id);
+
+  return {
+    userId: String(userRow.id),
+    username: normalizedUsername,
+    authDbPath: AUTH_DB_PATH,
+    revokedSessionCount,
+  };
+}
+
 export function getManagedUserAccounts(staff = []) {
   const staffById = new Map((Array.isArray(staff) ? staff : []).map((staffMember) => [staffMember.id, staffMember]));
   return getAllRawAuthUserRows()
@@ -571,8 +634,8 @@ export async function saveManagedUserAccount({ requestHeaders, accountInput, sta
     throw new Error("Username is required.");
   }
 
-  if (password && password.length < 6) {
-    throw new Error("Password must be at least 6 characters.");
+  if (password && password.length < AUTH_MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`);
   }
 
   if (!existingAccount && !password) {
