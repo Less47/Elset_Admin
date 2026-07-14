@@ -347,7 +347,7 @@ test("job notes and photo metadata can be added and photo metadata can be delete
   });
 });
 
-test("job delete archives complete jobs, core restore handles job-number conflicts, and document restore is blocked", async () => {
+test("job delete archives complete jobs and restore preserves documents while handling job-number conflicts", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
       const restorable = await requestJson(baseUrl, "/api/jobs", {
@@ -394,21 +394,24 @@ test("job delete archives complete jobs, core restore handles job-number conflic
       assert.equal(Boolean(archivedJob?.invoice), true);
       assert.equal(archivedJob.invoice.payments.length, 1);
 
-      const blockedDocumentRestore = await requestJson(baseUrl, "/api/jobs/demo-job-1001/restore", { method: "POST" });
-      assert.equal(blockedDocumentRestore.response.status, 409);
-      assert.match(blockedDocumentRestore.payload.error, /quote or invoice/);
+      const restoredDocumentJob = await requestJson(baseUrl, "/api/jobs/demo-job-1001/restore", { method: "POST" });
+      assert.equal(restoredDocumentJob.response.status, 200, restoredDocumentJob.payload.error);
+      assert.equal(Boolean(restoredDocumentJob.payload.result.quote), true);
+      assert.equal(Boolean(restoredDocumentJob.payload.result.invoice), true);
+      assert.equal(restoredDocumentJob.payload.result.invoice.payments[0].id, "demo-payment-1");
 
       const deleteConflict = await requestJson(baseUrl, "/api/jobs/job-number-conflict", { method: "DELETE" });
       assert.equal(deleteConflict.response.status, 200, deleteConflict.payload.error);
 
       const emptied = await requestJson(baseUrl, "/api/deleted-jobs", { method: "DELETE" });
       assert.equal(emptied.response.status, 200, emptied.payload.error);
-      assert.equal(emptied.payload.result.deletedCount, 2);
+      assert.equal(emptied.payload.result.deletedCount, 1);
       assert.equal(emptied.payload.state.deletedJobs.length, 0);
 
       const state = getDbState(dbPath);
       assert.equal(state.jobs.some((job) => job.id === "job-restorable-core"), true);
-      assert.equal(state.jobs.some((job) => job.id === "demo-job-1001"), false);
+      assert.equal(state.jobs.some((job) => job.id === "demo-job-1001"), true);
+      assert.equal(state.jobs.find((job) => job.id === "demo-job-1001").invoice.payments.length, 1);
       assert.equal(state.deletedJobs.length, 0);
     });
   });

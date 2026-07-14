@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { insertInvoiceTree, insertQuoteTree } from "./server-workspace-documents.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 
 const statusValues = new Set(["To Do", "In Progress", "Completed"]);
@@ -809,6 +810,8 @@ function insertJobTree(db, job) {
   insertJobCore(db, job);
   (Array.isArray(job.notes) ? job.notes : []).forEach((note) => insertNote(db, job.id, normalizeNoteInput(note)));
   (Array.isArray(job.photos) ? job.photos : []).forEach((photo) => insertPhoto(db, job.id, normalizePhotoInput(photo)));
+  if (job.quote) insertQuoteTree(db, job.id, job.quote);
+  if (job.invoice) insertInvoiceTree(db, job.id, job.invoice);
 }
 
 function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
@@ -912,15 +915,6 @@ function normalizeDeletedJobPayload(payload) {
       : {},
     extra: pickExtra(payload, jobKnownKeys),
   };
-}
-
-function assertDeletedJobHasOnlyCoreRecords(job) {
-  if (job.quote || job.invoice) {
-    throw new WorkspaceJobError(
-      "This deleted job includes quote or invoice records. Restore it after document SQLite writes are implemented.",
-      409
-    );
-  }
 }
 
 export function createJob(db, input) {
@@ -1184,7 +1178,6 @@ export function restoreDeletedJob(db, jobIdInput) {
     if (!row) throw new WorkspaceJobError("Deleted job not found.", 404);
 
     let job = normalizeDeletedJobPayload(parseJson(row.payload_json, null));
-    assertDeletedJobHasOnlyCoreRecords(job);
     let customer = getCustomerState(db, job.customerId);
 
     if (!customer) {
