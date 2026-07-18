@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
+  requestDocumentWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
 
@@ -73,6 +74,115 @@ test("workspace API helper sends job-specific JSON requests", async () => {
   assert.equal(payload.result.status, "In Progress");
 });
 
+test("document API helper sends quote and invoice record-specific requests", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          invoiceId: "job-1:invoice",
+          financials: { subtotal: 100, gst: 10, total: 110, paid: 0, balance: 110 },
+          status: { id: "draft", label: "Draft" },
+        },
+        state: {
+          jobs: [
+            {
+              id: "job-1",
+              invoice: {
+                issueDate: "2026-02-01",
+                dueDate: "2026-02-08",
+                items: [{ id: "line-1", qty: 1, rate: 100 }],
+                payments: [],
+              },
+            },
+          ],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestDocumentWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/jobs/job-1/invoice",
+    method: "PUT",
+    body: {
+      invoice: {
+        issueDate: "2026-02-01",
+        dueDate: "2026-02-08",
+        items: [{ id: "line-1", qty: 1, rate: 100 }],
+      },
+    },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, "/api/jobs/job-1/invoice");
+  assert.equal(calls[0].options.method, "PUT");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    invoice: {
+      issueDate: "2026-02-01",
+      dueDate: "2026-02-08",
+      items: [{ id: "line-1", qty: 1, rate: 100 }],
+    },
+  });
+  assert.equal(payload.result.financials.total, 110);
+  assert.equal(payload.result.status.id, "draft");
+});
+
+test("document API helper sends stable payment IDs for retry-safe payment creation", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          paymentId: "payment-stable-1",
+          financials: { total: 110, paid: 50, balance: 60 },
+          status: { id: "deposit-paid", label: "Deposit Paid" },
+        },
+        state: {
+          jobs: [
+            {
+              id: "job-1",
+              invoice: {
+                payments: [{ id: "payment-stable-1", amount: 50 }],
+              },
+            },
+          ],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestDocumentWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/jobs/job-1/invoice/payments",
+    method: "POST",
+    body: {
+      payment: {
+        id: "payment-stable-1",
+        amount: 50,
+        date: "2026-02-03",
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/jobs/job-1/invoice/payments");
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    payment: {
+      id: "payment-stable-1",
+      amount: 50,
+      date: "2026-02-03",
+    },
+  });
+  assert.equal(payload.result.paymentId, "payment-stable-1");
+});
+
 test("customer API helper rejects failed requests with server error text", async () => {
   const fetchWithAuth = async () => ({
     ok: false,
@@ -88,6 +198,24 @@ test("customer API helper rejects failed requests with server error text", async
       body: { customer: { name: "" } },
     }),
     /Customer name is required/
+  );
+});
+
+test("document API helper rejects failed document requests with server error text", async () => {
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: "Payment amount must be greater than zero." }),
+  });
+
+  await assert.rejects(
+    () => requestDocumentWorkspaceUpdate({
+      fetchWithAuth,
+      path: "/api/jobs/job-1/invoice/payments",
+      method: "POST",
+      body: { payment: { id: "payment-1", amount: 0 } },
+    }),
+    /Payment amount must be greater than zero/
   );
 });
 

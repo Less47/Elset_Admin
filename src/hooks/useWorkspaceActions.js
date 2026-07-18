@@ -37,7 +37,12 @@ import {
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
 } from "@/lib/quote-template";
-import { isSqliteWorkspaceMode, requestCustomerWorkspaceUpdate, requestWorkspaceUpdate } from "./workspace-customer-api";
+import {
+  isSqliteWorkspaceMode,
+  requestCustomerWorkspaceUpdate,
+  requestDocumentWorkspaceUpdate,
+  requestWorkspaceUpdate,
+} from "./workspace-customer-api";
 
 export function useWorkspaceActions({
   applyServerWorkspaceState,
@@ -120,12 +125,39 @@ export function useWorkspaceActions({
     }
   }
 
+  async function saveDocumentApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update the document records.",
+  }) {
+    try {
+      const payload = await requestDocumentWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
   function customerPath(customerId, suffix = "") {
     return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
   }
 
   function jobPath(jobId, suffix = "") {
     return `/api/jobs/${encodeURIComponent(String(jobId || ""))}${suffix}`;
+  }
+
+  function documentPath(jobId, type, suffix = "") {
+    const documentType = type === "invoice" ? "invoice" : "quote";
+    return jobPath(jobId, `/${documentType}${suffix}`);
   }
 
   function getTomorrowPlanningDate() {
@@ -516,11 +548,223 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleUpdateInvoicePayment(jobId, updates) {
+  function getPaymentComparable(payment) {
+    return {
+      amount: Number(payment?.amount || 0).toFixed(2),
+      date: toDateInputValue(payment?.date || payment?.paidAt || payment?.createdAt),
+      method: String(payment?.method || "").trim(),
+      reference: String(payment?.reference || "").trim(),
+      notes: String(payment?.notes || "").trim(),
+    };
+  }
+
+  function hasPaymentChanged(currentPayment, nextPayment) {
+    const current = getPaymentComparable(currentPayment);
+    const next = getPaymentComparable(nextPayment);
+    return Object.keys(next).some((key) => current[key] !== next[key]);
+  }
+
+  function ensureStablePaymentIds(invoice) {
+    return {
+      ...invoice,
+      payments: (invoice.payments || []).map((payment) => ({
+        ...payment,
+        id: payment.id || crypto.randomUUID(),
+      })),
+    };
+  }
+
+  async function handleAddInvoicePayment(jobId, paymentInput) {
+    if (!canManageBusiness) return false;
+
+    const job = data.jobs.find((entry) => entry.id === jobId);
+    if (!job) return false;
+
+    const payment = {
+      ...paymentInput,
+      id: paymentInput?.id || crypto.randomUUID(),
+    };
+
+    if (useSqliteApi) {
+      const saved = await saveDocumentApiRequest({
+        path: documentPath(jobId, "invoice", "/payments"),
+        method: "POST",
+        body: { payment },
+        errorMessage: "Unable to add the invoice payment.",
+      });
+      return saved.ok;
+    }
+
+    if (!job.invoice) return false;
+
+    const nextInvoice = normalizeDocument("invoice", {
+      ...job.invoice,
+      payments: [...(job.invoice.payments || []), payment],
+    });
+    updateJob(jobId, { invoice: nextInvoice });
+    return true;
+  }
+
+  async function handleEditInvoicePayment(jobId, paymentId, updates) {
+    if (!canManageBusiness) return false;
+
+    const job = data.jobs.find((entry) => entry.id === jobId);
+    if (!job || !paymentId) return false;
+
+    const existingPayment = (job.invoice?.payments || []).find((payment) => payment.id === paymentId);
+    if (!existingPayment && !useSqliteApi) return false;
+
+    const payment = {
+      ...(existingPayment || {}),
+      ...updates,
+      id: paymentId,
+    };
+
+    if (useSqliteApi) {
+      const saved = await saveDocumentApiRequest({
+        path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
+        method: "PATCH",
+        body: { payment },
+        errorMessage: "Unable to update the invoice payment.",
+      });
+      return saved.ok;
+    }
+
+    const nextInvoice = normalizeDocument("invoice", {
+      ...job.invoice,
+      payments: (job.invoice.payments || []).map((entry) => (entry.id === paymentId ? payment : entry)),
+    });
+    updateJob(jobId, { invoice: nextInvoice });
+    return true;
+  }
+
+  async function handleDeleteInvoicePayment(jobId, paymentId) {
+    if (!canManageBusiness) return false;
+
+    const job = data.jobs.find((entry) => entry.id === jobId);
+    if (!job || !paymentId) return false;
+    if (!job.invoice && !useSqliteApi) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveDocumentApiRequest({
+        path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
+        method: "DELETE",
+        errorMessage: "Unable to delete the invoice payment.",
+      });
+      return saved.ok;
+    }
+
+    const nextInvoice = normalizeDocument("invoice", {
+      ...job.invoice,
+      payments: (job.invoice.payments || []).filter((payment) => payment.id !== paymentId),
+    });
+    updateJob(jobId, { invoice: nextInvoice });
+    return true;
+  }
+
+  async function syncInvoicePayments(job, nextInvoice) {
+    const currentInvoice = normalizeDocument("invoice", job.invoice);
+    const currentPayments = currentInvoice?.payments || [];
+    const nextPayments = nextInvoice.payments || [];
+    const currentById = new Map(currentPayments.map((payment) => [payment.id, payment]));
+    const nextById = new Map(nextPayments.map((payment) => [payment.id, payment]));
+
+    for (const payment of currentPayments) {
+      if (!nextById.has(payment.id)) {
+        const deleted = await handleDeleteInvoicePayment(job.id, payment.id);
+        if (!deleted) return false;
+      }
+    }
+
+    for (const payment of nextPayments) {
+      const currentPayment = currentById.get(payment.id);
+      if (!currentPayment) {
+        const added = await handleAddInvoicePayment(job.id, payment);
+        if (!added) return false;
+      } else if (hasPaymentChanged(currentPayment, payment)) {
+        const edited = await handleEditInvoicePayment(job.id, payment.id, payment);
+        if (!edited) return false;
+      }
+    }
+
+    return true;
+  }
+
+  async function handleSaveDocument(jobId, type, doc) {
+    if (!canManageBusiness) return false;
+
+    const job = data.jobs.find((entry) => entry.id === jobId);
+    if (!job) return false;
+
+    const documentType = type === "invoice" ? "invoice" : "quote";
+    const normalizedDocument = normalizeDocument(documentType, doc);
+    if (!normalizedDocument) return false;
+    const documentToSave = documentType === "invoice" ? ensureStablePaymentIds(normalizedDocument) : normalizedDocument;
+
+    if (useSqliteApi) {
+      const saved = await saveDocumentApiRequest({
+        path: documentPath(jobId, documentType),
+        method: "PUT",
+        body: { [documentType]: documentToSave },
+        errorMessage: `Unable to save the ${documentType}.`,
+      });
+      if (!saved.ok) return false;
+
+      if (documentType === "invoice") {
+        return syncInvoicePayments(job, documentToSave);
+      }
+
+      return true;
+    }
+
+    updateJob(jobId, { [documentType]: documentToSave });
+    return true;
+  }
+
+  async function handleDeleteDocument(jobId, type) {
+    if (!canManageBusiness) return false;
+
+    const job = data.jobs.find((entry) => entry.id === jobId);
+    if (!job) return false;
+
+    const documentType = type === "invoice" ? "invoice" : "quote";
+    if (!job[documentType]) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveDocumentApiRequest({
+        path: documentPath(jobId, documentType),
+        method: "DELETE",
+        errorMessage: `Unable to delete the ${documentType}.`,
+      });
+      return saved.ok;
+    }
+
+    updateJob(jobId, { [documentType]: null });
+    return true;
+  }
+
+  async function handleUpdateInvoicePayment(jobId, updates) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
     if (!job?.invoice) return false;
+
+    const invoiceUpdates = {};
+    ["issueDate", "dueDate", "notes", "paymentNotes"].forEach((field) => {
+      if (Object.prototype.hasOwnProperty.call(updates, field)) {
+        invoiceUpdates[field] = field.endsWith("Date") ? toDateInputValue(updates[field]) : updates[field];
+      }
+    });
+
+    if (useSqliteApi && Object.keys(invoiceUpdates).length > 0) {
+      const saved = await saveDocumentApiRequest({
+        path: documentPath(jobId, "invoice"),
+        method: "PATCH",
+        body: { invoice: invoiceUpdates },
+        errorMessage: "Unable to update the invoice.",
+      });
+      return saved.ok;
+    }
 
     const nextInvoice = normalizeDocument("invoice", {
       ...job.invoice,
@@ -1661,6 +1905,7 @@ export function useWorkspaceActions({
 
   return {
     createJob,
+    handleAddInvoicePayment,
     handleAddJobNote,
     handleAddJobPhotos,
     handleApplyThemePreset,
@@ -1670,13 +1915,16 @@ export function useWorkspaceActions({
     handleCreateStaff,
     handleCreateSiteProfile,
     handleDeleteCustomer,
+    handleDeleteDocument,
     handleDeleteInventoryItem,
+    handleDeleteInvoicePayment,
     handleDeleteJob,
     handleDeleteJobPhoto,
     handleDeleteMaintenancePlan,
     handleDeleteSiteProfile,
     handleEmptyDeletedCustomers,
     handleEmptyDeletedJobs,
+    handleEditInvoicePayment,
     handleGenerateMaintenanceJob,
     handleOpenCustomerProfile,
     handleOpenDoc,
@@ -1692,6 +1940,7 @@ export function useWorkspaceActions({
     handleResetUiSettings,
     handleRestoreDeletedCustomer,
     handleRestoreDeletedJob,
+    handleSaveDocument,
     handleSaveSiteProfile,
     handleScheduleJob,
     handleSendDocument,

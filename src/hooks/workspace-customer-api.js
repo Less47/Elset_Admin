@@ -37,3 +37,7 @@ export async function requestWorkspaceUpdate({
 export function requestCustomerWorkspaceUpdate(options) {
   return requestWorkspaceUpdate(options);
 }
+
+export function requestDocumentWorkspaceUpdate(options) {
+  return requestWorkspaceUpdate(options);
+}

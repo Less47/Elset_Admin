@@ -5,7 +5,7 @@ import JobDetailsDialog from "@/components/jobs/JobDetailsDialog";
 import JobEditDialog from "@/components/jobs/JobEditDialog";
 import JobFormDialog from "@/components/jobs/JobFormDialog";
 import SiteProfileDialog from "@/components/sites/SiteProfileDialog";
-import { normalizeDocument, readFileAsDataUrl } from "@/lib/app-support";
+import { readFileAsDataUrl } from "@/lib/app-support";
 
 export default function WorkspaceDialogs({ auth, chrome, data, selection, supplierManualState, actions }) {
   const { canManageBusiness } = auth;
@@ -56,12 +56,12 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
     handlePreviewDocument,
+    handleSaveDocument,
     handleSaveSiteProfile,
     handleSendDocument,
     handleStatusChange,
     handleUpdateCustomer,
     handleUpdateJobDetails,
-    updateJob,
   } = actions;
 
   return (
@@ -190,10 +190,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             onPreviewDocument={handlePreviewDocument}
             onSendDocument={handleSendDocument}
             onOpenSentDocument={() => selectedFreshJob && handleOpenSentDocumentCopy(selectedFreshJob, docType)}
-            onSave={(doc) => {
-              if (!selectedFreshJob) return;
-              updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, doc) });
-            }}
+            onSave={(doc) => (selectedFreshJob ? handleSaveDocument(selectedFreshJob.id, docType, doc) : false)}
           />
 
           <JobEditDialog
