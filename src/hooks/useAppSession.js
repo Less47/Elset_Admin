@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { requestServiceM8ImportUpdate } from "@/hooks/workspace-customer-api";
 import {
   countBusinessRecords,
   getLegacyPersistedState,
@@ -604,23 +605,13 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     }
 
     try {
-      const response = await fetchWithAuth("/api/admin/servicem8-import/apply", {
+      const payload = await requestServiceM8ImportUpdate({
+        fetchWithAuth,
+        path: "/api/admin/servicem8-import/apply",
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ apiKey, options, previewId }),
+        body: { apiKey, options, previewId },
+        errorMessage: "Unable to import ServiceM8 data.",
       });
-      const { payload, error: responseError } = await readServiceM8ImportResponse(response);
-
-      if (!response.ok || !payload?.ok) {
-        throw new Error(getServiceM8ImportError(
-          response,
-          payload,
-          responseError,
-          "Unable to import ServiceM8 data."
-        ));
-      }
 
       const nextState = normalizeAppState(payload.state);
       hasLoadedServerStateRef.current = true;

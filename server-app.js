@@ -1,17 +1,11 @@
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 import express from "express";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { fileURLToPath } from "url";
 import { generateDocumentPdf } from "./quote-pdf.js";
-import {
-  applyServiceM8ImportPlan,
-  buildAndApplyServiceM8Import,
-  previewServiceM8Import,
-} from "./server-servicem8-importer.js";
 import {
   auth,
   getAuthBackupUsers,
@@ -44,6 +38,7 @@ import { registerJobRoutes } from "./server-job-routes.js";
 import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
 import { registerStaffRoutes } from "./server-staff-routes.js";
+import { registerServiceM8ImportRoutes } from "./server-servicem8-import-routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,8 +54,6 @@ const MAX_ADDRESS_QUERY_LENGTH = 160;
 const GEOAPIFY_MAP_ATTRIBUTION = 'Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> | <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a>';
 const geoapifyGeocodeCache = new Map();
 const BACKUP_FORMAT_VERSION = "elset-backup-v2";
-const SERVICE_M8_IMPORT_PREVIEW_TTL_MS = 1000 * 60 * 20;
-const serviceM8ImportPreviewCache = new Map();
 
 dotenv.config({ path: envPath });
 
@@ -296,39 +289,6 @@ function prepareWorkspaceBackupImportData(backupInput) {
   };
 }
 
-function pruneExpiredServiceM8ImportPreviews() {
-  const now = Date.now();
-  for (const [previewId, preview] of serviceM8ImportPreviewCache.entries()) {
-    if (!preview || preview.expiresAt <= now) {
-      serviceM8ImportPreviewCache.delete(previewId);
-    }
-  }
-}
-
-function createServiceM8ImportPreview(user, plan) {
-  pruneExpiredServiceM8ImportPreviews();
-  const previewId = crypto.randomUUID();
-  serviceM8ImportPreviewCache.set(previewId, {
-    userId: user?.id || "",
-    createdAt: Date.now(),
-    expiresAt: Date.now() + SERVICE_M8_IMPORT_PREVIEW_TTL_MS,
-    plan,
-  });
-  return previewId;
-}
-
-function takeServiceM8ImportPreview(user, previewId) {
-  pruneExpiredServiceM8ImportPreviews();
-  const normalizedPreviewId = String(previewId || "").trim();
-  if (!normalizedPreviewId) return null;
-
-  const preview = serviceM8ImportPreviewCache.get(normalizedPreviewId);
-  if (!preview || preview.userId !== (user?.id || "")) return null;
-
-  serviceM8ImportPreviewCache.delete(normalizedPreviewId);
-  return preview.plan;
-}
-
 export function createServerApp() {
   const app = express();
   const shouldServeStatic = process.env.ELSET_DISABLE_STATIC !== "true";
@@ -534,6 +494,11 @@ export function createServerApp() {
   registerInventoryRoutes(app, { requireAuth, requireRole });
   registerStaffRoutes(app, { requireAuth, requireRole });
   registerSettingsRoutes(app, { requireAuth, requireRole });
+  registerServiceM8ImportRoutes(app, {
+    requireAuth,
+    requireRole,
+    syncManagedUserNamesWithStaffFn: syncManagedUserNamesWithStaff,
+  });
 
   app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {
@@ -627,59 +592,6 @@ export function createServerApp() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to restore the backup file.";
-      return res.status(400).json({ error: message });
-    }
-  });
-
-  app.post("/api/admin/servicem8-import/preview", requireAuth, requireRole(["admin"]), async (req, res) => {
-    try {
-      const plan = await previewServiceM8Import({
-        apiKey: req.body?.apiKey,
-        existingData: loadWorkspaceState(),
-        options: req.body?.options,
-      });
-      const previewId = createServiceM8ImportPreview(req.user, plan);
-
-      res.setHeader("Cache-Control", "no-store");
-      return res.json({
-        ok: true,
-        importedAt: plan.importedAt,
-        previewId,
-        summary: plan.summary,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to preview the ServiceM8 import.";
-      return res.status(400).json({ error: message });
-    }
-  });
-
-  app.post("/api/admin/servicem8-import/apply", requireAuth, requireRole(["admin"]), async (req, res) => {
-    try {
-      const existingData = loadWorkspaceState();
-      const cachedPlan = takeServiceM8ImportPreview(req.user, req.body?.previewId);
-      const { plan, nextData } = cachedPlan
-        ? {
-            plan: cachedPlan,
-            nextData: applyServiceM8ImportPlan(existingData, cachedPlan),
-          }
-        : await buildAndApplyServiceM8Import({
-            apiKey: req.body?.apiKey,
-            existingData,
-            options: req.body?.options,
-          });
-      const savedData = saveWorkspaceState(nextData);
-
-      syncManagedUserNamesWithStaff(savedData.staff);
-
-      res.setHeader("Cache-Control", "no-store");
-      return res.json({
-        ok: true,
-        importedAt: plan.importedAt,
-        summary: plan.summary,
-        state: getAuthorizedWorkspaceState(req.user),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to import ServiceM8 data.";
       return res.status(400).json({ error: message });
     }
   });

@@ -6,6 +6,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
+  requestServiceM8ImportUpdate,
   requestSettingsWorkspaceUpdate,
   requestStaffWorkspaceUpdate,
   requestWorkspaceUpdate,
@@ -666,6 +667,78 @@ test("settings API helper rejects failed requests before state is applied", asyn
       appliedState = Boolean(payload.state);
     },
     /Company email is invalid/
+  );
+  assert.equal(appliedState, false);
+});
+
+test("ServiceM8 import helper uses the dedicated import endpoint payload", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        importedAt: "2026-02-06T00:00:00.000Z",
+        summary: {
+          apply: {
+            customers: { created: 1, updated: 0, skipped: 0, conflicted: 0, failed: 0 },
+            jobs: { created: 1, updated: 0, skipped: 0, conflicted: 0, failed: 0 },
+          },
+        },
+        state: {
+          customers: [{ id: "servicem8-company-1", name: "Synthetic ServiceM8 Customer" }],
+          jobs: [{ id: "servicem8-job-1", title: "Synthetic ServiceM8 job" }],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestServiceM8ImportUpdate({
+    fetchWithAuth,
+    path: "/api/admin/servicem8-import/apply",
+    method: "POST",
+    body: {
+      apiKey: "synthetic-api-key",
+      options: { includePayments: true },
+      previewId: "preview-1",
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/admin/servicem8-import/apply");
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    apiKey: "synthetic-api-key",
+    options: { includePayments: true },
+    previewId: "preview-1",
+  });
+  assert.equal(payload.summary.apply.customers.created, 1);
+});
+
+test("ServiceM8 import helper rejects failed imports before state is applied", async () => {
+  let appliedState = false;
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      error: "ServiceM8 jobs response was not a list.",
+      state: {
+        customers: [{ id: "bad-import" }],
+      },
+    }),
+  });
+
+  await assert.rejects(
+    async () => {
+      const payload = await requestServiceM8ImportUpdate({
+        fetchWithAuth,
+        path: "/api/admin/servicem8-import/apply",
+        method: "POST",
+        body: { apiKey: "synthetic-api-key" },
+      });
+      appliedState = Boolean(payload.state);
+    },
+    /ServiceM8 jobs response was not a list/
   );
   assert.equal(appliedState, false);
 });

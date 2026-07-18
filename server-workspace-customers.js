@@ -276,7 +276,7 @@ function normalizeContacts(customer, sites) {
   return contacts.sort((a, b) => (a.name || a.email || a.phone).localeCompare(b.name || b.email || b.phone));
 }
 
-function normalizeCustomerInput(input, existingCustomer = null) {
+export function normalizeCustomerInput(input, existingCustomer = null) {
   assertPlainObject(input);
   const now = nowIso();
   const source = {
@@ -470,7 +470,7 @@ function replaceCustomerAccessNotes(db, customer) {
   });
 }
 
-function insertOrReplaceCustomer(db, customer) {
+export function insertOrReplaceCustomer(db, customer) {
   db.prepare(`
     INSERT INTO customers (
       id, name, email, phone, customer_type, address, created_at, updated_at, external_refs_json, extra_json
@@ -502,7 +502,7 @@ function insertOrReplaceCustomer(db, customer) {
   insertServiceM8Ref(db, "customer", customer.id, customer.externalRefs);
 }
 
-function syncJobCustomerSnapshots(db, customer, updatedAt = nowIso()) {
+export function syncJobCustomerSnapshots(db, customer, updatedAt = nowIso()) {
   db.prepare(`
     UPDATE jobs
        SET customer_name = ?,

@@ -57,3 +57,10 @@ export function requestStaffWorkspaceUpdate(options) {
 export function requestSettingsWorkspaceUpdate(options) {
   return requestWorkspaceUpdate(options);
 }
+
+export function requestServiceM8ImportUpdate(options) {
+  return requestWorkspaceUpdate({
+    errorMessage: "Unable to import ServiceM8 data.",
+    ...options,
+  });
+}

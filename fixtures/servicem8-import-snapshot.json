@@ -1,0 +1,149 @@
+{
+  "clients": [
+    {
+      "uuid": "svc-company-alpha",
+      "name": "Synthetic ServiceM8 Customer",
+      "email": "accounts@synthetic-servicem8.example.test",
+      "phone": "0400 900 100",
+      "address_street": "44 Import Circuit",
+      "address_city": "Sampleville",
+      "address_state": "VIC",
+      "address_postcode": "3001",
+      "address_country": "Australia",
+      "is_individual": "0",
+      "active": "1",
+      "edit_date": "2026-02-05 08:00:00"
+    },
+    {
+      "uuid": "svc-site-alpha",
+      "parent_company_uuid": "svc-company-alpha",
+      "name": "Synthetic Side Gate",
+      "address_street": "46 Import Circuit",
+      "address_city": "Sampleville",
+      "address_state": "VIC",
+      "address_postcode": "3001",
+      "address_country": "Australia",
+      "active": "1",
+      "edit_date": "2026-02-05 08:15:00"
+    }
+  ],
+  "contacts": [
+    {
+      "uuid": "svc-contact-alpha",
+      "company_uuid": "svc-company-alpha",
+      "first": "Morgan",
+      "last": "Example",
+      "email": "morgan.example@synthetic-servicem8.example.test",
+      "mobile": "0400 900 101",
+      "is_primary_contact": "1",
+      "active": "1",
+      "edit_date": "2026-02-05 08:20:00"
+    },
+    {
+      "uuid": "svc-contact-site-alpha",
+      "company_uuid": "svc-site-alpha",
+      "first": "Riley",
+      "last": "Example",
+      "email": "riley.example@synthetic-servicem8.example.test",
+      "mobile": "0400 900 102",
+      "is_primary_contact": "1",
+      "active": "1",
+      "edit_date": "2026-02-05 08:25:00"
+    }
+  ],
+  "jobs": [
+    {
+      "uuid": "svc-job-alpha",
+      "company_uuid": "svc-site-alpha",
+      "generated_job_id": "7001",
+      "job_description": "Synthetic ServiceM8 gate service",
+      "work_done_description": "Replaced a synthetic control board and tested safety edges.",
+      "job_address": "46 Import Circuit, Sampleville VIC 3001, Australia",
+      "billing_address": "44 Import Circuit, Sampleville VIC 3001, Australia",
+      "status": "Completed",
+      "date": "2026-02-06 09:00:00",
+      "completion_date": "2026-02-06 12:00:00",
+      "quote_sent": "1",
+      "quote_sent_stamp": "2026-02-05 11:00:00",
+      "quote_date": "2026-02-05",
+      "invoice_sent": "1",
+      "invoice_sent_stamp": "2026-02-06 13:00:00",
+      "total_invoice_amount": "275.00",
+      "purchase_order_number": "PO-SYN-7001",
+      "created_by_staff_uuid": "svc-staff-admin",
+      "active": "1",
+      "edit_date": "2026-02-06 13:30:00"
+    }
+  ],
+  "activities": [
+    {
+      "uuid": "svc-activity-alpha",
+      "job_uuid": "svc-job-alpha",
+      "staff_uuid": "svc-staff-admin",
+      "start_date": "2026-02-06 09:00:00",
+      "activity_was_scheduled": "1",
+      "activity_was_recorded": "1",
+      "active": "1",
+      "edit_date": "2026-02-06 12:10:00"
+    }
+  ],
+  "materials": [
+    {
+      "uuid": "svc-material-controller",
+      "job_uuid": "svc-job-alpha",
+      "name": "Synthetic controller",
+      "quantity": "1",
+      "price": "200.00",
+      "displayed_amount": "200.00",
+      "active": "1",
+      "edit_date": "2026-02-06 11:00:00"
+    },
+    {
+      "uuid": "svc-material-labour",
+      "job_uuid": "svc-job-alpha",
+      "name": "Synthetic labour",
+      "quantity": "0.5",
+      "price": "150.00",
+      "displayed_amount": "75.00",
+      "active": "1",
+      "edit_date": "2026-02-06 11:30:00"
+    }
+  ],
+  "notes": [
+    {
+      "uuid": "svc-note-alpha",
+      "related_object": "job",
+      "related_object_uuid": "svc-job-alpha",
+      "note": "Synthetic ServiceM8 note copied into the job.",
+      "edit_by_staff_uuid": "svc-staff-admin",
+      "active": "1",
+      "create_date": "2026-02-06 10:00:00",
+      "edit_date": "2026-02-06 10:05:00"
+    }
+  ],
+  "payments": [
+    {
+      "uuid": "svc-payment-alpha",
+      "job_uuid": "svc-job-alpha",
+      "amount": "110.00",
+      "method": "Synthetic EFT",
+      "note": "Synthetic imported payment.",
+      "is_deposit": "1",
+      "actioned_by_uuid": "svc-staff-admin",
+      "timestamp": "2026-02-07 09:00:00",
+      "active": "1",
+      "edit_date": "2026-02-07 09:10:00"
+    }
+  ],
+  "staff": [
+    {
+      "uuid": "svc-staff-admin",
+      "first": "Jordan",
+      "last": "Vale",
+      "email": "jordan.vale@example.test",
+      "active": "1",
+      "edit_date": "2026-02-05 07:00:00"
+    }
+  ],
+  "warnings": []
+}

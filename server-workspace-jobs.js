@@ -833,7 +833,7 @@ function insertPhoto(db, jobId, photo) {
   );
 }
 
-function insertJobTree(db, job) {
+export function insertJobTree(db, job) {
   insertJobCore(db, job);
   (Array.isArray(job.notes) ? job.notes : []).forEach((note) => insertNote(db, job.id, normalizeNoteInput(note)));
   (Array.isArray(job.photos) ? job.photos : []).forEach((photo) => insertPhoto(db, job.id, normalizePhotoInput(photo)));
