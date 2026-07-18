@@ -41,6 +41,7 @@ import {
   isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
   requestDocumentWorkspaceUpdate,
+  requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
@@ -149,6 +150,28 @@ export function useWorkspaceActions({
     }
   }
 
+  async function saveInventoryApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update the inventory records.",
+  }) {
+    try {
+      const payload = await requestInventoryWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
   async function saveMaintenanceApiRequest({
     path,
     method = "POST",
@@ -182,6 +205,13 @@ export function useWorkspaceActions({
   function documentPath(jobId, type, suffix = "") {
     const documentType = type === "invoice" ? "invoice" : "quote";
     return jobPath(jobId, `/${documentType}${suffix}`);
+  }
+
+  function inventoryPath(itemId = "", suffix = "") {
+    const normalizedItemId = String(itemId || "").trim();
+    return normalizedItemId
+      ? `/api/inventory-items/${encodeURIComponent(normalizedItemId)}${suffix}`
+      : "/api/inventory-items";
   }
 
   function maintenancePath(planId = "", suffix = "") {
@@ -353,7 +383,7 @@ export function useWorkspaceActions({
     return updatedStaff;
   }
 
-  function handleCreateInventoryItem(partInput) {
+  async function handleCreateInventoryItem(partInput) {
     if (!canManageBusiness) return false;
 
     const createdPart = normalizeInventoryRecord({
@@ -363,6 +393,16 @@ export function useWorkspaceActions({
       updatedAt: new Date().toISOString(),
     });
 
+    if (useSqliteApi) {
+      const saved = await saveInventoryApiRequest({
+        path: inventoryPath(),
+        method: "POST",
+        body: { item: createdPart },
+        errorMessage: "Unable to create the inventory item.",
+      });
+      return saved.ok ? (saved.result || true) : false;
+    }
+
     setData((prev) => ({
       ...prev,
       inventoryItems: [createdPart, ...(prev.inventoryItems || []).filter((entry) => entry.id !== createdPart.id)],
@@ -371,8 +411,18 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleUpdateInventoryItem(partId, updates) {
+  async function handleUpdateInventoryItem(partId, updates) {
     if (!canManageBusiness) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveInventoryApiRequest({
+        path: inventoryPath(partId),
+        method: "PATCH",
+        body: { item: updates },
+        errorMessage: "Unable to save the inventory item.",
+      });
+      return saved.ok ? (saved.result || true) : false;
+    }
 
     setData((prev) => ({
       ...prev,
@@ -386,7 +436,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleDeleteInventoryItem(partId) {
+  async function handleDeleteInventoryItem(partId) {
     if (!canManageBusiness) return false;
 
     const part = (data.inventoryItems || []).find((entry) => entry.id === partId);
@@ -394,6 +444,15 @@ export function useWorkspaceActions({
 
     const confirmed = window.confirm(`Delete ${part.name} from parts inventory?`);
     if (!confirmed) return false;
+
+    if (useSqliteApi) {
+      const saved = await saveInventoryApiRequest({
+        path: inventoryPath(partId),
+        method: "DELETE",
+        errorMessage: "Unable to delete the inventory item.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => ({
       ...prev,

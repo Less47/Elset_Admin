@@ -4,6 +4,7 @@ import {
   isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
   requestDocumentWorkspaceUpdate,
+  requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
@@ -386,6 +387,88 @@ test("maintenance API helper rejects failed requests before state is applied", a
       appliedState = Boolean(payload.state);
     },
     /Next service date is invalid/
+  );
+  assert.equal(appliedState, false);
+});
+
+test("inventory API helper sends record-specific item requests", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          id: "inventory-item-1",
+          name: "Synthetic inventory item",
+          quantity: 4,
+        },
+        state: {
+          inventoryItems: [
+            {
+              id: "inventory-item-1",
+              name: "Synthetic inventory item",
+              quantity: 4,
+            },
+          ],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestInventoryWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/inventory-items/inventory-item-1",
+    method: "PATCH",
+    body: {
+      item: {
+        quantity: 4,
+        unitCost: 25,
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/inventory-items/inventory-item-1");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    item: {
+      quantity: 4,
+      unitCost: 25,
+    },
+  });
+  assert.equal(payload.result.id, "inventory-item-1");
+});
+
+test("inventory API helper rejects failed requests before state is applied", async () => {
+  let appliedState = false;
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      error: "Quantity must be a valid number.",
+      state: {
+        inventoryItems: [
+          {
+            id: "inventory-item-1",
+            quantity: "bad",
+          },
+        ],
+      },
+    }),
+  });
+
+  await assert.rejects(
+    async () => {
+      const payload = await requestInventoryWorkspaceUpdate({
+        fetchWithAuth,
+        path: "/api/inventory-items/inventory-item-1",
+        method: "PATCH",
+        body: { item: { quantity: "bad" } },
+      });
+      appliedState = Boolean(payload.state);
+    },
+    /Quantity must be a valid number/
   );
   assert.equal(appliedState, false);
 });

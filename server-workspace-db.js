@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 2;
+export const WORKSPACE_SCHEMA_VERSION = 3;
 
 const migrations = [
   {
@@ -399,6 +399,26 @@ const migrations = [
          SET schema_version = 2
        WHERE id = 1
          AND schema_version < 2;
+    `,
+  },
+  {
+    version: 3,
+    name: "inventory-item-archive-records",
+    sql: `
+      CREATE TABLE IF NOT EXISTS deleted_inventory_items (
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL,
+        deleted_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        extra_json TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_deleted_inventory_item_id ON deleted_inventory_items(item_id);
+
+      UPDATE workspace_info
+         SET schema_version = 3
+       WHERE id = 1
+         AND schema_version < 3;
     `,
   },
 ];
