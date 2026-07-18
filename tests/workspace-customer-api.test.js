@@ -6,6 +6,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
+import { sendDocumentAndPersistHistory } from "../src/hooks/document-send-workflow.js";
 
 test("detects SQLite workspace mode explicitly", () => {
   assert.equal(isSqliteWorkspaceMode("sqlite"), true);
@@ -181,6 +182,131 @@ test("document API helper sends stable payment IDs for retry-safe payment creati
     },
   });
   assert.equal(payload.result.paymentId, "payment-stable-1");
+});
+
+test("document API helper sends stable sent-history records", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          sentHistoryId: "sent-history-stable-1",
+          quote: {
+            sentHistory: [
+              {
+                id: "sent-history-stable-1",
+                subject: "QUOTE for Synthetic job",
+              },
+            ],
+          },
+        },
+        state: {
+          jobs: [
+            {
+              id: "job-1",
+              quote: {
+                sentHistory: [
+                  {
+                    id: "sent-history-stable-1",
+                    subject: "QUOTE for Synthetic job",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestDocumentWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/jobs/job-1/quote/sent-history",
+    method: "POST",
+    body: {
+      history: {
+        id: "sent-history-stable-1",
+        sentAt: "2026-02-03T00:00:00.000Z",
+        fromEmail: "admin@example.test",
+        toEmail: "accounts@example.test",
+        toName: "Example Accounts",
+        subject: "QUOTE for Synthetic job",
+        messageId: "message-1",
+        documentSnapshot: { type: "quote" },
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/jobs/job-1/quote/sent-history");
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    history: {
+      id: "sent-history-stable-1",
+      sentAt: "2026-02-03T00:00:00.000Z",
+      fromEmail: "admin@example.test",
+      toEmail: "accounts@example.test",
+      toName: "Example Accounts",
+      subject: "QUOTE for Synthetic job",
+      messageId: "message-1",
+      documentSnapshot: { type: "quote" },
+    },
+  });
+  assert.equal(payload.result.sentHistoryId, "sent-history-stable-1");
+});
+
+test("document send workflow records sent history only after email success", async () => {
+  const calls = [];
+
+  const result = await sendDocumentAndPersistHistory({
+    sendEmail: async () => ({
+      messageId: "message-success",
+      sentAt: "2026-02-03T00:00:00.000Z",
+    }),
+    buildHistoryEntry: (payload) => ({
+      id: "sent-history-stable-1",
+      messageId: payload.messageId,
+      sentAt: payload.sentAt,
+    }),
+    persistHistory: async ({ historyEntry }) => {
+      calls.push(historyEntry);
+      return true;
+    },
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    {
+      id: "sent-history-stable-1",
+      messageId: "message-success",
+      sentAt: "2026-02-03T00:00:00.000Z",
+    },
+  ]);
+});
+
+test("document send workflow skips sent history when email sending fails", async () => {
+  const calls = [];
+  const errors = [];
+
+  const result = await sendDocumentAndPersistHistory({
+    sendEmail: async () => {
+      throw new Error("SMTP rejected the message.");
+    },
+    buildHistoryEntry: () => {
+      throw new Error("History should not be built after failed email.");
+    },
+    persistHistory: async ({ historyEntry }) => {
+      calls.push(historyEntry);
+      return true;
+    },
+    onError: (error) => errors.push(error.message),
+  });
+
+  assert.equal(result, false);
+  assert.deepEqual(calls, []);
+  assert.deepEqual(errors, ["SMTP rejected the message."]);
 });
 
 test("customer API helper rejects failed requests with server error text", async () => {

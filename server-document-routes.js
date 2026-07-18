@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  addDocumentSentHistory,
   addInvoicePayment,
   deleteInvoiceForJob,
   deleteInvoicePayment,
@@ -85,6 +86,12 @@ export function createDocumentRouter({
     handleDocumentRoute((db, req) => deleteQuoteForJob(db, req.params.id), env)
   );
 
+  router.post(
+    "/api/jobs/:id/quote/sent-history",
+    ...middleware,
+    handleDocumentRoute((db, req) => addDocumentSentHistory(db, req.params.id, "quote", getRequestBody(req, "history")), env)
+  );
+
   router.put(
     "/api/jobs/:id/invoice",
     ...middleware,
@@ -101,6 +108,12 @@ export function createDocumentRouter({
     "/api/jobs/:id/invoice",
     ...middleware,
     handleDocumentRoute((db, req) => deleteInvoiceForJob(db, req.params.id), env)
+  );
+
+  router.post(
+    "/api/jobs/:id/invoice/sent-history",
+    ...middleware,
+    handleDocumentRoute((db, req) => addDocumentSentHistory(db, req.params.id, "invoice", getRequestBody(req, "history")), env)
   );
 
   router.post(

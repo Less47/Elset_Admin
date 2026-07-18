@@ -111,6 +111,40 @@ function getDbState(dbPath) {
   }
 }
 
+function sentHistoryPayload(id, type = "quote", overrides = {}) {
+  return {
+    id,
+    sentAt: type === "invoice" ? "2026-02-04T00:00:00.000Z" : "2026-02-03T00:00:00.000Z",
+    fromEmail: "admin@example.test",
+    toEmail: type === "invoice" ? "invoices@example.test" : "quotes@example.test",
+    toName: "Synthetic Accounts",
+    subject: `ELSET ${type === "invoice" ? "INVOICE" : "QUOTE"} FOR 1 Demo Street`,
+    messageId: `${id}-message`,
+    stampText: type === "invoice" ? "PART PAYMENT" : "",
+    emailPurpose: type === "invoice" ? "part-payment-receipt" : "",
+    jobSnapshot: {
+      id: "demo-job-1001",
+      title: "Synthetic gate repair",
+      customerName: "Demo Customer",
+    },
+    documentSnapshot: {
+      type,
+      items: [
+        {
+          id: `${id}-line`,
+          description: "Synthetic sent document line",
+          qty: 1,
+          rate: 100,
+        },
+      ],
+    },
+    templateSnapshot: {
+      companyName: "ELSET Demo Pty Ltd",
+    },
+    ...overrides,
+  };
+}
+
 test("quote routes calculate subtotal, GST, and total on the server", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
@@ -313,6 +347,73 @@ test("invoice status reports unpaid when sent history exists without payments", 
   }, fixture);
 });
 
+test("quote and invoice sent-history routes persist successful sends with stable IDs", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      const quoteHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-quote-route-1", "quote"),
+        }),
+      });
+      assert.equal(quoteHistory.response.status, 200, quoteHistory.payload.error);
+      assert.equal(quoteHistory.payload.result.sentHistoryId, "sent-quote-route-1");
+      assert.equal(quoteHistory.payload.result.quote.sentHistory.length, 1);
+      assert.equal(quoteHistory.payload.result.quote.sentHistory[0].id, "sent-quote-route-1");
+      assert.equal(quoteHistory.payload.result.quote.sentHistory[0].subject, "ELSET QUOTE FOR 1 Demo Street");
+      assert.equal(quoteHistory.payload.result.quote.sentHistory[0].messageId, "sent-quote-route-1-message");
+      assert.equal(quoteHistory.payload.result.quote.sentHistory[0].documentSnapshot.type, "quote");
+
+      const invoiceHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-invoice-route-1", "invoice"),
+        }),
+      });
+      assert.equal(invoiceHistory.response.status, 200, invoiceHistory.payload.error);
+      assert.equal(invoiceHistory.payload.result.sentHistoryId, "sent-invoice-route-1");
+      assert.equal(invoiceHistory.payload.result.invoice.sentHistory.length, 1);
+      assert.equal(invoiceHistory.payload.result.invoice.sentHistory[0].id, "sent-invoice-route-1");
+      assert.equal(invoiceHistory.payload.result.invoice.sentHistory[0].subject, "ELSET INVOICE FOR 1 Demo Street");
+      assert.equal(invoiceHistory.payload.result.invoice.sentHistory[0].stampText, "PART PAYMENT");
+      assert.equal(invoiceHistory.payload.result.invoice.sentHistory[0].emailPurpose, "part-payment-receipt");
+      assert.ok(invoiceHistory.payload.result.status.id);
+
+      const state = getDbState(dbPath);
+      const job = state.jobs.find((entry) => entry.id === "demo-job-1001");
+      assert.equal(job.quote.sentHistory.length, 1);
+      assert.equal(job.invoice.sentHistory.length, 1);
+      assert.equal(job.quote.sentHistory[0].subject, "ELSET QUOTE FOR 1 Demo Street");
+      assert.equal(job.invoice.sentHistory[0].subject, "ELSET INVOICE FOR 1 Demo Street");
+    });
+  });
+});
+
+test("sent-history routes are idempotent for duplicate stable IDs", async () => {
+  await withTempWorkspace(async ({ env }) => {
+    await withServer(env, async (baseUrl) => {
+      const first = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-quote-duplicate", "quote"),
+        }),
+      });
+      assert.equal(first.response.status, 200, first.payload.error);
+
+      const duplicate = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-quote-duplicate", "quote"),
+        }),
+      });
+      assert.equal(duplicate.response.status, 200, duplicate.payload.error);
+      assert.equal(duplicate.payload.result.duplicate, true);
+      assert.equal(duplicate.payload.result.sentHistoryId, "sent-quote-duplicate");
+      assert.equal(duplicate.payload.result.quote.sentHistory.length, 1);
+    });
+  });
+});
+
 test("document routes reject invalid values and stay unavailable in JSON mode", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {
@@ -358,6 +459,46 @@ test("document routes reject invalid values and stay unavailable in JSON mode", 
         }),
       });
       assert.equal(missingPaymentId.response.status, 400);
+
+      const missingJobHistory = await requestJson(baseUrl, "/api/jobs/missing-job/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-missing-job", "quote"),
+        }),
+      });
+      assert.equal(missingJobHistory.response.status, 404);
+
+      const deleteQuote = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote", { method: "DELETE" });
+      assert.equal(deleteQuote.response.status, 200, deleteQuote.payload.error);
+      const missingDocumentHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-missing-document", "quote"),
+        }),
+      });
+      assert.equal(missingDocumentHistory.response.status, 404);
+
+      const missingHistoryId = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: {
+            ...sentHistoryPayload("", "invoice"),
+            id: "",
+          },
+        }),
+      });
+      assert.equal(missingHistoryId.response.status, 400);
+
+      const missingRecipient = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: {
+            ...sentHistoryPayload("sent-missing-recipient", "invoice"),
+            toEmail: "",
+          },
+        }),
+      });
+      assert.equal(missingRecipient.response.status, 400);
     });
   });
 
@@ -377,6 +518,14 @@ test("document routes reject invalid values and stay unavailable in JSON mode", 
         }),
       });
       assert.equal(result.response.status, 409);
+
+      const sentHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-json-mode", "quote"),
+        }),
+      });
+      assert.equal(sentHistory.response.status, 409);
     });
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -470,4 +619,43 @@ test("deleting and restoring a job preserves quotes, invoices, payments, and sen
       assert.equal(state.deletedJobs.length, 0);
     });
   }, fixture);
+});
+
+test("deleting and restoring a job preserves sent history created through document routes", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      const quoteHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-quote-before-delete", "quote"),
+        }),
+      });
+      assert.equal(quoteHistory.response.status, 200, quoteHistory.payload.error);
+
+      const invoiceHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice/sent-history", {
+        method: "POST",
+        body: JSON.stringify({
+          history: sentHistoryPayload("sent-invoice-before-delete", "invoice"),
+        }),
+      });
+      assert.equal(invoiceHistory.response.status, 200, invoiceHistory.payload.error);
+
+      const deleted = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "DELETE" });
+      assert.equal(deleted.response.status, 200, deleted.payload.error);
+      assert.equal(deleted.payload.state.deletedJobs[0].job.quote.sentHistory[0].id, "sent-quote-before-delete");
+      assert.equal(deleted.payload.state.deletedJobs[0].job.invoice.sentHistory[0].id, "sent-invoice-before-delete");
+
+      const restored = await requestJson(baseUrl, "/api/jobs/demo-job-1001/restore", { method: "POST" });
+      assert.equal(restored.response.status, 200, restored.payload.error);
+      assert.equal(restored.payload.result.quote.sentHistory[0].id, "sent-quote-before-delete");
+      assert.equal(restored.payload.result.quote.sentHistory[0].subject, "ELSET QUOTE FOR 1 Demo Street");
+      assert.equal(restored.payload.result.invoice.sentHistory[0].id, "sent-invoice-before-delete");
+      assert.equal(restored.payload.result.invoice.sentHistory[0].subject, "ELSET INVOICE FOR 1 Demo Street");
+
+      const state = getDbState(dbPath);
+      const job = state.jobs.find((entry) => entry.id === "demo-job-1001");
+      assert.equal(job.quote.sentHistory[0].id, "sent-quote-before-delete");
+      assert.equal(job.invoice.sentHistory[0].id, "sent-invoice-before-delete");
+    });
+  });
 });

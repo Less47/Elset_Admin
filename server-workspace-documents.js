@@ -237,6 +237,42 @@ function normalizePayment(input, invoiceId, { existing = null, requireId = true 
   };
 }
 
+function normalizeSentHistoryEntry(input, kind, documentId, jobId, { requireSourceId = false, index = 0 } = {}) {
+  assertPlainObject(input, "Sent document history");
+  const sourceId = normalizeOptionalId(input.id, "Sent history ID");
+  if (requireSourceId && !sourceId) {
+    throw new WorkspaceDocumentError("Sent history ID is required.");
+  }
+  const stableId = `${kind}:${documentId}:sent:${sourceId || index + 1}`;
+  const sentAt = trimText(input.sentAt || input.createdAt) || nowIso();
+
+  const history = {
+    id: stableId,
+    sourceId,
+    kind,
+    quoteId: kind === "quote" ? documentId : null,
+    invoiceId: kind === "invoice" ? documentId : null,
+    jobId,
+    sentAt,
+    fromEmail: trimText(input.fromEmail),
+    toEmail: trimText(input.toEmail),
+    toName: trimText(input.toName),
+    messageId: trimText(input.messageId),
+    stampText: trimText(input.stampText),
+    emailPurpose: trimText(input.emailPurpose),
+    jobSnapshot: input.jobSnapshot,
+    documentSnapshot: input.documentSnapshot,
+    templateSnapshot: input.templateSnapshot,
+    extra: pickExtra(input, historyKnownKeys),
+  };
+
+  if (requireSourceId && !history.toEmail) {
+    throw new WorkspaceDocumentError("Sent history recipient email is required.");
+  }
+
+  return history;
+}
+
 function documentSubtotalFromRows(rows) {
   return rows.reduce((sum, row) => sum + lineTotalCentsFromScaled(row.quantity_micros, row.rate_cents), 0);
 }
@@ -422,37 +458,38 @@ function insertLineItems(db, table, parentColumn, parentId, lineItems) {
   });
 }
 
-function insertSendHistory(db, kind, documentId, jobId, sentHistory) {
-  if (!Array.isArray(sentHistory) || sentHistory.length === 0) return;
-  const statement = db.prepare(`
+function insertSentHistoryRow(db, history) {
+  db.prepare(`
     INSERT INTO document_send_history (
       id, source_id, document_kind, quote_id, invoice_id, job_id, sent_at, from_email, to_email, to_name,
       message_id, stamp_text, email_purpose, job_snapshot_json, document_snapshot_json, template_snapshot_json, extra_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  `).run(
+    history.id,
+    history.sourceId,
+    history.kind,
+    history.quoteId,
+    history.invoiceId,
+    history.jobId,
+    history.sentAt,
+    history.fromEmail,
+    history.toEmail,
+    history.toName,
+    history.messageId,
+    history.stampText,
+    history.emailPurpose,
+    nullableJson(history.jobSnapshot),
+    nullableJson(history.documentSnapshot),
+    nullableJson(history.templateSnapshot),
+    objectJson(history.extra)
+  );
+}
+
+function insertSendHistory(db, kind, documentId, jobId, sentHistory) {
+  if (!Array.isArray(sentHistory) || sentHistory.length === 0) return;
   sentHistory.forEach((entry, index) => {
-    assertPlainObject(entry, "Sent document history");
-    const sourceId = trimText(entry.id);
-    const stableId = `${kind}:${documentId}:sent:${sourceId || index + 1}`;
-    statement.run(
-      stableId,
-      sourceId,
-      kind,
-      kind === "quote" ? documentId : null,
-      kind === "invoice" ? documentId : null,
-      jobId,
-      trimText(entry.sentAt || entry.createdAt || nowIso()),
-      trimText(entry.fromEmail),
-      trimText(entry.toEmail),
-      trimText(entry.toName),
-      trimText(entry.messageId),
-      trimText(entry.stampText),
-      trimText(entry.emailPurpose),
-      nullableJson(entry.jobSnapshot),
-      nullableJson(entry.documentSnapshot),
-      nullableJson(entry.templateSnapshot),
-      objectJson(pickExtra(entry, historyKnownKeys))
-    );
+    const history = normalizeSentHistoryEntry(entry, kind, documentId, jobId, { index });
+    insertSentHistoryRow(db, history);
   });
 }
 
@@ -786,5 +823,49 @@ export function deleteInvoicePayment(db, jobIdInput, paymentIdInput) {
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
     return getInvoiceResult(db, jobId, { paymentId });
+  })();
+}
+
+export function addDocumentSentHistory(db, jobIdInput, documentTypeInput, input) {
+  assertPlainObject(input, "Sent document history");
+  const jobId = normalizeId(jobIdInput, "Job ID");
+  const documentType = documentTypeInput === "invoice" ? "invoice" : "quote";
+
+  return db.transaction(() => {
+    ensureJobExists(db, jobId);
+    const documentRow = documentType === "invoice" ? getInvoiceRowForJob(db, jobId) : getQuoteRowForJob(db, jobId);
+    if (!documentRow) {
+      throw new WorkspaceDocumentError(`${documentType === "invoice" ? "Invoice" : "Quote"} not found.`, 404);
+    }
+
+    const history = normalizeSentHistoryEntry(input, documentType, documentRow.id, jobId, { requireSourceId: true });
+    const existingRow = db.prepare("SELECT * FROM document_send_history WHERE id = ?").get(history.id);
+    if (existingRow) {
+      const belongsToDocument =
+        existingRow.job_id === jobId
+        && existingRow.document_kind === documentType
+        && (documentType === "invoice" ? existingRow.invoice_id === documentRow.id : existingRow.quote_id === documentRow.id);
+      if (!belongsToDocument) {
+        throw new WorkspaceDocumentError("Sent history ID is already used by another document.", 409);
+      }
+      const result = documentType === "invoice" ? getInvoiceResult(db, jobId) : getQuoteResult(db, jobId);
+      return {
+        ...result,
+        sentHistoryId: history.sourceId,
+        duplicate: true,
+      };
+    }
+
+    insertSentHistoryRow(db, history);
+    const updatedAt = nowIso();
+    updateJobTouchedAt(db, jobId, updatedAt);
+    touchWorkspaceInfo(db, updatedAt);
+    runForeignKeyCheck(db);
+
+    const result = documentType === "invoice" ? getInvoiceResult(db, jobId) : getQuoteResult(db, jobId);
+    return {
+      ...result,
+      sentHistoryId: history.sourceId,
+    };
   })();
 }

@@ -749,6 +749,7 @@ export function createServerApp() {
         messageId: info.messageId,
         sentAt: new Date().toISOString(),
         fromEmail,
+        subject,
       });
     } catch (error) {
       const message = error instanceof Error

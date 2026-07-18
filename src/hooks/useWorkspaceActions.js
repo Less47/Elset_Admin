@@ -43,6 +43,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
+import { sendDocumentAndPersistHistory } from "./document-send-workflow";
 
 export function useWorkspaceActions({
   applyServerWorkspaceState,
@@ -1535,70 +1536,94 @@ export function useWorkspaceActions({
       window.alert(`Add a billing or customer email address before sending the ${docType}.`);
       return false;
     }
+    setIsSendingDocument(true);
+    const template = getDocumentTemplateSnapshot(docType);
     try {
-      setIsSendingDocument(true);
-      const template = getDocumentTemplateSnapshot(docType);
       const requestHeaders = {
         "Content-Type": "application/json",
       };
-      const response = await fetch("/api/documents/send", {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify({
-          job: selectedFreshJob,
-          documentType: docType,
-          document: {
-            ...doc,
-            sentHistory: doc.sentHistory || [],
-          },
-          template,
-          stampText: options.stampText || "",
-          emailPurpose: options.emailPurpose || "",
-          emailSettings: {
-            fromEmail: themeSettings.defaultSenderEmail,
-            replyToEmail: themeSettings.replyToEmail,
-            ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail,
-            signature: themeSettings.emailSignature,
-          },
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("The email API needs a backend restart before invoice sending is available.");
-        }
-        throw new Error(payload.error || `Failed to send the ${docType} PDF.`);
-      }
-
-      const documentToSave = {
-        ...doc,
-        sentHistory: [
-          ...(doc.sentHistory || []),
-            {
-              id: crypto.randomUUID(),
-              sentAt: payload.sentAt || new Date().toISOString(),
-              fromEmail: payload.fromEmail || ADMIN_EMAIL,
-              toEmail: recipientEmail,
-              toName: recipientName,
-              messageId: payload.messageId || "",
+      return await sendDocumentAndPersistHistory({
+        sendEmail: async () => {
+          const response = await fetch("/api/documents/send", {
+            method: "POST",
+            headers: requestHeaders,
+            body: JSON.stringify({
+              job: selectedFreshJob,
+              documentType: docType,
+              document: {
+                ...doc,
+                sentHistory: doc.sentHistory || [],
+              },
+              template,
               stampText: options.stampText || "",
               emailPurpose: options.emailPurpose || "",
-            jobSnapshot: buildDocumentJobSnapshot(selectedFreshJob),
-            documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
-            templateSnapshot: template,
-          },
-        ],
-      };
+              emailSettings: {
+                fromEmail: themeSettings.defaultSenderEmail,
+                replyToEmail: themeSettings.replyToEmail,
+                ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail,
+                signature: themeSettings.emailSignature,
+              },
+            }),
+          });
 
-      updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, documentToSave) });
-      setDocEditorOpen(false);
-      window.alert(`${docType === "invoice" ? "Invoice" : "Quote"} sent successfully with a PDF attachment.`);
-      return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : `Failed to send the ${docType} PDF.`;
-      window.alert(message);
-      return false;
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            if (response.status === 404) {
+              throw new Error("The email API needs a backend restart before invoice sending is available.");
+            }
+            throw new Error(payload.error || `Failed to send the ${docType} PDF.`);
+          }
+
+          return payload;
+        },
+        buildHistoryEntry: (payload) => ({
+          id: crypto.randomUUID(),
+          sentAt: payload.sentAt || new Date().toISOString(),
+          fromEmail: payload.fromEmail || ADMIN_EMAIL,
+          toEmail: recipientEmail,
+          toName: recipientName,
+          subject: payload.subject || "",
+          messageId: payload.messageId || "",
+          stampText: options.stampText || "",
+          emailPurpose: options.emailPurpose || "",
+          jobSnapshot: buildDocumentJobSnapshot(selectedFreshJob),
+          documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
+          templateSnapshot: template,
+        }),
+        persistHistory: async ({ historyEntry }) => {
+          const documentToSave = {
+            ...doc,
+            sentHistory: [
+              ...(doc.sentHistory || []),
+              historyEntry,
+            ],
+          };
+
+          if (useSqliteApi) {
+            const savedDocument = await handleSaveDocument(selectedFreshJob.id, docType, doc);
+            if (!savedDocument) return false;
+
+            const savedHistory = await saveDocumentApiRequest({
+              path: documentPath(selectedFreshJob.id, docType, "/sent-history"),
+              method: "POST",
+              body: { history: historyEntry },
+              errorMessage: `Email was sent, but the ${docType} send history could not be saved.`,
+            });
+            return savedHistory.ok;
+          }
+
+          updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, documentToSave) });
+          return true;
+        },
+        onSuccess: () => {
+          setDocEditorOpen(false);
+          window.alert(`${docType === "invoice" ? "Invoice" : "Quote"} sent successfully with a PDF attachment.`);
+        },
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : `Failed to send the ${docType} PDF.`;
+          window.alert(message);
+        },
+      });
     } finally {
       setIsSendingDocument(false);
     }
