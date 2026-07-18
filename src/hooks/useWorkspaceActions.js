@@ -43,6 +43,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
+  requestSettingsWorkspaceUpdate,
   requestStaffWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
@@ -217,6 +218,28 @@ export function useWorkspaceActions({
     }
   }
 
+  async function saveSettingsApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update workspace settings.",
+  }) {
+    try {
+      const payload = await requestSettingsWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
   function customerPath(customerId, suffix = "") {
     return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
   }
@@ -249,6 +272,11 @@ export function useWorkspaceActions({
     return normalizedStaffId
       ? `/api/staff/${encodeURIComponent(normalizedStaffId)}${suffix}`
       : "/api/staff";
+  }
+
+  function documentTemplatePath(type, suffix = "") {
+    const templateType = type === "invoice" ? "invoice" : "quote";
+    return `/api/document-templates/${templateType}${suffix}`;
   }
 
   function getTomorrowPlanningDate() {
@@ -2052,16 +2080,39 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleUpdateDocumentTemplate(type, nextTemplate) {
+  async function handleUpdateDocumentTemplate(type, nextTemplate) {
     if (!canManageBusiness) return;
+    const normalizedTemplate = normalizeDocumentTemplate(nextTemplate, type);
+
+    if (useSqliteApi) {
+      const saved = await saveSettingsApiRequest({
+        path: documentTemplatePath(type),
+        method: "PUT",
+        body: { template: normalizedTemplate },
+        errorMessage: "Unable to save the document template.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
-      [type === "invoice" ? "invoiceTemplate" : "quoteTemplate"]: normalizeDocumentTemplate(nextTemplate, type),
+      [type === "invoice" ? "invoiceTemplate" : "quoteTemplate"]: normalizedTemplate,
     }));
+
+    return true;
   }
 
-  function handleResetDocumentTemplate(type) {
+  async function handleResetDocumentTemplate(type) {
     if (!canManageBusiness) return;
+    if (useSqliteApi) {
+      const saved = await saveSettingsApiRequest({
+        path: documentTemplatePath(type, "/reset"),
+        method: "POST",
+        errorMessage: "Unable to reset the document template.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
       [type === "invoice" ? "invoiceTemplate" : "quoteTemplate"]:
@@ -2069,10 +2120,22 @@ export function useWorkspaceActions({
           ? normalizeInvoiceTemplate(defaultInvoiceTemplate)
           : normalizeQuoteTemplate(defaultQuoteTemplate),
     }));
+
+    return true;
   }
 
-  function handleThemeSettingChange(key, value) {
+  async function handleThemeSettingChange(key, value) {
     if (!canManageBusiness) return;
+    if (useSqliteApi) {
+      const saved = await saveSettingsApiRequest({
+        path: "/api/settings",
+        method: "PATCH",
+        body: { settings: { [key]: value } },
+        errorMessage: "Unable to save workspace settings.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
       settings: normalizeThemeSettings({
@@ -2080,10 +2143,22 @@ export function useWorkspaceActions({
         [key]: value,
       }),
     }));
+
+    return true;
   }
 
-  function handleApplyThemePreset(values) {
+  async function handleApplyThemePreset(values) {
     if (!canManageBusiness) return;
+    if (useSqliteApi) {
+      const saved = await saveSettingsApiRequest({
+        path: "/api/settings",
+        method: "PATCH",
+        body: { settings: values },
+        errorMessage: "Unable to apply the theme preset.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
       settings: normalizeThemeSettings({
@@ -2091,10 +2166,22 @@ export function useWorkspaceActions({
         ...values,
       }),
     }));
+
+    return true;
   }
 
-  function handleResetUiSettings() {
+  async function handleResetUiSettings() {
     if (!canManageBusiness) return;
+    if (useSqliteApi) {
+      const saved = await saveSettingsApiRequest({
+        path: "/api/settings/reset",
+        method: "POST",
+        body: { group: "ui" },
+        errorMessage: "Unable to reset UI settings.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
       settings: normalizeThemeSettings({
@@ -2102,10 +2189,22 @@ export function useWorkspaceActions({
         ...pickSettings(defaultThemeSettings, uiSettingKeys),
       }),
     }));
+
+    return true;
   }
 
-  function handleResetPreferences() {
+  async function handleResetPreferences() {
     if (!canManageBusiness) return;
+    if (useSqliteApi) {
+      const saved = await saveSettingsApiRequest({
+        path: "/api/settings/reset",
+        method: "POST",
+        body: { group: "preferences" },
+        errorMessage: "Unable to reset preference settings.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
       settings: normalizeThemeSettings({
@@ -2113,6 +2212,8 @@ export function useWorkspaceActions({
         ...pickSettings(defaultThemeSettings, preferenceSettingKeys),
       }),
     }));
+
+    return true;
   }
 
   return {

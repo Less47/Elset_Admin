@@ -1,3 +1,5 @@
+import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
+
 function parseJson(value, fallback = null) {
   if (value === null || value === undefined || value === "") return fallback;
   try {
@@ -161,6 +163,7 @@ export function loadWorkspaceStateFromDb(db) {
   );
 
   const settings = settingsRows.reduce((nextSettings, row) => {
+    if (isWorkspaceSecretSettingKey(row.key)) return nextSettings;
     nextSettings[row.key] = parseJson(row.value_json, null);
     return nextSettings;
   }, {});

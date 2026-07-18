@@ -53,3 +53,7 @@ export function requestMaintenanceWorkspaceUpdate(options) {
 export function requestStaffWorkspaceUpdate(options) {
   return requestWorkspaceUpdate(options);
 }
+
+export function requestSettingsWorkspaceUpdate(options) {
+  return requestWorkspaceUpdate(options);
+}

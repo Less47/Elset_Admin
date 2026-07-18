@@ -6,6 +6,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
+  requestSettingsWorkspaceUpdate,
   requestStaffWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
@@ -550,6 +551,121 @@ test("staff API helper rejects failed requests before state is applied", async (
       appliedState = Boolean(payload.state);
     },
     /Staff email address is invalid/
+  );
+  assert.equal(appliedState, false);
+});
+
+test("settings API helper sends record-specific settings requests", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          updatedKeys: ["companyName"],
+        },
+        state: {
+          settings: {
+            companyName: "Synthetic Business",
+          },
+        },
+      }),
+    };
+  };
+
+  const payload = await requestSettingsWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/settings",
+    method: "PATCH",
+    body: {
+      settings: {
+        companyName: "Synthetic Business",
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/settings");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    settings: {
+      companyName: "Synthetic Business",
+    },
+  });
+  assert.deepEqual(payload.result.updatedKeys, ["companyName"]);
+});
+
+test("settings API helper sends record-specific document template requests", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          type: "quote",
+          template: {
+            quoteHeading: "Synthetic Quote",
+          },
+        },
+        state: {
+          quoteTemplate: {
+            quoteHeading: "Synthetic Quote",
+          },
+        },
+      }),
+    };
+  };
+
+  const payload = await requestSettingsWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/document-templates/quote",
+    method: "PUT",
+    body: {
+      template: {
+        quoteHeading: "Synthetic Quote",
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/document-templates/quote");
+  assert.equal(calls[0].options.method, "PUT");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    template: {
+      quoteHeading: "Synthetic Quote",
+    },
+  });
+  assert.equal(payload.result.type, "quote");
+});
+
+test("settings API helper rejects failed requests before state is applied", async () => {
+  let appliedState = false;
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      error: "Company email is invalid.",
+      state: {
+        settings: {
+          companyEmail: "bad-email",
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    async () => {
+      const payload = await requestSettingsWorkspaceUpdate({
+        fetchWithAuth,
+        path: "/api/settings",
+        method: "PATCH",
+        body: { settings: { companyEmail: "bad-email" } },
+      });
+      appliedState = Boolean(payload.state);
+    },
+    /Company email is invalid/
   );
   assert.equal(appliedState, false);
 });

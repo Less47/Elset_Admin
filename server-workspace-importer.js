@@ -4,6 +4,7 @@ import {
   WORKSPACE_SCHEMA_VERSION,
   migrateWorkspaceSchema,
 } from "./server-workspace-db.js";
+import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
 
 export const WORKSPACE_IMPORTER_VERSION = "workspace-json-importer-v1";
 const QUANTITY_SCALE = 1_000_000;
@@ -578,6 +579,7 @@ function insertWorkspaceData(db, data, { sourceJsonSha256 = "" } = {}) {
   );
 
   for (const [key, value] of Object.entries(data.settings || {})) {
+    if (isWorkspaceSecretSettingKey(key)) continue;
     statements.setting.run(key, json(value), importTime);
   }
 
