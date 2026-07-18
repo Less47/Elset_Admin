@@ -622,6 +622,33 @@ function validateExistingSiteForCreate(customer, jobAddress) {
   }
 }
 
+function getMaintenancePlanForJobCreate(db, maintenancePlanId, customerId, jobAddress = "") {
+  const planId = trimText(maintenancePlanId);
+  if (!planId) return null;
+
+  const plan = db.prepare(`
+    SELECT id, customer_id, site_address
+      FROM maintenance_plans
+     WHERE id = ?
+  `).get(planId);
+  if (!plan) throw new WorkspaceJobError("Maintenance plan not found.", 404);
+  if (plan.customer_id !== customerId) {
+    throw new WorkspaceJobError("Maintenance plan does not belong to the selected customer.", 400);
+  }
+
+  const normalizedJobAddress = normalizeSiteAddress(jobAddress);
+  const normalizedPlanAddress = normalizeSiteAddress(plan.site_address);
+  if (
+    normalizedJobAddress
+    && normalizedPlanAddress
+    && normalizedJobAddress.toLowerCase() !== normalizedPlanAddress.toLowerCase()
+  ) {
+    throw new WorkspaceJobError("Maintenance job address does not match the maintenance plan.", 400);
+  }
+
+  return plan;
+}
+
 function addOrReplaceCustomerSite(customer, siteInput, updatedAt = nowIso()) {
   const nextSite = normalizeSiteRecord({ ...siteInput, updatedAt, createdAt: siteInput?.createdAt || updatedAt });
   if (!nextSite) throw new WorkspaceJobError("Site address is required.");
@@ -957,7 +984,16 @@ export function createJob(db, input) {
         customer = addOrReplaceCustomerSite(customer, input.siteInput, now);
         insertOrReplaceCustomer(db, customer);
       } else {
-        validateExistingSiteForCreate(customer, jobForInsert.jobAddress || customer.address);
+        const maintenancePlan = getMaintenancePlanForJobCreate(
+          db,
+          jobForInsert.maintenancePlanId,
+          customer.id,
+          jobForInsert.jobAddress
+        );
+        if (maintenancePlan?.site_address && !normalizeSiteAddress(jobForInsert.jobAddress)) {
+          jobForInsert.jobAddress = maintenancePlan.site_address;
+        }
+        if (!maintenancePlan) validateExistingSiteForCreate(customer, jobForInsert.jobAddress || customer.address);
       }
     }
 
@@ -1024,6 +1060,7 @@ export function updateJobDetails(db, jobIdInput, input) {
 
     if (updates.status === "Completed") {
       clearCompletedTomorrowState(db, existingJob, updatedAt);
+      recordMaintenanceJobCompletion(db, existingJob, updatedAt);
     }
 
     touchWorkspaceInfo(db, updatedAt);
@@ -1042,6 +1079,17 @@ function clearCompletedTomorrowState(db, job, updatedAt) {
   `).run(updatedAt, job.id);
 }
 
+function recordMaintenanceJobCompletion(db, job, updatedAt) {
+  const maintenancePlanId = trimText(job?.maintenancePlanId);
+  if (!maintenancePlanId) return;
+  db.prepare(`
+    UPDATE maintenance_plans
+       SET last_completed_at = ?,
+           updated_at = ?
+     WHERE id = ?
+  `).run(updatedAt, updatedAt, maintenancePlanId);
+}
+
 export function changeJobStatus(db, jobIdInput, statusInput) {
   const jobId = normalizeId(jobIdInput, "Job ID");
   const nextStatus = normalizeOption(statusInput, statusValues, "");
@@ -1056,6 +1104,7 @@ export function changeJobStatus(db, jobIdInput, statusInput) {
     updateJobCore(db, jobId, { status: nextStatus }, updatedAt);
     if (nextStatus === "Completed") {
       clearCompletedTomorrowState(db, job, updatedAt);
+      recordMaintenanceJobCompletion(db, job, updatedAt);
     }
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);

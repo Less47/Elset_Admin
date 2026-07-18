@@ -1,4 +1,8 @@
 import crypto from "crypto";
+import {
+  archiveMaintenancePlansForCustomer,
+  restoreMaintenancePlansForCustomer,
+} from "./server-workspace-maintenance.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 
 const customerTypeValues = new Set(["homeowner", "strata", "property-manager", "builder", "business", "government", "other", ""]);
@@ -590,6 +594,7 @@ export function deleteCustomer(db, customerIdInput) {
       insertDeletedJob.run(`deleted-job:${job.id}`, job.id, deletedAt, json(job));
     });
 
+    const deletedMaintenancePlanCount = archiveMaintenancePlansForCustomer(db, customerId, deletedAt);
     db.prepare("DELETE FROM maintenance_plans WHERE customer_id = ?").run(customerId);
     db.prepare("DELETE FROM jobs WHERE customer_id = ?").run(customerId);
     db.prepare("DELETE FROM service_m8_refs WHERE entity_type = 'customer' AND entity_id = ?").run(customerId);
@@ -601,6 +606,7 @@ export function deleteCustomer(db, customerIdInput) {
       deletedAt,
       customerId,
       deletedJobCount: relatedJobs.length,
+      deletedMaintenancePlanCount,
     };
   })();
 }
@@ -628,6 +634,7 @@ export function restoreCustomer(db, customerIdInput) {
     const restoredPayload = parseJson(deletedRecord.payload_json, null);
     const customer = normalizeCustomerInput({ ...(restoredPayload || {}), id: customerId });
     insertOrReplaceCustomer(db, customer);
+    restoreMaintenancePlansForCustomer(db, customerId);
     syncJobCustomerSnapshots(db, customer, customer.updatedAt);
     db.prepare("DELETE FROM deleted_records WHERE kind = 'customer' AND record_id = ?").run(customerId);
     touchWorkspaceInfo(db, customer.updatedAt);

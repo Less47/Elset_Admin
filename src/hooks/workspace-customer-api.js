@@ -41,3 +41,7 @@ export function requestCustomerWorkspaceUpdate(options) {
 export function requestDocumentWorkspaceUpdate(options) {
   return requestWorkspaceUpdate(options);
 }
+
+export function requestMaintenanceWorkspaceUpdate(options) {
+  return requestWorkspaceUpdate(options);
+}

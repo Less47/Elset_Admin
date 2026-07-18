@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 1;
+export const WORKSPACE_SCHEMA_VERSION = 2;
 
 const migrations = [
   {
@@ -376,6 +376,29 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_deleted_records_kind ON deleted_records(kind);
       CREATE INDEX IF NOT EXISTS idx_service_m8_entity ON service_m8_refs(entity_type, entity_id);
       CREATE INDEX IF NOT EXISTS idx_service_m8_uuid ON service_m8_refs(service_m8_uuid);
+    `,
+  },
+  {
+    version: 2,
+    name: "maintenance-plan-archive-records",
+    sql: `
+      CREATE TABLE IF NOT EXISTS deleted_maintenance_plans (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL DEFAULT '',
+        deleted_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        linked_job_ids_json TEXT NOT NULL DEFAULT '[]',
+        extra_json TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_deleted_maintenance_plan_id ON deleted_maintenance_plans(plan_id);
+      CREATE INDEX IF NOT EXISTS idx_deleted_maintenance_customer ON deleted_maintenance_plans(customer_id);
+
+      UPDATE workspace_info
+         SET schema_version = 2
+       WHERE id = 1
+         AND schema_version < 2;
     `,
   },
 ];

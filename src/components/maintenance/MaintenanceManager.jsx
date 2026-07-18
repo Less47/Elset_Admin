@@ -247,7 +247,7 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
           </Button>
           <Button
             disabled={!canSave}
-            onClick={() => {
+            onClick={async () => {
               const didSave = onSave({
                 planName: draft.planName,
                 customerId: draft.customerId,
@@ -260,6 +260,7 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
                 checklist: normalizeChecklistItems(draft.checklistText),
                 notes: draft.notes,
               });
+              if (didSave instanceof Promise && (await didSave) === false) return;
               if (didSave !== false) onOpenChange(false);
             }}
           >

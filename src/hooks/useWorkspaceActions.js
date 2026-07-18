@@ -41,6 +41,7 @@ import {
   isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
   requestDocumentWorkspaceUpdate,
+  requestMaintenanceWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
@@ -148,6 +149,28 @@ export function useWorkspaceActions({
     }
   }
 
+  async function saveMaintenanceApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update the maintenance records.",
+  }) {
+    try {
+      const payload = await requestMaintenanceWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
   function customerPath(customerId, suffix = "") {
     return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
   }
@@ -159,6 +182,13 @@ export function useWorkspaceActions({
   function documentPath(jobId, type, suffix = "") {
     const documentType = type === "invoice" ? "invoice" : "quote";
     return jobPath(jobId, `/${documentType}${suffix}`);
+  }
+
+  function maintenancePath(planId = "", suffix = "") {
+    const normalizedPlanId = String(planId || "").trim();
+    return normalizedPlanId
+      ? `/api/maintenance-plans/${encodeURIComponent(normalizedPlanId)}${suffix}`
+      : "/api/maintenance-plans";
   }
 
   function getTomorrowPlanningDate() {
@@ -373,7 +403,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleCreateMaintenancePlan(planInput) {
+  async function handleCreateMaintenancePlan(planInput) {
     if (!canManageBusiness) return false;
 
     const customer = data.customers.find((entry) => entry.id === planInput.customerId);
@@ -390,6 +420,16 @@ export function useWorkspaceActions({
       updatedAt: now,
     });
 
+    if (useSqliteApi) {
+      const saved = await saveMaintenanceApiRequest({
+        path: maintenancePath(),
+        method: "POST",
+        body: { plan: createdPlan },
+        errorMessage: "Unable to create the maintenance plan.",
+      });
+      return saved.ok ? (saved.result || true) : false;
+    }
+
     setData((prev) => ({
       ...prev,
       maintenancePlans: [createdPlan, ...(prev.maintenancePlans || []).filter((entry) => entry.id !== createdPlan.id)],
@@ -398,7 +438,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleUpdateMaintenancePlan(planId, updates) {
+  async function handleUpdateMaintenancePlan(planId, updates) {
     if (!canManageBusiness) return false;
 
     const existingPlan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
@@ -408,6 +448,16 @@ export function useWorkspaceActions({
     if (!customer) {
       window.alert("Select a valid customer before saving the maintenance plan.");
       return false;
+    }
+
+    if (useSqliteApi) {
+      const saved = await saveMaintenanceApiRequest({
+        path: maintenancePath(planId),
+        method: "PATCH",
+        body: { plan: updates },
+        errorMessage: "Unable to save the maintenance plan.",
+      });
+      return saved.ok ? (saved.result || true) : false;
     }
 
     setData((prev) => ({
@@ -426,7 +476,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleDeleteMaintenancePlan(planId) {
+  async function handleDeleteMaintenancePlan(planId) {
     if (!canManageBusiness) return false;
 
     const plan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
@@ -441,6 +491,15 @@ export function useWorkspaceActions({
     );
     if (!confirmed) return false;
 
+    if (useSqliteApi) {
+      const saved = await saveMaintenanceApiRequest({
+        path: maintenancePath(planId),
+        method: "DELETE",
+        errorMessage: "Unable to delete the maintenance plan.",
+      });
+      return saved.ok;
+    }
+
     setData((prev) => ({
       ...prev,
       maintenancePlans: (prev.maintenancePlans || []).filter((entry) => entry.id !== planId),
@@ -454,7 +513,7 @@ export function useWorkspaceActions({
     setJobDetailsOpen(true);
   }
 
-  function handleGenerateMaintenanceJob(planId) {
+  async function handleGenerateMaintenanceJob(planId) {
     if (!canManageBusiness) return false;
 
     const plan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
@@ -476,6 +535,20 @@ export function useWorkspaceActions({
     if (existingOpenJob) {
       handleOpenJob(existingOpenJob);
       return true;
+    }
+
+    if (useSqliteApi) {
+      const saved = await saveMaintenanceApiRequest({
+        path: maintenancePath(planId, "/generate-job"),
+        method: "POST",
+        errorMessage: "Unable to generate the maintenance job.",
+      });
+      if (!saved.ok) return false;
+      if (saved.result?.job) {
+        setSelectedJob(saved.result.job);
+        setJobDetailsOpen(true);
+      }
+      return saved.result || true;
     }
 
     const now = new Date().toISOString();

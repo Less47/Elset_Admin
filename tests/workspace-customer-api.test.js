@@ -4,6 +4,7 @@ import {
   isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
   requestDocumentWorkspaceUpdate,
+  requestMaintenanceWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
 import { sendDocumentAndPersistHistory } from "../src/hooks/document-send-workflow.js";
@@ -307,6 +308,86 @@ test("document send workflow skips sent history when email sending fails", async
   assert.equal(result, false);
   assert.deepEqual(calls, []);
   assert.deepEqual(errors, ["SMTP rejected the message."]);
+});
+
+test("maintenance API helper sends record-specific plan requests", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          id: "maintenance-plan-1",
+          planName: "Synthetic maintenance plan",
+        },
+        state: {
+          maintenancePlans: [
+            {
+              id: "maintenance-plan-1",
+              planName: "Synthetic maintenance plan",
+            },
+          ],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestMaintenanceWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/maintenance-plans/maintenance-plan-1",
+    method: "PATCH",
+    body: {
+      plan: {
+        planName: "Synthetic maintenance plan",
+        nextDueDate: "2026-03-01",
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/maintenance-plans/maintenance-plan-1");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    plan: {
+      planName: "Synthetic maintenance plan",
+      nextDueDate: "2026-03-01",
+    },
+  });
+  assert.equal(payload.result.id, "maintenance-plan-1");
+});
+
+test("maintenance API helper rejects failed requests before state is applied", async () => {
+  let appliedState = false;
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      error: "Next service date is invalid.",
+      state: {
+        maintenancePlans: [
+          {
+            id: "maintenance-plan-1",
+            nextDueDate: "bad-date",
+          },
+        ],
+      },
+    }),
+  });
+
+  await assert.rejects(
+    async () => {
+      const payload = await requestMaintenanceWorkspaceUpdate({
+        fetchWithAuth,
+        path: "/api/maintenance-plans/maintenance-plan-1/schedule",
+        method: "PATCH",
+        body: { nextDueDate: "bad-date" },
+      });
+      appliedState = Boolean(payload.state);
+    },
+    /Next service date is invalid/
+  );
+  assert.equal(appliedState, false);
 });
 
 test("customer API helper rejects failed requests with server error text", async () => {
