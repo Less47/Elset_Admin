@@ -6,6 +6,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
+  requestStaffWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
 import { sendDocumentAndPersistHistory } from "../src/hooks/document-send-workflow.js";
@@ -469,6 +470,86 @@ test("inventory API helper rejects failed requests before state is applied", asy
       appliedState = Boolean(payload.state);
     },
     /Quantity must be a valid number/
+  );
+  assert.equal(appliedState, false);
+});
+
+test("staff API helper sends record-specific staff requests", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          id: "staff-1",
+          name: "Synthetic Staff",
+        },
+        state: {
+          staff: [
+            {
+              id: "staff-1",
+              name: "Synthetic Staff",
+            },
+          ],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestStaffWorkspaceUpdate({
+    fetchWithAuth,
+    path: "/api/staff/staff-1",
+    method: "PATCH",
+    body: {
+      staff: {
+        name: "Synthetic Staff",
+        role: "Service Technician",
+      },
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/staff/staff-1");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    staff: {
+      name: "Synthetic Staff",
+      role: "Service Technician",
+    },
+  });
+  assert.equal(payload.result.id, "staff-1");
+});
+
+test("staff API helper rejects failed requests before state is applied", async () => {
+  let appliedState = false;
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      error: "Staff email address is invalid.",
+      state: {
+        staff: [
+          {
+            id: "staff-1",
+            email: "bad-email",
+          },
+        ],
+      },
+    }),
+  });
+
+  await assert.rejects(
+    async () => {
+      const payload = await requestStaffWorkspaceUpdate({
+        fetchWithAuth,
+        path: "/api/staff/staff-1",
+        method: "PATCH",
+        body: { staff: { email: "bad-email" } },
+      });
+      appliedState = Boolean(payload.state);
+    },
+    /Staff email address is invalid/
   );
   assert.equal(appliedState, false);
 });

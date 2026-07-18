@@ -49,3 +49,7 @@ export function requestInventoryWorkspaceUpdate(options) {
 export function requestMaintenanceWorkspaceUpdate(options) {
   return requestWorkspaceUpdate(options);
 }
+
+export function requestStaffWorkspaceUpdate(options) {
+  return requestWorkspaceUpdate(options);
+}

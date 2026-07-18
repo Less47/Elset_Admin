@@ -1871,13 +1871,16 @@ export function getInventoryStockStatus(item) {
 
 export function normalizeStaffRecord(staffMember) {
   if (!staffMember) return null;
+  const createdAt = staffMember.createdAt || new Date().toISOString();
   return {
+    ...(staffMember && typeof staffMember === "object" && !Array.isArray(staffMember) ? staffMember : {}),
     id: staffMember.id || crypto.randomUUID(),
     name: staffMember.name || "Unnamed staff member",
     role: staffMember.role || "Staff",
     email: staffMember.email || "",
     phone: staffMember.phone || "",
-    createdAt: staffMember.createdAt || new Date().toISOString(),
+    createdAt,
+    ...(staffMember.updatedAt ? { updatedAt: staffMember.updatedAt } : {}),
   };
 }
 

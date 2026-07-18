@@ -42,6 +42,7 @@ import { registerDocumentRoutes } from "./server-document-routes.js";
 import { registerInventoryRoutes } from "./server-inventory-routes.js";
 import { registerJobRoutes } from "./server-job-routes.js";
 import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
+import { registerStaffRoutes } from "./server-staff-routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -530,6 +531,7 @@ export function createServerApp() {
   registerDocumentRoutes(app, { requireAuth, requireRole });
   registerMaintenanceRoutes(app, { requireAuth, requireRole });
   registerInventoryRoutes(app, { requireAuth, requireRole });
+  registerStaffRoutes(app, { requireAuth, requireRole });
 
   app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {

@@ -43,6 +43,7 @@ import {
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
+  requestStaffWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
@@ -194,6 +195,28 @@ export function useWorkspaceActions({
     }
   }
 
+  async function saveStaffApiRequest({
+    path,
+    method = "POST",
+    body,
+    errorMessage = "Unable to update the staff records.",
+  }) {
+    try {
+      const payload = await requestStaffWorkspaceUpdate({
+        fetchWithAuth,
+        path,
+        method,
+        body,
+        errorMessage,
+      });
+      const state = applyServerState(payload.state);
+      return { ok: true, payload, result: payload.result, state };
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : errorMessage);
+      return { ok: false, result: null, state: null };
+    }
+  }
+
   function customerPath(customerId, suffix = "") {
     return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
   }
@@ -219,6 +242,13 @@ export function useWorkspaceActions({
     return normalizedPlanId
       ? `/api/maintenance-plans/${encodeURIComponent(normalizedPlanId)}${suffix}`
       : "/api/maintenance-plans";
+  }
+
+  function staffPath(staffId = "", suffix = "") {
+    const normalizedStaffId = String(staffId || "").trim();
+    return normalizedStaffId
+      ? `/api/staff/${encodeURIComponent(normalizedStaffId)}${suffix}`
+      : "/api/staff";
   }
 
   function getTomorrowPlanningDate() {
@@ -342,8 +372,23 @@ export function useWorkspaceActions({
     });
   }
 
-  function handleCreateStaff(staffInput) {
+  async function handleCreateStaff(staffInput) {
     if (!canManageBusiness) return null;
+
+    if (useSqliteApi) {
+      const createdStaff = {
+        id: crypto.randomUUID(),
+        ...staffInput,
+        createdAt: new Date().toISOString(),
+      };
+      const saved = await saveStaffApiRequest({
+        path: staffPath(),
+        method: "POST",
+        body: { staff: createdStaff },
+        errorMessage: "Unable to create the staff member.",
+      });
+      return saved.ok ? saved.result : null;
+    }
 
     const createdStaff = normalizeStaffRecord({
       id: crypto.randomUUID(),
@@ -359,8 +404,18 @@ export function useWorkspaceActions({
     return createdStaff;
   }
 
-  function handleUpdateStaff(staffId, updates) {
+  async function handleUpdateStaff(staffId, updates) {
     if (!canManageBusiness) return null;
+
+    if (useSqliteApi) {
+      const saved = await saveStaffApiRequest({
+        path: staffPath(staffId),
+        method: "PATCH",
+        body: { staff: updates },
+        errorMessage: "Unable to save the staff member.",
+      });
+      return saved.ok ? saved.result : null;
+    }
 
     const updatedStaff = normalizeStaffRecord({
       ...(data.staff.find((entry) => entry.id === staffId) || {}),
