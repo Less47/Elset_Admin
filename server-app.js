@@ -39,6 +39,11 @@ import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
 import { registerStaffRoutes } from "./server-staff-routes.js";
 import { registerServiceM8ImportRoutes } from "./server-servicem8-import-routes.js";
+import { registerWorkspaceRestoreRoutes } from "./server-workspace-restore-routes.js";
+import {
+  MAX_SQLITE_BACKUP_PAYLOAD_BYTES,
+  createWorkspaceSqliteBackupBundle,
+} from "./server-workspace-backup.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -334,6 +339,7 @@ export function createServerApp() {
   });
 
   app.all("/api/auth/{*any}", toNodeHandler(auth));
+  app.use("/api/admin/workspace-restore", express.json({ limit: MAX_SQLITE_BACKUP_PAYLOAD_BYTES }));
   app.use(express.json({ limit: "15mb" }));
 
   app.get("/api/health", (_req, res) => {
@@ -499,6 +505,11 @@ export function createServerApp() {
     requireRole,
     syncManagedUserNamesWithStaffFn: syncManagedUserNamesWithStaff,
   });
+  registerWorkspaceRestoreRoutes(app, {
+    requireAuth,
+    requireRole,
+    verifyUserPassword,
+  });
 
   app.get("/api/admin/user-accounts", requireAuth, requireRole(["admin"]), (_req, res) => {
     try {
@@ -532,8 +543,18 @@ export function createServerApp() {
     }
   });
 
-  app.get("/api/admin/data-backup", requireAuth, requireRole(["admin"]), (req, res) => {
+  app.get("/api/admin/data-backup", requireAuth, requireRole(["admin"]), async (req, res) => {
     try {
+      if (getWorkspaceStorageMode() === "sqlite") {
+        const backup = await createWorkspaceSqliteBackupBundle({ exportedBy: req.user });
+        const payload = JSON.stringify(backup, null, 2);
+
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${buildBackupFilename()}"`);
+        return res.status(200).send(payload);
+      }
+
       const data = loadWorkspaceState();
       const backup = {
         ...data,
@@ -564,6 +585,12 @@ export function createServerApp() {
 
   app.post("/api/admin/data-backup/restore", requireAuth, requireRole(["admin"]), (req, res) => {
     try {
+      if (getWorkspaceStorageMode() === "sqlite") {
+        return res.status(409).json({
+          error: "Use the SQLite workspace restore endpoint for SQLite backups.",
+        });
+      }
+
       const restorePassword = String(req.body?.restorePassword || "");
       const hasWrappedBackup = Object.prototype.hasOwnProperty.call(req.body || {}, "backupData");
       const backupInput = hasWrappedBackup ? req.body?.backupData : req.body;

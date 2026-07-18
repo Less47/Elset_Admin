@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { requestServiceM8ImportUpdate } from "@/hooks/workspace-customer-api";
+import {
+  isSqliteWorkspaceMode,
+  requestServiceM8ImportUpdate,
+  requestWorkspaceRestoreUpdate,
+} from "@/hooks/workspace-customer-api";
 import {
   countBusinessRecords,
   getLegacyPersistedState,
@@ -490,20 +494,38 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         throw new Error("The selected file is not valid JSON.");
       }
 
-      const response = await fetchWithAuth("/api/admin/data-backup/restore", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          backupData: parsedBackup,
-          restorePassword: password,
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
+      let payload = null;
+      if (isSqliteWorkspaceMode(workspaceStorageMode)) {
+        payload = await requestWorkspaceRestoreUpdate({
+          fetchWithAuth,
+          path: "/api/admin/workspace-restore",
+          method: "POST",
+          body: {
+            backupData: parsedBackup,
+            restorePassword: password,
+          },
+          errorMessage: "Unable to restore the workspace backup.",
+        });
+      } else {
+        const response = await fetchWithAuth("/api/admin/data-backup/restore", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            backupData: parsedBackup,
+            restorePassword: password,
+          }),
+        });
+        payload = await response.json().catch(() => ({}));
 
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error || "Unable to restore the backup file.");
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "Unable to restore the backup file.");
+        }
+      }
+
+      if (!payload?.state) {
+        throw new Error("The restore completed without returning the refreshed workspace state.");
       }
 
       const nextState = normalizeAppState(payload.state);
@@ -528,8 +550,8 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         };
       }
 
-      const nextAccounts = Array.isArray(payload.accounts) ? payload.accounts : [];
-      const nextUser = payload.user || null;
+      const nextAccounts = Array.isArray(payload.accounts) ? payload.accounts : adminUserAccounts;
+      const nextUser = payload.user || authUser;
       setAuthUser(nextUser);
       setAdminUserAccounts(nextUser?.role === "admin" ? nextAccounts : []);
       setAdminUserAccountsError("");

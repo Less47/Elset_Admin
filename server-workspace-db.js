@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { fileURLToPath } from "url";
+import { assertWorkspaceWritable } from "./server-workspace-restore-lock.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -495,7 +496,16 @@ export function migrateWorkspaceSchema(db) {
   return db;
 }
 
-export function openWorkspaceDb({ dbPath = getWorkspaceDbPath(), readonly = false, migrate = true } = {}) {
+export function openWorkspaceDb({
+  dbPath = getWorkspaceDbPath(),
+  readonly = false,
+  migrate = true,
+  allowDuringRestore = false,
+} = {}) {
+  if (!readonly && !allowDuringRestore) {
+    assertWorkspaceWritable();
+  }
+
   if (!readonly && dbPath !== ":memory:") {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   }

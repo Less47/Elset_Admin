@@ -172,6 +172,21 @@ npm run backup:workspace -- --include-files
 
 The backup command uses SQLite's backup API, writes checksums, records schema/version metadata, validates foreign keys, and prints a small count summary. It does not connect to Fly.io.
 
+When the app is running in SQLite mode, the Settings > Data Backup screen downloads an uploadable JSON bundle that contains only the workspace SQLite database plus metadata and checksums. It does not include Better Auth login accounts, sessions, SMTP credentials, API keys, OAuth tokens, or environment variables.
+
+Restore a SQLite workspace backup from the Settings > Data Backup screen only after testing the file somewhere safe. The SQLite restore path:
+
+- accepts only `elset-workspace-sqlite-backup-v1` workspace backup bundles
+- validates metadata, SHA-256 checksums, SQLite integrity, schema version, required tables, foreign keys, record counts, and financial totals before replacing data
+- rejects backups with authentication tables or unexpected embedded files
+- creates a verified pre-restore backup under `ELSET_DATA_DIR/backups/pre-restore-workspace-sqlite-*`
+- blocks workspace writes while the restore is running
+- replaces the workspace database as a complete snapshot, then reloads the app state
+- removes stale SQLite WAL/SHM/journal files during the swap
+- rolls back to the pre-restore database if replacement or verification fails
+
+The legacy JSON restore path remains available only when `ELSET_WORKSPACE_STORAGE=json` is active. SQLite restore never overwrites `auth.db` or secrets.
+
 ## SQLite Rollout And Rollback
 
 The old JSON-backed store remains available temporarily as a rollback mode.

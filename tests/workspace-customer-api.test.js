@@ -9,6 +9,7 @@ import {
   requestServiceM8ImportUpdate,
   requestSettingsWorkspaceUpdate,
   requestStaffWorkspaceUpdate,
+  requestWorkspaceRestoreUpdate,
   requestWorkspaceUpdate,
 } from "../src/hooks/workspace-customer-api.js";
 import { sendDocumentAndPersistHistory } from "../src/hooks/document-send-workflow.js";
@@ -739,6 +740,78 @@ test("ServiceM8 import helper rejects failed imports before state is applied", a
       appliedState = Boolean(payload.state);
     },
     /ServiceM8 jobs response was not a list/
+  );
+  assert.equal(appliedState, false);
+});
+
+test("workspace restore helper uses the dedicated SQLite restore endpoint payload", async () => {
+  const calls = [];
+  const fetchWithAuth = async (path, options) => {
+    calls.push({ path, options });
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        restore: {
+          restoredBackup: {
+            summary: {
+              counts: { customers: 1 },
+            },
+          },
+        },
+        state: {
+          customers: [{ id: "restored-customer", name: "Restored Synthetic Customer" }],
+        },
+      }),
+    };
+  };
+
+  const payload = await requestWorkspaceRestoreUpdate({
+    fetchWithAuth,
+    path: "/api/admin/workspace-restore",
+    method: "POST",
+    body: {
+      backupData: { backup: { format: "elset-workspace-sqlite-backup-v1" } },
+      restorePassword: "correct-password",
+    },
+  });
+
+  assert.equal(calls[0].path, "/api/admin/workspace-restore");
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    backupData: { backup: { format: "elset-workspace-sqlite-backup-v1" } },
+    restorePassword: "correct-password",
+  });
+  assert.equal(payload.state.customers[0].name, "Restored Synthetic Customer");
+});
+
+test("workspace restore helper rejects failed restores before visible state is applied", async () => {
+  let appliedState = false;
+  const fetchWithAuth = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({
+      error: "The SQLite workspace backup checksum does not match the embedded database.",
+      state: {
+        customers: [{ id: "tampered-customer" }],
+      },
+    }),
+  });
+
+  await assert.rejects(
+    async () => {
+      const payload = await requestWorkspaceRestoreUpdate({
+        fetchWithAuth,
+        path: "/api/admin/workspace-restore",
+        method: "POST",
+        body: {
+          backupData: { backup: { format: "elset-workspace-sqlite-backup-v1" } },
+          restorePassword: "correct-password",
+        },
+      });
+      appliedState = Boolean(payload.state);
+    },
+    /checksum does not match/
   );
   assert.equal(appliedState, false);
 });

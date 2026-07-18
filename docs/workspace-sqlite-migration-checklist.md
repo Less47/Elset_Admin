@@ -63,6 +63,17 @@ Use this checklist before moving a real ELSET Admin workspace from `app-data.jso
 - Confirm the test records persist.
 - Remove the test records using normal app controls.
 
+## SQLite Backup Restore Test
+
+- Create a temporary data directory.
+- Start the app against that temporary directory only.
+- Download a SQLite backup bundle from Settings > Data Backup.
+- Restore the bundle into another temporary SQLite workspace.
+- Confirm the restore creates `ELSET_DATA_DIR/backups/pre-restore-workspace-sqlite-*`.
+- Confirm customer, site, job, quote, invoice, payment, maintenance, inventory, staff, settings, and deleted-record counts match the backup summary.
+- Confirm login accounts, sessions, SMTP credentials, API keys, OAuth tokens, and environment variables were not restored or changed.
+- Confirm a failed or tampered backup leaves the original workspace database in place.
+
 ## Rollback
 
 - Stop the app.

@@ -463,9 +463,11 @@ export default function SettingsManager({
   onPreviewServiceM8Import,
   onApplyServiceM8Import,
   backupSummary,
+  workspaceStorageMode = "json",
 }) {
   const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
+  const isSqliteBackupMode = String(workspaceStorageMode || "").trim().toLowerCase() === "sqlite";
   const [downloadStatus, setDownloadStatus] = useState("idle");
   const [downloadMessage, setDownloadMessage] = useState("");
   const [restoreStatus, setRestoreStatus] = useState("idle");
@@ -509,16 +511,19 @@ export default function SettingsManager({
     () => templateFields.filter((field) => !field.documentTypes || field.documentTypes.includes(currentTemplateType)),
     [currentTemplateType]
   );
-  const backupCards = useMemo(() => ([
-    { key: "customers", label: "Customers", value: backupSummary?.customers || 0 },
-    { key: "jobs", label: "Jobs", value: backupSummary?.jobs || 0 },
-    { key: "staff", label: "Staff", value: backupSummary?.staff || 0 },
-    { key: "inventoryItems", label: "Inventory Items", value: backupSummary?.inventoryItems || 0 },
-    { key: "maintenancePlans", label: "Maintenance Plans", value: backupSummary?.maintenancePlans || 0 },
-    { key: "userAccounts", label: "Login Accounts", value: backupSummary?.userAccounts || 0 },
-    { key: "deletedJobs", label: "Deleted Jobs", value: backupSummary?.deletedJobs || 0 },
-    { key: "deletedCustomers", label: "Deleted Customers", value: backupSummary?.deletedCustomers || 0 },
-  ]), [backupSummary]);
+  const backupCards = useMemo(() => {
+    const cards = [
+      { key: "customers", label: "Customers", value: backupSummary?.customers || 0 },
+      { key: "jobs", label: "Jobs", value: backupSummary?.jobs || 0 },
+      { key: "staff", label: "Staff", value: backupSummary?.staff || 0 },
+      { key: "inventoryItems", label: "Inventory Items", value: backupSummary?.inventoryItems || 0 },
+      { key: "maintenancePlans", label: "Maintenance Plans", value: backupSummary?.maintenancePlans || 0 },
+      { key: "userAccounts", label: "Login Accounts", value: backupSummary?.userAccounts || 0 },
+      { key: "deletedJobs", label: "Deleted Jobs", value: backupSummary?.deletedJobs || 0 },
+      { key: "deletedCustomers", label: "Deleted Customers", value: backupSummary?.deletedCustomers || 0 },
+    ];
+    return isSqliteBackupMode ? cards.filter((item) => item.key !== "userAccounts") : cards;
+  }, [backupSummary, isSqliteBackupMode]);
   const serviceM8SummaryCards = useMemo(() => serviceM8Summary ? ([
     { key: "customer-create", label: "Customers To Create", value: serviceM8Summary.customers?.create || 0 },
     { key: "customer-update", label: "Customers To Update", value: serviceM8Summary.customers?.update || 0 },
@@ -1006,7 +1011,9 @@ export default function SettingsManager({
                 <div>
                   <CardTitle className="text-lg">Download Full Backup</CardTitle>
                   <p className="mt-1 text-sm text-slate-600">
-                    Save a JSON copy of the shared workspace, including customers, jobs, staff, templates, settings, and login accounts.
+                    {isSqliteBackupMode
+                      ? "Save a SQLite workspace backup bundle with customers, jobs, staff, templates, settings, and deleted records."
+                      : "Save a JSON copy of the shared workspace, including customers, jobs, staff, templates, settings, and login accounts."}
                   </p>
                 </div>
                 <Badge className={isAdmin ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
@@ -1015,7 +1022,9 @@ export default function SettingsManager({
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  Active session tokens are left out of the file for security, but the backup still includes the core workspace records and saved login accounts.
+                  {isSqliteBackupMode
+                    ? "Login accounts, active sessions, SMTP credentials, API keys, and environment secrets are left out of SQLite workspace backups."
+                    : "Active session tokens are left out of the file for security, but the backup still includes the core workspace records and saved login accounts."}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -1053,7 +1062,9 @@ export default function SettingsManager({
                 <div>
                   <CardTitle className="text-lg">Restore From Backup</CardTitle>
                   <p className="mt-1 text-sm text-slate-600">
-                    Upload a previously downloaded backup JSON file to replace the current shared workspace snapshot.
+                    {isSqliteBackupMode
+                      ? "Upload a SQLite workspace backup JSON bundle to replace the current shared workspace snapshot."
+                      : "Upload a previously downloaded backup JSON file to replace the current shared workspace snapshot."}
                   </p>
                 </div>
                 <Badge className={isAdmin ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}>
@@ -1062,7 +1073,9 @@ export default function SettingsManager({
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                  This will overwrite customers, jobs, staff, settings, templates, deleted records, and saved login accounts on the shared server.
+                  {isSqliteBackupMode
+                    ? "This will overwrite workspace records only. Login accounts, sessions, SMTP credentials, API keys, and environment settings are not restored."
+                    : "This will overwrite customers, jobs, staff, settings, templates, deleted records, and saved login accounts on the shared server."}
                 </div>
 
                 <FormField label="Backup JSON file">
@@ -1139,7 +1152,9 @@ export default function SettingsManager({
 
                 <form className="grid gap-4" onSubmit={handleBackupRestore}>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                    This replaces customers, jobs, staff, templates, deleted records, and saved login accounts with the uploaded backup file.
+                    {isSqliteBackupMode
+                      ? "This replaces the SQLite workspace snapshot only. Login accounts and secrets are left untouched."
+                      : "This replaces customers, jobs, staff, templates, deleted records, and saved login accounts with the uploaded backup file."}
                   </div>
 
                   {restoreFile ? (

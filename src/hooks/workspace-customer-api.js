@@ -64,3 +64,10 @@ export function requestServiceM8ImportUpdate(options) {
     ...options,
   });
 }
+
+export function requestWorkspaceRestoreUpdate(options) {
+  return requestWorkspaceUpdate({
+    errorMessage: "Unable to restore the workspace backup.",
+    ...options,
+  });
+}
