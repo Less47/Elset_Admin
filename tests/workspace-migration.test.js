@@ -328,6 +328,45 @@ test("production auth startup guard does not create a container-local auth direc
   }
 });
 
+test("auth startup does not rewrite app-data.json when workspace storage is SQLite", () => {
+  const tempDir = makeTempDir();
+  const jsonPath = path.join(tempDir, "app-data.json");
+  const dbPath = path.join(tempDir, "elset-workspace.db");
+
+  try {
+    fs.copyFileSync(fixturePath, jsonPath);
+    const db = openWorkspaceDb({ dbPath });
+    try {
+      importWorkspaceJsonData(db, readFixture());
+    } finally {
+      db.close();
+    }
+
+    const before = fs.readFileSync(jsonPath, "utf8");
+    const result = spawnSync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `const authModule = await import(${JSON.stringify(path.join(repoRoot, "server-auth.js"))}); await authModule.ensureAuthReady();`,
+    ], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        BETTER_AUTH_SECRET: "synthetic-test-secret",
+        ELSET_AUTH_DB_PATH: path.join(tempDir, "auth.db"),
+        ELSET_DATA_DIR: tempDir,
+        ELSET_WORKSPACE_STORAGE: "sqlite",
+        NODE_ENV: "test",
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fs.readFileSync(jsonPath, "utf8"), before);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("sqlite mode rejects broad workspace writes", () => {
   const tempDir = makeTempDir();
   const dbPath = path.join(tempDir, "elset-workspace.db");

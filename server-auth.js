@@ -20,6 +20,7 @@ const AUTH_ROLE_VALUES = new Set(["admin", "user"]);
 const env = globalThis.process?.env || {};
 const DATA_DIR = path.resolve(env.ELSET_DATA_DIR || path.join(__dirname, "data"));
 const AUTH_DB_PATH = path.resolve(env.ELSET_AUTH_DB_PATH || path.join(DATA_DIR, "auth.db"));
+const WORKSPACE_DB_PATH = path.resolve(env.ELSET_WORKSPACE_DB_PATH || path.join(DATA_DIR, "elset-workspace.db"));
 const DEFAULT_API_PORT = Number(env.ELSET_API_PORT || env.PORT || 3101);
 const DEFAULT_FRONTEND_PORT = Number(env.ELSET_FRONTEND_PORT || 5173);
 
@@ -46,6 +47,13 @@ function assertProductionAuthStorageReady() {
   }
 
   fs.accessSync(authDir, fs.constants.R_OK | fs.constants.W_OK);
+}
+
+function shouldRunLegacyJsonAuthMigration() {
+  const workspaceMode = String(env.ELSET_WORKSPACE_STORAGE || "").trim().toLowerCase();
+  if (workspaceMode === "json") return true;
+  if (workspaceMode === "sqlite") return false;
+  return !fs.existsSync(WORKSPACE_DB_PATH);
 }
 
 function ensureAuthDirectory() {
@@ -480,6 +488,10 @@ function findMatchingUserForSession(users, currentUser) {
 }
 
 async function migrateLegacyUsersIfNeeded() {
+  if (!shouldRunLegacyJsonAuthMigration()) {
+    return;
+  }
+
   const data = loadData();
   const migrationMeta = data.meta?.authMigration;
   if (migrationMeta?.version === AUTH_MIGRATION_VERSION) {
