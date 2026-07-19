@@ -6,6 +6,10 @@ import {
   requestWorkspaceRestoreUpdate,
 } from "@/hooks/workspace-customer-api";
 import {
+  shouldAttemptBroadWorkspaceAutosave,
+  shouldRunRecycleBinClientPrune,
+} from "@/hooks/workspace-autosave";
+import {
   countBusinessRecords,
   getLegacyPersistedState,
   hasCompletedServerMigration,
@@ -226,16 +230,24 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   }, [authStatus, clearSessionState, fetchWithAuth, setData]);
 
   useEffect(() => {
-    if (authStatus !== "authenticated") return undefined;
+    if (!shouldRunRecycleBinClientPrune({ authStatus, workspaceStorageMode })) return undefined;
 
     const intervalId = window.setInterval(() => {
       setData((prev) => purgeExpiredRecycleBinState(prev));
     }, 1000 * 60 * 30);
 
     return () => window.clearInterval(intervalId);
-  }, [authStatus, setData]);
+  }, [authStatus, setData, workspaceStorageMode]);
 
   useEffect(() => {
+    if (isSqliteWorkspaceMode(workspaceStorageMode)) {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      return undefined;
+    }
+
     if (authStatus !== "authenticated" || !hasLoadedServerStateRef.current) {
       return undefined;
     }
@@ -248,6 +260,16 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
 
     const serialized = JSON.stringify(nextData);
     if (serialized === lastSyncedDataRef.current) {
+      return undefined;
+    }
+
+    if (!shouldAttemptBroadWorkspaceAutosave({
+      authStatus,
+      hasLoadedServerState: hasLoadedServerStateRef.current,
+      workspaceStorageMode,
+      serializedState: serialized,
+      lastSyncedState: lastSyncedDataRef.current,
+    })) {
       return undefined;
     }
 
@@ -296,7 +318,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         window.clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [authStatus, clearSessionState, data, fetchWithAuth, setData]);
+  }, [authStatus, clearSessionState, data, fetchWithAuth, setData, workspaceStorageMode]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {

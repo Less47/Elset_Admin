@@ -48,6 +48,7 @@ import {
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
+import { getSupportedInvoiceUpdateKeys } from "./workspace-invoice-updates";
 
 export function useWorkspaceActions({
   applyServerWorkspaceState,
@@ -966,13 +967,18 @@ export function useWorkspaceActions({
     if (!job?.invoice) return false;
 
     const invoiceUpdates = {};
-    ["issueDate", "dueDate", "notes", "paymentNotes"].forEach((field) => {
+    getSupportedInvoiceUpdateKeys(updates).forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(updates, field)) {
         invoiceUpdates[field] = field.endsWith("Date") ? toDateInputValue(updates[field]) : updates[field];
       }
     });
 
-    if (useSqliteApi && Object.keys(invoiceUpdates).length > 0) {
+    if (useSqliteApi) {
+      if (Object.keys(invoiceUpdates).length === 0) {
+        window.alert("This invoice change is not supported in SQLite mode yet.");
+        return false;
+      }
+
       const saved = await saveDocumentApiRequest({
         path: documentPath(jobId, "invoice"),
         method: "PATCH",
@@ -2070,11 +2076,20 @@ export function useWorkspaceActions({
     return true;
   }
 
-  function handleEmptyDeletedCustomers() {
+  async function handleEmptyDeletedCustomers() {
     if (!canManageBusiness) return false;
     if (data.deletedCustomers.length === 0) return false;
     const confirmed = window.confirm("Empty the deleted customers recycle bin? This cannot be undone.");
     if (!confirmed) return false;
+
+    if (useCustomerSqliteApi) {
+      const saved = await saveCustomerApiRequest({
+        path: "/api/deleted-customers",
+        method: "DELETE",
+        errorMessage: "Unable to empty deleted customers.",
+      });
+      return saved.ok;
+    }
 
     setData((prev) => ({ ...prev, deletedCustomers: [] }));
     return true;

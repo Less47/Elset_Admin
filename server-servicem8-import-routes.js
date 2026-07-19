@@ -52,6 +52,7 @@ function takeServiceM8ImportPreview(user, previewId) {
 
 function getStatusCode(error) {
   if (error instanceof ServiceM8SqliteImportError) return error.statusCode;
+  if (Number.isInteger(error?.statusCode)) return error.statusCode;
   return 400;
 }
 

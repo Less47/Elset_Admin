@@ -205,6 +205,27 @@ test("DELETE /api/customers/:id archives the customer and related jobs, then res
   });
 });
 
+test("DELETE /api/deleted-customers empties only deleted customer records", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      const deleted = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia", { method: "DELETE" });
+      assert.equal(deleted.response.status, 200, deleted.payload.error);
+      assert.equal(deleted.payload.state.deletedCustomers.length, 1);
+      assert.equal(deleted.payload.state.deletedJobs.length, 1);
+
+      const emptied = await requestJson(baseUrl, "/api/deleted-customers", { method: "DELETE" });
+      assert.equal(emptied.response.status, 200, emptied.payload.error);
+      assert.equal(emptied.payload.result.deletedCustomerCount, 1);
+      assert.equal(emptied.payload.state.deletedCustomers.length, 0);
+      assert.equal(emptied.payload.state.deletedJobs.length, 1);
+
+      const state = getDbState(dbPath);
+      assert.equal(state.deletedCustomers.length, 0);
+      assert.equal(state.deletedJobs.length, 1);
+    });
+  });
+});
+
 test("site update syncs matching job and maintenance-plan addresses", async () => {
   const fixture = readFixture({
     maintenancePlans: [

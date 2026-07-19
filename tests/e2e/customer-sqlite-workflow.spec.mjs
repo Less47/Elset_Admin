@@ -202,6 +202,38 @@ async function login(page) {
   await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
 }
 
+function trackBroadWorkspacePuts(page) {
+  const requests = [];
+  const onRequest = (request) => {
+    try {
+      const requestUrl = new URL(request.url());
+      const base = new URL(baseUrl);
+      if (
+        request.method() === "PUT" &&
+        requestUrl.origin === base.origin &&
+        requestUrl.pathname === "/api/app-state"
+      ) {
+        requests.push({
+          method: request.method(),
+          url: request.url(),
+        });
+      }
+    } catch {
+      // Ignore non-standard URLs from browser internals.
+    }
+  };
+
+  page.on("request", onRequest);
+  return {
+    requests,
+    stop: () => page.off("request", onRequest),
+    async expectNone(label) {
+      await page.waitForTimeout(750);
+      expect(requests, label).toHaveLength(0);
+    },
+  };
+}
+
 async function apiJson(page, method, pathname, data = undefined) {
   const response = await page.request.fetch(`${baseUrl}${pathname}`, {
     method,
@@ -608,172 +640,200 @@ test.afterEach(async ({}, testInfo) => {
   }
 });
 
+test("SQLite startup and ordinary navigation do not broad-save app state", async ({ page }) => {
+  const tracker = trackBroadWorkspacePuts(page);
+  try {
+    await login(page);
+    await openCustomers(page);
+    await openSites(page);
+    await openJobHistory(page);
+    await openServiceBoard(page);
+    await tracker.expectNone("no PUT /api/app-state during startup or navigation");
+  } finally {
+    tracker.stop();
+  }
+});
+
 test("SQLite customer workflow persists through browser refreshes", async ({ page }) => {
-  await login(page);
+  const tracker = trackBroadWorkspacePuts(page);
+  try {
+    await login(page);
 
-  const baselineState = readWorkspaceState();
-  const unrelatedCustomer = baselineState.customers.find((customer) => customer.name === unrelatedCustomerName);
-  expect(unrelatedCustomer).toBeTruthy();
-  expect(baselineState.jobs).toHaveLength(1);
-  expect(baselineState.inventoryItems).toHaveLength(1);
+    const baselineState = readWorkspaceState();
+    const unrelatedCustomer = baselineState.customers.find((customer) => customer.name === unrelatedCustomerName);
+    expect(unrelatedCustomer).toBeTruthy();
+    expect(baselineState.jobs).toHaveLength(1);
+    expect(baselineState.inventoryItems).toHaveLength(1);
 
-  await createCustomer(page);
-  await page.reload();
-  await openCustomers(page);
-  await expect(customerRows(page, createdCustomerName).first()).toBeVisible();
+    await createCustomer(page);
+    await page.reload();
+    await openCustomers(page);
+    await expect(customerRows(page, createdCustomerName).first()).toBeVisible();
 
-  await editCustomer(page);
-  await page.reload();
-  await openCustomers(page);
-  await expect(customerRows(page, editedCustomerName).first()).toBeVisible();
-  await expect(customerRows(page, createdCustomerName)).toHaveCount(0);
+    await editCustomer(page);
+    await page.reload();
+    await openCustomers(page);
+    await expect(customerRows(page, editedCustomerName).first()).toBeVisible();
+    await expect(customerRows(page, createdCustomerName)).toHaveCount(0);
 
-  await deleteCustomer(page);
-  await openRecycleBin(page);
-  await page.getByRole("tab", { name: "Deleted Customers" }).click();
-  await expect(page.getByText(editedCustomerName)).toBeVisible();
+    await deleteCustomer(page);
+    await openRecycleBin(page);
+    await page.getByRole("tab", { name: "Deleted Customers" }).click();
+    await expect(page.getByText(editedCustomerName)).toBeVisible();
 
-  await restoreCustomer(page);
-  await page.reload();
-  await openCustomers(page);
-  await expect(customerRows(page, editedCustomerName).first()).toBeVisible();
+    await restoreCustomer(page);
+    await page.reload();
+    await openCustomers(page);
+    await expect(customerRows(page, editedCustomerName).first()).toBeVisible();
 
-  await createSite(page);
-  await page.reload();
-  await openSites(page);
-  await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(createdSiteAddress);
-  await expect(siteRows(page, createdSiteAddress).first()).toBeVisible();
+    await createSite(page);
+    await page.reload();
+    await openSites(page);
+    await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(createdSiteAddress);
+    await expect(siteRows(page, createdSiteAddress).first()).toBeVisible();
 
-  await editSite(page);
-  await deleteSite(page);
-  await openSites(page);
-  await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(editedSiteAddress);
-  await expect(siteRows(page, editedSiteAddress)).toHaveCount(0);
+    await editSite(page);
+    await deleteSite(page);
+    await openSites(page);
+    await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(editedSiteAddress);
+    await expect(siteRows(page, editedSiteAddress)).toHaveCount(0);
 
-  const finalState = readWorkspaceState();
-  const finalCustomer = finalState.customers.find((customer) => customer.name === editedCustomerName);
-  const finalUnrelatedCustomer = finalState.customers.find((customer) => customer.id === unrelatedCustomer.id);
-  expect(finalCustomer).toBeTruthy();
-  expect(finalCustomer.email).toBe("e2e.updated@example.test");
-  expect(finalCustomer.sites.some((site) => site.address === editedSiteAddress)).toBe(false);
-  expect(finalState.deletedCustomers.some((record) => record.customer.name === editedCustomerName)).toBe(false);
-  expect(finalUnrelatedCustomer).toMatchObject({
-    name: unrelatedCustomer.name,
-    email: unrelatedCustomer.email,
-    address: unrelatedCustomer.address,
-  });
-  expect(finalState.jobs).toHaveLength(baselineState.jobs.length);
-  expect(finalState.inventoryItems).toHaveLength(baselineState.inventoryItems.length);
-  expect(finalState.jobs[0]).toMatchObject({
-    id: baselineState.jobs[0].id,
-    customerId: baselineState.jobs[0].customerId,
-    title: baselineState.jobs[0].title,
-  });
+    await tracker.expectNone("no PUT /api/app-state during SQLite customer workflow");
+
+    const finalState = readWorkspaceState();
+    const finalCustomer = finalState.customers.find((customer) => customer.name === editedCustomerName);
+    const finalUnrelatedCustomer = finalState.customers.find((customer) => customer.id === unrelatedCustomer.id);
+    expect(finalCustomer).toBeTruthy();
+    expect(finalCustomer.email).toBe("e2e.updated@example.test");
+    expect(finalCustomer.sites.some((site) => site.address === editedSiteAddress)).toBe(false);
+    expect(finalState.deletedCustomers.some((record) => record.customer.name === editedCustomerName)).toBe(false);
+    expect(finalUnrelatedCustomer).toMatchObject({
+      name: unrelatedCustomer.name,
+      email: unrelatedCustomer.email,
+      address: unrelatedCustomer.address,
+    });
+    expect(finalState.jobs).toHaveLength(baselineState.jobs.length);
+    expect(finalState.inventoryItems).toHaveLength(baselineState.inventoryItems.length);
+    expect(finalState.jobs[0]).toMatchObject({
+      id: baselineState.jobs[0].id,
+      customerId: baselineState.jobs[0].customerId,
+      title: baselineState.jobs[0].title,
+    });
+  } finally {
+    tracker.stop();
+  }
 });
 
 test("SQLite core job workflow persists through browser refreshes", async ({ page }) => {
-  await login(page);
+  const tracker = trackBroadWorkspacePuts(page);
+  try {
+    await login(page);
 
-  const controlRecords = await seedUnrelatedControlRecords(page);
-  expect(controlRecords.customer).toBeTruthy();
-  expect(controlRecords.job).toBeTruthy();
+    const controlRecords = await seedUnrelatedControlRecords(page);
+    expect(controlRecords.customer).toBeTruthy();
+    expect(controlRecords.job).toBeTruthy();
 
-  const baselineState = readWorkspaceState();
-  const fixtureJob = baselineState.jobs.find((job) => job.id === fixtureJobId);
-  const controlCustomer = baselineState.customers.find((customer) => customer.id === controlCustomerId);
-  const controlJob = baselineState.jobs.find((job) => job.id === controlJobId);
-  expect(fixtureJob).toBeTruthy();
-  expect(controlCustomer).toBeTruthy();
-  expect(controlJob).toBeTruthy();
+    const baselineState = readWorkspaceState();
+    const fixtureJob = baselineState.jobs.find((job) => job.id === fixtureJobId);
+    const controlCustomer = baselineState.customers.find((customer) => customer.id === controlCustomerId);
+    const controlJob = baselineState.jobs.find((job) => job.id === controlJobId);
+    expect(fixtureJob).toBeTruthy();
+    expect(controlCustomer).toBeTruthy();
+    expect(controlJob).toBeTruthy();
 
-  const createdJob = await createExistingCustomerJob(page);
-  expect(createdJob).toMatchObject({
-    title: jobOriginalTitle,
-    customerId: fixtureCustomerId,
-    customerName: unrelatedCustomerName,
-    jobAddress: fixtureSiteAddress,
-    status: "To Do",
-  });
+    const createdJob = await createExistingCustomerJob(page);
+    expect(createdJob).toMatchObject({
+      title: jobOriginalTitle,
+      customerId: fixtureCustomerId,
+      customerName: unrelatedCustomerName,
+      jobAddress: fixtureSiteAddress,
+      status: "To Do",
+    });
 
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
-  let dialog = await openJobFromHistory(page, jobOriginalTitle);
-  await expect(dialog).toContainText(jobOriginalDescription);
-  await closeOpenDialog(page);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
+    let dialog = await openJobFromHistory(page, jobOriginalTitle);
+    await expect(dialog).toContainText(jobOriginalDescription);
+    await closeOpenDialog(page);
 
-  await editJobDetailsAndSchedule(page, createdJob.id);
-  await changeJobStatusFromDetails(page, createdJob.id, jobEditedTitle, "In Progress");
-  await changeJobStatusFromDetails(page, createdJob.id, jobEditedTitle, "To Do");
+    await editJobDetailsAndSchedule(page, createdJob.id);
+    await changeJobStatusFromDetails(page, createdJob.id, jobEditedTitle, "In Progress");
+    await changeJobStatusFromDetails(page, createdJob.id, jobEditedTitle, "To Do");
 
-  const scheduledJob = await waitForActiveJob(createdJob.id, (job) =>
-    job.status === "To Do" &&
-    job.scheduledDate === jobScheduledDate
-  );
-  expect(scheduledJob.scheduledDate).toBe(jobScheduledDate);
+    const scheduledJob = await waitForActiveJob(createdJob.id, (job) =>
+      job.status === "To Do" &&
+      job.scheduledDate === jobScheduledDate
+    );
+    expect(scheduledJob.scheduledDate).toBe(jobScheduledDate);
 
-  const tomorrowDate = await addAndRemoveTomorrowPlan(page, scheduledJob);
-  expect(tomorrowDate).toBeTruthy();
-  await addJobNoteAndPhotoMetadata(page, createdJob.id);
+    const tomorrowDate = await addAndRemoveTomorrowPlan(page, scheduledJob);
+    expect(tomorrowDate).toBeTruthy();
+    await addJobNoteAndPhotoMetadata(page, createdJob.id);
 
-  await deleteAndRestoreJob(page, createdJob.id);
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
-  dialog = await openJobFromHistory(page, jobEditedTitle);
-  await expect(dialog).toContainText(jobEditedDescription);
-  await expect(dialog).toContainText(jobNoteText);
-  await closeOpenDialog(page);
+    await deleteAndRestoreJob(page, createdJob.id);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
+    dialog = await openJobFromHistory(page, jobEditedTitle);
+    await expect(dialog).toContainText(jobEditedDescription);
+    await expect(dialog).toContainText(jobNoteText);
+    await closeOpenDialog(page);
 
-  const finalState = readWorkspaceState();
-  const finalJob = finalState.jobs.find((job) => job.id === createdJob.id);
-  expect(finalJob).toMatchObject({
-    id: createdJob.id,
-    title: jobEditedTitle,
-    description: jobEditedDescription,
-    status: "To Do",
-    customerId: fixtureCustomerId,
-    customerName: unrelatedCustomerName,
-    jobAddress: fixtureSiteAddress,
-    ocNumber: "OC-E2E-JOB-EDITED",
-    scheduledDate: "",
-    serviceBoardTomorrowDate: "",
-  });
-  expect(finalJob.notes.some((note) => note.text === jobNoteText)).toBe(true);
-  expect(finalJob.photos.some((photo) => photo.name === jobPhotoName)).toBe(false);
-  expect(finalState.deletedJobs.some((record) => record.job.id === createdJob.id)).toBe(false);
+    await tracker.expectNone("no PUT /api/app-state during SQLite job workflow");
 
-  const finalControlCustomer = finalState.customers.find((customer) => customer.id === controlCustomerId);
-  const finalControlJob = finalState.jobs.find((job) => job.id === controlJobId);
-  const finalFixtureJob = finalState.jobs.find((job) => job.id === fixtureJobId);
-  expect(finalControlCustomer).toMatchObject({
-    id: controlCustomer.id,
-    name: controlCustomer.name,
-    email: controlCustomer.email,
-    phone: controlCustomer.phone,
-    address: controlCustomer.address,
-  });
-  expect(finalControlCustomer.sites[0]).toMatchObject({
-    id: controlSiteId,
-    address: controlSiteAddress,
-    accessNotes: "Synthetic control access notes.",
-  });
-  expect(finalControlJob).toMatchObject({
-    id: controlJob.id,
-    jobNumber: controlJob.jobNumber,
-    title: controlJob.title,
-    description: controlJob.description,
-    status: controlJob.status,
-    scheduledDate: controlJob.scheduledDate,
-    customerId: controlJob.customerId,
-    jobAddress: controlJob.jobAddress,
-    ocNumber: controlJob.ocNumber,
-  });
-  expect(finalFixtureJob).toMatchObject({
-    id: fixtureJob.id,
-    jobNumber: fixtureJob.jobNumber,
-    title: fixtureJob.title,
-    status: fixtureJob.status,
-    scheduledDate: fixtureJob.scheduledDate,
-    customerId: fixtureJob.customerId,
-    jobAddress: fixtureJob.jobAddress,
-  });
+    const finalState = readWorkspaceState();
+    const finalJob = finalState.jobs.find((job) => job.id === createdJob.id);
+    expect(finalJob).toMatchObject({
+      id: createdJob.id,
+      title: jobEditedTitle,
+      description: jobEditedDescription,
+      status: "To Do",
+      customerId: fixtureCustomerId,
+      customerName: unrelatedCustomerName,
+      jobAddress: fixtureSiteAddress,
+      ocNumber: "OC-E2E-JOB-EDITED",
+      scheduledDate: "",
+      serviceBoardTomorrowDate: "",
+    });
+    expect(finalJob.notes.some((note) => note.text === jobNoteText)).toBe(true);
+    expect(finalJob.photos.some((photo) => photo.name === jobPhotoName)).toBe(false);
+    expect(finalState.deletedJobs.some((record) => record.job.id === createdJob.id)).toBe(false);
+
+    const finalControlCustomer = finalState.customers.find((customer) => customer.id === controlCustomerId);
+    const finalControlJob = finalState.jobs.find((job) => job.id === controlJobId);
+    const finalFixtureJob = finalState.jobs.find((job) => job.id === fixtureJobId);
+    expect(finalControlCustomer).toMatchObject({
+      id: controlCustomer.id,
+      name: controlCustomer.name,
+      email: controlCustomer.email,
+      phone: controlCustomer.phone,
+      address: controlCustomer.address,
+    });
+    expect(finalControlCustomer.sites[0]).toMatchObject({
+      id: controlSiteId,
+      address: controlSiteAddress,
+      accessNotes: "Synthetic control access notes.",
+    });
+    expect(finalControlJob).toMatchObject({
+      id: controlJob.id,
+      jobNumber: controlJob.jobNumber,
+      title: controlJob.title,
+      description: controlJob.description,
+      status: controlJob.status,
+      scheduledDate: controlJob.scheduledDate,
+      customerId: controlJob.customerId,
+      jobAddress: controlJob.jobAddress,
+      ocNumber: controlJob.ocNumber,
+    });
+    expect(finalFixtureJob).toMatchObject({
+      id: fixtureJob.id,
+      jobNumber: fixtureJob.jobNumber,
+      title: fixtureJob.title,
+      status: fixtureJob.status,
+      scheduledDate: fixtureJob.scheduledDate,
+      customerId: fixtureJob.customerId,
+      jobAddress: fixtureJob.jobAddress,
+    });
+  } finally {
+    tracker.stop();
+  }
 });

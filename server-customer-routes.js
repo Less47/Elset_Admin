@@ -4,6 +4,7 @@ import {
   createCustomerSite,
   deleteCustomer,
   deleteCustomerSite,
+  emptyDeletedCustomers,
   restoreCustomer,
   updateCustomer,
   updateCustomerSite,
@@ -32,6 +33,7 @@ function getSiteRequestBody(req) {
 
 function getStatusCode(error) {
   if (error instanceof WorkspaceCustomerError) return error.statusCode;
+  if (Number.isInteger(error?.statusCode)) return error.statusCode;
   return 500;
 }
 
@@ -105,6 +107,12 @@ export function createCustomerRouter({
     "/api/customers/:id/restore",
     ...middleware,
     handleCustomerRoute((db, req) => restoreCustomer(db, req.params.id), env)
+  );
+
+  router.delete(
+    "/api/deleted-customers",
+    ...middleware,
+    handleCustomerRoute((db) => emptyDeletedCustomers(db), env)
   );
 
   router.post(

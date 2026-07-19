@@ -21,6 +21,7 @@ function getRequestBody(req, key) {
 
 function getStatusCode(error) {
   if (error instanceof WorkspaceMaintenanceError) return error.statusCode;
+  if (Number.isInteger(error?.statusCode)) return error.statusCode;
   return 500;
 }
 

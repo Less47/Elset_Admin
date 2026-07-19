@@ -23,6 +23,7 @@ function getRequestBody(req, key) {
 
 function getStatusCode(error) {
   if (error instanceof WorkspaceDocumentError) return error.statusCode;
+  if (Number.isInteger(error?.statusCode)) return error.statusCode;
   return 500;
 }
 

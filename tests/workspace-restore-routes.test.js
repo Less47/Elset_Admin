@@ -458,7 +458,7 @@ test("ordinary SQLite writes are blocked while a restore is in progress", async 
           }),
         });
 
-        assert.notEqual(result.response.status, 200);
+        assert.equal(result.response.status, 423);
         assert.match(result.payload.error, /restore is in progress/i);
       });
     } finally {

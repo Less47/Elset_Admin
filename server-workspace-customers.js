@@ -643,6 +643,18 @@ export function restoreCustomer(db, customerIdInput) {
   })();
 }
 
+export function emptyDeletedCustomers(db) {
+  return db.transaction(() => {
+    const result = db.prepare("DELETE FROM deleted_records WHERE kind = 'customer'").run();
+    const updatedAt = nowIso();
+    touchWorkspaceInfo(db, updatedAt);
+    runForeignKeyCheck(db);
+    return {
+      deletedCustomerCount: result.changes,
+    };
+  })();
+}
+
 export function createCustomerSite(db, customerIdInput, input) {
   assertPlainObject(input, "Site");
   const customerId = normalizeId(customerIdInput, "Customer ID");
