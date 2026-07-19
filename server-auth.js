@@ -25,6 +25,29 @@ const DEFAULT_FRONTEND_PORT = Number(env.ELSET_FRONTEND_PORT || 5173);
 
 let authReadyPromise = null;
 
+function isProductionRuntime() {
+  return env.NODE_ENV === "production" || Boolean(env.FLY_APP_NAME);
+}
+
+function assertProductionAuthStorageReady() {
+  if (!isProductionRuntime()) return;
+
+  const authDir = path.dirname(AUTH_DB_PATH);
+  if (env.FLY_APP_NAME && DATA_DIR !== path.resolve("/app/data")) {
+    throw new Error(`Fly runtime must use ELSET_DATA_DIR=/app/data. Current value resolves to ${DATA_DIR}.`);
+  }
+
+  if (!fs.existsSync(authDir)) {
+    throw new Error(`Persistent authentication data directory does not exist at ${authDir}. Confirm the Fly volume is mounted.`);
+  }
+
+  if (!fs.statSync(authDir).isDirectory()) {
+    throw new Error(`Persistent authentication data path is not a directory at ${authDir}.`);
+  }
+
+  fs.accessSync(authDir, fs.constants.R_OK | fs.constants.W_OK);
+}
+
 function ensureAuthDirectory() {
   fs.mkdirSync(path.dirname(AUTH_DB_PATH), { recursive: true });
 }
@@ -117,6 +140,7 @@ function getTrustedOrigins() {
   return [...new Set(origins)];
 }
 
+assertProductionAuthStorageReady();
 ensureAuthDirectory();
 
 const authDb = new Database(AUTH_DB_PATH);

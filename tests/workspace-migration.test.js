@@ -18,7 +18,9 @@ import {
 } from "../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
 import {
+  assertProductionWorkspaceStorageReady,
   getAuthorizedWorkspaceState,
+  getWorkspaceReadinessStatus,
   getWorkspaceStorageMode,
   loadWorkspaceState,
   saveAuthorizedWorkspaceState,
@@ -228,6 +230,99 @@ test("production storage guard requires explicit migration when non-empty JSON e
       getWorkspaceStorageMode({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production", ELSET_WORKSPACE_STORAGE: "json" }),
       "json"
     );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production workspace readiness refuses empty or absent persistent storage", () => {
+  const tempDir = makeTempDir();
+  const missingDir = path.join(tempDir, "missing-volume");
+  try {
+    assert.throws(
+      () => assertProductionWorkspaceStorageReady({ ELSET_DATA_DIR: missingDir, NODE_ENV: "production" }),
+      /Persistent workspace data directory does not exist/
+    );
+
+    assert.throws(
+      () => assertProductionWorkspaceStorageReady({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" }),
+      /Production workspace storage is not initialized/
+    );
+
+    const readiness = getWorkspaceReadinessStatus({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" });
+    assert.equal(readiness.ok, false);
+    assert.match(readiness.error, /Production workspace storage is not initialized/);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production workspace readiness accepts a migrated SQLite workspace", () => {
+  const tempDir = makeTempDir();
+  const dbPath = path.join(tempDir, "elset-workspace.db");
+  try {
+    fs.copyFileSync(fixturePath, path.join(tempDir, "app-data.json"));
+    const db = openWorkspaceDb({ dbPath });
+    importWorkspaceJsonData(db, readFixture());
+    db.close();
+
+    const status = assertProductionWorkspaceStorageReady({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" });
+    assert.equal(status.mode, "sqlite");
+    assert.equal(status.dbPath, dbPath);
+
+    const readiness = getWorkspaceReadinessStatus({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" });
+    assert.equal(readiness.ok, true);
+    assert.equal(readiness.storage.mode, "sqlite");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production JSON rollback mode requires an existing non-empty JSON workspace", () => {
+  const tempDir = makeTempDir();
+  try {
+    assert.throws(
+      () => assertProductionWorkspaceStorageReady({
+        ELSET_DATA_DIR: tempDir,
+        ELSET_WORKSPACE_STORAGE: "json",
+        NODE_ENV: "production",
+      }),
+      /Production JSON rollback mode requires an existing non-empty workspace JSON file/
+    );
+
+    fs.copyFileSync(fixturePath, path.join(tempDir, "app-data.json"));
+    const status = assertProductionWorkspaceStorageReady({
+      ELSET_DATA_DIR: tempDir,
+      ELSET_WORKSPACE_STORAGE: "json",
+      NODE_ENV: "production",
+    });
+    assert.equal(status.mode, "json");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("production auth startup guard does not create a container-local auth directory", () => {
+  const tempDir = makeTempDir();
+  const missingAuthDir = path.join(tempDir, "missing-volume");
+  try {
+    const result = spawnSync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `await import(${JSON.stringify(path.join(repoRoot, "server-auth.js"))});`,
+    ], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ELSET_DATA_DIR: missingAuthDir,
+        NODE_ENV: "production",
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Persistent authentication data directory does not exist/);
+    assert.equal(fs.existsSync(missingAuthDir), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

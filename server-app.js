@@ -25,6 +25,7 @@ import {
 } from "./src/lib/quote-template.js";
 import {
   getAuthorizedWorkspaceState,
+  getWorkspaceReadinessStatus,
   getWorkspaceStorageMode,
   getWorkspaceStorageStatus,
   loadWorkspaceState,
@@ -343,7 +344,12 @@ export function createServerApp() {
   app.use(express.json({ limit: "15mb" }));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true });
+    const readiness = getWorkspaceReadinessStatus();
+    if (!readiness.ok) {
+      return res.status(503).json(readiness);
+    }
+
+    return res.json(readiness);
   });
 
   app.get("/api/address/autocomplete", requireAuth, async (req, res) => {
