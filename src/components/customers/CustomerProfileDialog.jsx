@@ -196,10 +196,12 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                   </Button>
                   <Button
                     className="rounded-xl"
-                    onClick={() => {
-                      onSaveCustomer(customer.id, buildCustomerSavePayload(customer, draftCustomer));
-                      setIsEditing(false);
-                      setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
+                    onClick={async () => {
+                      const saved = await onSaveCustomer(customer.id, buildCustomerSavePayload(customer, draftCustomer));
+                      if (saved) {
+                        setIsEditing(false);
+                        setNewSiteDraft({ address: "", siteType: "", ocNumber: "", notes: "" });
+                      }
                     }}
                   >
                     Save Changes

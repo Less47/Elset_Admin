@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import {
+  isSqliteWorkspaceMode,
+  requestServiceM8ImportUpdate,
+  requestWorkspaceRestoreUpdate,
+} from "@/hooks/workspace-customer-api";
+import {
+  shouldAttemptBroadWorkspaceAutosave,
+  shouldRunRecycleBinClientPrune,
+} from "@/hooks/workspace-autosave";
+import {
   countBusinessRecords,
   getLegacyPersistedState,
   hasCompletedServerMigration,
@@ -68,6 +77,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [adminUserAccounts, setAdminUserAccounts] = useState([]);
   const [adminUserAccountsError, setAdminUserAccountsError] = useState("");
+  const [workspaceStorageMode, setWorkspaceStorageMode] = useState("json");
   const lastSyncedDataRef = useRef("");
   const saveTimeoutRef = useRef(null);
   const syncErrorRef = useRef("");
@@ -91,6 +101,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     setAuthError(message);
     setAuthUser(null);
     setAuthStatus("logged_out");
+    setWorkspaceStorageMode("json");
     setLoginForm((prev) => ({ ...prev, password: "" }));
     setAdminUserAccounts([]);
     setAdminUserAccountsError("");
@@ -110,6 +121,16 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       headers,
     });
   }, []);
+
+  const applyServerWorkspaceState = useCallback((incomingState) => {
+    const nextState = normalizeAppState(incomingState);
+    hasLoadedServerStateRef.current = true;
+    lastSyncedDataRef.current = JSON.stringify(nextState);
+    syncErrorRef.current = "";
+    setData(nextState);
+    setAuthError("");
+    return nextState;
+  }, [setData]);
 
   useEffect(() => {
     return () => {
@@ -159,9 +180,10 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
           throw new Error(statePayload.error || "Failed to load the shared workspace data.");
         }
 
+        const nextStorageMode = statePayload.storageMode === "sqlite" ? "sqlite" : "json";
         let nextState = normalizeAppState(statePayload.state);
 
-        if (user?.role !== "technician" && !hasCompletedServerMigration()) {
+        if (nextStorageMode !== "sqlite" && user?.role !== "technician" && !hasCompletedServerMigration()) {
           const legacyState = getLegacyPersistedState();
           if (legacyState && countBusinessRecords(legacyState) > countBusinessRecords(nextState)) {
             const migrateResponse = await fetchWithAuth("/api/app-state", {
@@ -188,6 +210,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         lastSyncedDataRef.current = JSON.stringify(nextState);
         syncErrorRef.current = "";
         setData(nextState);
+        setWorkspaceStorageMode(nextStorageMode);
         setAuthUser(user);
         setAuthStatus("authenticated");
         setAuthError("");
@@ -207,16 +230,24 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   }, [authStatus, clearSessionState, fetchWithAuth, setData]);
 
   useEffect(() => {
-    if (authStatus !== "authenticated") return undefined;
+    if (!shouldRunRecycleBinClientPrune({ authStatus, workspaceStorageMode })) return undefined;
 
     const intervalId = window.setInterval(() => {
       setData((prev) => purgeExpiredRecycleBinState(prev));
     }, 1000 * 60 * 30);
 
     return () => window.clearInterval(intervalId);
-  }, [authStatus, setData]);
+  }, [authStatus, setData, workspaceStorageMode]);
 
   useEffect(() => {
+    if (isSqliteWorkspaceMode(workspaceStorageMode)) {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      return undefined;
+    }
+
     if (authStatus !== "authenticated" || !hasLoadedServerStateRef.current) {
       return undefined;
     }
@@ -229,6 +260,16 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
 
     const serialized = JSON.stringify(nextData);
     if (serialized === lastSyncedDataRef.current) {
+      return undefined;
+    }
+
+    if (!shouldAttemptBroadWorkspaceAutosave({
+      authStatus,
+      hasLoadedServerState: hasLoadedServerStateRef.current,
+      workspaceStorageMode,
+      serializedState: serialized,
+      lastSyncedState: lastSyncedDataRef.current,
+    })) {
       return undefined;
     }
 
@@ -277,7 +318,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         window.clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [authStatus, clearSessionState, data, fetchWithAuth, setData]);
+  }, [authStatus, clearSessionState, data, fetchWithAuth, setData, workspaceStorageMode]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {
@@ -475,20 +516,38 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         throw new Error("The selected file is not valid JSON.");
       }
 
-      const response = await fetchWithAuth("/api/admin/data-backup/restore", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          backupData: parsedBackup,
-          restorePassword: password,
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
+      let payload = null;
+      if (isSqliteWorkspaceMode(workspaceStorageMode)) {
+        payload = await requestWorkspaceRestoreUpdate({
+          fetchWithAuth,
+          path: "/api/admin/workspace-restore",
+          method: "POST",
+          body: {
+            backupData: parsedBackup,
+            restorePassword: password,
+          },
+          errorMessage: "Unable to restore the workspace backup.",
+        });
+      } else {
+        const response = await fetchWithAuth("/api/admin/data-backup/restore", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            backupData: parsedBackup,
+            restorePassword: password,
+          }),
+        });
+        payload = await response.json().catch(() => ({}));
 
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error || "Unable to restore the backup file.");
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "Unable to restore the backup file.");
+        }
+      }
+
+      if (!payload?.state) {
+        throw new Error("The restore completed without returning the refreshed workspace state.");
       }
 
       const nextState = normalizeAppState(payload.state);
@@ -513,8 +572,8 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         };
       }
 
-      const nextAccounts = Array.isArray(payload.accounts) ? payload.accounts : [];
-      const nextUser = payload.user || null;
+      const nextAccounts = Array.isArray(payload.accounts) ? payload.accounts : adminUserAccounts;
+      const nextUser = payload.user || authUser;
       setAuthUser(nextUser);
       setAdminUserAccounts(nextUser?.role === "admin" ? nextAccounts : []);
       setAdminUserAccountsError("");
@@ -590,23 +649,13 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     }
 
     try {
-      const response = await fetchWithAuth("/api/admin/servicem8-import/apply", {
+      const payload = await requestServiceM8ImportUpdate({
+        fetchWithAuth,
+        path: "/api/admin/servicem8-import/apply",
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ apiKey, options, previewId }),
+        body: { apiKey, options, previewId },
+        errorMessage: "Unable to import ServiceM8 data.",
       });
-      const { payload, error: responseError } = await readServiceM8ImportResponse(response);
-
-      if (!response.ok || !payload?.ok) {
-        throw new Error(getServiceM8ImportError(
-          response,
-          payload,
-          responseError,
-          "Unable to import ServiceM8 data."
-        ));
-      }
 
       const nextState = normalizeAppState(payload.state);
       hasLoadedServerStateRef.current = true;
@@ -634,10 +683,12 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   return {
     adminUserAccounts,
     adminUserAccountsError,
+    applyServerWorkspaceState,
     authError,
     authStatus,
     authUser,
     canManageBusiness,
+    fetchWithAuth,
     handleDownloadBackup,
     handleApplyServiceM8Import,
     handleLogin,
@@ -651,5 +702,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     isAuthenticated,
     isTechnician,
     loginForm,
+    workspaceStorageMode,
   };
 }

@@ -140,7 +140,7 @@ function InventoryItemDialog({ open, onOpenChange, initialPart, onSave }) {
           </Button>
           <Button
             disabled={!canSave}
-            onClick={() => {
+            onClick={async () => {
               const didSave = onSave({
                 name: draftPart.name,
                 sku: draftPart.sku,
@@ -152,6 +152,7 @@ function InventoryItemDialog({ open, onOpenChange, initialPart, onSave }) {
                 unitCost: normalizeNumber(draftPart.unitCost, 0),
                 notes: draftPart.notes,
               });
+              if (didSave instanceof Promise && (await didSave) === false) return;
               if (didSave !== false) onOpenChange(false);
             }}
           >

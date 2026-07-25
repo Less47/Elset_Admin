@@ -577,6 +577,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
             onRestoreBackup={auth.handleRestoreBackup}
             onPreviewServiceM8Import={auth.handlePreviewServiceM8Import}
             onApplyServiceM8Import={auth.handleApplyServiceM8Import}
+            workspaceStorageMode={auth.workspaceStorageMode}
             backupSummary={{
               staff: data.staff.length,
               customers: data.customers.length,

@@ -477,9 +477,11 @@ export default function DocumentEditor({
           </Button>
           <Button
             disabled={isSendingDocument}
-            onClick={() => {
-              onSave(docState);
-              onOpenChange(false);
+            onClick={async () => {
+              const saved = await Promise.resolve(onSave(docState));
+              if (saved !== false) {
+                onOpenChange(false);
+              }
             }}
           >
             Save {documentLabel}

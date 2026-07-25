@@ -103,9 +103,11 @@ export default function App() {
     supplierManuals: supplierManualState.manuals,
   });
   const workspaceActions = useWorkspaceActions({
+    applyServerWorkspaceState: session.applyServerWorkspaceState,
     canManageBusiness: session.canManageBusiness,
     data,
     docType,
+    fetchWithAuth: session.fetchWithAuth,
     selectedFreshJob: workspaceViewModel.selectedFreshJob,
     selectedJob,
     selectedSiteContext,
@@ -121,6 +123,7 @@ export default function App() {
     setSelectedSiteContext,
     setSiteProfileOpen,
     themeSettings,
+    workspaceStorageMode: session.workspaceStorageMode,
   });
 
   if (session.authStatus === "checking") {

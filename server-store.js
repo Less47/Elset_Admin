@@ -477,13 +477,16 @@ function normalizeCustomerSiteProfiles(sites, primaryAddress = "", legacySiteAcc
 
 function normalizeStaffRecord(staffMember) {
   if (!staffMember) return null;
+  const createdAt = staffMember.createdAt || new Date().toISOString();
   return {
+    ...(staffMember && typeof staffMember === "object" && !Array.isArray(staffMember) ? staffMember : {}),
     id: staffMember.id || crypto.randomUUID(),
     name: staffMember.name || "Unnamed staff member",
     role: staffMember.role || "Staff",
     email: staffMember.email || "",
     phone: staffMember.phone || "",
-    createdAt: staffMember.createdAt || new Date().toISOString(),
+    createdAt,
+    ...(staffMember.updatedAt ? { updatedAt: staffMember.updatedAt } : {}),
   };
 }
 
@@ -708,6 +711,10 @@ function normalizeDocumentRecord(document, fallbackType) {
 
 function normalizeJobRecord(job) {
   if (!job) return null;
+  const tomorrowOrderValue = Number(job.serviceBoardTomorrowOrder);
+  const hasTomorrowOrder = job.serviceBoardTomorrowOrder !== null
+    && job.serviceBoardTomorrowOrder !== undefined
+    && Number.isFinite(tomorrowOrderValue);
   return {
     id: job.id || crypto.randomUUID(),
     jobNumber: job.jobNumber || 1,
@@ -727,6 +734,8 @@ function normalizeJobRecord(job) {
     maintenancePlanId: String(job.maintenancePlanId || "").trim(),
     maintenancePlanName: String(job.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job.maintenanceDueDate),
+    serviceBoardTomorrowDate: toDateInputValue(job.serviceBoardTomorrowDate),
+    serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
     createdAt: job.createdAt || new Date().toISOString(),
     updatedAt: job.updatedAt || new Date().toISOString(),
     notes: Array.isArray(job.notes) ? job.notes.map(normalizeNote).filter(Boolean) : [],
@@ -947,7 +956,7 @@ function normalizeAuthMigrationMeta(meta) {
   };
 }
 
-function normalizeStoredData(rawData) {
+export function normalizeStoredData(rawData) {
   const data = rawData || buildSeedData();
   return syncUsersWithStaff(pruneExpiredSessions({
     ...data,

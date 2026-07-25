@@ -90,6 +90,130 @@ npm run backup:fly
 
 That downloads `app-data.json`, `auth.db`, `auth.db-wal`, and `auth.db-shm` into `backups/`, then creates a `.tar.gz` archive with a SHA-256 checksum. The `backups/` folder is ignored by git.
 
+## Workspace Storage
+
+Runtime workspace data must not be committed to Git. The live JSON workspace, SQLite databases, uploaded files, generated documents, temporary PDFs, and backups are ignored by `.gitignore` and excluded from Docker builds by `.dockerignore`.
+
+Current runtime paths:
+
+- Legacy workspace JSON: `ELSET_DATA_DIR/app-data.json`
+- New workspace SQLite database: `ELSET_DATA_DIR/elset-workspace.db`
+- Better Auth database: `ELSET_DATA_DIR/auth.db`
+
+On Fly, `ELSET_DATA_DIR` resolves to `/app/data`, which is the persistent volume. Locally, it defaults to `./data`.
+
+The committed development fixture is synthetic only:
+
+```bash
+fixtures/demo-workspace.json
+```
+
+Application startup must not treat that fixture as live business data. Copy it into a temporary `ELSET_DATA_DIR` only for tests or demos.
+
+## SQLite Workspace Migration
+
+Dry-run a migration without writing a database:
+
+```bash
+npm run migrate:workspace -- --dry-run
+```
+
+Dry-run a specific JSON file:
+
+```bash
+npm run migrate:workspace -- --dry-run --source fixtures/demo-workspace.json
+```
+
+Run a local migration:
+
+```bash
+npm run migrate:workspace
+```
+
+The migration command:
+
+- reads `ELSET_DATA_DIR/app-data.json` unless `--source` is provided
+- creates `ELSET_DATA_DIR/elset-workspace.db` unless `--db` is provided
+- creates a timestamped JSON backup under `ELSET_DATA_DIR/backups/`
+- leaves the original JSON file untouched
+- refuses malformed JSON
+- refuses duplicate imports into a non-empty workspace database
+- validates record counts, relationships, quote totals, invoice totals, payments, and outstanding balances
+- never connects to Fly.io by itself
+
+For local test restores, use a temporary directory:
+
+```bash
+mkdir -p /tmp/elset-restore-test
+cp fixtures/demo-workspace.json /tmp/elset-restore-test/app-data.json
+ELSET_DATA_DIR=/tmp/elset-restore-test npm run migrate:workspace
+ELSET_DATA_DIR=/tmp/elset-restore-test npm test
+```
+
+Do not restore over the active production data directory until the backup has been validated separately.
+
+Create a local SQLite workspace backup:
+
+```bash
+npm run backup:workspace
+```
+
+Include the Better Auth database when appropriate:
+
+```bash
+npm run backup:workspace -- --include-auth
+```
+
+Include externally stored runtime files such as uploads and generated documents:
+
+```bash
+npm run backup:workspace -- --include-files
+```
+
+The backup command uses SQLite's backup API, writes checksums, records schema/version metadata, validates foreign keys, and prints a small count summary. It does not connect to Fly.io.
+
+When the app is running in SQLite mode, the Settings > Data Backup screen downloads an uploadable JSON bundle that contains only the workspace SQLite database plus metadata and checksums. It does not include Better Auth login accounts, sessions, SMTP credentials, API keys, OAuth tokens, or environment variables.
+
+Restore a SQLite workspace backup from the Settings > Data Backup screen only after testing the file somewhere safe. The SQLite restore path:
+
+- accepts only `elset-workspace-sqlite-backup-v1` workspace backup bundles
+- validates metadata, SHA-256 checksums, SQLite integrity, schema version, required tables, foreign keys, record counts, and financial totals before replacing data
+- rejects backups with authentication tables or unexpected embedded files
+- creates a verified pre-restore backup under `ELSET_DATA_DIR/backups/pre-restore-workspace-sqlite-*`
+- blocks workspace writes while the restore is running
+- replaces the workspace database as a complete snapshot, then reloads the app state
+- removes stale SQLite WAL/SHM/journal files during the swap
+- rolls back to the pre-restore database if replacement or verification fails
+
+The legacy JSON restore path remains available only when `ELSET_WORKSPACE_STORAGE=json` is active. SQLite restore never overwrites `auth.db` or secrets.
+
+## SQLite Rollout And Rollback
+
+The old JSON-backed store remains available temporarily as a rollback mode.
+
+Storage mode rules:
+
+- `ELSET_WORKSPACE_STORAGE=json` uses the legacy JSON store.
+- `ELSET_WORKSPACE_STORAGE=sqlite` uses `elset-workspace.db`.
+- If no mode is set and `elset-workspace.db` exists, the server reads from SQLite.
+- If no mode is set in production and a non-empty `app-data.json` exists without `elset-workspace.db`, the server refuses to start with a migration-required message.
+
+This prevents the app from silently starting with an empty SQLite database over an existing JSON workspace.
+
+Rollback after a failed SQLite validation:
+
+```bash
+ELSET_WORKSPACE_STORAGE=json npm run server
+```
+
+Keep the original `app-data.json` until the SQLite migration has been validated and signed off.
+
+## Git History Cleanup
+
+This repo previously tracked runtime files. This change removes them from future Git tracking only; it does not rewrite history.
+
+If customer data or generated PDFs were committed in earlier history, remove them only with a deliberate manual history-cleanup process after making verified backups and coordinating with anyone who has cloned the repo. A typical tool is `git filter-repo`, followed by force-pushing rewritten branches and rotating any exposed secrets. Do not run history rewriting casually.
+
 When the API is running, quote sends:
 
 - generate a PDF attachment from the current quote template

@@ -467,6 +467,7 @@ function buildCustomerDraft(company, siteCompanies, contactsByCompanyUuid, exist
       },
     },
     createdAt: existingCustomer?.createdAt || toIsoTimestamp(company?.edit_date, importedAt),
+    updatedAt: toIsoTimestamp(company?.edit_date, importedAt),
   };
 }
 

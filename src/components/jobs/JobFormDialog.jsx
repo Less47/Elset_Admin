@@ -655,7 +655,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, onS
           </Button>
           <Button
             disabled={!canSave}
-            onClick={() => {
+            onClick={async () => {
               const existingCustomer = orderedCustomers.find((c) => c.id === selectedCustomerId);
               const jobAddress = normalizeSiteAddress(selectedJobAddress);
               const siteInput = canCreateSite
@@ -664,7 +664,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, onS
                     address: jobAddress,
                   }
                 : null;
-              onSave({
+              const saved = await onSave({
                 job: {
                   ...job,
                   jobAddress,
@@ -679,6 +679,7 @@ export default function JobFormDialog({ open, onOpenChange, customers, jobs, onS
                     ? siteInput
                     : null,
               });
+              if (saved === false || saved === null) return;
               onOpenChange(false);
             }}
           >

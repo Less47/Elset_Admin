@@ -40,7 +40,9 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
 
   if (!customer) return null;
 
-  const activeAddress = normalizeSiteAddress(isEditing ? draftSite.address : site.address);
+  const isEditingSite = isEditing || !site;
+  const activeSite = isEditingSite ? draftSite : site;
+  const activeAddress = normalizeSiteAddress(activeSite?.address || "");
   const customerContacts = getCustomerContacts(customer);
   const siteJobs = [...jobs]
     .filter((job) => normalizeSiteAddress(job.jobAddress).toLowerCase() === activeAddress.toLowerCase())
@@ -71,13 +73,13 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
         <DialogHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <DialogTitle className="text-xl">{site ? getSiteDisplayName(isEditing ? draftSite : site) : "New Site"}</DialogTitle>
+              <DialogTitle className="text-xl">{site ? getSiteDisplayName(isEditingSite ? draftSite : site) : "New Site"}</DialogTitle>
               <p className="text-sm text-muted-foreground">
                 Site profile for {customer.name}. Keep one address together even when it has multiple gates or project areas.
               </p>
             </div>
             <div className="flex gap-2">
-              {isEditing ? (
+              {isEditingSite ? (
                 <>
                   <Button
                     variant="outline"
@@ -97,8 +99,8 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                   <Button
                     className="rounded-xl"
                     disabled={!canSave}
-                    onClick={() => {
-                      const saved = onSaveSite(customer.id, draftSite, site?.address || "");
+                    onClick={async () => {
+                      const saved = await onSaveSite(customer.id, draftSite, site?.address || "");
                       if (saved) setIsEditing(false);
                     }}
                   >
@@ -133,7 +135,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                 <CardTitle className="text-base">Site Details</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 text-sm">
-                {isEditing ? (
+                {isEditingSite ? (
                   <>
                     <FormField label="Address">
                       <AddressAutocompleteInput
@@ -264,7 +266,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Gates / projects</span>
-                  <span className="font-semibold text-slate-900">{(isEditing ? draftSite.assets : site.assets || []).length}</span>
+                  <span className="font-semibold text-slate-900">{(isEditingSite ? draftSite.assets : site.assets || []).length}</span>
                 </div>
               </CardContent>
             </Card>
@@ -279,26 +281,26 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                     Keep each gate, entry point, or project area attached to this site.
                   </p>
                 </div>
-                <Badge variant="secondary">{(isEditing ? draftSite.assets : site.assets || []).length}</Badge>
+                <Badge variant="secondary">{(isEditingSite ? draftSite.assets : site.assets || []).length}</Badge>
               </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3">
-                {!isEditing && site.accessNotes ? (
+                {!isEditingSite && site.accessNotes ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{site.accessNotes}</p>
                   </div>
                 ) : null}
 
-                {!isEditing && site.profileNotes ? (
+                {!isEditingSite && site.profileNotes ? (
                   <div className="rounded-2xl border bg-white p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{site.profileNotes}</p>
                   </div>
                 ) : null}
 
-                {isEditing ? (
+                {isEditingSite ? (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Add gate or project</p>
                     <div className="mt-3 grid gap-3">
@@ -359,12 +361,12 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                   </div>
                 ) : null}
 
-                {(isEditing ? draftSite.assets : site.assets || []).length === 0 ? (
+                {(isEditingSite ? draftSite.assets : site.assets || []).length === 0 ? (
                   <EmptyState title="No gate or project records yet" text="Add each gate, operator, or project area here so the site history stays grouped together." />
                 ) : (
-                  (isEditing ? draftSite.assets : site.assets || []).map((asset) => (
+                  (isEditingSite ? draftSite.assets : site.assets || []).map((asset) => (
                     <div key={asset.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                      {isEditing ? (
+                      {isEditingSite ? (
                         <div className="grid gap-3">
                           <div className="grid gap-3 sm:grid-cols-2">
                             <Input value={asset.name} onChange={(e) => updateDraftAsset(asset.id, "name", e.target.value)} placeholder="Name" />
@@ -431,7 +433,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                       <p className="mt-1 text-sm font-semibold text-slate-900">{job.title}</p>
                       <p className="mt-1 line-clamp-2 text-sm text-slate-600">{job.description}</p>
                       <p className="mt-2 text-xs text-slate-500">
-                        Site: <span className="font-medium text-slate-700">{job.jobAddress || site.address || "Not set"}</span>
+                        Site: <span className="font-medium text-slate-700">{job.jobAddress || activeAddress || "Not set"}</span>
                       </p>
                     </button>
                   ))

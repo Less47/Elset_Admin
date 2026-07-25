@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import { degrees, PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { fileURLToPath } from "url";
 import {
   buildDocumentReference,
@@ -27,6 +26,23 @@ const TEMPLATE_HEIGHT = 1754;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const LOGO_PATH = path.join(__dirname, "public", "elset-logo.png");
+let pdfLibPromise = null;
+let degrees = null;
+let PDFDocument = null;
+let StandardFonts = null;
+let rgb = null;
+
+async function ensurePdfLib() {
+  if (!pdfLibPromise) {
+    pdfLibPromise = import("pdf-lib");
+  }
+
+  const pdfLib = await pdfLibPromise;
+  degrees = pdfLib.degrees;
+  PDFDocument = pdfLib.PDFDocument;
+  StandardFonts = pdfLib.StandardFonts;
+  rgb = pdfLib.rgb;
+}
 
 function rectFromTemplate(left, top, width, height) {
   const scaleX = PAGE_WIDTH / TEMPLATE_WIDTH;
@@ -132,6 +148,8 @@ function wrapText(text, font, size, maxWidth) {
 }
 
 export async function generateDocumentPdf({ job, document, template, type = "quote", stampText = "" }) {
+  await ensurePdfLib();
+
   const pdfDoc = await PDFDocument.create();
   const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);

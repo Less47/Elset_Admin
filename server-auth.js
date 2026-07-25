@@ -13,16 +13,48 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const AUTH_MIGRATION_VERSION = "better-auth-v1";
+const AUTH_MIN_PASSWORD_LENGTH = 6;
 const SYNTHETIC_EMAIL_DOMAIN = "auth.elset.local";
 const WORKSPACE_ROLE_VALUES = new Set(["admin", "office", "technician"]);
 const AUTH_ROLE_VALUES = new Set(["admin", "user"]);
 const env = globalThis.process?.env || {};
 const DATA_DIR = path.resolve(env.ELSET_DATA_DIR || path.join(__dirname, "data"));
 const AUTH_DB_PATH = path.resolve(env.ELSET_AUTH_DB_PATH || path.join(DATA_DIR, "auth.db"));
+const WORKSPACE_DB_PATH = path.resolve(env.ELSET_WORKSPACE_DB_PATH || path.join(DATA_DIR, "elset-workspace.db"));
 const DEFAULT_API_PORT = Number(env.ELSET_API_PORT || env.PORT || 3101);
 const DEFAULT_FRONTEND_PORT = Number(env.ELSET_FRONTEND_PORT || 5173);
 
 let authReadyPromise = null;
+
+function isProductionRuntime() {
+  return env.NODE_ENV === "production" || Boolean(env.FLY_APP_NAME);
+}
+
+function assertProductionAuthStorageReady() {
+  if (!isProductionRuntime()) return;
+
+  const authDir = path.dirname(AUTH_DB_PATH);
+  if (env.FLY_APP_NAME && DATA_DIR !== path.resolve("/app/data")) {
+    throw new Error(`Fly runtime must use ELSET_DATA_DIR=/app/data. Current value resolves to ${DATA_DIR}.`);
+  }
+
+  if (!fs.existsSync(authDir)) {
+    throw new Error(`Persistent authentication data directory does not exist at ${authDir}. Confirm the Fly volume is mounted.`);
+  }
+
+  if (!fs.statSync(authDir).isDirectory()) {
+    throw new Error(`Persistent authentication data path is not a directory at ${authDir}.`);
+  }
+
+  fs.accessSync(authDir, fs.constants.R_OK | fs.constants.W_OK);
+}
+
+function shouldRunLegacyJsonAuthMigration() {
+  const workspaceMode = String(env.ELSET_WORKSPACE_STORAGE || "").trim().toLowerCase();
+  if (workspaceMode === "json") return true;
+  if (workspaceMode === "sqlite") return false;
+  return !fs.existsSync(WORKSPACE_DB_PATH);
+}
 
 function ensureAuthDirectory() {
   fs.mkdirSync(path.dirname(AUTH_DB_PATH), { recursive: true });
@@ -116,6 +148,7 @@ function getTrustedOrigins() {
   return [...new Set(origins)];
 }
 
+assertProductionAuthStorageReady();
 ensureAuthDirectory();
 
 const authDb = new Database(AUTH_DB_PATH);
@@ -130,7 +163,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    minPasswordLength: 6,
+    minPasswordLength: AUTH_MIN_PASSWORD_LENGTH,
     maxPasswordLength: 128,
     password: {
       hash: async (password) => hashLegacyPassword(password),
@@ -258,6 +291,24 @@ function getRawAuthUserRowById(userId) {
     WHERE u.id = ?
     LIMIT 1
   `).get(String(userId)) || null;
+}
+
+function getRawAuthUserRowByUsername(username) {
+  const normalizedUsername = normalizeUsername(username);
+  if (!normalizedUsername) return null;
+
+  return authDb.prepare(`
+    SELECT
+      u.id,
+      u.username,
+      a.password AS passwordHash
+    FROM "user" u
+    LEFT JOIN "account" a
+      ON a.userId = u.id
+     AND a.providerId = 'credential'
+    WHERE lower(u.username) = ?
+    LIMIT 1
+  `).get(normalizedUsername) || null;
 }
 
 function getCurrentUserSessions(userId) {
@@ -437,6 +488,10 @@ function findMatchingUserForSession(users, currentUser) {
 }
 
 async function migrateLegacyUsersIfNeeded() {
+  if (!shouldRunLegacyJsonAuthMigration()) {
+    return;
+  }
+
   const data = loadData();
   const migrationMeta = data.meta?.authMigration;
   if (migrationMeta?.version === AUTH_MIGRATION_VERSION) {
@@ -520,6 +575,50 @@ export function verifyUserPassword(userId, password) {
   });
 }
 
+export function getAuthDatabasePath() {
+  return AUTH_DB_PATH;
+}
+
+export function getAuthMinimumPasswordLength() {
+  return AUTH_MIN_PASSWORD_LENGTH;
+}
+
+export async function resetExistingAuthUserPassword({ username = "admin", newPassword } = {}) {
+  const normalizedUsername = normalizeUsername(username);
+  const passwordValue = String(newPassword || "");
+
+  if (!normalizedUsername) {
+    throw new Error("Username is required.");
+  }
+
+  if (passwordValue.length < AUTH_MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`);
+  }
+
+  const userRow = getRawAuthUserRowByUsername(normalizedUsername);
+  if (!userRow) {
+    throw new Error(`Existing user "${normalizedUsername}" was not found. No account was created.`);
+  }
+
+  if (!userRow.passwordHash) {
+    throw new Error(`Existing user "${normalizedUsername}" does not have a credential password account.`);
+  }
+
+  const context = await auth.$context;
+  const revokedSessionCount = getCurrentUserSessions(userRow.id).length;
+  const passwordHash = await context.password.hash(passwordValue);
+
+  await context.internalAdapter.updatePassword(userRow.id, passwordHash);
+  await context.internalAdapter.deleteUserSessions(userRow.id);
+
+  return {
+    userId: String(userRow.id),
+    username: normalizedUsername,
+    authDbPath: AUTH_DB_PATH,
+    revokedSessionCount,
+  };
+}
+
 export function getManagedUserAccounts(staff = []) {
   const staffById = new Map((Array.isArray(staff) ? staff : []).map((staffMember) => [staffMember.id, staffMember]));
   return getAllRawAuthUserRows()
@@ -571,8 +670,8 @@ export async function saveManagedUserAccount({ requestHeaders, accountInput, sta
     throw new Error("Username is required.");
   }
 
-  if (password && password.length < 6) {
-    throw new Error("Password must be at least 6 characters.");
+  if (password && password.length < AUTH_MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`);
   }
 
   if (!existingAccount && !password) {

@@ -36,8 +36,10 @@ import {
   inventoryCategories,
   loginAccessRoleOptions,
   maintenanceFrequencyOptions,
+  preferenceSettingKeys,
   sidebarWidthOptions,
   siteTypeOptions,
+  uiSettingKeys,
 } from "./app-support-config.js";
 
 export {
@@ -811,6 +813,21 @@ export function normalizeTextSetting(value, fallback = "") {
   return value;
 }
 
+function isSecretLikeSettingKey(key) {
+  return /(?:password|secret|token|api[_-]?key|oauth|smtp[_-]?pass|private[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)/i.test(String(key || ""));
+}
+
+function getSafeUnknownThemeSettings(settings) {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return {};
+  const knownKeys = new Set([...uiSettingKeys, ...preferenceSettingKeys]);
+  return Object.entries(settings).reduce((extra, [key, value]) => {
+    if (!knownKeys.has(key) && !isSecretLikeSettingKey(key)) {
+      extra[key] = value;
+    }
+    return extra;
+  }, {});
+}
+
 export function pickSettings(source, keys) {
   return keys.reduce((acc, key) => {
     acc[key] = source[key];
@@ -882,6 +899,7 @@ export function buildDataViewTheme(settings) {
 
 export function normalizeThemeSettings(settings) {
   return {
+    ...getSafeUnknownThemeSettings(settings),
     pageBackgroundStart: normalizeHexColor(settings?.pageBackgroundStart, defaultThemeSettings.pageBackgroundStart),
     pageBackgroundEnd: normalizeHexColor(settings?.pageBackgroundEnd, defaultThemeSettings.pageBackgroundEnd),
     sidebarSurface: normalizeHexColor(settings?.sidebarSurface, defaultThemeSettings.sidebarSurface),
@@ -1871,13 +1889,16 @@ export function getInventoryStockStatus(item) {
 
 export function normalizeStaffRecord(staffMember) {
   if (!staffMember) return null;
+  const createdAt = staffMember.createdAt || new Date().toISOString();
   return {
+    ...(staffMember && typeof staffMember === "object" && !Array.isArray(staffMember) ? staffMember : {}),
     id: staffMember.id || crypto.randomUUID(),
     name: staffMember.name || "Unnamed staff member",
     role: staffMember.role || "Staff",
     email: staffMember.email || "",
     phone: staffMember.phone || "",
-    createdAt: staffMember.createdAt || new Date().toISOString(),
+    createdAt,
+    ...(staffMember.updatedAt ? { updatedAt: staffMember.updatedAt } : {}),
   };
 }
 

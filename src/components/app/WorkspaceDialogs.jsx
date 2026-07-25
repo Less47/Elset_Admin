@@ -5,7 +5,7 @@ import JobDetailsDialog from "@/components/jobs/JobDetailsDialog";
 import JobEditDialog from "@/components/jobs/JobEditDialog";
 import JobFormDialog from "@/components/jobs/JobFormDialog";
 import SiteProfileDialog from "@/components/sites/SiteProfileDialog";
-import { normalizeDocument, readFileAsDataUrl } from "@/lib/app-support";
+import { readFileAsDataUrl } from "@/lib/app-support";
 
 export default function WorkspaceDialogs({ auth, chrome, data, selection, supplierManualState, actions }) {
   const { canManageBusiness } = auth;
@@ -43,9 +43,12 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
   } = selection;
   const {
     createJob,
+    handleAddJobNote,
+    handleAddJobPhotos,
     handleCreateCustomer,
     handleDeleteCustomer,
     handleDeleteJob,
+    handleDeleteJobPhoto,
     handleDeleteSiteProfile,
     handleOpenCustomerProfile,
     handleOpenDoc,
@@ -53,12 +56,12 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
     handlePreviewDocument,
+    handleSaveDocument,
     handleSaveSiteProfile,
     handleSendDocument,
     handleStatusChange,
     handleUpdateCustomer,
     handleUpdateJobDetails,
-    updateJob,
   } = actions;
 
   return (
@@ -145,12 +148,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
         onAddNote={(text) => {
           if (!selectedFreshJob) return;
 
-          updateJob(selectedFreshJob.id, {
-            notes: [
-              ...(selectedFreshJob.notes || []),
-              { id: crypto.randomUUID(), author: noteAuthor, text, createdAt: new Date().toISOString() },
-            ],
-          });
+          return handleAddJobNote(selectedFreshJob.id, text, noteAuthor);
         }}
         onAddPhotos={async (files) => {
           if (!selectedFreshJob) return;
@@ -164,9 +162,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
               }))
             );
 
-            updateJob(selectedFreshJob.id, {
-              photos: [...(selectedFreshJob.photos || []), ...photos],
-            });
+            return handleAddJobPhotos(selectedFreshJob.id, photos);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to read the selected image files.";
             window.alert(message);
@@ -179,9 +175,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
           const confirmed = window.confirm(`Delete ${photoLabel} from this job? This cannot be undone.`);
           if (!confirmed) return;
 
-          updateJob(selectedFreshJob.id, {
-            photos: (selectedFreshJob.photos || []).filter((entry) => entry.id !== photo.id),
-          });
+          return handleDeleteJobPhoto(selectedFreshJob.id, photo);
         }}
       />
 
@@ -196,10 +190,7 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             onPreviewDocument={handlePreviewDocument}
             onSendDocument={handleSendDocument}
             onOpenSentDocument={() => selectedFreshJob && handleOpenSentDocumentCopy(selectedFreshJob, docType)}
-            onSave={(doc) => {
-              if (!selectedFreshJob) return;
-              updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, doc) });
-            }}
+            onSave={(doc) => (selectedFreshJob ? handleSaveDocument(selectedFreshJob.id, docType, doc) : false)}
           />
 
           <JobEditDialog
