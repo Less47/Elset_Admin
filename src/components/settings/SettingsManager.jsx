@@ -91,8 +91,8 @@ const serviceM8ImportOptionFields = [
 const templateFields = [
   { key: "accentColor", label: "Accent colour", type: "color" },
   { key: "quoteHeading", label: "Document heading" },
-  { key: "introText", label: "Intro text", multiline: true, rows: 4, documentTypes: ["invoice"] },
-  { key: "notesHeading", label: "Notes heading", documentTypes: ["invoice"] },
+  { key: "introText", label: "Intro text", multiline: true, rows: 4, documentTypes: ["quote", "invoice"] },
+  { key: "notesHeading", label: "Notes heading", documentTypes: ["quote", "invoice"] },
   { key: "termsHeading", label: "Section heading" },
   { key: "termsText", label: "Section text", multiline: true, rows: 5 },
   { key: "footerText", label: "Footer text", multiline: true, rows: 3 },
@@ -416,9 +416,15 @@ function ExactDocumentPreview({ requestBody }) {
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-4">
         {previewUrl ? (
-          <iframe title="Exact customer document preview" src={previewUrl} className="h-[980px] w-full bg-white" />
+          <div className="mx-auto w-full min-w-[640px] max-w-[794px] overflow-hidden rounded-sm bg-white shadow-lg">
+            <iframe
+              title="Exact customer document preview"
+              src={previewUrl}
+              className="block h-[clamp(640px,78vh,1040px)] w-full bg-white"
+            />
+          </div>
         ) : previewStatus === "error" ? (
           <div className="p-6 text-sm text-rose-700">{previewError}</div>
         ) : (

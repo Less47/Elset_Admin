@@ -4,8 +4,8 @@ import { fileURLToPath } from "url";
 import {
   buildDocumentReference,
   buildDocumentTemplateContext,
-  calculateInvoiceBalanceDue,
   calculateDocTotal,
+  calculateInvoiceBalanceDue,
   calculateInvoiceGst,
   calculateInvoicePaidAmount,
   calculateInvoiceSubtotal,
@@ -18,14 +18,44 @@ import {
   normalizeDocumentTemplate,
 } from "./src/lib/quote-template.js";
 
-const PAGE_WIDTH = 595.28;
-const PAGE_HEIGHT = 841.89;
-const PAGE_MARGIN = 48;
-const TEMPLATE_WIDTH = 1240;
-const TEMPLATE_HEIGHT = 1754;
+export const DOCUMENT_LAYOUT = Object.freeze({
+  format: "A4 portrait",
+  pageWidth: 595.28,
+  pageHeight: 841.89,
+  margin: 34,
+  pageBackground: "#FFFFFF",
+  outerBorder: false,
+  tableHeaderBackground: "#F1F1F1",
+  tableCellBorders: false,
+});
+
+const PAGE_WIDTH = DOCUMENT_LAYOUT.pageWidth;
+const PAGE_HEIGHT = DOCUMENT_LAYOUT.pageHeight;
+const PAGE_MARGIN = DOCUMENT_LAYOUT.margin;
+const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
+const CONTENT_RIGHT = PAGE_WIDTH - PAGE_MARGIN;
+const CONTENT_BOTTOM = 54;
+const PAYMENT_ANCHOR_Y = 184;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const LOGO_PATH = path.join(__dirname, "public", "elset-logo.png");
+
+const COLORS = Object.freeze({
+  black: "#0A0A0A",
+  body: "#171717",
+  muted: "#666666",
+  line: "#E5E5E5",
+  tableHeader: DOCUMENT_LAYOUT.tableHeaderBackground,
+  highlight: "#EFEFEF",
+  white: DOCUMENT_LAYOUT.pageBackground,
+  stamp: "#D90B0B",
+});
+
+const LEGACY_INVOICE_NOTE_TEXT = new Set([
+  "Payment due within 7 days.",
+  "Payment due within 7 days. Please reference the invoice number when remitting payment.",
+]);
+
 let pdfLibPromise = null;
 let degrees = null;
 let PDFDocument = null;
@@ -33,10 +63,7 @@ let StandardFonts = null;
 let rgb = null;
 
 async function ensurePdfLib() {
-  if (!pdfLibPromise) {
-    pdfLibPromise = import("pdf-lib");
-  }
-
+  if (!pdfLibPromise) pdfLibPromise = import("pdf-lib");
   const pdfLib = await pdfLibPromise;
   degrees = pdfLib.degrees;
   PDFDocument = pdfLib.PDFDocument;
@@ -44,806 +71,1045 @@ async function ensurePdfLib() {
   rgb = pdfLib.rgb;
 }
 
-function rectFromTemplate(left, top, width, height) {
-  const scaleX = PAGE_WIDTH / TEMPLATE_WIDTH;
-  const scaleY = PAGE_HEIGHT / TEMPLATE_HEIGHT;
-
-  return {
-    x: left * scaleX,
-    y: PAGE_HEIGHT - (top + height) * scaleY,
-    width: width * scaleX,
-    height: height * scaleY,
-  };
+function cleanText(value) {
+  return String(value ?? "").trim();
 }
 
-function insetRect(rect, inset) {
-  return {
-    x: rect.x + inset,
-    y: rect.y + inset,
-    width: rect.width - inset * 2,
-    height: rect.height - inset * 2,
-  };
+function normalizePdfText(value) {
+  const normalized = String(value ?? "")
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, "...")
+    .replace(/\u00A0/g, " ");
+
+  return [...normalized].filter((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint >= 32 || character === "\n" || character === "\r" || character === "\t";
+  }).join("");
 }
 
-function fitTextSize(text, font, maxWidth, preferredSize, minSize = 10) {
-  let size = preferredSize;
-  while (size > minSize && font.widthOfTextAtSize(text, size) > maxWidth) {
-    size -= 1;
+function parseDateInput(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanText(value));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== month - 1
+    || date.getUTCDate() !== day
+  ) return null;
+  return { year, month, day };
+}
+
+function ordinalSuffix(day) {
+  const remainder100 = day % 100;
+  if (remainder100 >= 11 && remainder100 <= 13) return "th";
+  if (day % 10 === 1) return "st";
+  if (day % 10 === 2) return "nd";
+  if (day % 10 === 3) return "rd";
+  return "th";
+}
+
+export function formatDocumentDate(value) {
+  const parsed = parseDateInput(value);
+  if (!parsed) return cleanText(value);
+  const monthName = new Intl.DateTimeFormat("en-AU", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day)));
+  return `${parsed.day}${ordinalSuffix(parsed.day)} ${monthName} ${parsed.year}`;
+}
+
+function addDaysToDateInput(value, days) {
+  const parsed = parseDateInput(value);
+  if (!parsed) return "";
+  const date = new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function uniqueTextLines(values) {
+  const seen = new Set();
+  const lines = [];
+  for (const value of values) {
+    const normalized = cleanText(value);
+    if (!normalized) continue;
+    const key = normalized.toLocaleLowerCase("en-AU");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push(normalized);
   }
+  return lines;
+}
+
+function splitAddressLines(value) {
+  return cleanText(value)
+    .split(/\r?\n|,\s*/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function getDocumentNotes(type, notes) {
+  const normalized = cleanText(notes);
+  if (!normalized) return "";
+  if (type === "invoice" && LEGACY_INVOICE_NOTE_TEXT.has(normalized)) return "";
+  return normalized;
+}
+
+function buildCustomerLines(job) {
+  return uniqueTextLines([
+    cleanText(job?.billingContact?.name),
+    cleanText(job?.customerName),
+    ...splitAddressLines(job?.jobAddress),
+  ]);
+}
+
+function fallbackWorkText(job, document) {
+  const jobDescription = cleanText(job?.description);
+  if (jobDescription) return jobDescription;
+  return (document?.items || [])
+    .map((item) => cleanText(item?.description))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildFinancialRows(type, document) {
+  const items = document?.items || [];
+  if (type === "invoice") {
+    const subtotal = calculateInvoiceSubtotal(items);
+    const gst = calculateInvoiceGst(items);
+    const total = calculateInvoiceTotal(items);
+    const paid = calculateInvoicePaidAmount(document?.payments || []);
+    const balanceDue = calculateInvoiceBalanceDue(items, document?.payments || []);
+    return {
+      subtotal,
+      gst,
+      total,
+      paid,
+      balanceDue,
+      rows: [
+        { key: "subtotal", label: "Subtotal", value: money(subtotal) },
+        { key: "gst", label: "GST", value: money(gst) },
+        { key: "total", label: "Total", value: money(total), strong: true },
+        { key: "paid", label: "Paid", value: money(paid) },
+        { key: "balance", label: "Balance Due", value: money(balanceDue), highlight: true },
+      ],
+    };
+  }
+  if (type === "quote") {
+    const subtotal = calculateQuoteSubtotal(items);
+    const gst = calculateQuoteGst(items);
+    const total = calculateQuoteTotal(items);
+    return {
+      subtotal,
+      gst,
+      total,
+      paid: 0,
+      balanceDue: total,
+      rows: [
+        { key: "subtotal", label: "Subtotal", value: money(subtotal) },
+        { key: "gst", label: "GST", value: money(gst) },
+        { key: "total", label: "Total", value: money(total), highlight: true },
+      ],
+    };
+  }
+  const total = calculateDocTotal(items);
+  return {
+    subtotal: total,
+    gst: 0,
+    total,
+    paid: 0,
+    balanceDue: total,
+    rows: [{ key: "total", label: "Total", value: money(total), highlight: true }],
+  };
+}
+
+export function buildDocumentPresentationModel({ job = {}, document = {}, template, type = "quote" }) {
+  const documentType = type === "invoice" ? "invoice" : "quote";
+  const normalizedTemplate = normalizeDocumentTemplate(template, documentType);
+  const context = buildDocumentTemplateContext({
+    job,
+    document,
+    template: normalizedTemplate,
+    type: documentType,
+  });
+  const reference = buildDocumentReference(job, documentType);
+  const documentLabel = documentType === "invoice" ? "Tax Invoice" : "Quote";
+  const title = cleanText(normalizedTemplate.quoteHeading) || documentLabel;
+  const issueDate = cleanText(document?.issueDate);
+  const dueDate = documentType === "invoice" ? cleanText(document?.dueDate) : "";
+  const quoteValidUntil = documentType === "quote"
+    ? cleanText(context.quoteValidUntil) || addDaysToDateInput(issueDate, 30)
+    : "";
+  const notes = getDocumentNotes(documentType, document?.notes);
+  const expandedIntro = cleanText(fillTemplateText(normalizedTemplate.introText, context));
+  const fallbackText = fallbackWorkText(job, document);
+  let introText = "";
+  let workText = "";
+  if (documentType === "invoice") {
+    workText = notes || fallbackText || expandedIntro;
+    introText = expandedIntro && expandedIntro !== workText ? expandedIntro : "";
+  } else {
+    workText = uniqueTextLines([expandedIntro || fallbackText, notes]).join("\n\n");
+  }
+
+  const financials = buildFinancialRows(documentType, document);
+  const bankRows = [
+    normalizedTemplate.bankAccountName
+      ? { label: "Name", value: cleanText(normalizedTemplate.bankAccountName) }
+      : null,
+    normalizedTemplate.bankBsb
+      ? { label: "BSB", value: cleanText(normalizedTemplate.bankBsb) }
+      : null,
+    normalizedTemplate.bankAccountNumber
+      ? { label: "Account Number", value: cleanText(normalizedTemplate.bankAccountNumber) }
+      : null,
+  ].filter(Boolean);
+  const workHeading = cleanText(normalizedTemplate.notesHeading)
+    || (documentType === "invoice" ? "Work Completed" : "Scope of Work");
+  const termsText = cleanText(fillTemplateText(normalizedTemplate.termsText, context));
+
+  return {
+    type: documentType,
+    layout: DOCUMENT_LAYOUT,
+    title,
+    documentLabel,
+    reference,
+    issueDate,
+    issueDateDisplay: cleanText(context.issueDateDisplay) || formatDocumentDate(issueDate),
+    dueDate,
+    dueDateDisplay: cleanText(context.dueDateDisplay) || formatDocumentDate(dueDate),
+    quoteValidUntil,
+    quoteValidUntilDisplay:
+      cleanText(context.quoteValidUntilDisplay) || formatDocumentDate(quoteValidUntil),
+    business: {
+      name: cleanText(normalizedTemplate.companyName) || "ELSET",
+      address: cleanText(normalizedTemplate.companyAddress),
+      email: cleanText(normalizedTemplate.companyEmail),
+      phone: cleanText(normalizedTemplate.companyPhone),
+      abn: cleanText(normalizedTemplate.companyAbn),
+      acn: cleanText(normalizedTemplate.companyAcn),
+    },
+    customerLines: buildCustomerLines(job),
+    introText,
+    work: { heading: workHeading, text: workText },
+    table: {
+      headers: ["Description", "Qty", "Unit Price", "Total Price"],
+      items: (document?.items || []).map((item) => ({
+        description: cleanText(item?.description) || `${documentLabel} item`,
+        qty: item?.qty ?? 0,
+        rate: Number(item?.rate || 0),
+        total: Number(item?.qty || 0) * Number(item?.rate || 0),
+      })),
+    },
+    financials,
+    terms: {
+      heading: cleanText(normalizedTemplate.termsHeading)
+        || (documentType === "invoice" ? "How to Pay" : "Quote Terms"),
+      text: termsText,
+    },
+    payment: documentType === "invoice"
+      ? {
+          bankRows,
+          chequeAddress: cleanText(normalizedTemplate.companyAddress),
+          remittanceEmail: cleanText(normalizedTemplate.companyEmail),
+          summaryReference: `${documentLabel} # ${reference}`,
+          summaryDue: dueDate
+            ? `${money(financials.balanceDue)} due by ${formatDocumentDate(dueDate)}`
+            : `${money(financials.balanceDue)} balance due`,
+        }
+      : null,
+    quoteSummary: documentType === "quote"
+      ? {
+          reference: `Quote # ${reference}`,
+          validity: quoteValidUntil
+            ? `Valid until ${formatDocumentDate(quoteValidUntil)}`
+            : "",
+        }
+      : null,
+    footerText: cleanText(fillTemplateText(normalizedTemplate.footerText, context)),
+    accentColor: cleanText(normalizedTemplate.accentColor) || "#2095C7",
+    sections: documentType === "invoice"
+      ? ["header", "customer", "work-completed", "line-items", "totals", "payment", "footer"]
+      : ["header", "customer", "scope", "line-items", "totals", "terms", "footer"],
+  };
+}
+
+function hexToRgb(hex) {
+  const cleaned = cleanText(hex).replace("#", "");
+  const expanded = cleaned.length === 3
+    ? cleaned.split("").map((character) => `${character}${character}`).join("")
+    : cleaned;
+  const normalized = /^[0-9a-fA-F]{6}$/.test(expanded) ? expanded : "2095C7";
+  const value = Number.parseInt(normalized, 16);
+  return rgb(
+    ((value >> 16) & 255) / 255,
+    ((value >> 8) & 255) / 255,
+    (value & 255) / 255
+  );
+}
+
+function textWidth(font, text, size) {
+  return font.widthOfTextAtSize(normalizePdfText(text), size);
+}
+
+function fitTextSize(text, font, maxWidth, preferredSize, minSize = 7) {
+  let size = preferredSize;
+  while (size > minSize && textWidth(font, text, size) > maxWidth) size -= 0.5;
   return size;
 }
 
 function truncateTextToWidth(text, font, size, maxWidth) {
   const suffix = "...";
-  let value = String(text || "").trim();
-  if (!value || font.widthOfTextAtSize(value, size) <= maxWidth) {
-    return value;
-  }
-
-  while (value.length > 0 && font.widthOfTextAtSize(`${value}${suffix}`, size) > maxWidth) {
+  let value = normalizePdfText(text).trim();
+  if (!value || textWidth(font, value, size) <= maxWidth) return value;
+  while (value.length > 0 && textWidth(font, `${value}${suffix}`, size) > maxWidth) {
     value = value.slice(0, -1).trimEnd();
   }
-
   return value ? `${value}${suffix}` : suffix;
 }
 
-function getVisibleDocumentNotes(type, notes = "") {
-  if (type === "quote") return "";
-
-  const normalizedNotes = String(notes || "").trim();
-  const legacyDueDateNotes = [
-    "Payment due within 7 days.",
-    "Payment due within 7 days. Please reference the invoice number when remitting payment.",
-  ];
-
-  return legacyDueDateNotes.includes(normalizedNotes) ? "" : normalizedNotes;
-}
-
-const HEADER_RECT = rectFromTemplate(77, 155, 1086, 220);
-const CONTENT_RECT = rectFromTemplate(77, 395, 1086, 1230);
-const TOP_STRIP_CLEAR_RECT = rectFromTemplate(0, 0, 1240, 92);
-const HEADER_CONTENT_CLEAR_RECT = insetRect(HEADER_RECT, 3);
-
-function hexToRgb(hex) {
-  const value = String(hex || "").replace("#", "");
-  const normalized = value.length === 3
-    ? value.split("").map((char) => `${char}${char}`).join("")
-    : value.padEnd(6, "0").slice(0, 6);
-
-  const int = Number.parseInt(normalized, 16);
-
-  return rgb(
-    ((int >> 16) & 255) / 255,
-    ((int >> 8) & 255) / 255,
-    (int & 255) / 255
-  );
+function splitLongWord(word, font, size, maxWidth) {
+  const chunks = [];
+  let chunk = "";
+  for (const character of normalizePdfText(word)) {
+    const candidate = `${chunk}${character}`;
+    if (chunk && textWidth(font, candidate, size) > maxWidth) {
+      chunks.push(chunk);
+      chunk = character;
+    } else {
+      chunk = candidate;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
 }
 
 function wrapText(text, font, size, maxWidth) {
-  const content = String(text || "").trim();
+  const content = normalizePdfText(text).trim();
   if (!content) return [];
-
   const lines = [];
   for (const paragraph of content.split(/\r?\n/)) {
-    const words = paragraph.split(/\s+/).filter(Boolean);
-    if (words.length === 0) {
+    if (!paragraph.trim()) {
       lines.push("");
       continue;
     }
-
-    let currentLine = words[0];
-    for (const word of words.slice(1)) {
-      const candidate = `${currentLine} ${word}`;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+    const words = paragraph.trim().split(/\s+/).flatMap((word) => (
+      textWidth(font, word, size) > maxWidth
+        ? splitLongWord(word, font, size, maxWidth)
+        : [word]
+    ));
+    let currentLine = "";
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (!currentLine || textWidth(font, candidate, size) <= maxWidth) {
         currentLine = candidate;
       } else {
         lines.push(currentLine);
         currentLine = word;
       }
     }
-    lines.push(currentLine);
+    if (currentLine) lines.push(currentLine);
   }
-
   return lines;
+}
+
+function formatQuantity(value) {
+  const numericValue = Number(value || 0);
+  if (!Number.isFinite(numericValue)) return "0";
+  return new Intl.NumberFormat("en-AU", { maximumFractionDigits: 6 }).format(numericValue);
+}
+
+function headingText(value) {
+  const normalized = cleanText(value).toUpperCase();
+  if (!normalized) return "";
+  return /[:!?]$/.test(normalized) ? normalized : `${normalized}:`;
 }
 
 export async function generateDocumentPdf({ job, document, template, type = "quote", stampText = "" }) {
   await ensurePdfLib();
-
+  const model = buildDocumentPresentationModel({ job, document, template, type });
   const pdfDoc = await PDFDocument.create();
   const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const normalizedTemplate = normalizeDocumentTemplate(template, type);
-  const context = buildDocumentTemplateContext({
-    job,
-    document,
-    template: normalizedTemplate,
-    type,
-  });
-  const documentLabel = type === "invoice" ? "Invoice" : "Quote";
-  const accent = hexToRgb(normalizedTemplate.accentColor);
   const logoImage = fs.existsSync(LOGO_PATH)
     ? await pdfDoc.embedPng(fs.readFileSync(LOGO_PATH))
     : null;
-  const baseTemplateImage = null;
-  const panelFill = rgb(0.93, 0.96, 1);
-  const lightAccent = rgb(
-    Math.min(accent.red + 0.82, 0.96),
-    Math.min(accent.green + 0.82, 0.96),
-    Math.min(accent.blue + 0.82, 0.96)
+  const color = Object.fromEntries(
+    Object.entries(COLORS).map(([key, value]) => [key, hexToRgb(value)])
   );
-  const normalizedStampText = String(stampText || "").trim().toUpperCase();
+  const accent = hexToRgb(model.accentColor);
+  const normalizedStampText = cleanText(stampText).toUpperCase();
+  const pages = [];
+  const state = { page: null, pageIndex: -1, y: 0 };
 
-  let page;
-  let y = 0;
+  pdfDoc.setTitle(`${model.documentLabel} ${model.reference}`);
+  pdfDoc.setAuthor(model.business.name);
+  pdfDoc.setSubject(`${model.documentLabel} for ${cleanText(job?.customerName) || "customer"}`);
+  pdfDoc.setCreator("ELSET Admin");
+  pdfDoc.setProducer("ELSET Admin");
 
-  const contentInnerRect = insetRect(CONTENT_RECT, 12);
-  const contentBottom = contentInnerRect.y + 4;
-
-  const drawPageShell = (targetPage) => {
-    if (baseTemplateImage) {
-      targetPage.drawImage(baseTemplateImage, {
-        x: 0,
-        y: 0,
-        width: PAGE_WIDTH,
-        height: PAGE_HEIGHT,
-      });
-
-      return;
-    }
-
-    targetPage.drawRectangle({
-      x: 0,
-      y: PAGE_HEIGHT - 18,
-      width: PAGE_WIDTH,
-      height: 18,
-      color: accent,
-    });
-
-    targetPage.drawRectangle({
-      x: 0,
-      y: 0,
-      width: PAGE_WIDTH,
-      height: 18,
-      color: accent,
-    });
-
-    for (const rect of [HEADER_RECT, CONTENT_RECT]) {
-      targetPage.drawRectangle({
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-        color: panelFill,
-        borderWidth: 2,
-        borderColor: accent,
-      });
-    }
+  const drawText = (text, options) => {
+    const normalizedText = normalizePdfText(text);
+    if (normalizedText) state.page.drawText(normalizedText, options);
   };
 
-  const drawHeader = () => {
-    const headerInnerRect = insetRect(HEADER_RECT, 18);
-
-    {
-      const companyName = normalizedTemplate.companyName || "Elset";
-      const headingText = normalizedTemplate.quoteHeading || documentLabel;
-      const companyDetailSize = 8;
-      const companyDetailColor = rgb(0.25, 0.25, 0.25);
-      const companyDetailSections = [
-        normalizedTemplate.companyAddress,
-        [
-          normalizedTemplate.companyAbn ? `ABN ${normalizedTemplate.companyAbn}` : "",
-          normalizedTemplate.companyAcn ? `ACN ${normalizedTemplate.companyAcn}` : "",
-        ].filter(Boolean).join("  |  "),
-        [
-          normalizedTemplate.companyEmail,
-          normalizedTemplate.companyPhone,
-        ].filter(Boolean).join("  |  "),
-      ].filter(Boolean);
-
-      const buildCompanyDetailLines = (maxWidth, maxLines = 5) => {
-        const lines = [];
-
-        for (const section of companyDetailSections) {
-          const wrappedLines = wrapText(section, regularFont, companyDetailSize, maxWidth);
-          for (const line of wrappedLines) {
-            if (!line) continue;
-            lines.push(line);
-            if (lines.length >= maxLines) {
-              return lines;
-            }
-          }
-        }
-
-        return lines;
-      };
-
-      const drawAlignedText = (text, { x, y, width, font, size, color, align = "left" }) => {
-        const textX = align === "right"
-          ? x + width - font.widthOfTextAtSize(text, size)
-          : x;
-
-        page.drawText(text, {
-          x: textX,
-          y,
-          font,
-          size,
-          color,
-        });
-      };
-
-      if (baseTemplateImage) {
-        page.drawRectangle({
-          ...TOP_STRIP_CLEAR_RECT,
-          color: rgb(1, 1, 1),
-        });
-        page.drawRectangle({
-          ...HEADER_CONTENT_CLEAR_RECT,
-          color: panelFill,
-        });
-      }
-
-      if (logoImage) {
-        const logoDimensions = logoImage.scaleToFit(
-          Math.min(headerInnerRect.width * 0.42, 160),
-          headerInnerRect.height - 10
-        );
-        const companyInfoX = headerInnerRect.x + logoDimensions.width + 24;
-        const companyInfoWidth = headerInnerRect.x + headerInnerRect.width - companyInfoX;
-        const companyNameSize = fitTextSize(companyName, boldFont, companyInfoWidth, 14, 11);
-        const companyDetailLines = buildCompanyDetailLines(companyInfoWidth, 5);
-        const logoMeta = [headingText, context.documentReference].filter(Boolean).join("  |  ");
-
-        page.drawImage(logoImage, {
-          x: headerInnerRect.x,
-          y: headerInnerRect.y + (headerInnerRect.height - logoDimensions.height) / 2,
-          width: logoDimensions.width,
-          height: logoDimensions.height,
-        });
-
-        drawAlignedText(companyName, {
-          x: companyInfoX,
-          y: headerInnerRect.y + headerInnerRect.height - companyNameSize - 2,
-          width: companyInfoWidth,
-          font: boldFont,
-          size: companyNameSize,
-          color: accent,
-          align: "right",
-        });
-
-        let infoY = headerInnerRect.y + headerInnerRect.height - companyNameSize - 14;
-        for (const line of companyDetailLines) {
-          drawAlignedText(line, {
-            x: companyInfoX,
-            y: infoY,
-            width: companyInfoWidth,
-            font: regularFont,
-            size: companyDetailSize,
-            color: companyDetailColor,
-            align: "right",
-          });
-          infoY -= 9.5;
-        }
-
-        if (logoMeta && companyDetailLines.length <= 3) {
-          drawAlignedText(logoMeta, {
-            x: companyInfoX,
-            y: headerInnerRect.y + 2,
-            width: companyInfoWidth,
-            font: regularFont,
-            size: 7.5,
-            color: companyDetailColor,
-            align: "right",
-          });
-        }
-
-        return;
-      }
-
-      const companyTextWidth = headerInnerRect.width - 220;
-      const companyNameSize = fitTextSize(companyName, boldFont, companyTextWidth, 20, 14);
-      const headingSize = fitTextSize(headingText, boldFont, 170, 16, 11);
-      const companyDetailLines = buildCompanyDetailLines(Math.min(companyTextWidth, 260), 5);
-      const referenceMeta = [context.documentReference, document.issueDate].filter(Boolean).join("  |  ");
-
-      page.drawText(companyName, {
-        x: headerInnerRect.x + 54,
-        y: headerInnerRect.y + headerInnerRect.height - companyNameSize - 6,
-        font: boldFont,
-        size: companyNameSize,
-        color: accent,
-      });
-
-      let infoY = headerInnerRect.y + headerInnerRect.height - companyNameSize - 20;
-      for (const line of companyDetailLines) {
-        page.drawText(line, {
-          x: headerInnerRect.x + 54,
-          y: infoY,
-          font: regularFont,
-          size: companyDetailSize,
-          color: companyDetailColor,
-        });
-        infoY -= 10;
-      }
-
-      page.drawText(headingText, {
-        x: headerInnerRect.x + headerInnerRect.width - boldFont.widthOfTextAtSize(headingText, headingSize),
-        y: headerInnerRect.y + 24,
-        font: boldFont,
-        size: headingSize,
-        color: accent,
-      });
-
-      if (referenceMeta) {
-        page.drawText(referenceMeta, {
-          x: headerInnerRect.x + headerInnerRect.width - regularFont.widthOfTextAtSize(referenceMeta, 8.5),
-          y: headerInnerRect.y + 10,
-          font: regularFont,
-          size: 8.5,
-          color: companyDetailColor,
-        });
-      }
-
-      return;
-    }
-
-    // eslint-disable-next-line no-unreachable
-    const companyTextWidth = headerInnerRect.width - 220;
-    const companyName = normalizedTemplate.companyName || "Elset";
-    const companyNameSize = fitTextSize(companyName, boldFont, companyTextWidth, 20, 14);
-    const headingText = normalizedTemplate.quoteHeading || documentLabel;
-    const headingSize = fitTextSize(headingText, boldFont, 170, 16, 11);
-    const companyInfoLines = wrapText(
-      [
-        normalizedTemplate.companyEmail,
-        normalizedTemplate.companyPhone,
-        normalizedTemplate.companyAddress,
-      ].filter(Boolean).join("  ·  "),
-      regularFont,
-      8.5,
-      Math.min(companyTextWidth, 250)
-    ).slice(0, 3);
-    const referenceMeta = [context.documentReference, document.issueDate].filter(Boolean).join("  ·  ");
-
-    let companyX = headerInnerRect.x + 54;
-    if (!baseTemplateImage && logoImage) {
-      const logoDimensions = logoImage.scaleToFit(90, 34);
-      page.drawImage(logoImage, {
-        x: headerInnerRect.x,
-        y: headerInnerRect.y + headerInnerRect.height - logoDimensions.height - 6,
-        width: logoDimensions.width,
-        height: logoDimensions.height,
-      });
-      companyX = headerInnerRect.x + logoDimensions.width + 12;
-    }
-
-    page.drawText(companyName, {
-      x: companyX,
-      y: headerInnerRect.y + headerInnerRect.height - companyNameSize - 6,
-      font: boldFont,
-      size: companyNameSize,
-      color: accent,
+  const drawRightText = (text, { right = CONTENT_RIGHT, y, font = regularFont, size = 9, ...options }) => {
+    const normalizedText = normalizePdfText(text);
+    if (!normalizedText) return;
+    drawText(normalizedText, {
+      x: right - textWidth(font, normalizedText, size),
+      y,
+      font,
+      size,
+      ...options,
     });
+  };
 
-    let infoY = headerInnerRect.y + headerInnerRect.height - companyNameSize - 20;
-    for (const line of companyInfoLines) {
-      page.drawText(line, {
-        x: companyX,
-        y: infoY,
-        font: regularFont,
-        size: 8.5,
-        color: rgb(0.25, 0.25, 0.25),
-      });
-      infoY -= 10.5;
-    }
-
-    page.drawText(headingText, {
-      x: headerInnerRect.x + headerInnerRect.width - boldFont.widthOfTextAtSize(headingText, headingSize),
-      y: headerInnerRect.y + 24,
-      font: boldFont,
-      size: headingSize,
-      color: accent,
+  const drawCenteredText = (text, { center, y, font = regularFont, size = 9, ...options }) => {
+    const normalizedText = normalizePdfText(text);
+    if (!normalizedText) return;
+    drawText(normalizedText, {
+      x: center - textWidth(font, normalizedText, size) / 2,
+      y,
+      font,
+      size,
+      ...options,
     });
-
-    if (referenceMeta) {
-      page.drawText(referenceMeta, {
-        x: headerInnerRect.x + headerInnerRect.width - regularFont.widthOfTextAtSize(referenceMeta, 8.5),
-        y: headerInnerRect.y + 10,
-        font: regularFont,
-        size: 8.5,
-        color: rgb(0.25, 0.25, 0.25),
-      });
-    }
   };
 
-  const startNewPage = () => {
-    page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
-    drawPageShell(page);
-    drawHeader();
-    y = contentInnerRect.y + contentInnerRect.height - 12;
-  };
-
-  const ensureSpace = (heightNeeded, { keepTableHeader = false } = {}) => {
-    if (y - heightNeeded < contentBottom) {
-      startNewPage();
-      if (keepTableHeader) {
-        drawTableHeader();
-      }
-    }
-  };
-
-  const drawParagraph = ({
-    text,
-    x = contentInnerRect.x,
-    width = contentInnerRect.width,
+  const drawRightAlignedLines = (lines, {
+    right = CONTENT_RIGHT,
+    y,
     font = regularFont,
-    size = 10.2,
-    lineHeight = 12.5,
-    color = rgb(0.15, 0.15, 0.15),
-    gapAfter = 6,
-    maxLines = null,
+    size = 9,
+    lineHeight = 11,
+    textColor = color.body,
   }) => {
-    let lines = wrapText(text, font, size, width);
-    if (maxLines && lines.length > maxLines) {
-      lines = lines.slice(0, maxLines);
-      lines[lines.length - 1] = truncateTextToWidth(lines[lines.length - 1], font, size, width);
-    }
-    if (lines.length === 0) {
-      ensureSpace(gapAfter);
-      y -= gapAfter;
-      return;
-    }
-
+    let cursor = y;
     for (const line of lines) {
-      ensureSpace(lineHeight);
-      if (line) {
-        page.drawText(line, { x, y, font, size, color });
-      }
-      y -= lineHeight;
+      if (line) drawRightText(line, { right, y: cursor, font, size, color: textColor });
+      cursor -= lineHeight;
     }
-    ensureSpace(gapAfter);
-    y -= gapAfter;
+    return cursor;
   };
 
-  const drawKeyValue = (label, value, x, width, topY, { maxValueLines = 2 } = {}) => {
-    const labelSize = 7.8;
-    const valueSize = 9.2;
-    let cursorY = topY;
-
-    page.drawText(label.toUpperCase(), {
-      x,
-      y: cursorY,
-      font: boldFont,
-      size: labelSize,
-      color: rgb(0.45, 0.45, 0.45),
-    });
-    cursorY -= 11;
-    let valueLines = wrapText(value || "-", regularFont, valueSize, width);
-    if (maxValueLines && valueLines.length > maxValueLines) {
-      valueLines = valueLines.slice(0, maxValueLines);
-      valueLines[valueLines.length - 1] = truncateTextToWidth(valueLines[valueLines.length - 1], regularFont, valueSize, width);
-    }
-    for (const line of valueLines) {
-      page.drawText(line, {
-        x,
-        y: cursorY,
-        font: regularFont,
-        size: valueSize,
-        color: rgb(0.1, 0.1, 0.1),
+  const drawFirstPageHeader = () => {
+    const topY = PAGE_HEIGHT - 29;
+    const rightColumnX = PAGE_MARGIN + 341;
+    const rightColumnWidth = CONTENT_RIGHT - rightColumnX;
+    let logoBottom = topY - 82;
+    if (logoImage) {
+      const dimensions = logoImage.scaleToFit(324, 110);
+      logoBottom = topY - dimensions.height;
+      state.page.drawImage(logoImage, {
+        x: PAGE_MARGIN,
+        y: logoBottom,
+        width: dimensions.width,
+        height: dimensions.height,
       });
-      cursorY -= 10.5;
-    }
-    return cursorY - 4;
-  };
-
-  const drawTableHeader = () => {
-    ensureSpace(24);
-    page.drawRectangle({
-      x: contentInnerRect.x,
-      y: y - 15,
-      width: contentInnerRect.width,
-      height: 18,
-      color: lightAccent,
-    });
-
-    for (const column of columns) {
-      page.drawText(column.label, {
-        x: column.x,
-        y: y - 10,
+    } else {
+      const companySize = fitTextSize(model.business.name, boldFont, 320, 30, 18);
+      drawText(model.business.name, {
+        x: PAGE_MARGIN,
+        y: topY - companySize,
         font: boldFont,
-        size: 8.4,
+        size: companySize,
         color: accent,
       });
+      logoBottom = topY - companySize - 12;
     }
-    y -= 22;
-  };
 
-  const columns = (() => {
-    const width = contentInnerRect.width;
-    const descriptionWidth = width * 0.56;
-    const qtyWidth = width * 0.09;
-    const rateWidth = width * 0.15;
-    const totalWidth = width - descriptionWidth - qtyWidth - rateWidth;
+    let rightY = topY - 7;
+    const addressLines = splitAddressLines(model.business.address)
+      .flatMap((line) => wrapText(line, regularFont, 9.1, rightColumnWidth))
+      .slice(0, 4);
+    if (addressLines.length) {
+      rightY = drawRightAlignedLines(addressLines, {
+        y: rightY,
+        size: 9.1,
+        lineHeight: 11,
+      }) - 5;
+    }
+    for (const contactLine of [model.business.email, model.business.phone].filter(Boolean)) {
+      drawRightText(contactLine, {
+        y: rightY,
+        font: regularFont,
+        size: 9.1,
+        color: color.body,
+      });
+      rightY -= 11;
+    }
+    if (model.business.email || model.business.phone) rightY -= 9;
 
-    return [
-      { label: "Description", x: contentInnerRect.x + 10, width: descriptionWidth - 10, align: "left" },
-      { label: "Qty", x: contentInnerRect.x + descriptionWidth, width: qtyWidth, align: "right" },
-      { label: "Rate", x: contentInnerRect.x + descriptionWidth + qtyWidth, width: rateWidth, align: "right" },
-      { label: "Line Total", x: contentInnerRect.x + descriptionWidth + qtyWidth + rateWidth, width: totalWidth - 10, align: "right" },
-    ];
-  })();
-
-  startNewPage();
-
-  ensureSpace(110);
-  const leftColumnX = contentInnerRect.x;
-  const rightColumnX = contentInnerRect.x + contentInnerRect.width / 2 + 10;
-  const columnWidth = contentInnerRect.width / 2 - 10;
-  const metaTopY = y;
-
-  let leftColumnEnd = drawKeyValue(`${documentLabel} for`, job.customerName, leftColumnX, columnWidth, metaTopY, { maxValueLines: 1 });
-  leftColumnEnd = drawKeyValue("Customer email", job.customerEmail || "Not provided", leftColumnX, columnWidth, leftColumnEnd, { maxValueLines: 1 });
-  leftColumnEnd = drawKeyValue("Service address", job.jobAddress || "Not provided", leftColumnX, columnWidth, leftColumnEnd);
-
-  let rightColumnEnd = drawKeyValue("Reference", context.documentReference, rightColumnX, columnWidth, metaTopY, { maxValueLines: 1 });
-  rightColumnEnd = drawKeyValue("Issue date", document.issueDate || "-", rightColumnX, columnWidth, rightColumnEnd, { maxValueLines: 1 });
-  if (type === "invoice" && job.ocNumber) {
-    rightColumnEnd = drawKeyValue("OC number", job.ocNumber, rightColumnX, columnWidth, rightColumnEnd, { maxValueLines: 1 });
-  }
-  if (type !== "quote") {
-    rightColumnEnd = drawKeyValue("Job title", job.title || "-", rightColumnX, columnWidth, rightColumnEnd);
-  }
-
-  y = Math.min(leftColumnEnd, rightColumnEnd) - 6;
-
-  const introText = type === "quote"
-    ? String(job.description || "").trim()
-    : fillTemplateText(normalizedTemplate.introText, context).trim();
-
-  if (introText) {
-    drawParagraph({
-      text: introText,
-      size: 9.8,
-      lineHeight: 12,
-      gapAfter: 8,
+    const titleSize = fitTextSize(model.title, boldFont, rightColumnWidth, 16.5, 12);
+    drawRightText(model.title, {
+      y: rightY,
+      font: boldFont,
+      size: titleSize,
+      color: color.black,
     });
-  }
-
-  drawTableHeader();
-
-  for (const item of document.items || []) {
-    const descriptionLines = wrapText(item.description || `${documentLabel} item`, regularFont, 8.8, columns[0].width);
-    const rowHeight = Math.max(17, descriptionLines.length * 10.2 + 7);
-    ensureSpace(rowHeight + 3, { keepTableHeader: true });
-
-    page.drawRectangle({
-      x: contentInnerRect.x,
-      y: y - rowHeight + 3,
-      width: contentInnerRect.width,
-      height: rowHeight,
-      borderWidth: 1,
-      borderColor: rgb(0.84, 0.88, 0.92),
-      color: rgb(1, 1, 1),
-    });
-
-    let descriptionY = y - 8;
-    for (const line of descriptionLines) {
-      page.drawText(line, {
-        x: columns[0].x,
-        y: descriptionY,
+    rightY -= titleSize + 5;
+    if (model.business.abn) {
+      drawRightText(`ABN: ${model.business.abn}`, {
+        y: rightY,
+        font: boldFont,
+        size: 9.1,
+        color: color.black,
+      });
+      rightY -= 11;
+    }
+    if (model.business.acn) {
+      drawRightText(`ACN: ${model.business.acn}`, {
+        y: rightY,
         font: regularFont,
         size: 8.8,
-        color: rgb(0.12, 0.12, 0.12),
+        color: color.body,
       });
-      descriptionY -= 10.2;
+      rightY -= 10.5;
+    }
+    rightY -= 9;
+    drawRightText(`${model.documentLabel} # ${model.reference}`, {
+      y: rightY,
+      font: regularFont,
+      size: 9.2,
+      color: color.body,
+    });
+    rightY -= 11;
+    if (model.issueDateDisplay) {
+      drawRightText(model.issueDateDisplay, {
+        y: rightY,
+        font: regularFont,
+        size: 9.2,
+        color: color.body,
+      });
+      rightY -= 11;
+    }
+    if (model.type === "quote" && model.quoteValidUntilDisplay) {
+      drawRightText(`Valid until ${model.quoteValidUntilDisplay}`, {
+        y: rightY,
+        font: regularFont,
+        size: 8.6,
+        color: color.muted,
+      });
+      rightY -= 10;
     }
 
-    const qty = Number(item.qty || 0);
-    const rate = Number(item.rate || 0);
-    const lineTotal = qty * rate;
+    let customerY = Math.min(logoBottom, rightY) - 27;
+    const customerX = PAGE_MARGIN + 84;
+    const customerLines = model.customerLines.flatMap((line) => (
+      wrapText(line, regularFont, 10.1, 310)
+    ));
+    for (const line of customerLines) {
+      drawText(line, {
+        x: customerX,
+        y: customerY,
+        font: regularFont,
+        size: 10.1,
+        color: color.black,
+      });
+      customerY -= 12.3;
+    }
+    return customerY - (customerLines.length ? 32 : 12);
+  };
 
-    const qtyText = String(qty);
-    const rateText = money(rate);
-    const totalText = money(lineTotal);
-
-    page.drawText(qtyText, {
-      x: columns[1].x + columns[1].width - regularFont.widthOfTextAtSize(qtyText, 8.8),
-      y: y - 8,
-      font: regularFont,
-      size: 8.8,
-      color: rgb(0.12, 0.12, 0.12),
-    });
-    page.drawText(rateText, {
-      x: columns[2].x + columns[2].width - regularFont.widthOfTextAtSize(rateText, 8.8),
-      y: y - 8,
-      font: regularFont,
-      size: 8.8,
-      color: rgb(0.12, 0.12, 0.12),
-    });
-    page.drawText(totalText, {
-      x: columns[3].x + columns[3].width - boldFont.widthOfTextAtSize(totalText, 8.8),
-      y: y - 8,
+  const drawContinuationHeader = () => {
+    const topY = PAGE_HEIGHT - 27;
+    let logoBottom = topY - 45;
+    if (logoImage) {
+      const dimensions = logoImage.scaleToFit(166, 57);
+      logoBottom = topY - dimensions.height;
+      state.page.drawImage(logoImage, {
+        x: PAGE_MARGIN,
+        y: logoBottom,
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+    } else {
+      drawText(model.business.name, {
+        x: PAGE_MARGIN,
+        y: topY - 22,
+        font: boldFont,
+        size: 20,
+        color: accent,
+      });
+    }
+    drawRightText(model.title, {
+      y: topY - 17,
       font: boldFont,
-      size: 8.8,
-      color: rgb(0.12, 0.12, 0.12),
+      size: 13,
+      color: color.black,
     });
+    drawRightText(`${model.documentLabel} # ${model.reference}`, {
+      y: topY - 32,
+      font: regularFont,
+      size: 8.7,
+      color: color.body,
+    });
+    drawRightText("Continued", {
+      y: topY - 44,
+      font: regularFont,
+      size: 8.2,
+      color: color.muted,
+    });
+    const ruleY = Math.min(logoBottom, topY - 49) - 7;
+    state.page.drawLine({
+      start: { x: PAGE_MARGIN, y: ruleY },
+      end: { x: CONTENT_RIGHT, y: ruleY },
+      thickness: 1.1,
+      color: accent,
+      opacity: 0.8,
+    });
+    return ruleY - 19;
+  };
 
-    y -= rowHeight + 3;
-  }
+  const startPage = ({ first = false } = {}) => {
+    state.page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    pages.push(state.page);
+    state.pageIndex = pages.length - 1;
+    state.y = first ? drawFirstPageHeader() : drawContinuationHeader();
+  };
 
-  if (type === "invoice" || type === "quote") {
-    const subtotal = type === "invoice"
-      ? calculateInvoiceSubtotal(document.items || [])
-      : calculateQuoteSubtotal(document.items || []);
-    const gst = type === "invoice"
-      ? calculateInvoiceGst(document.items || [])
-      : calculateQuoteGst(document.items || []);
-    const total = type === "invoice"
-      ? calculateInvoiceTotal(document.items || [])
-      : calculateQuoteTotal(document.items || []);
-    const paid = type === "invoice" ? calculateInvoicePaidAmount(document.payments || []) : 0;
-    const balanceDue = type === "invoice" ? calculateInvoiceBalanceDue(document.items || [], document.payments || []) : 0;
-    const totalBoxWidth = Math.min(235, contentInnerRect.width * 0.44);
-    const totalBoxX = contentInnerRect.x + contentInnerRect.width - totalBoxWidth;
-    const totalRows = type === "invoice"
-      ? [
-          { label: "Subtotal", value: money(subtotal) },
-          { label: "GST", value: money(gst) },
-          { label: "Total", value: money(total), font: boldFont, size: 9.2 },
-          { label: "Paid", value: money(paid) },
-          {
-            label: "Balance Due",
-            value: money(balanceDue),
-            highlight: true,
-            font: boldFont,
-            labelSize: 10,
-            valueSize: 10,
-          },
-        ]
-      : [
-          { label: "Subtotal", value: money(subtotal) },
-          { label: "GST", value: money(gst) },
-          {
-            label: "Quote Total",
-            value: money(total),
-            highlight: true,
-            font: boldFont,
-            labelSize: 10,
-            valueSize: 10,
-          },
-        ];
+  let drawTableHeader = null;
+  const ensureSpace = (heightNeeded, { repeatTableHeader = false } = {}) => {
+    if (state.y - heightNeeded >= CONTENT_BOTTOM) return false;
+    startPage();
+    if (repeatTableHeader && drawTableHeader) drawTableHeader({ ensure: false });
+    return true;
+  };
 
-    ensureSpace(totalRows.length * 16 + 18);
+  const drawFlowingLines = (lines, {
+    x = PAGE_MARGIN,
+    font = regularFont,
+    size = 9.6,
+    lineHeight = 12,
+    textColor = color.body,
+    gapAfter = 0,
+  } = {}) => {
+    for (const line of lines) {
+      ensureSpace(lineHeight);
+      if (line) drawText(line, { x, y: state.y, font, size, color: textColor });
+      state.y -= lineHeight;
+    }
+    state.y -= gapAfter;
+  };
 
-    totalRows.forEach((row, index) => {
-      const rowTopY = y - index * 16;
-      const labelFont = row.font || regularFont;
-      const valueFont = row.font || regularFont;
-      const labelSize = row.labelSize || 8.8;
-      const valueSize = row.valueSize || 8.8;
+  const drawParagraph = (text, {
+    x = PAGE_MARGIN,
+    width = CONTENT_WIDTH,
+    font = regularFont,
+    size = 9.6,
+    lineHeight = 12,
+    textColor = color.body,
+    gapAfter = 0,
+  } = {}) => {
+    const lines = wrapText(text, font, size, width);
+    drawFlowingLines(lines, { x, font, size, lineHeight, textColor, gapAfter });
+    return lines.length;
+  };
 
+  const drawWorkSection = () => {
+    if (model.introText) {
+      const introLines = wrapText(model.introText, regularFont, 9.4, CONTENT_WIDTH);
+      ensureSpace(Math.min(introLines.length, 2) * 12 + 12);
+      drawFlowingLines(introLines, {
+        size: 9.4,
+        lineHeight: 12,
+        textColor: color.body,
+        gapAfter: 12,
+      });
+    }
+    if (!model.work.text) return;
+    const bodyLines = wrapText(model.work.text, regularFont, 9.6, CONTENT_WIDTH);
+    ensureSpace(19 + Math.min(bodyLines.length, 2) * 12);
+    drawText(headingText(model.work.heading), {
+      x: PAGE_MARGIN,
+      y: state.y,
+      font: boldFont,
+      size: 10.2,
+      color: color.black,
+    });
+    state.y -= 17;
+    drawFlowingLines(bodyLines, {
+      size: 9.6,
+      lineHeight: 12,
+      textColor: color.body,
+      gapAfter: 15,
+    });
+  };
+
+  const descriptionWidth = CONTENT_WIDTH * 0.59;
+  const qtyWidth = CONTENT_WIDTH * 0.08;
+  const unitWidth = CONTENT_WIDTH * 0.16;
+  const totalWidth = CONTENT_WIDTH - descriptionWidth - qtyWidth - unitWidth;
+  const columns = [
+    { label: model.table.headers[0], x: PAGE_MARGIN + 7, width: descriptionWidth - 13, align: "left" },
+    { label: model.table.headers[1], x: PAGE_MARGIN + descriptionWidth, width: qtyWidth, align: "center" },
+    { label: model.table.headers[2], x: PAGE_MARGIN + descriptionWidth + qtyWidth, width: unitWidth - 7, align: "right" },
+    { label: model.table.headers[3], x: PAGE_MARGIN + descriptionWidth + qtyWidth + unitWidth, width: totalWidth - 7, align: "right" },
+  ];
+
+  const drawColumnText = (text, column, y, { font = regularFont, size = 8.7, textColor = color.body } = {}) => {
+    const normalizedText = normalizePdfText(text);
+    let x = column.x;
+    if (column.align === "right") x = column.x + column.width - textWidth(font, normalizedText, size);
+    if (column.align === "center") x = column.x + (column.width - textWidth(font, normalizedText, size)) / 2;
+    drawText(normalizedText, { x, y, font, size, color: textColor });
+  };
+
+  drawTableHeader = ({ ensure = true } = {}) => {
+    if (ensure) ensureSpace(27);
+    const topY = state.y;
+    state.page.drawRectangle({
+      x: PAGE_MARGIN,
+      y: topY - 24,
+      width: CONTENT_WIDTH,
+      height: 24,
+      color: color.tableHeader,
+    });
+    for (const column of columns) {
+      drawColumnText(column.label.toUpperCase(), column, topY - 16, {
+        font: boldFont,
+        size: 8.2,
+        textColor: color.black,
+      });
+    }
+    state.y = topY - 24;
+  };
+
+  const drawLineItem = (item) => {
+    let remainingLines = wrapText(item.description, regularFont, 8.9, columns[0].width);
+    if (!remainingLines.length) remainingLines = [`${model.documentLabel} item`];
+    let firstChunk = true;
+    while (remainingLines.length) {
+      if (state.y - 25 < CONTENT_BOTTOM) {
+        startPage();
+        drawTableHeader({ ensure: false });
+      }
+      const availableHeight = state.y - CONTENT_BOTTOM;
+      const maximumLines = Math.max(1, Math.floor((availableHeight - 14) / 10.6));
+      const chunkLines = remainingLines.splice(0, maximumLines);
+      const rowHeight = Math.max(27, chunkLines.length * 10.6 + 14);
+      if (state.y - rowHeight < CONTENT_BOTTOM) {
+        remainingLines.unshift(...chunkLines);
+        startPage();
+        drawTableHeader({ ensure: false });
+        continue;
+      }
+      const topY = state.y;
+      let descriptionY = topY - 13;
+      for (const line of chunkLines) {
+        drawText(line, {
+          x: columns[0].x,
+          y: descriptionY,
+          font: regularFont,
+          size: 8.9,
+          color: color.body,
+        });
+        descriptionY -= 10.6;
+      }
+      if (firstChunk) {
+        drawColumnText(formatQuantity(item.qty), columns[1], topY - 13, { size: 8.9 });
+        drawColumnText(money(item.rate), columns[2], topY - 13, { size: 8.9 });
+        drawColumnText(money(item.total), columns[3], topY - 13, { size: 8.9 });
+      }
+      state.page.drawLine({
+        start: { x: PAGE_MARGIN, y: topY - rowHeight },
+        end: { x: CONTENT_RIGHT, y: topY - rowHeight },
+        thickness: 0.55,
+        color: color.line,
+      });
+      state.y = topY - rowHeight;
+      firstChunk = false;
+    }
+  };
+
+  const drawTotals = () => {
+    const rows = model.financials.rows;
+    const blockHeight = 20 + rows.reduce((height, row) => height + (row.highlight ? 27 : 17), 0) + 8;
+    ensureSpace(blockHeight);
+    state.y -= 13;
+    state.page.drawLine({
+      start: { x: PAGE_MARGIN, y: state.y },
+      end: { x: CONTENT_RIGHT, y: state.y },
+      thickness: 0.7,
+      color: color.line,
+    });
+    state.y -= 15;
+    const boxWidth = 216;
+    const boxX = CONTENT_RIGHT - boxWidth;
+    const labelRight = boxX + 108;
+    for (const row of rows) {
+      const rowHeight = row.highlight ? 27 : 17;
+      const topY = state.y;
+      const labelSize = row.highlight ? 11.2 : 9.2;
+      const valueSize = row.highlight ? 11.2 : 9.2;
+      const rowFont = row.highlight || row.strong ? boldFont : regularFont;
+      const baselineY = topY - rowHeight + (row.highlight ? 8.5 : 5.5);
+      const label = `${row.label.toUpperCase()}:`;
       if (row.highlight) {
-        page.drawRectangle({
-          x: totalBoxX - 8,
-          y: rowTopY - 12,
-          width: totalBoxWidth + 8,
-          height: 18,
-          color: lightAccent,
-          borderWidth: 1,
-          borderColor: accent,
+        state.page.drawRectangle({
+          x: boxX - 7,
+          y: topY - rowHeight,
+          width: boxWidth + 7,
+          height: rowHeight,
+          color: color.highlight,
         });
       }
-
-      page.drawText(row.label, {
-        x: totalBoxX,
-        y: rowTopY - 7,
-        font: labelFont,
+      drawText(label, {
+        x: labelRight - textWidth(rowFont, label, labelSize),
+        y: baselineY,
+        font: rowFont,
         size: labelSize,
-        color: row.highlight ? accent : rgb(0.18, 0.18, 0.18),
+        color: color.black,
       });
-
-      page.drawText(row.value, {
-        x: totalBoxX + totalBoxWidth - valueFont.widthOfTextAtSize(row.value, valueSize),
-        y: rowTopY - 7,
-        font: valueFont,
+      drawRightText(row.value, {
+        right: CONTENT_RIGHT - 5,
+        y: baselineY,
+        font: rowFont,
         size: valueSize,
-        color: rgb(0.08, 0.08, 0.08),
+        color: color.black,
       });
-    });
+      state.y -= rowHeight;
+    }
+    state.y -= 8;
+  };
 
-    y -= totalRows.length * 16 + 8;
-  } else {
-    ensureSpace(34);
-    const totalBoxWidth = Math.min(205, contentInnerRect.width * 0.4);
-    const totalBoxX = contentInnerRect.x + contentInnerRect.width - totalBoxWidth;
-    page.drawRectangle({
-      x: totalBoxX,
-      y: y - 21,
-      width: totalBoxWidth,
-      height: 24,
-      color: lightAccent,
-      borderWidth: 1,
-      borderColor: accent,
-    });
-    const totalLabel = `${documentLabel} Total`;
-    page.drawText(totalLabel, {
-      x: totalBoxX + 12,
-      y: y - 13,
-      font: boldFont,
-      size: 9.4,
-      color: accent,
-    });
-    const grandTotal = money(calculateDocTotal(document.items || []));
-    page.drawText(grandTotal, {
-      x: totalBoxX + totalBoxWidth - 12 - boldFont.widthOfTextAtSize(grandTotal, 10),
-      y: y - 13,
-      font: boldFont,
-      size: 10,
-      color: rgb(0.08, 0.08, 0.08),
-    });
-    y -= 30;
-  }
+  const measureClosingSection = () => {
+    const termsLines = wrapText(model.terms.text, regularFont, 9.2, CONTENT_WIDTH);
+    let height = 45 + Math.max(termsLines.length, 1) * 11.5 + (model.type === "invoice" ? 10 : 4);
+    if (model.type === "invoice") {
+      const addressLines = splitAddressLines(model.payment?.chequeAddress)
+        .flatMap((line) => wrapText(line, regularFont, 8.8, 190));
+      height += 18 + Math.max(model.payment?.bankRows?.length || 0, addressLines.length, 1) * 11;
+      if (model.payment?.remittanceEmail) height += 10;
+    }
+    return height + 1;
+  };
 
-  const documentNotes = getVisibleDocumentNotes(type, document.notes);
-  if (documentNotes) {
-    drawParagraph({
-      text: normalizedTemplate.notesHeading,
-      font: boldFont,
-      size: 10.6,
-      lineHeight: 12,
-      color: accent,
-      gapAfter: 3,
-    });
-    drawParagraph({
-      text: documentNotes,
-      size: 9.2,
-      lineHeight: 11.2,
-      gapAfter: 8,
-    });
-  }
+  const positionClosingSection = () => {
+    const estimatedHeight = measureClosingSection();
+    if (
+      state.pageIndex === 0
+      && state.y > PAYMENT_ANCHOR_Y
+      && PAYMENT_ANCHOR_Y - estimatedHeight >= CONTENT_BOTTOM
+    ) {
+      state.y = PAYMENT_ANCHOR_Y;
+      return;
+    }
+    if (state.y - estimatedHeight < CONTENT_BOTTOM) startPage();
+  };
 
-  drawParagraph({
-    text: normalizedTemplate.termsHeading,
-    font: boldFont,
-    size: 10.6,
-    lineHeight: 12,
-    color: accent,
-    gapAfter: 3,
-  });
-  drawParagraph({
-    text: fillTemplateText(normalizedTemplate.termsText, context),
-    size: 9.2,
-    lineHeight: 11.2,
-    gapAfter: 8,
-  });
+  const drawClosingHeader = () => {
+    state.page.drawLine({
+      start: { x: PAGE_MARGIN, y: state.y },
+      end: { x: CONTENT_RIGHT, y: state.y },
+      thickness: 0.7,
+      color: color.line,
+    });
+    state.y -= 25;
+    drawText(model.terms.heading, {
+      x: PAGE_MARGIN,
+      y: state.y,
+      font: regularFont,
+      size: 14.5,
+      color: color.black,
+    });
+    if (model.type === "invoice") {
+      drawRightText(model.payment.summaryReference, {
+        y: state.y + 3,
+        font: regularFont,
+        size: 8.8,
+        color: color.body,
+      });
+      drawRightText(model.payment.summaryDue, {
+        y: state.y - 8,
+        font: regularFont,
+        size: 8.8,
+        color: color.body,
+      });
+    } else if (model.quoteSummary) {
+      drawRightText(model.quoteSummary.reference, {
+        y: state.y + 3,
+        font: regularFont,
+        size: 8.8,
+        color: color.body,
+      });
+      if (model.quoteSummary.validity) {
+        drawRightText(model.quoteSummary.validity, {
+          y: state.y - 8,
+          font: regularFont,
+          size: 8.8,
+          color: color.body,
+        });
+      }
+    }
+    state.y -= 20;
+  };
 
-  if (type === "invoice" && normalizedStampText) {
-    const stampSize = fitTextSize(normalizedStampText, boldFont, PAGE_WIDTH * 0.82, 92, 38);
-    const stampWidth = boldFont.widthOfTextAtSize(normalizedStampText, stampSize);
-    for (const targetPage of pdfDoc.getPages()) {
-      targetPage.drawText(normalizedStampText, {
+  const drawBankAndChequeDetails = () => {
+    const bankRows = model.payment?.bankRows || [];
+    const chequeLines = splitAddressLines(model.payment?.chequeAddress)
+      .flatMap((line) => wrapText(line, regularFont, 8.8, 190));
+    if (!bankRows.length && !chequeLines.length) return;
+    const blockHeight = 18 + Math.max(bankRows.length, chequeLines.length, 1) * 11;
+    ensureSpace(blockHeight + 8);
+    const leftHeadingX = PAGE_MARGIN + 40;
+    const leftContentX = PAGE_MARGIN + 105;
+    const rightHeadingX = PAGE_MARGIN + 328;
+    const rightContentX = PAGE_MARGIN + 373;
+    if (bankRows.length) {
+      drawText("Bank Details", {
+        x: leftHeadingX,
+        y: state.y,
+        font: boldFont,
+        size: 9.1,
+        color: color.black,
+      });
+    }
+    if (chequeLines.length) {
+      drawText("Cheque", {
+        x: rightHeadingX,
+        y: state.y,
+        font: boldFont,
+        size: 9.1,
+        color: color.black,
+      });
+    }
+    let bankY = state.y;
+    for (const row of bankRows) {
+      const label = `${row.label}:`;
+      drawText(label, {
+        x: leftContentX,
+        y: bankY,
+        font: boldFont,
+        size: 8.8,
+        color: color.black,
+      });
+      drawText(row.value, {
+        x: leftContentX + Math.max(58, textWidth(boldFont, label, 8.8) + 7),
+        y: bankY,
+        font: regularFont,
+        size: 8.8,
+        color: color.body,
+      });
+      bankY -= 11;
+    }
+    let chequeY = state.y;
+    for (const line of chequeLines) {
+      drawText(line, {
+        x: rightContentX,
+        y: chequeY,
+        font: regularFont,
+        size: 8.8,
+        color: color.body,
+      });
+      chequeY -= 11;
+    }
+    state.y -= blockHeight;
+  };
+
+  const drawClosingSection = () => {
+    positionClosingSection();
+    const firstTermsLineHeight = model.terms.text ? 11.5 : 0;
+    ensureSpace(45 + firstTermsLineHeight);
+    drawClosingHeader();
+    if (model.terms.text) {
+      drawParagraph(model.terms.text, {
+        size: 9.2,
+        lineHeight: 11.5,
+        textColor: color.body,
+        gapAfter: model.type === "invoice" ? 10 : 4,
+      });
+    }
+    if (model.type === "invoice") {
+      drawBankAndChequeDetails();
+      if (model.payment?.remittanceEmail) {
+        ensureSpace(10);
+        const remittanceText = `Please email remittance advice to ${model.payment.remittanceEmail}`;
+        const remittanceSize = fitTextSize(remittanceText, regularFont, CONTENT_WIDTH, 8.7, 7.5);
+        drawCenteredText(remittanceText, {
+          center: PAGE_WIDTH / 2,
+          y: state.y,
+          font: regularFont,
+          size: remittanceSize,
+          color: color.body,
+        });
+        state.y -= 10;
+      }
+    }
+  };
+
+  const drawPageFooters = () => {
+    pages.forEach((targetPage, index) => {
+      const footerText = normalizePdfText(model.footerText);
+      const hasPageNumber = pages.length > 1;
+      if (!footerText && !hasPageNumber) return;
+      targetPage.drawLine({
+        start: { x: PAGE_MARGIN, y: 43 },
+        end: { x: CONTENT_RIGHT, y: 43 },
+        thickness: 0.55,
+        color: color.line,
+      });
+      if (footerText) {
+        const availableWidth = hasPageNumber ? CONTENT_WIDTH - 80 : CONTENT_WIDTH;
+        const fittedFooter = truncateTextToWidth(footerText, regularFont, 7.5, availableWidth);
+        targetPage.drawText(fittedFooter, {
+          x: PAGE_MARGIN,
+          y: 26,
+          font: regularFont,
+          size: 7.5,
+          color: color.muted,
+        });
+      }
+      if (hasPageNumber) {
+        const pageText = `Page ${index + 1} of ${pages.length}`;
+        targetPage.drawText(pageText, {
+          x: CONTENT_RIGHT - textWidth(regularFont, pageText, 7.5),
+          y: 26,
+          font: regularFont,
+          size: 7.5,
+          color: color.muted,
+        });
+      }
+    });
+  };
+
+  const drawReceiptStamp = () => {
+    if (model.type !== "invoice" || !normalizedStampText) return;
+    const stampSize = fitTextSize(normalizedStampText, boldFont, PAGE_WIDTH * 0.8, 84, 36);
+    const stampWidth = textWidth(boldFont, normalizedStampText, stampSize);
+    for (const targetPage of pages) {
+      targetPage.drawText(normalizePdfText(normalizedStampText), {
         x: (PAGE_WIDTH - stampWidth) / 2,
         y: PAGE_HEIGHT * 0.48,
         font: boldFont,
         size: stampSize,
-        color: rgb(0.86, 0.05, 0.05),
+        color: color.stamp,
         rotate: degrees(32),
-        opacity: 0.34,
+        opacity: 0.28,
       });
     }
-  }
+  };
+
+  startPage({ first: true });
+  drawWorkSection();
+  drawTableHeader();
+  for (const item of model.table.items) drawLineItem(item);
+  drawTotals();
+  drawClosingSection();
+  drawPageFooters();
+  drawReceiptStamp();
 
   return {
     bytes: await pdfDoc.save(),
-    filename: `${buildDocumentReference(job, type)}.pdf`,
+    filename: `${model.reference}.pdf`,
   };
 }
 
 export async function generateQuotePdf({ job, quote, template }) {
-  return generateDocumentPdf({
-    job,
-    document: quote,
-    template,
-    type: "quote",
-  });
+  return generateDocumentPdf({ job, document: quote, template, type: "quote" });
 }
