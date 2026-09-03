@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
+import MobileWorkspaceNavigation from "@/components/app/MobileWorkspaceNavigation";
 import CalendarManager from "@/components/calendar/CalendarManager";
 import CustomerManager from "@/components/customers/CustomerManager";
 import InventoryManager from "@/components/inventory/InventoryManager";
@@ -8,6 +9,7 @@ import JobHistoryManager from "@/components/jobs/JobHistoryManager";
 import MaintenanceManager from "@/components/maintenance/MaintenanceManager";
 import JobsMapManager from "@/components/map/JobsMapManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
+import MobileServiceBoard from "@/components/service-board/MobileServiceBoard";
 import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPanel } from "@/components/service-board/OfficeBoard";
 import SettingsManager from "@/components/settings/SettingsManager";
 import StaffManager from "@/components/staff/StaffManager";
@@ -17,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   LOGO_SRC,
   addMonths,
@@ -43,6 +46,7 @@ const FAVICON_SRC = "/favicon.png";
 
 export default function WorkspaceShell({ auth, chrome, data, derived, supplierManualState, actions }) {
   const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useState([]);
+  const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
     activeSection,
@@ -68,6 +72,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
     showServiceBoardTagLabels,
   } = chrome;
   const {
+    currentSection,
     dashboard,
     filteredJobs,
     isServiceBoardFullScreen,
@@ -116,6 +121,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
+  const desktopServiceBoardFullScreen = isDesktopLayout && isServiceBoardFullScreen;
 
   const handleHideServiceBoardColumn = (status) => {
     setServiceBoardHiddenColumns((currentStatuses) => (
@@ -190,8 +196,23 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
 
   return (
     <>
-      {!isServiceBoardFullScreen && (
-        <aside className={isIconOnlySidebar ? "w-full lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]" : "lg:fixed lg:inset-y-0 lg:left-0 lg:w-[var(--sidebar-width)]"}>
+      {!isDesktopLayout ? (
+        <MobileWorkspaceNavigation
+          activeSection={activeSection}
+          authUser={authUser}
+          canManageBusiness={canManageBusiness}
+          currentSection={currentSection}
+          items={visibleSideNavItems}
+          onLogout={handleLogout}
+          onNavigate={setActiveSection}
+          onNewJob={() => setJobFormOpen(true)}
+          roleLabel={roleMenuLabel}
+          themePalette={themePalette}
+        />
+      ) : null}
+
+      {!desktopServiceBoardFullScreen && (
+        <aside className={isIconOnlySidebar ? "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[var(--sidebar-width)]" : "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[var(--sidebar-width)]"}>
           <div
             className="overflow-hidden border shadow-sm backdrop-blur lg:flex lg:h-screen lg:flex-col lg:rounded-none lg:border-y-0 lg:border-r lg:border-l-0"
             style={themePalette.sidebarShell}
@@ -226,7 +247,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                 )}
               </div>
 
-              <div className={isIconOnlySidebar ? "flex flex-1 items-center gap-2 overflow-x-auto lg:mt-4 lg:grid lg:justify-center" : "mt-4 grid gap-2"}>
+              <nav
+                aria-label="Application"
+                className={isIconOnlySidebar ? "flex flex-1 items-center gap-2 overflow-x-auto lg:mt-4 lg:grid lg:justify-center" : "mt-4 grid gap-2"}
+              >
                 {visibleSideNavItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeSection === item.id;
@@ -250,6 +274,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                         style={isActive ? themePalette.sidebarActiveButton : themePalette.sidebarInactiveButton}
                         title={item.label}
                         aria-label={item.label}
+                        aria-current={isActive ? "page" : undefined}
                       >
                         <div
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
@@ -306,7 +331,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
                     </div>
                   );
                 })}
-              </div>
+              </nav>
 
               <div className={isIconOnlySidebar ? "ml-2 shrink-0 border-l pl-2 lg:ml-0 lg:mt-4 lg:grid lg:justify-center lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4" : "mt-6 border-t pt-4"} style={{ borderColor: themePalette.borderColor }}>
                 <div className={isIconOnlySidebar ? "h-12 w-12 rounded-2xl border p-1 text-sm" : "rounded-2xl border p-4 text-sm"} style={themePalette.sidebarInactiveButton}>
@@ -355,9 +380,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
 
       <div
         className={
-          isServiceBoardFullScreen
+          desktopServiceBoardFullScreen
             ? "min-w-0 space-y-4 px-3 py-3 sm:px-4 sm:py-4"
-            : "min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] py-[var(--content-padding-y-mobile)] sm:px-[var(--content-padding-x-sm)] sm:py-[var(--content-padding-y-sm)] lg:px-[var(--content-padding-x-lg)] lg:py-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)]"
+            : "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] py-[var(--content-padding-y-mobile)] sm:px-[var(--content-padding-x-sm)] sm:py-[var(--content-padding-y-sm)] lg:px-[var(--content-padding-x-lg)] lg:py-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)]"
         }
       >
         {authError ? (
@@ -368,7 +393,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
           </Card>
         ) : null}
 
-        {!isServiceBoardFullScreen && activeSection === "service-board" ? (
+        {isDesktopLayout && !desktopServiceBoardFullScreen && activeSection === "service-board" ? (
           <Card className="overflow-hidden rounded-xl shadow-xl" style={themePalette.heroCard}>
             <CardContent className="flex min-h-[104px] flex-col justify-center p-4 md:px-5 md:py-5">
               {renderServiceBoardControls("hero")}
@@ -377,8 +402,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
         ) : null}
 
         {activeSection === "service-board" ? (
-          <div className="space-y-6">
-            {isServiceBoardFullScreen ? (
+          <div className="min-w-0 space-y-6">
+            {desktopServiceBoardFullScreen ? (
               <Card className="sticky top-3 z-20 rounded-xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
                 <CardContent className="grid gap-3 p-3 md:p-4">
                   {renderServiceBoardControls("panel")}
@@ -386,57 +411,90 @@ export default function WorkspaceShell({ auth, chrome, data, derived, supplierMa
               </Card>
             ) : null}
 
-            <ServiceBoardTomorrowPanel
-              jobs={derived.tomorrowJobs}
-              open={serviceBoardTomorrowPanelOpen}
-              tomorrowDate={derived.tomorrowPlanningDate}
-              onOpenChange={setServiceBoardTomorrowPanelOpen}
-              onOpenJob={handleOpenJob}
-              onRemoveAllJobs={handleRemoveAllJobsFromTomorrow}
-              onRemoveJob={handleRemoveJobFromTomorrow}
-              formatDate={formatDate}
-            />
+            {isDesktopLayout ? (
+              <>
+                <ServiceBoardTomorrowPanel
+                  jobs={derived.tomorrowJobs}
+                  open={serviceBoardTomorrowPanelOpen}
+                  tomorrowDate={derived.tomorrowPlanningDate}
+                  onOpenChange={setServiceBoardTomorrowPanelOpen}
+                  onOpenJob={handleOpenJob}
+                  onRemoveAllJobs={handleRemoveAllJobsFromTomorrow}
+                  onRemoveJob={handleRemoveJobFromTomorrow}
+                  formatDate={formatDate}
+                />
 
-            <OfficeBoard
-              jobs={filteredJobs}
-              customers={data.customers}
-              onDropJob={handleStatusChange}
-              onOpenJob={handleOpenJob}
-              onQuickStatusChange={handleStatusChange}
-              supplierManuals={supplierManualState.manuals}
-              allowDragging
-              columnSortModes={serviceBoardColumnSorts}
-              columnViewModes={serviceBoardColumnViews}
-              onPlanJobForTomorrow={handlePlanJobForTomorrow}
-              showTagLabels={showServiceBoardTagLabels}
-              findSupplierManualMatches={findSupplierManualMatches}
-              getCustomerSiteAccessNote={getCustomerSiteAccessNote}
-              getInvoiceStatus={getInvoiceStatus}
-              formatDate={formatDate}
-              tomorrowPlanningDate={derived.tomorrowPlanningDate}
-              hiddenColumnStatuses={serviceBoardHiddenColumns}
-              onHideColumn={handleHideServiceBoardColumn}
-              onColumnSortModeChange={(status, sortMode) =>
-                setServiceBoardColumnSorts((prev) =>
-                  prev[status] === sortMode
-                    ? prev
-                    : {
-                        ...prev,
-                        [status]: sortMode,
-                      }
-                )
-              }
-              onColumnViewModeChange={(status, viewMode) =>
-                setServiceBoardColumnViews((prev) =>
-                  prev[status] === viewMode
-                    ? prev
-                    : {
-                        ...prev,
-                        [status]: viewMode,
-                      }
-                )
-              }
-            />
+                <OfficeBoard
+                  jobs={filteredJobs}
+                  customers={data.customers}
+                  onDropJob={handleStatusChange}
+                  onOpenJob={handleOpenJob}
+                  supplierManuals={supplierManualState.manuals}
+                  allowDragging
+                  columnSortModes={serviceBoardColumnSorts}
+                  columnViewModes={serviceBoardColumnViews}
+                  onPlanJobForTomorrow={handlePlanJobForTomorrow}
+                  showTagLabels={showServiceBoardTagLabels}
+                  findSupplierManualMatches={findSupplierManualMatches}
+                  getCustomerSiteAccessNote={getCustomerSiteAccessNote}
+                  getInvoiceStatus={getInvoiceStatus}
+                  formatDate={formatDate}
+                  tomorrowPlanningDate={derived.tomorrowPlanningDate}
+                  hiddenColumnStatuses={serviceBoardHiddenColumns}
+                  onHideColumn={handleHideServiceBoardColumn}
+                  onColumnSortModeChange={(status, sortMode) =>
+                    setServiceBoardColumnSorts((prev) =>
+                      prev[status] === sortMode
+                        ? prev
+                        : {
+                            ...prev,
+                            [status]: sortMode,
+                          }
+                    )
+                  }
+                  onColumnViewModeChange={(status, viewMode) =>
+                    setServiceBoardColumnViews((prev) =>
+                      prev[status] === viewMode
+                        ? prev
+                        : {
+                            ...prev,
+                            [status]: viewMode,
+                          }
+                    )
+                  }
+                />
+              </>
+            ) : (
+              <MobileServiceBoard
+                canManageTomorrow={canManageBusiness}
+                columnSortModes={serviceBoardColumnSorts}
+                customers={data.customers}
+                findSupplierManualMatches={findSupplierManualMatches}
+                formatDate={formatDate}
+                getCustomerSiteAccessNote={getCustomerSiteAccessNote}
+                getInvoiceStatus={getInvoiceStatus}
+                jobs={filteredJobs}
+                officeSearch={officeSearch}
+                onColumnSortModeChange={(status, sortMode) =>
+                  setServiceBoardColumnSorts((prev) =>
+                    prev[status] === sortMode ? prev : { ...prev, [status]: sortMode }
+                  )
+                }
+                onOpenJob={handleOpenJob}
+                onPlanJobForTomorrow={handlePlanJobForTomorrow}
+                onRemoveAllJobsFromTomorrow={handleRemoveAllJobsFromTomorrow}
+                onRemoveJobFromTomorrow={handleRemoveJobFromTomorrow}
+                onSearchChange={setOfficeSearch}
+                onShowTagLabelsChange={setShowServiceBoardTagLabels}
+                onStatusChange={handleStatusChange}
+                onUrgencyChange={setShowHighUrgencyOnly}
+                showHighUrgencyOnly={showHighUrgencyOnly}
+                showTagLabels={showServiceBoardTagLabels}
+                supplierManuals={supplierManualState.manuals}
+                tomorrowJobs={derived.tomorrowJobs}
+                tomorrowPlanningDate={derived.tomorrowPlanningDate}
+              />
+            )}
           </div>
         ) : null}
 

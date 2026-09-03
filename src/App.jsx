@@ -144,7 +144,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen" style={themePalette.rootStyle}>
+    <div className="min-h-[100dvh]" style={themePalette.rootStyle}>
       <WorkspaceShell
         auth={session}
         chrome={{
