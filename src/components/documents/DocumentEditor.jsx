@@ -63,6 +63,7 @@ export default function DocumentEditor({
   const documentLabel = type === "quote" ? "Quote" : "Invoice";
   const recipientEmail = getDocumentRecipientEmail(job);
   const recipientName = getDocumentRecipientName(job);
+  const ocNumber = String(job.ocNumber || "").trim();
   const paymentReceiptStamp = type === "invoice" && paymentSummary?.paidAmount > 0 && paymentSummary?.total > 0
     ? paymentSummary.balanceAmount > 0
       ? "PART PAYMENT"
@@ -180,18 +181,22 @@ export default function DocumentEditor({
               </FormField>
             </div>
 
-            {type === "invoice" && (
+            {(type === "invoice" || ocNumber) && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Due date">
-                  <Input
-                    type="date"
-                    value={docState.dueDate || ""}
-                    onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value }))}
-                  />
-                </FormField>
-                <FormField label="OC number">
-                  <Input value={job.ocNumber || "Not set"} disabled />
-                </FormField>
+                {type === "invoice" ? (
+                  <FormField label="Due date">
+                    <Input
+                      type="date"
+                      value={docState.dueDate || ""}
+                      onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value }))}
+                    />
+                  </FormField>
+                ) : null}
+                {ocNumber ? (
+                  <FormField label="OC number">
+                    <Input value={ocNumber} disabled />
+                  </FormField>
+                ) : null}
               </div>
             )}
 

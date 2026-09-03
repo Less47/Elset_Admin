@@ -431,10 +431,10 @@ export default function JobDetailsDialog({
                     </div>
                     {onOpenDocument ? (
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("quote")}>
+                        <Button variant="outline" size="sm" className="rounded-xl border-sky-600 bg-sky-600 text-white hover:bg-sky-700 hover:text-white dark:border-sky-600 dark:bg-sky-600 dark:hover:bg-sky-700 dark:hover:text-white" onClick={() => onOpenDocument("quote")}>
                           Open Quote Editor
                         </Button>
-                        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => onOpenDocument("invoice")}>
+                        <Button variant="outline" size="sm" className="rounded-xl border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white dark:border-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 dark:hover:text-white" onClick={() => onOpenDocument("invoice")}>
                           Open Invoice Editor
                         </Button>
                       </div>

@@ -278,6 +278,7 @@ export function buildDocumentPresentationModel({ job = {}, document = {}, templa
     title,
     documentLabel,
     reference,
+    ocNumber: cleanText(job?.ocNumber),
     issueDate,
     issueDateDisplay: cleanText(context.issueDateDisplay) || formatDocumentDate(issueDate),
     dueDate,
@@ -579,6 +580,15 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
       color: color.body,
     });
     rightY -= 11;
+    if (model.ocNumber) {
+      drawRightText(`OC Number: ${model.ocNumber}`, {
+        y: rightY,
+        font: regularFont,
+        size: 9.2,
+        color: color.body,
+      });
+      rightY -= 11;
+    }
     if (model.issueDateDisplay) {
       drawRightText(model.issueDateDisplay, {
         y: rightY,

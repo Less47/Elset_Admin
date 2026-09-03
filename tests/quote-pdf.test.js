@@ -32,6 +32,7 @@ const invoiceJob = {
   customerName: "Colour Earth Wrought Ironworks",
   customerEmail: "accounts@example.test",
   jobAddress: "12 E Circuit, Sunshine West VIC 3020",
+  ocNumber: "OC-INVOICE-35",
   billingContact: {
     name: "Riggo Jeff",
     email: "accounts@example.test",
@@ -89,6 +90,7 @@ test("invoice presentation matches the ELSET commercial hierarchy and existing f
   assert.equal(model.layout.tableCellBorders, false);
   assert.equal(model.title, "Tax Invoice");
   assert.equal(model.reference, "INV-0035");
+  assert.equal(model.ocNumber, "OC-INVOICE-35");
   assert.equal(model.issueDateDisplay, "16th September 2025");
   assert.deepEqual(model.customerLines, [
     "Riggo Jeff",
@@ -142,6 +144,7 @@ test("quote presentation uses scope and validity while excluding invoice payment
       description: "Inspect the automation and replace the safety sensor.",
       customerName: "Sample Customer",
       jobAddress: "",
+      ocNumber: "OC-QUOTE-42",
       billingContact: { name: "Sample Customer" },
     },
     document: {
@@ -162,6 +165,7 @@ test("quote presentation uses scope and validity while excluding invoice payment
 
   assert.equal(model.title, "Quote");
   assert.equal(model.reference, "QT-0042");
+  assert.equal(model.ocNumber, "OC-QUOTE-42");
   assert.deepEqual(model.customerLines, ["Sample Customer"]);
   assert.equal(model.work.heading, "Scope of Work");
   assert.match(model.work.text, /Inspect the automation/);
@@ -183,6 +187,14 @@ test("quote presentation uses scope and validity while excluding invoice payment
     "terms",
     "footer",
   ]);
+
+  const modelWithoutOcNumber = buildDocumentPresentationModel({
+    job: { id: "quote-without-oc", jobNumber: 43, ocNumber: "   " },
+    document: { type: "quote", issueDate: "2025-09-16", items: [] },
+    template: defaultQuoteTemplate,
+    type: "quote",
+  });
+  assert.equal(modelWithoutOcNumber.ocNumber, "");
 });
 
 test("invoice PDF generation produces a valid sharp-text A4 document and receipt variant", async () => {

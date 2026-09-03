@@ -89,7 +89,6 @@ const serviceM8ImportOptionFields = [
 ];
 
 const templateFields = [
-  { key: "accentColor", label: "Accent colour", type: "color" },
   { key: "quoteHeading", label: "Document heading" },
   { key: "introText", label: "Intro text", multiline: true, rows: 4, documentTypes: ["quote", "invoice"] },
   { key: "notesHeading", label: "Notes heading", documentTypes: ["quote", "invoice"] },
@@ -811,7 +810,7 @@ export default function SettingsManager({
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Template Editor</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">Adjust wording, headings, section text, and colours for each document type. Company and bank details come from Preferences.</p>
+                  <p className="mt-1 text-sm text-slate-600">Adjust wording, headings, and section text for each document type. Company and bank details come from Preferences.</p>
                 </div>
                 <div className="w-full max-w-[220px]">
                   <Select value={currentTemplateType} onValueChange={onActiveTemplateTypeChange}>
@@ -845,19 +844,6 @@ export default function SettingsManager({
                             value={activeTemplate[field.key]}
                             onChange={(event) => updateTemplateField(field.key, event.target.value)}
                           />
-                        ) : field.type === "color" ? (
-                          <div className="flex items-center gap-3">
-                            <Input
-                              type="color"
-                              className="h-10 w-16 rounded-xl p-1"
-                              value={normalizeHexColor(activeTemplate[field.key], "#0F172A")}
-                              onChange={(event) => updateTemplateField(field.key, event.target.value)}
-                            />
-                            <Input
-                              value={activeTemplate[field.key]}
-                              onChange={(event) => updateTemplateField(field.key, event.target.value)}
-                            />
-                          </div>
                         ) : (
                           <Input
                             value={activeTemplate[field.key]}
