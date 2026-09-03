@@ -12,6 +12,7 @@
     "backup:fly": "node scripts/backup-fly-data.mjs",
     "backup:workspace": "node scripts/backup-workspace-sqlite.mjs",
     "migrate:workspace": "node scripts/migrate-workspace.mjs",
+    "create:local-admin": "node scripts/create-local-admin.mjs",
     "reset:local-admin-password": "node scripts/reset-local-admin-password.mjs",
     "demo:data": "node scripts/generate-demo-data.mjs",
     "build": "vite build",

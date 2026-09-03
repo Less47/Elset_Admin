@@ -259,7 +259,7 @@ flyctl secrets list -a elset-admin
 The sidebar includes a `Quote Template` section where admin users can edit:
 
 - company details shown on the PDF
-- heading text and branding color
+- document heading text
 - intro, terms, and footer content
 - placeholder-based text such as `{{customerName}}`, `{{jobTitle}}`, and `{{total}}`
 

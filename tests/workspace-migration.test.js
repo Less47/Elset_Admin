@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   WORKSPACE_SCHEMA_VERSION,
   migrateWorkspaceSchema,
@@ -30,6 +30,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const fixturePath = path.join(repoRoot, "fixtures", "demo-workspace.json");
+const serverAuthUrl = pathToFileURL(path.join(repoRoot, "server-auth.js")).href;
 
 function readFixture() {
   return JSON.parse(fs.readFileSync(fixturePath, "utf8"));
@@ -309,7 +310,7 @@ test("production auth startup guard does not create a container-local auth direc
     const result = spawnSync(process.execPath, [
       "--input-type=module",
       "--eval",
-      `await import(${JSON.stringify(path.join(repoRoot, "server-auth.js"))});`,
+      `await import(${JSON.stringify(serverAuthUrl)});`,
     ], {
       cwd: repoRoot,
       encoding: "utf8",
@@ -346,7 +347,7 @@ test("auth startup does not rewrite app-data.json when workspace storage is SQLi
     const result = spawnSync(process.execPath, [
       "--input-type=module",
       "--eval",
-      `const authModule = await import(${JSON.stringify(path.join(repoRoot, "server-auth.js"))}); await authModule.ensureAuthReady();`,
+      `const authModule = await import(${JSON.stringify(serverAuthUrl)}); await authModule.ensureAuthReady();`,
     ], {
       cwd: repoRoot,
       encoding: "utf8",
