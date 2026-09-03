@@ -34,7 +34,7 @@ export function useWorkspaceViewModel({
   const filteredJobs = useMemo(() => {
     const q = officeSearch.toLowerCase();
     return data.jobs.filter((job) => {
-      const matchesText = [job.customerName, job.title, job.description, job.jobAddress, job.scheduledDate]
+      const matchesText = [job.jobNumber, job.customerName, job.title, job.description, job.jobAddress, job.scheduledDate]
         .join(" ")
         .toLowerCase()
         .includes(q);
