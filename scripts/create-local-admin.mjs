@@ -1,4 +1,3 @@
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
@@ -11,7 +10,6 @@ import {
 } from "./local-auth-cli-helpers.mjs";
 
 export {
-  loadLocalEnv,
   resolveLocalAuthDbPath,
   validatePasswordPair,
 } from "./local-auth-cli-helpers.mjs";
@@ -19,20 +17,20 @@ export {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
-const CONFIRMATION_PHRASE = "RESET LOCAL ADMIN PASSWORD";
+const CONFIRMATION_PHRASE = "CREATE LOCAL ADMIN";
 
-export function assertSafeLocalResetEnvironment({
+export function assertSafeLocalCreateEnvironment({
   env = globalThis.process?.env || {},
   authDbPath,
 } = {}) {
   assertSafeLocalAuthEnvironment({
     env,
     authDbPath,
-    operation: "reset a password",
+    operation: "create a local admin",
   });
 }
 
-export async function runResetLocalAdminPassword({
+export async function runCreateLocalAdmin({
   env = process.env,
   input = process.stdin,
   output = process.stdout,
@@ -40,15 +38,11 @@ export async function runResetLocalAdminPassword({
   loadLocalEnv(repoRoot);
 
   const authDbPath = resolveLocalAuthDbPath({ env, root: repoRoot });
-  assertSafeLocalResetEnvironment({ env, authDbPath });
+  assertSafeLocalCreateEnvironment({ env, authDbPath });
 
-  if (!fs.existsSync(authDbPath)) {
-    throw new Error(`Authentication database not found at ${authDbPath}. No database was created.`);
-  }
-
-  output.write("ELSET Admin local admin password reset\n");
+  output.write("ELSET Admin local admin bootstrap\n");
   output.write(`Authentication database to modify:\n${authDbPath}\n\n`);
-  output.write("This changes only the existing local user \"admin\" and revokes that user's existing sessions.\n");
+  output.write("This command creates the initial local admin only when the authentication database has no users.\n");
 
   const confirmation = await promptVisible(
     `Type ${CONFIRMATION_PHRASE} to continue: `,
@@ -60,9 +54,10 @@ export async function runResetLocalAdminPassword({
   }
 
   const {
+    createInitialAdminAuthUser,
     getAuthDatabasePath,
     getAuthMinimumPasswordLength,
-    resetExistingAuthUserPassword,
+    getAuthUserCount,
   } = await import("../server-auth.js");
 
   const runtimeAuthDbPath = getAuthDatabasePath();
@@ -70,26 +65,32 @@ export async function runResetLocalAdminPassword({
     throw new Error(`Resolved auth database changed after loading the auth module: ${runtimeAuthDbPath}`);
   }
 
+  const userCount = await getAuthUserCount();
+  output.write(`Current Better Auth user count: ${userCount}\n`);
+
+  if (userCount !== 0) {
+    throw new Error(
+      `Bootstrap refused because the authentication database already contains ${userCount} user${userCount === 1 ? "" : "s"}. `
+      + "Use the existing account-management flow or npm run reset:local-admin-password instead. No account was created."
+    );
+  }
+
   const minPasswordLength = getAuthMinimumPasswordLength();
-  const firstPassword = await promptHidden("New password: ", { input, output });
-  const secondPassword = await promptHidden("Re-enter new password: ", { input, output });
-  const newPassword = validatePasswordPair(firstPassword, secondPassword, minPasswordLength);
+  const firstPassword = await promptHidden("Password: ", { input, output });
+  const secondPassword = await promptHidden("Re-enter password: ", { input, output });
+  const password = validatePasswordPair(firstPassword, secondPassword, minPasswordLength);
 
-  const result = await resetExistingAuthUserPassword({
-    username: "admin",
-    newPassword,
-  });
+  const result = await createInitialAdminAuthUser({ password });
 
-  output.write(`Password reset complete for existing user "${result.username}".\n`);
-  output.write(`Revoked sessions: ${result.revokedSessionCount}\n`);
+  output.write(`Local admin created for username "${result.username}".\n`);
   output.write(`Authentication database modified: ${result.authDbPath}\n`);
 
   return result;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  runResetLocalAdminPassword().catch((error) => {
-    console.error(error instanceof Error ? error.message : "Password reset failed.");
+  runCreateLocalAdmin().catch((error) => {
+    console.error(error instanceof Error ? error.message : "Local admin creation failed.");
     process.exitCode = 1;
   });
 }

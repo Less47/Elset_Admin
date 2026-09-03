@@ -89,10 +89,9 @@ const serviceM8ImportOptionFields = [
 ];
 
 const templateFields = [
-  { key: "accentColor", label: "Accent colour", type: "color" },
   { key: "quoteHeading", label: "Document heading" },
-  { key: "introText", label: "Intro text", multiline: true, rows: 4, documentTypes: ["invoice"] },
-  { key: "notesHeading", label: "Notes heading", documentTypes: ["invoice"] },
+  { key: "introText", label: "Intro text", multiline: true, rows: 4, documentTypes: ["quote", "invoice"] },
+  { key: "notesHeading", label: "Notes heading", documentTypes: ["quote", "invoice"] },
   { key: "termsHeading", label: "Section heading" },
   { key: "termsText", label: "Section text", multiline: true, rows: 5 },
   { key: "footerText", label: "Footer text", multiline: true, rows: 3 },
@@ -416,9 +415,15 @@ function ExactDocumentPreview({ requestBody }) {
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-sm">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-4">
         {previewUrl ? (
-          <iframe title="Exact customer document preview" src={previewUrl} className="h-[980px] w-full bg-white" />
+          <div className="mx-auto w-full min-w-[640px] max-w-[794px] overflow-hidden rounded-sm bg-white shadow-lg">
+            <iframe
+              title="Exact customer document preview"
+              src={previewUrl}
+              className="block h-[clamp(640px,78vh,1040px)] w-full bg-white"
+            />
+          </div>
         ) : previewStatus === "error" ? (
           <div className="p-6 text-sm text-rose-700">{previewError}</div>
         ) : (
@@ -805,7 +810,7 @@ export default function SettingsManager({
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Template Editor</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">Adjust wording, headings, section text, and colours for each document type. Company and bank details come from Preferences.</p>
+                  <p className="mt-1 text-sm text-slate-600">Adjust wording, headings, and section text for each document type. Company and bank details come from Preferences.</p>
                 </div>
                 <div className="w-full max-w-[220px]">
                   <Select value={currentTemplateType} onValueChange={onActiveTemplateTypeChange}>
@@ -839,19 +844,6 @@ export default function SettingsManager({
                             value={activeTemplate[field.key]}
                             onChange={(event) => updateTemplateField(field.key, event.target.value)}
                           />
-                        ) : field.type === "color" ? (
-                          <div className="flex items-center gap-3">
-                            <Input
-                              type="color"
-                              className="h-10 w-16 rounded-xl p-1"
-                              value={normalizeHexColor(activeTemplate[field.key], "#0F172A")}
-                              onChange={(event) => updateTemplateField(field.key, event.target.value)}
-                            />
-                            <Input
-                              value={activeTemplate[field.key]}
-                              onChange={(event) => updateTemplateField(field.key, event.target.value)}
-                            />
-                          </div>
                         ) : (
                           <Input
                             value={activeTemplate[field.key]}

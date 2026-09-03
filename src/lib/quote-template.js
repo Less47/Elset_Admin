@@ -17,11 +17,18 @@ export const documentTemplatePlaceholders = [
   "{{jobDescription}}",
   "{{jobAddress}}",
   "{{issueDate}}",
+  "{{issueDateDisplay}}",
+  "{{dueDate}}",
+  "{{dueDateDisplay}}",
   "{{quoteValidUntil}}",
+  "{{quoteValidUntilDisplay}}",
   "{{quoteReplyInstructions}}",
   "{{quoteReference}}",
+  "{{documentReference}}",
   "{{subtotal}}",
   "{{gst}}",
+  "{{paid}}",
+  "{{balanceDue}}",
   "{{total}}",
 ];
 
@@ -50,12 +57,12 @@ export const defaultQuoteTemplate = {
   bankBsb: "",
   bankAccountNumber: "",
   accentColor: "#0f172a",
-  quoteHeading: "Service Quote",
+  quoteHeading: "Quote",
   introText: "{{jobDescription}}",
-  notesHeading: "",
+  notesHeading: "Scope of Work",
   termsHeading: "Quote Validity",
   termsText:
-    "This quote is valid for 30 days from {{issueDate}}. {{quoteReplyInstructions}}",
+    "This quote is valid until {{quoteValidUntilDisplay}}. {{quoteReplyInstructions}}",
   footerText: "",
 };
 
@@ -70,30 +77,38 @@ export const defaultInvoiceTemplate = {
   bankBsb: "",
   bankAccountNumber: "",
   accentColor: "#0f172a",
-  quoteHeading: "Service Invoice",
-  introText:
-    "Please find your invoice for {{jobTitle}} for {{customerName}}. The completed work and charges are outlined below.",
+  quoteHeading: "Tax Invoice",
+  introText: "",
   notesHeading: "Work Completed",
   termsHeading: "How to Pay",
-  termsText:
-    "We accept payment by Direct Credit, cheque, or cash.\n\nDirect Credit:\n{{bankDetails}}\n\nCheques can be made payable to {{companyName}}. Cash payments are accepted by arrangement.",
+  termsText: "We accept payment by: Direct Credit / Cheque / Cash",
   footerText: "Thank you for choosing {{companyName}}.",
 };
 
-const legacyTemplateDefaults = {
+const legacyTemplateStockValues = {
   quote: {
-    introText:
+    quoteHeading: ["Service Quote"],
+    introText: [
       "Thank you for the opportunity to quote for {{jobTitle}} for {{customerName}}. The quoted work is outlined below.",
-    notesHeading: "Scope Notes",
-    termsHeading: "Terms & Next Steps",
-    termsText:
+    ],
+    notesHeading: ["Scope Notes", ""],
+    termsHeading: ["Terms & Next Steps"],
+    termsText: [
       "This quote is valid for 14 days from {{issueDate}}. Please reply to {{companyEmail}} if you would like us to proceed.",
-    footerText: "Thank you for choosing {{companyName}}.",
+      "This quote is valid for 30 days from {{issueDate}}. {{quoteReplyInstructions}}",
+    ],
+    footerText: ["Thank you for choosing {{companyName}}."],
   },
   invoice: {
-    termsHeading: "Payment Terms",
-    termsText:
+    quoteHeading: ["Service Invoice"],
+    introText: [
+      "Please find your invoice for {{jobTitle}} for {{customerName}}. The completed work and charges are outlined below.",
+    ],
+    termsHeading: ["Payment Terms"],
+    termsText: [
       "Payment is due within 7 days of {{issueDate}}. Please contact {{companyEmail}} if you have any questions about this invoice.",
+      "We accept payment by Direct Credit, cheque, or cash.\n\nDirect Credit:\n{{bankDetails}}\n\nCheques can be made payable to {{companyName}}. Cash payments are accepted by arrangement.",
+    ],
   },
 };
 
@@ -108,10 +123,10 @@ export function normalizeDocumentTemplate(template, type = "quote") {
     ...defaults,
     ...(template || {}),
   };
-  const legacyDefaults = legacyTemplateDefaults[type] || {};
+  const legacyStockValues = legacyTemplateStockValues[type] || {};
 
-  for (const [key, value] of Object.entries(legacyDefaults)) {
-    if (normalized[key] === value) {
+  for (const [key, values] of Object.entries(legacyStockValues)) {
+    if (values.includes(normalized[key])) {
       normalized[key] = defaults[key];
     }
   }
@@ -211,11 +226,62 @@ export function buildQuoteReference(job) {
   return buildDocumentReference(job, "quote");
 }
 
+const documentDateMonths = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function parseDocumentDateInput(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || "").trim());
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, monthIndex, day));
+
+  if (
+    date.getUTCFullYear() !== year
+    || date.getUTCMonth() !== monthIndex
+    || date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function getOrdinalSuffix(day) {
+  const lastTwoDigits = day % 100;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 13) return "th";
+  if (day % 10 === 1) return "st";
+  if (day % 10 === 2) return "nd";
+  if (day % 10 === 3) return "rd";
+  return "th";
+}
+
+export function formatDocumentDate(value) {
+  const date = parseDocumentDateInput(value);
+  if (!date) return "";
+
+  const day = date.getUTCDate();
+  return `${day}${getOrdinalSuffix(day)} ${documentDateMonths[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
 function addDaysToDateInput(value, days) {
-  if (!value) return "";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + days);
+  const date = parseDocumentDateInput(value);
+  if (!date) return "";
+  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
@@ -223,6 +289,8 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
   const normalizedTemplate = normalizeDocumentTemplate(template, type);
   const reference = buildDocumentReference(job, type);
   const issueDate = document?.issueDate || "";
+  const dueDate = type === "invoice" ? document?.dueDate || "" : "";
+  const quoteValidUntil = type === "quote" ? addDaysToDateInput(issueDate, 30) : "";
   const hasGst = type === "invoice" || type === "quote";
   const subtotal = hasGst ? calculateQuoteSubtotal(document?.items || []) : calculateDocTotal(document?.items || []);
   const gst = hasGst ? calculateQuoteGst(document?.items || []) : 0;
@@ -243,7 +311,7 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
     companyName: normalizedTemplate.companyName,
     companyAbn: normalizedTemplate.companyAbn || "",
     companyAcn: normalizedTemplate.companyAcn || "",
-    companyEmail: normalizedTemplate.companyEmail || ADMIN_EMAIL,
+    companyEmail: normalizedTemplate.companyEmail || "",
     companyPhone: normalizedTemplate.companyPhone || "",
     companyAddress: normalizedTemplate.companyAddress || "",
     bankAccountName: normalizedTemplate.bankAccountName || "",
@@ -256,7 +324,11 @@ export function buildDocumentTemplateContext({ job, document, template, type = "
     jobDescription: job?.description || "",
     jobAddress: job?.jobAddress || "",
     issueDate,
-    quoteValidUntil: addDaysToDateInput(issueDate, 30),
+    issueDateDisplay: formatDocumentDate(issueDate),
+    dueDate,
+    dueDateDisplay: formatDocumentDate(dueDate),
+    quoteValidUntil,
+    quoteValidUntilDisplay: formatDocumentDate(quoteValidUntil),
     quoteReplyInstructions: quoteContactMethods.length > 0
       ? `Please ${quoteContactMethods.join(" or ")} if you would like us to proceed.`
       : "",

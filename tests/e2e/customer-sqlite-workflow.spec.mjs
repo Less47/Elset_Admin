@@ -654,6 +654,59 @@ test("SQLite startup and ordinary navigation do not broad-save app state", async
   }
 });
 
+test("quote and invoice editors preview the shared PDF workflow", async ({ page }) => {
+  await login(page);
+
+  const jobDialog = await openJobFromHistory(page, "Synthetic gate service");
+  await jobDialog.getByRole("button", { name: "Open Invoice Editor" }).click();
+
+  const invoiceEditor = page.getByRole("dialog").filter({ hasText: "Invoice - Synthetic gate service" }).last();
+  await expect(invoiceEditor).toBeVisible();
+  await expect(invoiceEditor.getByText("Work completed", { exact: true })).toBeVisible();
+  await expect(invoiceEditor.getByText("Paid so far", { exact: true }).first()).toBeVisible();
+  await expect(invoiceEditor.getByText("Balance", { exact: true }).first()).toBeVisible();
+
+  const invoiceResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === "/api/quotes/preview-pdf";
+  });
+  await invoiceEditor.getByRole("button", { name: /^Preview & Send/ }).click();
+  const invoiceResponse = await invoiceResponsePromise;
+  expect(invoiceResponse.status()).toBe(200);
+  expect(invoiceResponse.headers()["content-type"]).toContain("application/pdf");
+  expect(invoiceResponse.headers()["content-disposition"]).toContain("inline;");
+
+  const invoicePreview = page.getByRole("dialog").filter({ hasText: "Preview Part Payment Receipt" }).last();
+  await expect(invoicePreview).toBeVisible();
+  await expect(invoicePreview.locator('iframe[title="Invoice PDF preview"]')).toBeVisible();
+  await invoicePreview.getByRole("button", { name: "Back to Edit" }).click();
+  await invoiceEditor.getByRole("button", { name: "Cancel" }).click();
+
+  const quoteJobDialog = await openJobFromHistory(page, "Synthetic gate service");
+  await quoteJobDialog.getByRole("button", { name: "Open Quote Editor" }).click();
+  const quoteEditor = page.getByRole("dialog").filter({ hasText: "Quote - Synthetic gate service" }).last();
+  await expect(quoteEditor).toBeVisible();
+  await expect(quoteEditor.getByText("Scope / notes", { exact: true })).toBeVisible();
+  await expect(quoteEditor.getByText("Paid so far", { exact: true })).toHaveCount(0);
+  await expect(quoteEditor.getByText("Payments received", { exact: true })).toHaveCount(0);
+
+  const quoteResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === "/api/quotes/preview-pdf";
+  });
+  await quoteEditor.getByRole("button", { name: "Preview & Send Quote" }).click();
+  const quoteResponse = await quoteResponsePromise;
+  expect(quoteResponse.status()).toBe(200);
+  expect(quoteResponse.headers()["content-type"]).toContain("application/pdf");
+  expect(quoteResponse.headers()["content-disposition"]).toContain("inline;");
+
+  const quotePreview = page.getByRole("dialog").filter({ hasText: "Preview Quote" }).last();
+  await expect(quotePreview).toBeVisible();
+  await expect(quotePreview.locator('iframe[title="Quote PDF preview"]')).toBeVisible();
+  await quotePreview.getByRole("button", { name: "Back to Edit" }).click();
+  await quoteEditor.getByRole("button", { name: "Cancel" }).click();
+});
+
 test("SQLite customer workflow persists through browser refreshes", async ({ page }) => {
   const tracker = trackBroadWorkspacePuts(page);
   try {

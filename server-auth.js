@@ -7,6 +7,7 @@ import { betterAuth } from "better-auth";
 import { fromNodeHeaders } from "better-auth/node";
 import { admin, username } from "better-auth/plugins";
 import { fileURLToPath } from "url";
+import { assertSafeLocalAuthEnvironment } from "./scripts/local-auth-cli-helpers.mjs";
 import { loadData, saveData } from "./server-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +25,7 @@ const WORKSPACE_DB_PATH = path.resolve(env.ELSET_WORKSPACE_DB_PATH || path.join(
 const DEFAULT_API_PORT = Number(env.ELSET_API_PORT || env.PORT || 3101);
 const DEFAULT_FRONTEND_PORT = Number(env.ELSET_FRONTEND_PORT || 5173);
 
+let authSchemaReadyPromise = null;
 let authReadyPromise = null;
 
 function isProductionRuntime() {
@@ -322,7 +324,7 @@ function getCurrentUserSessions(userId) {
   `).all(String(userId));
 }
 
-function getAuthUserCount() {
+function readAuthUserCount() {
   const row = authDb.prepare(`SELECT COUNT(*) AS count FROM "user"`).get();
   return Number(row?.count || 0);
 }
@@ -499,7 +501,7 @@ async function migrateLegacyUsersIfNeeded() {
   }
 
   const legacyUsers = Array.isArray(data.users) ? data.users : [];
-  if (getAuthUserCount() === 0 && legacyUsers.length > 0) {
+  if (readAuthUserCount() === 0 && legacyUsers.length > 0) {
     const nextUsers = legacyUsers
       .map((user) => normalizeBackupAuthUser({
         ...user,
@@ -529,13 +531,23 @@ async function migrateLegacyUsersIfNeeded() {
 export async function ensureAuthReady() {
   if (!authReadyPromise) {
     authReadyPromise = (async () => {
-      const context = await auth.$context;
-      await context.runMigrations();
+      await ensureAuthSchemaReady();
       await migrateLegacyUsersIfNeeded();
     })();
   }
 
   return authReadyPromise;
+}
+
+export async function ensureAuthSchemaReady() {
+  if (!authSchemaReadyPromise) {
+    authSchemaReadyPromise = (async () => {
+      const context = await auth.$context;
+      await context.runMigrations();
+    })();
+  }
+
+  return authSchemaReadyPromise;
 }
 
 export async function getRequestAuthSession(req) {
@@ -581,6 +593,55 @@ export function getAuthDatabasePath() {
 
 export function getAuthMinimumPasswordLength() {
   return AUTH_MIN_PASSWORD_LENGTH;
+}
+
+export async function getAuthUserCount() {
+  await ensureAuthSchemaReady();
+  return readAuthUserCount();
+}
+
+export async function createInitialAdminAuthUser({ password } = {}) {
+  assertSafeLocalAuthEnvironment({
+    env,
+    authDbPath: AUTH_DB_PATH,
+    operation: "create a local admin",
+  });
+
+  const passwordValue = String(password || "");
+  if (passwordValue.length < AUTH_MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${AUTH_MIN_PASSWORD_LENGTH} characters.`);
+  }
+
+  await ensureAuthSchemaReady();
+
+  const existingUserCount = readAuthUserCount();
+  if (existingUserCount !== 0) {
+    throw new Error(
+      `Authentication database already contains ${existingUserCount} user${existingUserCount === 1 ? "" : "s"}. `
+      + "Use the existing account-management flow or npm run reset:local-admin-password instead. No account was created."
+    );
+  }
+
+  const createdUser = await saveManagedUserAccount({
+    requestHeaders: undefined,
+    accountInput: {
+      username: "admin",
+      role: "admin",
+      staffName: "Admin",
+      password: passwordValue,
+    },
+    staff: [],
+  });
+
+  const createdRow = getRawAuthUserRowById(createdUser.id);
+  if (!createdRow?.passwordHash) {
+    throw new Error("Better Auth did not create a valid credential account for the local admin.");
+  }
+
+  return {
+    ...createdUser,
+    authDbPath: AUTH_DB_PATH,
+  };
 }
 
 export async function resetExistingAuthUserPassword({ username = "admin", newPassword } = {}) {

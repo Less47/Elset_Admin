@@ -63,6 +63,7 @@ export default function DocumentEditor({
   const documentLabel = type === "quote" ? "Quote" : "Invoice";
   const recipientEmail = getDocumentRecipientEmail(job);
   const recipientName = getDocumentRecipientName(job);
+  const ocNumber = String(job.ocNumber || "").trim();
   const paymentReceiptStamp = type === "invoice" && paymentSummary?.paidAmount > 0 && paymentSummary?.total > 0
     ? paymentSummary.balanceAmount > 0
       ? "PART PAYMENT"
@@ -180,18 +181,22 @@ export default function DocumentEditor({
               </FormField>
             </div>
 
-            {type === "invoice" && (
+            {(type === "invoice" || ocNumber) && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Due date">
-                  <Input
-                    type="date"
-                    value={docState.dueDate || ""}
-                    onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value }))}
-                  />
-                </FormField>
-                <FormField label="OC number">
-                  <Input value={job.ocNumber || "Not set"} disabled />
-                </FormField>
+                {type === "invoice" ? (
+                  <FormField label="Due date">
+                    <Input
+                      type="date"
+                      value={docState.dueDate || ""}
+                      onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value }))}
+                    />
+                  </FormField>
+                ) : null}
+                {ocNumber ? (
+                  <FormField label="OC number">
+                    <Input value={ocNumber} disabled />
+                  </FormField>
+                ) : null}
               </div>
             )}
 
@@ -215,7 +220,7 @@ export default function DocumentEditor({
               </div>
             )}
 
-            <FormField label="Notes / template text">
+            <FormField label={type === "invoice" ? "Work completed" : "Scope / notes"}>
               <Textarea
                 value={docState.notes}
                 rows={3}
@@ -502,13 +507,15 @@ export default function DocumentEditor({
         </DialogHeader>
 
         <DialogBody className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="min-h-[520px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+          <div className="min-h-[420px] overflow-x-auto rounded-2xl border border-slate-200 bg-slate-100 p-3 lg:min-h-[520px]">
             {sendPreview?.previewUrl ? (
-              <iframe
-                title={`${documentLabel} PDF preview`}
-                src={sendPreview.previewUrl}
-                className="h-full min-h-[520px] w-full bg-white"
-              />
+              <div className="mx-auto min-h-[396px] w-full min-w-[640px] max-w-[794px] overflow-hidden rounded-sm bg-white shadow-lg lg:min-h-[496px]">
+                <iframe
+                  title={`${documentLabel} PDF preview`}
+                  src={sendPreview.previewUrl}
+                  className="block h-[62vh] min-h-[396px] w-full bg-white lg:min-h-[496px]"
+                />
+              </div>
             ) : null}
           </div>
 

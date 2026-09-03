@@ -11,7 +11,7 @@ import { openWorkspaceDb } from "../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
 import { getAuthorizedWorkspaceState } from "../server-workspace-storage.js";
-import { defaultInvoiceTemplate } from "../src/lib/quote-template.js";
+import { defaultInvoiceTemplate, defaultQuoteTemplate } from "../src/lib/quote-template.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -232,13 +232,50 @@ test("document template routes update and reset quote and invoice defaults", asy
       assert.equal(quoteResult.payload.result.template.internalReferenceUrl, "https://example.test/template-reference");
       assert.equal(quoteResult.payload.state.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
 
-      const resetResult = await requestJson(baseUrl, "/api/document-templates/invoice/reset", { method: "POST" });
-      assert.equal(resetResult.response.status, 200, resetResult.payload.error);
-      assert.equal(resetResult.payload.state.invoiceTemplate.termsText, defaultInvoiceTemplate.termsText);
+      const invoiceReset = await requestJson(baseUrl, "/api/document-templates/invoice/reset", { method: "POST" });
+      assert.equal(invoiceReset.response.status, 200, invoiceReset.payload.error);
+      for (const key of [
+        "accentColor",
+        "quoteHeading",
+        "introText",
+        "notesHeading",
+        "termsHeading",
+        "termsText",
+        "footerText",
+      ]) {
+        const actual = invoiceReset.payload.state.invoiceTemplate[key];
+        const expected = defaultInvoiceTemplate[key];
+        assert.equal(key === "accentColor" ? actual.toLowerCase() : actual, expected, `invoice ${key}`);
+      }
+      assert.equal(invoiceReset.payload.state.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
+      assert.equal(invoiceReset.payload.state.settings.companyName, "ELSET Demo Pty Ltd");
+      assert.equal(invoiceReset.payload.state.settings.companyEmail, "admin@example.test");
+
+      const quoteReset = await requestJson(baseUrl, "/api/document-templates/quote/reset", { method: "POST" });
+      assert.equal(quoteReset.response.status, 200, quoteReset.payload.error);
+      for (const key of [
+        "accentColor",
+        "quoteHeading",
+        "introText",
+        "notesHeading",
+        "termsHeading",
+        "termsText",
+        "footerText",
+      ]) {
+        const actual = quoteReset.payload.state.quoteTemplate[key];
+        const expected = defaultQuoteTemplate[key];
+        assert.equal(key === "accentColor" ? actual.toLowerCase() : actual, expected, `quote ${key}`);
+      }
+      assert.equal(quoteReset.payload.state.quoteTemplate.internalReferenceUrl, undefined);
+      assert.equal(quoteReset.payload.state.invoiceTemplate.quoteHeading, defaultInvoiceTemplate.quoteHeading);
+      assert.equal(quoteReset.payload.state.settings.companyName, "ELSET Demo Pty Ltd");
+      assert.equal(quoteReset.payload.state.settings.companyEmail, "admin@example.test");
 
       const state = getDbState(dbPath);
-      assert.equal(state.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
+      assert.equal(state.quoteTemplate.quoteHeading, defaultQuoteTemplate.quoteHeading);
       assert.equal(state.invoiceTemplate.termsText, defaultInvoiceTemplate.termsText);
+      assert.equal(state.settings.companyName, "ELSET Demo Pty Ltd");
+      assert.equal(state.settings.companyEmail, "admin@example.test");
     });
   });
 });
