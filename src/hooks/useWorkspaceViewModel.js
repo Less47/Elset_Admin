@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import {
   addDaysToDateInput,
   buildCustomerSites,
-  findSupplierManualMatches,
   getInventoryStockStatus,
   getInvoicePaymentSummary,
   getInvoiceStatus,
@@ -27,7 +26,6 @@ export function useWorkspaceViewModel({
   selectedSiteContext,
   serviceBoardFullScreen,
   showHighUrgencyOnly,
-  supplierManuals,
 }) {
   const tomorrowPlanningDate = addDaysToDateInput(toDateInputValue(new Date()), 1);
 
@@ -156,11 +154,6 @@ export function useWorkspaceViewModel({
     };
   }, [data.customers, data.jobs, selectedCustomerId, selectedJob, selectedSiteContext]);
 
-  const selectedSupplierManualMatches = useMemo(
-    () => findSupplierManualMatches(selection.selectedFreshJob, supplierManuals, 8),
-    [selection.selectedFreshJob, supplierManuals]
-  );
-
   const isServiceBoardFullScreen = activeSection === "service-board" && serviceBoardFullScreen;
 
   const currentSection = useMemo(() => {
@@ -191,7 +184,6 @@ export function useWorkspaceViewModel({
     filteredJobs,
     isServiceBoardFullScreen,
     noteAuthor,
-    selectedSupplierManualMatches,
     tomorrowJobs,
     tomorrowPlanningDate,
     visibleSideNavItems,

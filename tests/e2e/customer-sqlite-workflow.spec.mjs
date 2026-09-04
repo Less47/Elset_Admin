@@ -429,12 +429,20 @@ async function openJobFromHistory(page, title) {
   const row = page.locator(".data-grid-row", { hasText: title }).first();
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: /Open/ }).click();
-  const dialog = page.getByRole("dialog").filter({ hasText: title }).first();
-  await expect(dialog).toBeVisible();
-  return dialog;
+  await expect(page).toHaveURL(/\/jobs\/[^/?#]+$/);
+  const workspace = page.locator(".record-workspace");
+  await expect(workspace.getByRole("heading", { name: title, level: 1 })).toBeVisible();
+  return workspace;
 }
 
 async function closeOpenDialog(page) {
+  const workspace = page.locator(".record-workspace");
+  if (await workspace.isVisible().catch(() => false)) {
+    await workspace.getByRole("button", { name: /^Back to / }).click();
+    await expect(workspace).toBeHidden();
+    return;
+  }
+
   const closeButton = page.getByRole("button", { name: "Close" }).last();
   if (await closeButton.isVisible().catch(() => false)) {
     await closeButton.click();
@@ -502,51 +510,51 @@ async function seedUnrelatedControlRecords(page) {
 async function createExistingCustomerJob(page) {
   await openServiceBoard(page);
   await page.getByRole("button", { name: "New Job" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Create New Job");
+  const workspace = page.locator(".record-workspace");
+  await expect(workspace.getByRole("heading", { name: "Create Job", level: 1 })).toBeVisible();
 
-  await dialog.getByPlaceholder("Search name, email, phone, or address...").fill(unrelatedCustomerName);
-  await dialog.getByRole("button", { name: new RegExp(unrelatedCustomerName) }).first().click();
-  const siteButton = dialog.locator("button", { hasText: "10 Example Lane" }).first();
-  await expect(siteButton).toBeVisible();
-  await siteButton.click();
-  await dialog.getByPlaceholder("e.g. Swing gate motor replacement").fill(jobOriginalTitle);
-  await dialog.locator("textarea").first().fill(jobOriginalDescription);
-  await dialog.getByPlaceholder("Optional invoice reference").fill("OC-E2E-JOB");
-  await dialog.getByRole("button", { name: "Create Job" }).click();
-  await expect(page.getByRole("dialog")).toBeHidden();
+  await workspace.getByRole("textbox", { name: "Search customers" }).fill(unrelatedCustomerName);
+  await workspace.locator('[aria-label="Customer search results"] button', { hasText: unrelatedCustomerName }).first().click();
+  await expect(workspace.getByText(fixtureSiteAddress, { exact: true }).first()).toBeVisible();
+  await workspace.getByLabel("Job title").fill(jobOriginalTitle);
+  await workspace.getByLabel("Description of work").fill(jobOriginalDescription);
+  await workspace.getByLabel("OC number").fill("OC-E2E-JOB");
+  await workspace.getByRole("button", { name: "Create Job" }).click();
+  await expect(page).toHaveURL(/\/jobs\/[^/?#]+$/);
 
-  return waitForActiveJobByTitle(jobOriginalTitle, (job) =>
+  const createdJob = await waitForActiveJobByTitle(jobOriginalTitle, (job) =>
     job.customerId === fixtureCustomerId &&
     job.jobAddress === fixtureSiteAddress
   );
+  await page.getByRole("button", { name: "Back to Service Board" }).click();
+  return createdJob;
 }
 
 async function editJobDetailsAndSchedule(page, jobId) {
-  const dialog = await openJobFromHistory(page, jobOriginalTitle);
-  await dialog.getByRole("button", { name: "Edit Job" }).click();
-
-  const editDialog = page.getByRole("dialog").filter({ hasText: /Edit Job #/ }).first();
-  await expect(editDialog).toBeVisible();
-  await editDialog.locator("input").first().fill(jobEditedTitle);
-  await editDialog.locator("textarea").first().fill(jobEditedDescription);
-  await editDialog.locator('input[type="date"]').first().fill(jobScheduledDate);
-  await editDialog.getByPlaceholder("Optional invoice reference").fill("OC-E2E-JOB-EDITED");
-  await editDialog.getByRole("button", { name: "Save Changes" }).click();
+  const workspace = await openJobFromHistory(page, jobOriginalTitle);
+  await workspace.getByRole("button", { name: "Edit", exact: true }).click();
+  await workspace.getByLabel("Job title").fill(jobEditedTitle);
+  await workspace.getByLabel("Description of work").fill(jobEditedDescription);
+  await workspace.getByLabel("OC number").fill("OC-E2E-JOB-EDITED");
+  await workspace.getByRole("button", { name: "Save changes" }).click();
 
   await waitForActiveJob(jobId, (job) =>
     job.title === jobEditedTitle &&
     job.description === jobEditedDescription &&
-    job.scheduledDate === jobScheduledDate &&
     job.ocNumber === "OC-E2E-JOB-EDITED"
   );
-  await expect(page.getByRole("dialog").filter({ hasText: jobEditedTitle }).first()).toBeVisible();
+
+  await workspace.getByRole("tab", { name: "Schedule" }).click();
+  await workspace.getByLabel("Scheduled date").fill(jobScheduledDate);
+  await workspace.getByRole("button", { name: "Save schedule" }).click();
+  await waitForActiveJob(jobId, (job) => job.scheduledDate === jobScheduledDate);
+  await expect(workspace.getByRole("heading", { name: jobEditedTitle, level: 1 })).toBeVisible();
   await closeOpenDialog(page);
 }
 
 async function changeJobStatusFromDetails(page, jobId, title, status) {
-  const dialog = await openJobFromHistory(page, title);
-  await dialog.getByRole("combobox").click();
+  const workspace = await openJobFromHistory(page, title);
+  await workspace.getByRole("combobox", { name: "Update job status" }).click();
   await page.getByRole("option", { name: status, exact: true }).click();
   await waitForActiveJob(jobId, (job) => job.status === status);
   await closeOpenDialog(page);
@@ -578,35 +586,36 @@ async function addAndRemoveTomorrowPlan(page, job) {
 }
 
 async function addJobNoteAndPhotoMetadata(page, jobId) {
-  const dialog = await openJobFromHistory(page, jobEditedTitle);
-  await dialog.getByPlaceholder("Add site notes, faults found, parts needed...").fill(jobNoteText);
-  await dialog.getByRole("button", { name: "Add Note" }).click();
+  const workspace = await openJobFromHistory(page, jobEditedTitle);
+  await workspace.getByRole("tab", { name: "Notes & photos" }).click();
+  await workspace.getByPlaceholder("Add site notes, faults found, parts needed...").fill(jobNoteText);
+  await workspace.getByRole("button", { name: "Add note" }).click();
   await waitForActiveJob(jobId, (job) => job.notes.some((note) => note.text === jobNoteText));
-  await expect(dialog.getByText(jobNoteText)).toBeVisible();
+  await expect(workspace.getByText(jobNoteText)).toBeVisible();
 
   const photoPath = path.join(tempDataDir, jobPhotoName);
   fs.writeFileSync(
     photoPath,
     Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64")
   );
-  await dialog.locator("#photo-upload").setInputFiles(photoPath);
+  await workspace.locator("#job-photo-upload").setInputFiles(photoPath);
   await waitForActiveJob(jobId, (job) => job.photos.some((photo) => photo.name === jobPhotoName));
-  await expect(dialog.getByText(jobPhotoName)).toBeVisible();
+  await expect(workspace.getByText(jobPhotoName)).toBeVisible();
 
   page.once("dialog", async (confirmDialog) => {
     await confirmDialog.accept();
   });
-  await dialog.getByRole("button", { name: `Delete ${jobPhotoName}` }).click();
+  await workspace.getByRole("button", { name: `Delete ${jobPhotoName}` }).click();
   await waitForActiveJob(jobId, (job) => !job.photos.some((photo) => photo.name === jobPhotoName));
   await closeOpenDialog(page);
 }
 
 async function deleteAndRestoreJob(page, jobId) {
-  const dialog = await openJobFromHistory(page, jobEditedTitle);
+  const workspace = await openJobFromHistory(page, jobEditedTitle);
   page.once("dialog", async (confirmDialog) => {
     await confirmDialog.accept();
   });
-  await dialog.getByRole("button", { name: "Delete Job" }).click();
+  await workspace.getByRole("button", { name: "Delete job" }).click();
   await waitForDeletedJob(jobId);
 
   await openRecycleBin(page);
@@ -657,8 +666,9 @@ test("SQLite startup and ordinary navigation do not broad-save app state", async
 test("quote and invoice editors preview the shared PDF workflow", async ({ page }) => {
   await login(page);
 
-  const jobDialog = await openJobFromHistory(page, "Synthetic gate service");
-  await jobDialog.getByRole("button", { name: "Open Invoice Editor" }).click();
+  const jobWorkspace = await openJobFromHistory(page, "Synthetic gate service");
+  await jobWorkspace.getByRole("tab", { name: "Documents" }).click();
+  await jobWorkspace.getByRole("button", { name: "Open Invoice Editor" }).click();
 
   const invoiceEditor = page.getByRole("dialog").filter({ hasText: "Invoice - Synthetic gate service" }).last();
   await expect(invoiceEditor).toBeVisible();
@@ -682,8 +692,7 @@ test("quote and invoice editors preview the shared PDF workflow", async ({ page 
   await invoicePreview.getByRole("button", { name: "Back to Edit" }).click();
   await invoiceEditor.getByRole("button", { name: "Cancel" }).click();
 
-  const quoteJobDialog = await openJobFromHistory(page, "Synthetic gate service");
-  await quoteJobDialog.getByRole("button", { name: "Open Quote Editor" }).click();
+  await jobWorkspace.getByRole("button", { name: "Open Quote Editor" }).click();
   const quoteEditor = page.getByRole("dialog").filter({ hasText: "Quote - Synthetic gate service" }).last();
   await expect(quoteEditor).toBeVisible();
   await expect(quoteEditor.getByText("Scope / notes", { exact: true })).toBeVisible();
@@ -705,6 +714,7 @@ test("quote and invoice editors preview the shared PDF workflow", async ({ page 
   await expect(quotePreview.locator('iframe[title="Quote PDF preview"]')).toBeVisible();
   await quotePreview.getByRole("button", { name: "Back to Edit" }).click();
   await quoteEditor.getByRole("button", { name: "Cancel" }).click();
+  await closeOpenDialog(page);
 });
 
 test("SQLite customer workflow persists through browser refreshes", async ({ page }) => {
@@ -805,8 +815,8 @@ test("SQLite core job workflow persists through browser refreshes", async ({ pag
 
     await page.reload();
     await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
-    let dialog = await openJobFromHistory(page, jobOriginalTitle);
-    await expect(dialog).toContainText(jobOriginalDescription);
+    let workspace = await openJobFromHistory(page, jobOriginalTitle);
+    await expect(workspace).toContainText(jobOriginalDescription);
     await closeOpenDialog(page);
 
     await editJobDetailsAndSchedule(page, createdJob.id);
@@ -826,9 +836,10 @@ test("SQLite core job workflow persists through browser refreshes", async ({ pag
     await deleteAndRestoreJob(page, createdJob.id);
     await page.reload();
     await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
-    dialog = await openJobFromHistory(page, jobEditedTitle);
-    await expect(dialog).toContainText(jobEditedDescription);
-    await expect(dialog).toContainText(jobNoteText);
+    workspace = await openJobFromHistory(page, jobEditedTitle);
+    await expect(workspace).toContainText(jobEditedDescription);
+    await workspace.getByRole("tab", { name: "Notes & photos" }).click();
+    await expect(workspace).toContainText(jobNoteText);
     await closeOpenDialog(page);
 
     await tracker.expectNone("no PUT /api/app-state during SQLite job workflow");

@@ -330,7 +330,6 @@ function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
 function JobCard({
   job,
   onOpen,
-  manualMatches = [],
   siteAccessNote = null,
   draggable = false,
   viewMode = "list",
@@ -360,7 +359,6 @@ function JobCard({
   const actionRowClassName = isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
   const cardIndicators = buildJobCardIndicators({
     job,
-    manualMatches,
     invoiceStatus,
     siteAccessPreview,
   });
@@ -565,7 +563,6 @@ export function OfficeBoard({
   customers = [],
   onDropJob,
   onOpenJob,
-  supplierManuals = [],
   allowDragging = true,
   columnSortModes = {},
   columnViewModes = {},
@@ -573,7 +570,6 @@ export function OfficeBoard({
   onColumnViewModeChange,
   onPlanJobForTomorrow,
   showTagLabels = false,
-  findSupplierManualMatches,
   getCustomerSiteAccessNote,
   getInvoiceStatus,
   formatDate,
@@ -586,9 +582,6 @@ export function OfficeBoard({
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
   const touchDragSessionRef = useRef(null);
   const touchDragHoldTimerRef = useRef(null);
-  const manualMatchesByJobId = useMemo(() => {
-    return new Map(jobs.map((job) => [job.id, findSupplierManualMatches(job, supplierManuals, 3)]));
-  }, [findSupplierManualMatches, jobs, supplierManuals]);
 
   const siteAccessNotesByJobId = useMemo(() => {
     const customersById = new Map(customers.map((customer) => [customer.id, customer]));
@@ -838,7 +831,6 @@ export function OfficeBoard({
                       key={`${job.id}-${viewMode}`}
                       job={job}
                       onOpen={onOpenJob}
-                      manualMatches={manualMatchesByJobId.get(job.id) || []}
                       siteAccessNote={siteAccessNotesByJobId.get(job.id) || null}
                       draggable={allowDragging}
                       viewMode={viewMode}

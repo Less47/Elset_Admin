@@ -3,8 +3,6 @@ import { ADMIN_EMAIL } from "@/lib/quote-template";
 export const STORAGE_KEY = "gateflow-demo-v1";
 export const AUTH_MIGRATION_KEY = "gateflow-server-migration-v1";
 export const LOGO_SRC = "/elset-logo.png";
-export const SUPPLIER_MANUALS_BASE_URL = "https://supplier-list-gamma.vercel.app";
-export const SUPPLIER_MANUALS_INDEX_URL = `${SUPPLIER_MANUALS_BASE_URL}/suppliers.json`;
 export const RECYCLE_BIN_RETENTION_MS = 1000 * 60 * 60 * 24 * 7;
 export const APP_TEXT_DARK = "#0F172A";
 export const APP_TEXT_LIGHT = "#FFFFFF";

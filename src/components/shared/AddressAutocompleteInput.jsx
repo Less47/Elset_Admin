@@ -22,7 +22,9 @@ async function fetchAddressSuggestions(query, signal) {
 export function AddressAutocompleteInput({
   className,
   disabled = false,
+  onBlur,
   onChange,
+  onFocus,
   onSelectSuggestion,
   placeholder = "Search an address",
   value,
@@ -139,9 +141,15 @@ export function AddressAutocompleteInput({
         disabled={disabled}
         placeholder={placeholder}
         value={value}
-        onBlur={() => setIsFocused(false)}
+        onBlur={(event) => {
+          setIsFocused(false);
+          onBlur?.(event);
+        }}
         onChange={(event) => handleValueChange(event.target.value)}
-        onFocus={() => setIsFocused(true)}
+        onFocus={(event) => {
+          setIsFocused(true);
+          onFocus?.(event);
+        }}
         onKeyDown={(event) => {
           if (!showDropdown || suggestions.length === 0) {
             if (event.key === "Escape") {

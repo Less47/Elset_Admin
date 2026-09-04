@@ -20,7 +20,6 @@ export default function MobileServiceBoard({
   canManageTomorrow,
   columnSortModes,
   customers,
-  findSupplierManualMatches,
   formatDate,
   getCustomerSiteAccessNote,
   getInvoiceStatus,
@@ -37,7 +36,6 @@ export default function MobileServiceBoard({
   onUrgencyChange,
   showHighUrgencyOnly,
   showTagLabels,
-  supplierManuals,
   tomorrowJobs,
   tomorrowPlanningDate,
 }) {
@@ -55,10 +53,6 @@ export default function MobileServiceBoard({
     const byId = new Map([...jobs, ...tomorrowJobs].map((job) => [job.id, job]));
     return [...byId.values()];
   }, [jobs, tomorrowJobs]);
-  const manualMatchesByJobId = useMemo(
-    () => new Map(candidateJobs.map((job) => [job.id, findSupplierManualMatches(job, supplierManuals, 3)])),
-    [candidateJobs, findSupplierManualMatches, supplierManuals]
-  );
   const siteAccessNotesByJobId = useMemo(() => {
     const customersById = new Map(customers.map((customer) => [customer.id, customer]));
     return new Map(
@@ -217,7 +211,6 @@ export default function MobileServiceBoard({
                 getInvoiceStatus={getInvoiceStatus}
                 isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
                 job={job}
-                manualMatches={manualMatchesByJobId.get(job.id) || []}
                 onMove={setMoveJob}
                 onOpen={onOpenJob}
                 onPlanForTomorrow={!isTomorrowView ? handlePlanForTomorrow : null}

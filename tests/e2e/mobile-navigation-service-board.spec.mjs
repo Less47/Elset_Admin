@@ -21,6 +21,24 @@ const screenshotNames = [
   "mobile-filters-375x667.png",
   "mobile-job-details-412x915.png",
   "desktop-board-1440x900.png",
+  "service-board-desktop-1280x720.png",
+  "service-board-desktop-1440x900.png",
+  "service-board-desktop-1920x1080.png",
+  "service-board-before-job-open-390x844.png",
+  "service-board-after-job-back-390x844.png",
+  "create-job-mobile-customer-search-390x844.png",
+  "create-job-mobile-selected-customer-390x844.png",
+  "create-job-mobile-details-390x844.png",
+  "create-job-ipad-820x1180.png",
+  "create-job-desktop-1280x720.png",
+  "create-job-desktop-1440x900.png",
+  "create-job-desktop-1920x1080.png",
+  "job-details-mobile-overview-390x844.png",
+  "job-details-mobile-documents-390x844.png",
+  "job-details-ipad-overview-820x1180.png",
+  "job-details-desktop-overview-1280x720.png",
+  "job-details-desktop-overview-1440x900.png",
+  "job-details-desktop-overview-1920x1080.png",
 ];
 const accountPassword = "E2E-mobile-pass-123";
 const plannedJobId = "mobile-job-progress";
@@ -320,6 +338,53 @@ async function assertNoHorizontalOverflow(page) {
   expect(dimensions.documentScrollWidth).toBeLessThanOrEqual(dimensions.documentClientWidth + 1);
 }
 
+async function assertDesktopBoardSpacing(page) {
+  const toolbar = page.locator("[data-service-board-toolbar]");
+  const columns = page.locator("[data-service-board-status]");
+  const toolbarBox = await toolbar.boundingBox();
+  const columnBoxes = await columns.evaluateAll((elements) => elements.map((element) => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top };
+  }));
+
+  expect(toolbarBox).not.toBeNull();
+  expect(columnBoxes).toHaveLength(3);
+  const columnTop = Math.min(...columnBoxes.map((box) => box.top));
+  const toolbarBottom = toolbarBox.y + toolbarBox.height;
+  expect(columnTop - toolbarBottom).toBeGreaterThanOrEqual(14);
+  expect(columnTop - toolbarBottom).toBeLessThanOrEqual(18);
+  expect(Math.max(...columnBoxes.map((box) => box.top)) - columnTop).toBeLessThanOrEqual(1);
+}
+
+async function assertRecordWorkspaceTop(page, desktop) {
+  const expectedHeaderTop = desktop ? 16 : 0;
+  await expect.poll(async () => {
+    const headerTop = await page.locator(".record-workspace-header").evaluate((header) => header.getBoundingClientRect().top);
+    return Math.abs(headerTop - expectedHeaderTop);
+  }).toBeLessThanOrEqual(1);
+  const metrics = await page.locator(".record-workspace").evaluate((workspace) => {
+    const header = workspace.querySelector(".record-workspace-header");
+    const content = header?.nextElementSibling;
+    const firstContent = content?.firstElementChild;
+    const headerRect = header?.getBoundingClientRect();
+    const firstContentRect = firstContent?.getBoundingClientRect();
+    const headerInner = header?.firstElementChild;
+    return {
+      headerTop: headerRect?.top,
+      headerBottom: headerRect?.bottom,
+      firstContentTop: firstContentRect?.top,
+      headerPaddingTop: headerInner ? Number.parseFloat(getComputedStyle(headerInner).paddingTop) : 0,
+    };
+  });
+
+  expect(metrics.headerTop).toBeGreaterThanOrEqual(expectedHeaderTop - 1);
+  expect(metrics.headerTop).toBeLessThanOrEqual(expectedHeaderTop + 1);
+  if (desktop) {
+    expect(metrics.firstContentTop - metrics.headerBottom).toBeGreaterThanOrEqual(23);
+  }
+  return metrics;
+}
+
 async function waitForJobStatus(jobId, status) {
   await expect.poll(() => readWorkspaceState().jobs.find((job) => job.id === jobId)?.status).toBe(status);
 }
@@ -348,6 +413,11 @@ async function capture(page, testInfo, filename, label) {
   const screenshotPath = path.join(screenshotDir, filename);
   await page.screenshot({ path: screenshotPath, animations: "disabled" });
   await testInfo.attach(label, { path: screenshotPath, contentType: "image/png" });
+}
+
+async function chooseSelectOption(page, label, option) {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
 }
 
 test.beforeAll(async () => {
@@ -463,9 +533,13 @@ test("mobile navigation and one-status Service Board support the core workflow",
     await capture(page, testInfo, "mobile-in-progress-390x844.png", "mobile In Progress list");
 
     await page.getByRole("button", { name: new RegExp(`Open Job #${plannedJobNumber}`) }).click();
-    await expect(page.getByRole("dialog", { name: "Mobile In Progress Job" })).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(new RegExp(`/jobs/${plannedJobId}$`));
+    await expect(page.getByRole("heading", { name: "Mobile In Progress Job", level: 1 })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Mobile In Progress Job" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Service Board" }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
     await expect(tabs.getByRole("tab", { name: /In Progress\s+1/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: new RegExp(`Open Job #${plannedJobNumber}`) })).toBeFocused();
 
     await tabs.getByRole("tab", { name: /Tomorrow\s+1/ }).click();
     await expect(page.locator('[data-mobile-board-view="Tomorrow"]')).toContainText("Mobile In Progress Job");
@@ -564,9 +638,11 @@ test("mobile and tablet viewport matrix keeps filters, details, and overflow usa
 
       if (viewport.width === 412) {
         await page.getByRole("button", { name: /Open Job #1001/ }).click();
-        await expect(page.getByRole("dialog", { name: "Synthetic gate service" })).toBeVisible();
+        await expect(page).toHaveURL(/\/jobs\/demo-job-1001$/);
+        await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
+        await expect(page.getByRole("dialog", { name: "Synthetic gate service" })).toHaveCount(0);
         await capture(page, testInfo, "mobile-job-details-412x915.png", "mobile job details");
-        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Back to Service Board" }).click();
       }
 
       if (viewport.width === 768) {
@@ -622,6 +698,14 @@ test("mobile navigation and actions retain admin, office, and technician permiss
         await expect(page.getByRole("button", { name: /Add Job #1001 to tomorrow/ })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "Move Job #1001" })).toBeVisible();
 
+        await page.getByRole("button", { name: /Open Job #1001/ }).click();
+        await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+        await expect(page.getByRole("tab", { name: "Documents" })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: /Edit job details/i })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: /Delete job/i })).toHaveCount(0);
+        await expect(page.getByRole("combobox", { name: "Update job status" })).toBeVisible();
+        await page.getByRole("button", { name: "Back to Service Board" }).click();
+
         const moveToProgressResponse = page.waitForResponse((response) =>
           response.request().method() === "PATCH"
             && new URL(response.url()).pathname === "/api/jobs/demo-job-1001/status"
@@ -650,6 +734,7 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
   for (const viewport of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
   ]) {
     const context = await browser.newContext(desktopContextOptions(viewport.width, viewport.height));
     const page = await context.newPage();
@@ -661,6 +746,7 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
       await expect(page.locator("[data-desktop-tomorrow-tab]")).toBeVisible();
       await expect(page.getByRole("button", { name: "Full Screen" })).toBeVisible();
       await expect(page.getByText("Legend", { exact: true })).toBeVisible();
+      await assertDesktopBoardSpacing(page);
 
       await page.getByRole("button", { name: "To Do Grid view" }).click();
       await expect(page.getByRole("button", { name: "To Do Grid view" })).toHaveAttribute("aria-pressed", "true");
@@ -689,13 +775,434 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
         await waitForJobStatus(plannedJobId, "In Progress");
       }
 
-      if (viewport.width === 1440) {
-        await capture(page, testInfo, "desktop-board-1440x900.png", "desktop board regression");
-      }
+      const boardScreenshotName = `service-board-desktop-${viewport.width}x${viewport.height}.png`;
+      await capture(page, testInfo, boardScreenshotName, `Service Board desktop ${viewport.width}x${viewport.height}`);
+      if (viewport.width === 1440) await capture(page, testInfo, "desktop-board-1440x900.png", "desktop board regression");
       await assertNoHorizontalOverflow(page);
       expect(broadPuts.requests).toEqual([]);
     } finally {
       broadPuts.stop();
+      await context.close();
+    }
+  }
+});
+
+test("Create Job is a guarded page workflow using the existing record API", async ({ browser }, testInfo) => {
+  const context = await browser.newContext(mobileContextOptions(390, 844));
+  const page = await context.newPage();
+  const broadPuts = trackBroadWorkspacePuts(page);
+  try {
+    await loginAs(page, "mobileadmin");
+    await capture(page, testInfo, "service-board-before-job-open-390x844.png", "Service Board before Create Job");
+
+    await page.getByRole("button", { name: "Add job", exact: true }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/new");
+    await expect(page.getByRole("heading", { name: "Create Job", level: 1 })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Create New Job" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Create Job", exact: true })).toBeDisabled();
+
+    const customerSearch = page.getByRole("textbox", { name: "Search customers" });
+    await customerSearch.fill("Arcadia");
+    await expect(page.locator('[aria-label="Customer search results"] button')).toHaveCount(1);
+    await capture(page, testInfo, "create-job-mobile-customer-search-390x844.png", "Create Job customer search");
+
+    await page.locator('[aria-label="Customer search results"] button').click();
+    await expect(page.getByRole("button", { name: "Change customer" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change site" })).toBeVisible();
+    await expect(page.locator(".record-workspace").getByText("Arcadia Example Apartments", { exact: true }).first()).toBeVisible();
+    await capture(page, testInfo, "create-job-mobile-selected-customer-390x844.png", "Create Job selected customer");
+
+    await page.getByLabel("Job title").fill("Page workspace service visit");
+    await page.getByLabel("Description of work").fill("Verify the responsive page workflow and existing create API.");
+    await page.getByLabel("Scheduled date").fill("2026-09-10");
+    await chooseSelectOption(page, "Assigned technician", "Jordan Vale · Office Manager");
+    await chooseSelectOption(page, "Urgency", "High");
+    await page.locator("#create-job-details").scrollIntoViewIfNeeded();
+    await capture(page, testInfo, "create-job-mobile-details-390x844.png", "Create Job details");
+    await expect(page.getByRole("button", { name: "Create Job", exact: true })).toBeEnabled();
+    await assertNoHorizontalOverflow(page);
+
+    const createRequestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/jobs"
+    );
+    const createResponsePromise = page.waitForResponse((response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname === "/api/jobs"
+    );
+    await page.getByRole("button", { name: "Create Job", exact: true }).click();
+    const createRequest = await createRequestPromise;
+    const createResponse = await createResponsePromise;
+    expect(createResponse.ok()).toBe(true);
+    expect(createRequest.postDataJSON()).toMatchObject({
+      customerMode: "existing",
+      customer: { id: "demo-customer-arcadia" },
+      job: {
+        title: "Page workspace service visit",
+        urgency: "High",
+        scheduledDate: "2026-09-10",
+        assignedTechnicianId: "demo-staff-admin",
+        assignedTechnicianName: "Jordan Vale",
+      },
+    });
+
+    await expect(page).toHaveURL(/\/jobs\/[a-f0-9-]+$/);
+    await expect(page.getByRole("heading", { name: "Page workspace service visit", level: 1 })).toBeVisible();
+    await expect.poll(() => readWorkspaceState().jobs.find((job) => job.title === "Page workspace service visit")?.assignedTechnicianName).toBe("Jordan Vale");
+    await page.getByRole("button", { name: "Back to Service Board" }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+    await capture(page, testInfo, "service-board-after-job-back-390x844.png", "Service Board after job Back");
+    expect(broadPuts.requests).toEqual([]);
+  } finally {
+    broadPuts.stop();
+    await context.close();
+  }
+});
+
+test("Create Job preserves nested customer and site work and confirms discarding it", async ({ browser }) => {
+  const context = await browser.newContext(mobileContextOptions(375, 667));
+  const page = await context.newPage();
+  try {
+    await loginAs(page, "mobileadmin");
+    await page.getByRole("button", { name: "Add job", exact: true }).click();
+    await page.getByRole("button", { name: "Add New Customer", exact: true }).click();
+    await page.getByLabel("Customer or company name").fill("Nested workflow customer");
+    await page.getByLabel("Primary site address").fill("44 Test Street, Melbourne VIC 3000");
+    await page.getByLabel("Job title").fill("Nested customer job");
+    await page.getByLabel("Description of work").fill("State remains on the page while adding a customer and site.");
+    await expect(page.getByRole("button", { name: "Create Job", exact: true })).toBeEnabled();
+
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    const discardDialog = page.getByRole("dialog", { name: "Discard unsaved changes?" });
+    await expect(discardDialog).toBeVisible();
+    await discardDialog.getByRole("button", { name: "Keep editing" }).click();
+    await expect(page.getByLabel("Customer or company name")).toHaveValue("Nested workflow customer");
+    await expect(page.getByLabel("Job title")).toHaveValue("Nested customer job");
+
+    await page.evaluate(() => window.history.back());
+    await expect(discardDialog).toBeVisible();
+    await discardDialog.getByRole("button", { name: "Discard" }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+
+    await page.getByRole("button", { name: "Add job", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search customers" }).fill("Arcadia");
+    await page.locator('[aria-label="Customer search results"] button').click();
+    await page.getByRole("button", { name: "Add site" }).click();
+    await page.getByLabel("Site address").fill("88 New Site Road, Richmond VIC 3121");
+    await expect(page.getByLabel("Site address")).toHaveValue("88 New Site Road, Richmond VIC 3121");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("dialog", { name: "Discard unsaved changes?" }).getByRole("button", { name: "Discard" }).click();
+
+    await page.getByRole("button", { name: "Add job", exact: true }).click();
+    await page.getByRole("button", { name: "Add New Customer", exact: true }).click();
+    await page.getByLabel("Customer or company name").fill("Created inside job workspace");
+    await page.getByLabel("Primary site address").fill("44 Test Street, Melbourne VIC 3000");
+    await page.getByLabel("Job title").fill("New customer workspace job");
+    await page.getByLabel("Description of work").fill("Create the customer, site, and job through the existing atomic job API.");
+    const newCustomerResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname === "/api/jobs"
+    );
+    await page.getByRole("button", { name: "Create Job", exact: true }).click();
+    expect((await newCustomerResponse).ok()).toBe(true);
+    await expect.poll(() => readWorkspaceState().customers.some((customer) => customer.name === "Created inside job workspace")).toBe(true);
+    await expect.poll(() => readWorkspaceState().jobs.some((job) => job.title === "New customer workspace job")).toBe(true);
+    await page.getByRole("button", { name: "Back to Service Board" }).click();
+
+    await page.getByRole("button", { name: "Add job", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search customers" }).fill("Arcadia");
+    await page.locator('[aria-label="Customer search results"] button').click();
+    await page.getByRole("button", { name: "Add site" }).click();
+    await page.getByLabel("Site address").fill("88 New Site Road, Richmond VIC 3121");
+    await page.getByLabel("Job title").fill("New site workspace job");
+    await page.getByLabel("Description of work").fill("Persist a new site while creating a job for an existing customer.");
+    const newSiteResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname === "/api/jobs"
+    );
+    await page.getByRole("button", { name: "Create Job", exact: true }).click();
+    expect((await newSiteResponse).ok()).toBe(true);
+    await expect.poll(() => readWorkspaceState().customers
+      .find((customer) => customer.id === "demo-customer-arcadia")
+      ?.sites.some((site) => site.address === "88 New Site Road, Richmond VIC 3121")).toBe(true);
+    await page.getByRole("button", { name: "Back to Service Board" }).click();
+  } finally {
+    await context.close();
+  }
+});
+
+test("Create Job reports API failures and prevents duplicate submission", async ({ browser }) => {
+  const context = await browser.newContext(mobileContextOptions(412, 915));
+  const page = await context.newPage();
+  let createRequestCount = 0;
+  page.on("dialog", (dialog) => dialog.dismiss());
+  try {
+    await loginAs(page, "mobileadmin");
+    await page.route("**/api/jobs", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      createRequestCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Synthetic create failure" }) });
+    });
+    await page.getByRole("button", { name: "Add job", exact: true }).click();
+    await page.getByRole("textbox", { name: "Search customers" }).fill("Arcadia");
+    await page.locator('[aria-label="Customer search results"] button').click();
+    await page.getByLabel("Job title").fill("Failing create request");
+    await page.getByLabel("Description of work").fill("Exercise the inline error state.");
+    const createButton = page.getByRole("button", { name: "Create Job", exact: true });
+    await createButton.click({ clickCount: 2 });
+    await expect(page.getByRole("alert")).toContainText("could not be created");
+    expect(createRequestCount).toBe(1);
+    await expect(page).toHaveURL(baseUrl + "/jobs/new");
+  } finally {
+    await context.close();
+  }
+});
+
+test("Job Details uses accessible tabs and preserves editing, status, and schedule APIs", async ({ browser }, testInfo) => {
+  const context = await browser.newContext(mobileContextOptions(390, 844));
+  const page = await context.newPage();
+  const broadPuts = trackBroadWorkspacePuts(page);
+  try {
+    await loginAs(page, "mobileadmin");
+    await capture(page, testInfo, "service-board-before-job-open-390x844.png", "Service Board before opening a job");
+    await page.getByRole("button", { name: /Open Job #1001/ }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Synthetic gate service" })).toHaveCount(0);
+    await capture(page, testInfo, "job-details-mobile-overview-390x844.png", "Job Details mobile Overview");
+    await assertNoHorizontalOverflow(page);
+
+    const tablist = page.getByRole("tablist", { name: "Job details sections" });
+    const overviewTab = tablist.getByRole("tab", { name: "Overview" });
+    const scheduleTab = tablist.getByRole("tab", { name: "Schedule" });
+    for (const tabName of ["Overview", "Schedule", "Documents", "Notes & photos"]) {
+      await expect(tablist.getByRole("tab", { name: tabName })).toBeVisible();
+    }
+    const tablistDimensions = await tablist.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(tablistDimensions.scrollWidth).toBeLessThanOrEqual(tablistDimensions.clientWidth + 1);
+    await expect(page.getByText("Supplier Manuals", { exact: true })).toHaveCount(0);
+    const customerProfileButton = page.getByRole("button", { name: "Open customer profile" });
+    await customerProfileButton.scrollIntoViewIfNeeded();
+    await capture(page, testInfo, "job-details-mobile-overview-actions-390x844.png", "Job Details mobile Overview actions");
+    await tablist.scrollIntoViewIfNeeded();
+    await overviewTab.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(scheduleTab).toBeFocused();
+    await expect(scheduleTab).toHaveAttribute("aria-selected", "true");
+
+    await page.getByLabel("Scheduled date").fill("2026-09-14");
+    await chooseSelectOption(page, "Assigned technician", "Jordan Vale · Office Manager");
+    await chooseSelectOption(page, "Urgency", "High");
+    const scheduleRequestPromise = page.waitForRequest((request) =>
+      request.method() === "PATCH" && new URL(request.url()).pathname === "/api/jobs/demo-job-1001"
+    );
+    await page.getByRole("button", { name: "Save schedule" }).click();
+    expect((await scheduleRequestPromise).postDataJSON()).toEqual({
+      job: {
+        scheduledDate: "2026-09-14",
+        urgency: "High",
+        assignedTechnicianId: "demo-staff-admin",
+        assignedTechnicianName: "Jordan Vale",
+      },
+    });
+    await expect.poll(() => readWorkspaceState().jobs.find((job) => job.id === "demo-job-1001")?.scheduledDate).toBe("2026-09-14");
+
+    const statusRequestPromise = page.waitForRequest((request) =>
+      request.method() === "PATCH" && new URL(request.url()).pathname === "/api/jobs/demo-job-1001/status"
+    );
+    await chooseSelectOption(page, "Update job status", "In Progress");
+    expect((await statusRequestPromise).postDataJSON()).toEqual({ status: "In Progress" });
+    await waitForJobStatus("demo-job-1001", "In Progress");
+
+    await tablist.getByRole("tab", { name: "Overview" }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Job title").fill("Synthetic gate service updated");
+    const detailUpdateRequest = page.waitForRequest((request) =>
+      request.method() === "PATCH" && new URL(request.url()).pathname === "/api/jobs/demo-job-1001"
+    );
+    await page.getByRole("button", { name: "Save changes" }).click();
+    expect((await detailUpdateRequest).postDataJSON()).toMatchObject({ job: { title: "Synthetic gate service updated" } });
+    await expect(page.getByRole("heading", { name: "Synthetic gate service updated", level: 1 })).toBeVisible();
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Job title").fill("Synthetic gate service");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
+
+    await tablist.getByRole("tab", { name: "Documents" }).click();
+    await expect(page.getByRole("button", { name: "Open Quote Editor" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Invoice Editor" })).toBeVisible();
+    await capture(page, testInfo, "job-details-mobile-documents-390x844.png", "Job Details mobile Documents");
+
+    await tablist.getByRole("tab", { name: "Notes & photos" }).click();
+    await capture(page, testInfo, "job-details-mobile-notes-390x844.png", "Job Details mobile Notes and photos");
+    const emptyPhotoState = page.getByText("No photos uploaded yet.", { exact: true });
+    await emptyPhotoState.scrollIntoViewIfNeeded();
+    await capture(page, testInfo, "job-details-mobile-empty-photos-390x844.png", "Job Details mobile empty photos");
+    await page.getByLabel("New note").fill("Responsive page note");
+    const noteRequestPromise = page.waitForRequest((request) =>
+      request.method() === "POST" && new URL(request.url()).pathname === "/api/jobs/demo-job-1001/notes"
+    );
+    await page.getByRole("button", { name: "Add note" }).click();
+    await noteRequestPromise;
+    await expect(page.getByText("Responsive page note", { exact: true })).toBeVisible();
+
+    await chooseSelectOption(page, "Update job status", "To Do");
+    await waitForJobStatus("demo-job-1001", "To Do");
+    await tablist.getByRole("tab", { name: "Schedule" }).click();
+    await page.getByLabel("Scheduled date").fill("2026-01-15");
+    await chooseSelectOption(page, "Assigned technician", "Unassigned");
+    await chooseSelectOption(page, "Urgency", "Medium");
+    await page.getByRole("button", { name: "Save schedule" }).click();
+    await expect.poll(() => readWorkspaceState().jobs.find((job) => job.id === "demo-job-1001")?.scheduledDate).toBe("2026-01-15");
+
+    await page.getByRole("button", { name: "Back to Service Board" }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+    await capture(page, testInfo, "service-board-after-job-back-390x844.png", "Service Board after Job Details Back");
+    expect(broadPuts.requests).toEqual([]);
+  } finally {
+    broadPuts.stop();
+    await context.close();
+  }
+});
+
+test("history, invoices, customer, and site entry points open the same Job Details page", async ({ browser }) => {
+  const context = await browser.newContext(desktopContextOptions(1280, 900));
+  const page = await context.newPage();
+  try {
+    await loginAs(page, "mobileadmin", false);
+
+    await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await page.getByRole("button", { name: "Customers", exact: true }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+    await expect(page.locator(".record-workspace")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveAttribute("aria-current", "page");
+
+    await page.getByRole("button", { name: "Job History", exact: true }).click();
+    const historyRow = page.locator('[title="Double-click to open job"]', { hasText: "Job #1001" });
+    await historyRow.getByRole("button", { name: "Open", exact: true }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await page.getByRole("button", { name: "Back to Job History" }).click();
+    await expect(page.getByRole("button", { name: "Job History", exact: true })).toHaveAttribute("aria-current", "page");
+
+    await page.getByRole("button", { name: "Invoices", exact: true }).click();
+    await page.locator(".data-grid-row", { hasText: "Job #1001" }).getByRole("button", { name: "Job", exact: true }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await page.getByRole("button", { name: "Back to Invoices" }).click();
+    await expect(page.getByRole("button", { name: "Invoices", exact: true })).toHaveAttribute("aria-current", "page");
+
+    await page.getByRole("button", { name: "Customers", exact: true }).click();
+    const customerRow = page.locator('[title="Double-click to open customer profile"]', { hasText: "Arcadia Example Apartments" });
+    await customerRow.getByRole("button", { name: "Open", exact: true }).click();
+    const customerDialog = page.getByRole("dialog", { name: "Arcadia Example Apartments" });
+    await customerDialog.getByRole("button", { name: /Job #1001/ }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await expect(customerDialog).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Customers" }).click();
+
+    await page.getByRole("button", { name: "Sites", exact: true }).click();
+    const siteRow = page.locator('[title="Double-click to open site profile"]', { hasText: "10 Example Lane, Sampleton VIC 3000" });
+    await siteRow.getByRole("button", { name: "Open", exact: true }).click();
+    const siteDialog = page.getByRole("dialog", { name: "10 Example Lane, Sampleton VIC 3000" });
+    await siteDialog.getByRole("button", { name: /Job #1001/ }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await expect(siteDialog).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Sites" }).click();
+
+    await page.goto(baseUrl + "/jobs/demo-job-1001");
+    await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
+    await page.getByRole("button", { name: "Back to Service Board" }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+  } finally {
+    await context.close();
+  }
+});
+
+test("desktop sidebar navigation closes Job Details and preserves its unsaved-change guard", async ({ browser }) => {
+  const context = await browser.newContext(desktopContextOptions(1440, 900));
+  const page = await context.newPage();
+  try {
+    await loginAs(page, "mobileadmin", false);
+    await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.getByLabel("Job title").fill("Unsaved sidebar navigation check");
+    await page.getByRole("button", { name: "Customers", exact: true }).click();
+
+    const discardDialog = page.getByRole("dialog", { name: "Discard unsaved changes?" });
+    await expect(discardDialog).toBeVisible();
+    await discardDialog.getByRole("button", { name: "Keep editing" }).click();
+    await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+    await expect(page.getByLabel("Job title")).toHaveValue("Unsaved sidebar navigation check");
+
+    await page.getByRole("button", { name: "Customers", exact: true }).click();
+    await discardDialog.getByRole("button", { name: "Discard" }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+    await expect(page.locator(".record-workspace")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveAttribute("aria-current", "page");
+  } finally {
+    await context.close();
+  }
+});
+
+test("Create Job and Job Details use tablet and desktop workspace layouts", async ({ browser }, testInfo) => {
+  for (const viewport of [
+    { width: 390, height: 844, mobile: true },
+    { width: 768, height: 1024, mobile: true },
+    { width: 820, height: 1180, mobile: true },
+    { width: 1024, height: 768, mobile: false },
+    { width: 1280, height: 720, mobile: false },
+    { width: 1440, height: 900, mobile: false },
+    { width: 1920, height: 1080, mobile: false },
+  ]) {
+    const context = await browser.newContext(
+      viewport.mobile ? mobileContextOptions(viewport.width, viewport.height) : desktopContextOptions(viewport.width, viewport.height)
+    );
+    const page = await context.newPage();
+    try {
+      if (viewport.width === 390) {
+        const devtools = await context.newCDPSession(page);
+        await devtools.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top: 24, right: 8, bottom: 20, left: 8 },
+        });
+      }
+      await loginAs(page, "mobileadmin", viewport.mobile);
+      const newJobButton = viewport.mobile
+        ? page.getByRole("button", { name: "Add job", exact: true })
+        : page.getByRole("button", { name: "New Job", exact: true });
+      await newJobButton.click();
+      await expect(page).toHaveURL(baseUrl + "/jobs/new");
+      await expect(page.getByRole("dialog", { name: "Create New Job" })).toHaveCount(0);
+      const createWorkspaceMetrics = await assertRecordWorkspaceTop(page, !viewport.mobile);
+      if (viewport.width === 390) expect(createWorkspaceMetrics.headerPaddingTop).toBeGreaterThanOrEqual(34);
+      await assertNoHorizontalOverflow(page);
+      if (viewport.width === 820) await capture(page, testInfo, "create-job-ipad-820x1180.png", "Create Job iPad portrait");
+      if (!viewport.mobile && [1280, 1440, 1920].includes(viewport.width)) {
+        await capture(page, testInfo, `create-job-desktop-${viewport.width}x${viewport.height}.png`, `Create Job desktop ${viewport.width}x${viewport.height}`);
+      }
+      await page.getByRole("button", { name: "Back to Service Board" }).click();
+
+      if (viewport.mobile) {
+        await page.getByRole("button", { name: /Open Job #1001/ }).click();
+      } else {
+        await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
+      }
+      await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+      await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Synthetic gate service" })).toHaveCount(0);
+      const detailsWorkspaceMetrics = await assertRecordWorkspaceTop(page, !viewport.mobile);
+      if (viewport.width === 390) expect(detailsWorkspaceMetrics.headerPaddingTop).toBeGreaterThanOrEqual(34);
+      await assertNoHorizontalOverflow(page);
+      if (viewport.width === 820) await capture(page, testInfo, "job-details-ipad-overview-820x1180.png", "Job Details iPad Overview");
+      if (!viewport.mobile && [1280, 1440, 1920].includes(viewport.width)) {
+        await capture(page, testInfo, `job-details-desktop-overview-${viewport.width}x${viewport.height}.png`, `Job Details desktop ${viewport.width}x${viewport.height}`);
+      }
+      await page.getByRole("button", { name: "Back to Service Board" }).click();
+    } finally {
       await context.close();
     }
   }

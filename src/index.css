@@ -183,6 +183,116 @@
 }
 
 @layer components {
+  .record-workspace {
+    min-height: 100dvh;
+    max-width: 100%;
+    overflow-x: clip;
+    overscroll-behavior-y: contain;
+  }
+
+  .record-workspace-header {
+    border-color: var(--ui-border-color) !important;
+    background: var(--workspace-hero-bg) !important;
+    color: var(--workspace-hero-text) !important;
+  }
+
+  .record-major-panel {
+    border-color: var(--ui-border-color) !important;
+    background: linear-gradient(180deg, var(--data-view-surface) 0%, color-mix(in oklab, var(--data-view-surface) 58%, white) 100%) !important;
+    box-shadow: 0 18px 38px -30px color-mix(in oklab, var(--data-view-accent) 46%, black) !important;
+  }
+
+  .record-selection-panel {
+    border-width: 1px !important;
+    border-color: var(--data-view-border) !important;
+    background: var(--data-view-header-start) !important;
+  }
+
+  .record-workspace-section + .record-workspace-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--data-view-border);
+  }
+
+  .record-subtle-divider-y {
+    border-block: 1px solid var(--data-view-border) !important;
+  }
+
+  .record-tab-strip {
+    border-bottom: 1px solid var(--data-view-border) !important;
+  }
+
+  .record-thin-border,
+  .record-result-list,
+  .record-inset-surface,
+  .record-empty-state {
+    border-style: solid;
+    border-width: 1px !important;
+  }
+
+  .record-result-list,
+  .record-inset-surface,
+  .record-empty-state {
+    border-color: var(--data-view-border) !important;
+  }
+
+  .record-inset-surface,
+  .record-empty-state,
+  .record-passive-surface {
+    background: color-mix(in oklab, var(--data-view-surface) 58%, white) !important;
+  }
+
+  .record-workspace .contact-snapshot-editor {
+    border-width: 0 !important;
+    border-radius: var(--radius-lg) !important;
+    background: color-mix(in oklab, var(--data-view-surface) 58%, white) !important;
+  }
+
+  .record-empty-state {
+    color: color-mix(in oklab, var(--foreground) 56%, var(--data-view-accent));
+  }
+
+  .record-workspace-action-bar {
+    border-color: var(--ui-border-color) !important;
+    background: color-mix(in oklab, var(--data-view-surface) 68%, white) !important;
+  }
+
+  .record-workspace :is(input, textarea, button[role="combobox"]:not(.record-workspace-status)) {
+    border-color: var(--data-view-border-strong) !important;
+    border-radius: var(--radius-lg) !important;
+    background: color-mix(in oklab, var(--card) 92%, var(--data-view-surface)) !important;
+    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--data-view-accent) 10%, transparent) !important;
+    scroll-margin-top: 7rem;
+    scroll-margin-bottom: 8rem;
+  }
+
+  .record-workspace :is(input, textarea, button[role="combobox"]):focus-visible {
+    border-color: var(--data-view-border-strong) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklab, var(--data-view-accent) 10%, transparent),
+      0 0 0 3px color-mix(in oklab, var(--primary) 28%, transparent) !important;
+  }
+
+  .record-workspace-tabs [data-slot="tabs-list"] {
+    border-width: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .record-workspace-tabs [data-slot="tabs-trigger"] {
+    border: 1px solid transparent !important;
+    border-radius: var(--radius-lg) !important;
+    color: color-mix(in oklab, var(--foreground) 78%, var(--data-view-accent)) !important;
+  }
+
+  .record-workspace-tabs [data-slot="tabs-trigger"][data-active],
+  .record-workspace-tabs [data-slot="tabs-trigger"][data-state="active"] {
+    border-color: var(--ui-border-color) !important;
+    background: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+    box-shadow: none !important;
+  }
+
   @media (max-width: 63.999rem) {
     .mobile-safe-workspace {
       padding-right: calc(var(--content-padding-x-mobile) + env(safe-area-inset-right)) !important;

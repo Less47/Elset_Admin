@@ -77,7 +77,7 @@ export default function ContactSnapshotEditor({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+    <div className="contact-snapshot-editor rounded-2xl border border-slate-200 bg-white p-4">
       <div>
         <p className="text-sm font-semibold text-slate-900">{title}</p>
         {description ? <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p> : null}

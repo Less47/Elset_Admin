@@ -56,6 +56,8 @@ export function useWorkspaceActions({
   data,
   docType,
   fetchWithAuth,
+  onCloseJobWorkspace,
+  onNavigateToJob,
   selectedFreshJob,
   selectedJob,
   selectedSiteContext,
@@ -64,8 +66,6 @@ export function useWorkspaceActions({
   setDocEditorOpen,
   setDocType,
   setIsSendingDocument,
-  setJobDetailsOpen,
-  setJobEditOpen,
   setSelectedCustomerId,
   setSelectedJob,
   setSelectedSiteContext,
@@ -314,91 +314,90 @@ export function useWorkspaceActions({
       return saved.ok ? saved.result : null;
     }
 
-    setData((prev) => {
-      let customerRecord = customer;
-      let customers = prev.customers;
-      const now = new Date().toISOString();
-      const normalizedSiteInput = siteInput
-        ? normalizeSiteProfileRecord({
-            ...siteInput,
-            updatedAt: now,
-            createdAt: siteInput.createdAt || now,
-          })
-        : null;
+    let customerRecord = customer;
+    let customers = data.customers;
+    const now = new Date().toISOString();
+    const normalizedSiteInput = siteInput
+      ? normalizeSiteProfileRecord({
+          ...siteInput,
+          updatedAt: now,
+          createdAt: siteInput.createdAt || now,
+        })
+      : null;
 
-      if (customerMode === "new") {
-        customerRecord = normalizeCustomerRecord({
-          id: crypto.randomUUID(),
-          ...customer,
-          address: normalizedSiteInput?.address || "",
-          sites: normalizedSiteInput ? [normalizedSiteInput] : [],
-          createdAt: now,
-        });
-        customers = [...prev.customers, customerRecord];
-      } else if (customer?.id) {
-        const existingCustomer = prev.customers.find((entry) => entry.id === customer.id) || customer;
-
-        if (normalizedSiteInput) {
-          customerRecord = normalizeCustomerRecord({
-            ...existingCustomer,
-            sites: normalizeCustomerSiteProfiles(
-              [
-                ...normalizeCustomerSiteProfiles(existingCustomer.sites, existingCustomer.address, existingCustomer.siteAccessNotes).filter(
-                  (site) => site.address.toLowerCase() !== normalizedSiteInput.address.toLowerCase()
-                ),
-                normalizedSiteInput,
-              ],
-              existingCustomer.address,
-              []
-            ),
-            createdAt: existingCustomer.createdAt,
-          });
-          customers = prev.customers.map((entry) => (entry.id === customerRecord.id ? customerRecord : entry));
-        } else {
-          customerRecord = existingCustomer;
-        }
-      }
-
-      const jobAddress = normalizeSiteAddress(job.jobAddress || normalizedSiteInput?.address || customerRecord.address);
-      const billingContact = buildContactSnapshot(job.billingContact, "Billing contact")
-        || buildContactSnapshot(getCustomerBillingContact(customerRecord), "Billing contact");
-      const onsiteContact = buildContactSnapshot(job.onsiteContact, "On-site contact")
-        || buildContactSnapshot(getCustomerSitePrimaryContact(customerRecord, jobAddress), "On-site contact");
-      const requesterContact = buildContactSnapshot(job.requesterContact, "Requester");
-
-      const newJob = normalizeJobRecord({
+    if (customerMode === "new") {
+      customerRecord = normalizeCustomerRecord({
         id: crypto.randomUUID(),
-        jobNumber: getNextJobNumber(prev.jobs),
-        title: job.title,
-        description: job.description,
-        urgency: job.urgency,
-        status: "To Do",
-        scheduledDate: toDateInputValue(job.scheduledDate),
-        assignedTechnicianId: "",
-        assignedTechnicianName: "",
-        customerId: customerRecord.id,
-        customerName: customerRecord.name,
-        customerEmail: customerRecord.email || billingContact?.email || "",
-        customerPhone: customerRecord.phone || billingContact?.phone || "",
-        jobAddress,
-        ocNumber: String(job.ocNumber || normalizedSiteInput?.ocNumber || "").trim(),
-        requesterContact,
-        onsiteContact,
-        billingContact,
+        ...customer,
+        address: normalizedSiteInput?.address || "",
+        sites: normalizedSiteInput ? [normalizedSiteInput] : [],
         createdAt: now,
-        updatedAt: now,
-        notes: [],
-        photos: [],
-        quote: null,
-        invoice: null,
       });
+      customers = [...data.customers, customerRecord];
+    } else if (customer?.id) {
+      const existingCustomer = data.customers.find((entry) => entry.id === customer.id) || customer;
 
-      return {
-        ...prev,
-        customers,
-        jobs: [newJob, ...prev.jobs],
-      };
+      if (normalizedSiteInput) {
+        customerRecord = normalizeCustomerRecord({
+          ...existingCustomer,
+          sites: normalizeCustomerSiteProfiles(
+            [
+              ...normalizeCustomerSiteProfiles(existingCustomer.sites, existingCustomer.address, existingCustomer.siteAccessNotes).filter(
+                (site) => site.address.toLowerCase() !== normalizedSiteInput.address.toLowerCase()
+              ),
+              normalizedSiteInput,
+            ],
+            existingCustomer.address,
+            []
+          ),
+          createdAt: existingCustomer.createdAt,
+        });
+        customers = data.customers.map((entry) => (entry.id === customerRecord.id ? customerRecord : entry));
+      } else {
+        customerRecord = existingCustomer;
+      }
+    }
+
+    const jobAddress = normalizeSiteAddress(job.jobAddress || normalizedSiteInput?.address || customerRecord.address);
+    const billingContact = buildContactSnapshot(job.billingContact, "Billing contact")
+      || buildContactSnapshot(getCustomerBillingContact(customerRecord), "Billing contact");
+    const onsiteContact = buildContactSnapshot(job.onsiteContact, "On-site contact")
+      || buildContactSnapshot(getCustomerSitePrimaryContact(customerRecord, jobAddress), "On-site contact");
+    const requesterContact = buildContactSnapshot(job.requesterContact, "Requester");
+
+    const newJob = normalizeJobRecord({
+      id: crypto.randomUUID(),
+      jobNumber: getNextJobNumber(data.jobs),
+      title: job.title,
+      description: job.description,
+      urgency: job.urgency,
+      status: "To Do",
+      scheduledDate: toDateInputValue(job.scheduledDate),
+      assignedTechnicianId: job.assignedTechnicianId || "",
+      assignedTechnicianName: job.assignedTechnicianName || "",
+      customerId: customerRecord.id,
+      customerName: customerRecord.name,
+      customerEmail: customerRecord.email || billingContact?.email || "",
+      customerPhone: customerRecord.phone || billingContact?.phone || "",
+      jobAddress,
+      ocNumber: String(job.ocNumber || normalizedSiteInput?.ocNumber || "").trim(),
+      requesterContact,
+      onsiteContact,
+      billingContact,
+      createdAt: now,
+      updatedAt: now,
+      notes: [],
+      photos: [],
+      quote: null,
+      invoice: null,
     });
+
+    setData({
+      ...data,
+      customers,
+      jobs: [newJob, ...data.jobs],
+    });
+    return newJob;
   }
 
   async function handleCreateStaff(staffInput) {
@@ -652,8 +651,11 @@ export function useWorkspaceActions({
   }
 
   function handleOpenJob(job) {
+    if (!job) return;
+    setCustomerProfileOpen(false);
+    setSiteProfileOpen(false);
     setSelectedJob(job);
-    setJobDetailsOpen(true);
+    onNavigateToJob?.(job);
   }
 
   async function handleGenerateMaintenanceJob(planId) {
@@ -688,8 +690,7 @@ export function useWorkspaceActions({
       });
       if (!saved.ok) return false;
       if (saved.result?.job) {
-        setSelectedJob(saved.result.job);
-        setJobDetailsOpen(true);
+        handleOpenJob(saved.result.job);
       }
       return saved.result || true;
     }
@@ -743,8 +744,7 @@ export function useWorkspaceActions({
       ),
     }));
 
-    setSelectedJob(newJob);
-    setJobDetailsOpen(true);
+    handleOpenJob(newJob);
     return true;
   }
 
@@ -1227,8 +1227,6 @@ export function useWorkspaceActions({
       });
       if (!saved.ok) return false;
 
-      setJobEditOpen(false);
-      setJobDetailsOpen(true);
       return true;
     }
 
@@ -1237,8 +1235,6 @@ export function useWorkspaceActions({
       updateJob(jobId, nextUpdates);
     }
 
-    setJobEditOpen(false);
-    setJobDetailsOpen(true);
     return true;
   }
 
@@ -1262,8 +1258,6 @@ export function useWorkspaceActions({
       if (!saved.ok) return false;
 
       setSelectedJob(null);
-      setJobDetailsOpen(false);
-      setJobEditOpen(false);
       setDocEditorOpen(false);
       return true;
     }
@@ -1277,8 +1271,6 @@ export function useWorkspaceActions({
       ],
     }));
     setSelectedJob(null);
-    setJobDetailsOpen(false);
-    setJobEditOpen(false);
     setDocEditorOpen(false);
     return true;
   }
@@ -1913,9 +1905,8 @@ export function useWorkspaceActions({
 
       if (selectedJob?.customerId === customerId) {
         setSelectedJob(null);
-        setJobDetailsOpen(false);
-        setJobEditOpen(false);
         setDocEditorOpen(false);
+        onCloseJobWorkspace?.({ force: true });
       }
 
       if (selectedSiteContext?.customerId === customerId) {
@@ -1950,9 +1941,8 @@ export function useWorkspaceActions({
 
     if (selectedJob?.customerId === customerId) {
       setSelectedJob(null);
-      setJobDetailsOpen(false);
-      setJobEditOpen(false);
       setDocEditorOpen(false);
+      onCloseJobWorkspace?.({ force: true });
     }
 
     if (selectedSiteContext?.customerId === customerId) {
