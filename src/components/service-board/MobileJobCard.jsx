@@ -48,7 +48,6 @@ export default function MobileJobCard({
   getInvoiceStatus,
   isPlannedForTomorrow,
   job,
-  manualMatches,
   onMove,
   onOpen,
   onPlanForTomorrow,
@@ -63,7 +62,6 @@ export default function MobileJobCard({
   const valueMeta = getJobValueMeta(job);
   const indicators = buildJobCardIndicators({
     job,
-    manualMatches,
     invoiceStatus: getInvoiceStatus(job),
     siteAccessPreview: getSiteAccessNotePreview(siteAccessNote?.notes),
   });

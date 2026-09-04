@@ -1,13 +1,9 @@
 import CustomerCreateDialog from "@/components/customers/CustomerCreateDialog";
 import CustomerProfileDialog from "@/components/customers/CustomerProfileDialog";
 import DocumentEditor from "@/components/documents/DocumentEditor";
-import JobDetailsDialog from "@/components/jobs/JobDetailsDialog";
-import JobEditDialog from "@/components/jobs/JobEditDialog";
-import JobFormDialog from "@/components/jobs/JobFormDialog";
 import SiteProfileDialog from "@/components/sites/SiteProfileDialog";
-import { readFileAsDataUrl } from "@/lib/app-support";
 
-export default function WorkspaceDialogs({ auth, chrome, data, selection, supplierManualState, actions }) {
+export default function WorkspaceDialogs({ auth, chrome, selection, actions }) {
   const { canManageBusiness } = auth;
   const {
     customerCreateOpen,
@@ -15,43 +11,26 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
     docEditorOpen,
     docType,
     isSendingDocument,
-    jobDetailsOpen,
-    jobEditOpen,
-    jobFormOpen,
     setCustomerCreateOpen,
     setCustomerProfileOpen,
     setDocEditorOpen,
-    setJobDetailsOpen,
-    setJobEditOpen,
-    setJobFormOpen,
     setSelectedCustomerId,
     setSelectedSiteContext,
     setSiteProfileOpen,
     siteProfileOpen,
   } = chrome;
   const {
-    noteAuthor,
     selectedCustomer,
     selectedCustomerJobs,
-    selectedFreshCustomer,
-    selectedFreshCustomerJobs,
     selectedFreshJob,
     selectedSite,
     selectedSiteCustomer,
     selectedSiteJobs,
-    selectedSupplierManualMatches,
   } = selection;
   const {
-    createJob,
-    handleAddJobNote,
-    handleAddJobPhotos,
     handleCreateCustomer,
     handleDeleteCustomer,
-    handleDeleteJob,
-    handleDeleteJobPhoto,
     handleDeleteSiteProfile,
-    handleOpenCustomerProfile,
-    handleOpenDoc,
     handleOpenJob,
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
@@ -59,23 +38,13 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
     handleSaveDocument,
     handleSaveSiteProfile,
     handleSendDocument,
-    handleStatusChange,
     handleUpdateCustomer,
-    handleUpdateJobDetails,
   } = actions;
 
   return (
     <>
       {canManageBusiness ? (
         <>
-          <JobFormDialog
-            open={jobFormOpen}
-            onOpenChange={setJobFormOpen}
-            customers={data.customers}
-            jobs={data.jobs}
-            onSave={createJob}
-          />
-
           <CustomerCreateDialog
             open={customerCreateOpen}
             onOpenChange={setCustomerCreateOpen}
@@ -116,69 +85,6 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
         </>
       ) : null}
 
-      <JobDetailsDialog
-        open={jobDetailsOpen}
-        onOpenChange={setJobDetailsOpen}
-        job={selectedFreshJob}
-        customer={selectedFreshCustomer}
-        onStatusChange={(status) => selectedFreshJob && handleStatusChange(selectedFreshJob.id, status)}
-        onEditJob={() => {
-          if (!canManageBusiness) return;
-          setJobDetailsOpen(false);
-          setJobEditOpen(true);
-        }}
-        onDeleteJob={() => selectedFreshJob && handleDeleteJob(selectedFreshJob.id)}
-        canEditJob={canManageBusiness}
-        canDeleteJob={canManageBusiness}
-        showCommercialDocuments={canManageBusiness}
-        supplierManualMatches={selectedSupplierManualMatches}
-        supplierManualStatus={supplierManualState.status}
-        supplierManualError={supplierManualState.error}
-        onOpenCustomerProfile={canManageBusiness ? handleOpenCustomerProfile : null}
-        onOpenSiteProfile={canManageBusiness ? handleOpenSiteProfile : null}
-        onOpenDocument={canManageBusiness ? (type) => {
-          if (!selectedFreshJob) return;
-          setJobDetailsOpen(false);
-          handleOpenDoc(selectedFreshJob, type);
-        } : null}
-        onOpenSentDocument={canManageBusiness ? (type) => {
-          if (!selectedFreshJob) return;
-          handleOpenSentDocumentCopy(selectedFreshJob, type);
-        } : null}
-        onAddNote={(text) => {
-          if (!selectedFreshJob) return;
-
-          return handleAddJobNote(selectedFreshJob.id, text, noteAuthor);
-        }}
-        onAddPhotos={async (files) => {
-          if (!selectedFreshJob) return;
-
-          try {
-            const photos = await Promise.all(
-              files.map(async (file) => ({
-                id: crypto.randomUUID(),
-                name: file.name,
-                url: await readFileAsDataUrl(file),
-              }))
-            );
-
-            return handleAddJobPhotos(selectedFreshJob.id, photos);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to read the selected image files.";
-            window.alert(message);
-          }
-        }}
-        onDeletePhoto={(photo) => {
-          if (!selectedFreshJob) return;
-
-          const photoLabel = photo?.name || "this photo";
-          const confirmed = window.confirm(`Delete ${photoLabel} from this job? This cannot be undone.`);
-          if (!confirmed) return;
-
-          return handleDeleteJobPhoto(selectedFreshJob.id, photo);
-        }}
-      />
-
       {canManageBusiness ? (
         <>
           <DocumentEditor
@@ -191,15 +97,6 @@ export default function WorkspaceDialogs({ auth, chrome, data, selection, suppli
             onSendDocument={handleSendDocument}
             onOpenSentDocument={() => selectedFreshJob && handleOpenSentDocumentCopy(selectedFreshJob, docType)}
             onSave={(doc) => (selectedFreshJob ? handleSaveDocument(selectedFreshJob.id, docType, doc) : false)}
-          />
-
-          <JobEditDialog
-            open={jobEditOpen}
-            onOpenChange={setJobEditOpen}
-            job={selectedFreshJob}
-            customer={selectedFreshCustomer}
-            customerJobs={selectedFreshCustomerJobs}
-            onSave={(updates) => selectedFreshJob && handleUpdateJobDetails(selectedFreshJob.id, updates)}
           />
         </>
       ) : null}

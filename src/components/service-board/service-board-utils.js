@@ -25,7 +25,6 @@ export const serviceBoardIndicatorLegend = [
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
   { id: "invoice-attention", label: "Invoice needs attention", dotClassName: "bg-rose-500" },
-  { id: "manuals", label: "Supplier manual", dotClassName: "bg-indigo-500" },
   { id: "maintenance", label: "Maintenance", dotClassName: "bg-teal-500" },
   { id: "access", label: "Access notes", dotClassName: "bg-amber-500" },
 ];
@@ -135,7 +134,7 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
   });
 }
 
-export function buildJobCardIndicators({ job, manualMatches, invoiceStatus, siteAccessPreview }) {
+export function buildJobCardIndicators({ job, invoiceStatus, siteAccessPreview }) {
   const indicators = [];
   const quoteSent = Boolean(job.quote?.sentHistory?.length);
   const showInvoiceStatus = Boolean(job.invoice) || job.status === "Completed";
@@ -154,14 +153,6 @@ export function buildJobCardIndicators({ job, manualMatches, invoiceStatus, site
     } else {
       indicators.push({ id: "invoice-pending", label: invoiceStatus.label, dotClassName: "bg-violet-500" });
     }
-  }
-
-  if (manualMatches.length > 0) {
-    indicators.push({
-      id: "manuals",
-      label: `${manualMatches.length} manual${manualMatches.length === 1 ? "" : "s"}`,
-      dotClassName: "bg-indigo-500",
-    });
   }
 
   if (job.maintenancePlanName) {

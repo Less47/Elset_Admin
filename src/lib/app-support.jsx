@@ -49,8 +49,6 @@ export {
   LOGO_SRC,
   RECYCLE_BIN_RETENTION_MS,
   STORAGE_KEY,
-  SUPPLIER_MANUALS_BASE_URL,
-  SUPPLIER_MANUALS_INDEX_URL,
   contentDensityOptions,
   customerTypeOptions,
   defaultStaffMembers,
@@ -65,8 +63,6 @@ export {
   preferenceSettingKeys,
   urgencyOptions,
 } from "./app-support-config.js";
-export * from "./supplier-manuals.js";
-export { SupplierManualMatches } from "@/components/shared/SupplierManualMatches";
 
 export function formatLoginAccessRole(role) {
   const match = loginAccessRoleOptions.find((option) => option.value === role);
