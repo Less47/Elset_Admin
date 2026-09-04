@@ -121,7 +121,7 @@ export default function MobileJobCard({
         </div>
       </button>
 
-      <div className="flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 border-t border-white/80 bg-white/38 px-2.5 py-1.5">
+      <div className="flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 bg-white/38 px-2.5 py-1.5">
         {canManageTomorrow && onRemoveFromTomorrow ? (
           <Button
             type="button"

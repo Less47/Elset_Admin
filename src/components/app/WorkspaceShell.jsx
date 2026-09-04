@@ -11,6 +11,7 @@ import JobsMapManager from "@/components/map/JobsMapManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
 import MobileServiceBoard from "@/components/service-board/MobileServiceBoard";
 import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPanel } from "@/components/service-board/OfficeBoard";
+import { TOMORROW_VIEW } from "@/components/service-board/service-board-utils";
 import SettingsManager from "@/components/settings/SettingsManager";
 import StaffManager from "@/components/staff/StaffManager";
 import SiteManager from "@/components/sites/SiteManager";
@@ -45,6 +46,7 @@ const FAVICON_SRC = "/favicon.png";
 
 export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null }) {
   const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useState([]);
+  const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
@@ -121,6 +123,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
   const desktopServiceBoardFullScreen = isDesktopLayout && isServiceBoardFullScreen;
+
+  const handleMobileNavigate = (sectionId) => {
+    const navigationStarted = setActiveSection(sectionId);
+    if (navigationStarted !== false && sectionId === "service-board") setMobileServiceBoardView("To Do");
+    return navigationStarted;
+  };
 
   const handleHideServiceBoardColumn = (status) => {
     setServiceBoardHiddenColumns((currentStatuses) => (
@@ -203,10 +211,13 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           currentSection={currentSection}
           items={visibleSideNavItems}
           onLogout={handleLogout}
-          onNavigate={setActiveSection}
+          onNavigate={handleMobileNavigate}
           onNewJob={() => openCreateJob()}
+          onOpenTomorrow={() => setMobileServiceBoardView(TOMORROW_VIEW)}
           roleLabel={roleMenuLabel}
           themePalette={themePalette}
+          tomorrowCount={derived.tomorrowJobs.length}
+          tomorrowSelected={mobileServiceBoardView === TOMORROW_VIEW}
         />
       ) : null}
 
@@ -383,6 +394,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             ? "min-w-0 lg:pl-[var(--sidebar-offset)] lg:pt-4"
             : desktopServiceBoardFullScreen
             ? "min-w-0 space-y-4 px-3 py-3 sm:px-4 sm:py-4"
+            : activeSection === "service-board"
+            ? "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] pb-[var(--content-padding-y-mobile)] pt-0 sm:px-[var(--content-padding-x-sm)] sm:pb-[var(--content-padding-y-sm)] sm:pt-0 lg:px-[var(--content-padding-x-lg)] lg:pb-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)] lg:pt-[var(--content-padding-y-lg)]"
             : "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] py-[var(--content-padding-y-mobile)] sm:px-[var(--content-padding-x-sm)] sm:py-[var(--content-padding-y-sm)] lg:px-[var(--content-padding-x-lg)] lg:py-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)]"
         }
       >
@@ -486,11 +499,13 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                 onRemoveAllJobsFromTomorrow={handleRemoveAllJobsFromTomorrow}
                 onRemoveJobFromTomorrow={handleRemoveJobFromTomorrow}
                 onSearchChange={setOfficeSearch}
+                onSelectedViewChange={setMobileServiceBoardView}
                 onShowTagLabelsChange={setShowServiceBoardTagLabels}
                 onStatusChange={handleStatusChange}
                 onUrgencyChange={setShowHighUrgencyOnly}
                 showHighUrgencyOnly={showHighUrgencyOnly}
                 showTagLabels={showServiceBoardTagLabels}
+                selectedView={mobileServiceBoardView}
                 tomorrowJobs={derived.tomorrowJobs}
                 tomorrowPlanningDate={derived.tomorrowPlanningDate}
               />

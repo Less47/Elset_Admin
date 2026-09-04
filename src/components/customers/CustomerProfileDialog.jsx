@@ -524,11 +524,14 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        value={newSiteDraft.ocNumber}
-                        onChange={(e) => setNewSiteDraft((prev) => ({ ...prev, ocNumber: e.target.value }))}
-                        placeholder="OC number (optional)"
-                      />
+                      <FormField label="OC number">
+                        <Input
+                          value={newSiteDraft.ocNumber}
+                          onChange={(e) => setNewSiteDraft((prev) => ({ ...prev, ocNumber: e.target.value }))}
+                          placeholder="e.g. PS123456"
+                        />
+                        <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
+                      </FormField>
                       <Textarea
                         rows={3}
                         value={newSiteDraft.notes}
@@ -573,8 +576,9 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                               <Input
                                 value={site.ocNumber || ""}
                                 onChange={(e) => updateDraftSiteAccessNote(site.address, site.accessNotes || "", site.siteType, e.target.value)}
-                                placeholder="Optional invoice reference"
+                                placeholder="e.g. PS123456"
                               />
+                              <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
                             </FormField>
                             <p className="mt-2 text-xs text-slate-500">
                               These notes will appear automatically on matching jobs for this site.

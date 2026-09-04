@@ -188,8 +188,9 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                       <Input
                         value={draftSite.ocNumber}
                         onChange={(e) => setDraftSite((prev) => ({ ...prev, ocNumber: e.target.value }))}
-                        placeholder="Optional client order/control number"
+                        placeholder="e.g. PS123456"
                       />
+                      <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
                     </FormField>
                     <FormField label="Access notes">
                       <Textarea

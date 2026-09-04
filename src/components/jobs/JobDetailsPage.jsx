@@ -35,7 +35,7 @@ function buildOverviewDraft(job) {
     title: job?.title || "",
     description: job?.description || "",
     jobAddress: job?.jobAddress || "",
-    ocNumber: job?.ocNumber || "",
+    clientReference: job?.ocNumber || "",
     requesterContact: job?.requesterContact || null,
     onsiteContact: job?.onsiteContact || null,
     billingContact: job?.billingContact || (
@@ -129,6 +129,18 @@ export default function JobDetailsPage({
     () => (customer ? buildCustomerSites(customer, customerJobs || []) : []),
     [customer, customerJobs]
   );
+  const currentJobSite = useMemo(
+    () => customerSites.find(
+      (site) => normalizeSiteAddress(site.address).toLowerCase() === normalizeSiteAddress(job?.jobAddress).toLowerCase()
+    ) || null,
+    [customerSites, job?.jobAddress]
+  );
+  const draftJobSite = useMemo(
+    () => customerSites.find(
+      (site) => normalizeSiteAddress(site.address).toLowerCase() === normalizeSiteAddress(overviewDraft.jobAddress).toLowerCase()
+    ) || null,
+    [customerSites, overviewDraft.jobAddress]
+  );
   const customerContacts = useMemo(() => (customer ? getCustomerContacts(customer) : []), [customer]);
 
   const overviewDirty = overviewEditing
@@ -177,10 +189,11 @@ export default function JobDetailsPage({
     if (!canSaveOverview || isSavingOverview) return;
     setIsSavingOverview(true);
     setPageError("");
+    const { clientReference, ...overviewUpdates } = overviewDraft;
     const saved = await onUpdateJobDetails({
-      ...overviewDraft,
+      ...overviewUpdates,
       jobAddress: normalizeSiteAddress(overviewDraft.jobAddress),
-      ocNumber: overviewDraft.ocNumber.trim(),
+      ocNumber: clientReference.trim(),
     });
     setIsSavingOverview(false);
     if (saved === false) {
@@ -252,7 +265,6 @@ export default function JobDetailsPage({
               <InfoItem label="Scheduled">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</InfoItem>
               <InfoItem label="Technician">{job.assignedTechnicianName || "Unassigned"}</InfoItem>
               <InfoItem label="Urgency"><Badge className={urgencyClassName(job.urgency)}>{job.urgency || "Low"}</Badge></InfoItem>
-              <InfoItem label="OC number">{job.ocNumber || "Not set"}</InfoItem>
             </dl>
             {canEditJob ? (
               <Button type="button" variant="outline" className="mt-4 h-11 w-full rounded-lg" onClick={() => {
@@ -307,7 +319,7 @@ export default function JobDetailsPage({
                             <p className="text-sm font-medium text-slate-700">Saved sites</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {customerSites.map((site) => (
-                                <Button key={site.id} type="button" variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address, ocNumber: site.ocNumber || current.ocNumber }))}>
+                                <Button key={site.id} type="button" variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address }))}>
                                   <span className="truncate">{site.address}</span>
                                 </Button>
                               ))}
@@ -315,8 +327,18 @@ export default function JobDetailsPage({
                           </div>
                         ) : null}
                         <div className="grid gap-2 sm:max-w-md">
-                          <Label htmlFor="edit-job-oc-number">OC number</Label>
-                          <Input id="edit-job-oc-number" className="h-11" value={overviewDraft.ocNumber} onChange={(event) => setOverviewDraft((current) => ({ ...current, ocNumber: event.target.value }))} />
+                          <p className="text-sm font-medium text-slate-700">OC number</p>
+                          <p className="text-sm font-medium text-slate-950">{draftJobSite?.ocNumber || "Not set"}</p>
+                          <p className="text-sm text-slate-500">This belongs to the site and is managed from the Site profile.</p>
+                          {customer && draftJobSite && onOpenSiteProfile ? (
+                            <Button type="button" variant="outline" className="h-11 justify-self-start rounded-lg" onClick={() => onOpenSiteProfile(customer.id, normalizeSiteAddress(draftJobSite.address).toLowerCase())}>
+                              <MapPin className="h-4 w-4" /> Open site profile
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="grid gap-2 sm:max-w-md">
+                          <Label htmlFor="edit-job-client-reference">Client reference / PO number</Label>
+                          <Input id="edit-job-client-reference" className="h-11" value={overviewDraft.clientReference} onChange={(event) => setOverviewDraft((current) => ({ ...current, clientReference: event.target.value }))} placeholder="Optional purchase order or client reference" />
                         </div>
                         <details className="record-inset-surface rounded-lg p-3 sm:p-4">
                           <summary className="cursor-pointer font-medium text-slate-950">Job contacts</summary>
@@ -344,7 +366,8 @@ export default function JobDetailsPage({
                           <InfoItem label="Customer">{job.customerName || "Not set"}</InfoItem>
                           <InfoItem label="Customer contact">{[job.customerPhone, job.customerEmail].filter(Boolean).join(" · ") || "Not set"}</InfoItem>
                           <InfoItem label="Site">{job.jobAddress || "Not set"}</InfoItem>
-                          <InfoItem label="OC number">{job.ocNumber || "Not set"}</InfoItem>
+                          <InfoItem label="OC number">{currentJobSite?.ocNumber || "Not set"}</InfoItem>
+                          <InfoItem label="Client reference / PO number">{job.ocNumber || "Not set"}</InfoItem>
                           {job.maintenancePlanName ? <InfoItem label="Maintenance plan">{job.maintenancePlanName}</InfoItem> : null}
                           {job.maintenanceDueDate ? <InfoItem label="Maintenance due">{formatDate(job.maintenanceDueDate)}</InfoItem> : null}
                         </dl>

@@ -54,6 +54,51 @@ test("Create Job continues to use the record-specific jobs endpoint", () => {
   assert.doesNotMatch(pageSource, /\/api\/app-state/);
 });
 
+test("site OC numbers and job client references stay separate in record workflows", () => {
+  const createJobSource = readSource("src/components/jobs/CreateJobPage.jsx");
+  const jobDetailsSource = readSource("src/components/jobs/JobDetailsPage.jsx");
+  const actionsSource = readSource("src/hooks/useWorkspaceActions.js");
+
+  assert.match(createJobSource, /htmlFor="new-site-oc-number">OC number/);
+  assert.match(createJobSource, /placeholder="e\.g\. PS123456"/);
+  assert.match(createJobSource, /htmlFor="job-client-reference">Client reference \/ PO number/);
+  assert.match(createJobSource, /placeholder="Optional purchase order or client reference"/);
+  assert.doesNotMatch(createJobSource, /ocNumber: defaultSite\.ocNumber/);
+  assert.doesNotMatch(createJobSource, /ocNumber: site\.ocNumber/);
+  assert.doesNotMatch(actionsSource, /job\.ocNumber \|\| normalizedSiteInput\?\.ocNumber/);
+
+  assert.match(jobDetailsSource, /<InfoItem label="OC number">\{currentJobSite\?\.ocNumber/);
+  assert.doesNotMatch(jobDetailsSource, /<InfoItem label="OC number">\{job\.ocNumber/);
+  assert.match(jobDetailsSource, /htmlFor="edit-job-client-reference">Client reference \/ PO number/);
+  assert.match(jobDetailsSource, /This belongs to the site and is managed from the Site profile\./);
+});
+
+test("site forms consistently describe OC number as a property reference", () => {
+  for (const relativePath of [
+    "src/components/customers/CustomerCreateDialog.jsx",
+    "src/components/customers/CustomerProfileDialog.jsx",
+    "src/components/sites/SiteProfileDialog.jsx",
+  ]) {
+    const source = readSource(relativePath);
+    assert.match(source, /label="OC number"/);
+    assert.match(source, /placeholder="e\.g\. PS123456"/);
+    assert.match(source, /Owners Corporation \/ plan reference for this property\./);
+    assert.doesNotMatch(source, /Optional (?:invoice|client order\/control) reference/);
+  }
+});
+
+test("quote and invoice surfaces label the legacy job field as a client reference", () => {
+  const documentEditorSource = readSource("src/components/documents/DocumentEditor.jsx");
+  const invoiceManagerSource = readSource("src/components/invoices/InvoiceManager.jsx");
+  const pdfSource = readSource("quote-pdf.js");
+
+  assert.match(documentEditorSource, /label="Client reference \/ PO number"/);
+  assert.match(invoiceManagerSource, /Client ref \{row\.job\.ocNumber\}/);
+  assert.match(pdfSource, /Client reference: \$\{model\.ocNumber\}/);
+  assert.doesNotMatch(documentEditorSource, /label="OC number"/);
+  assert.doesNotMatch(pdfSource, /OC Number:/);
+});
+
 test("supplier manual loading, matching, and UI remain removed", () => {
   for (const relativePath of [
     "src/hooks/useSupplierManuals.js",

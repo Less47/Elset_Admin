@@ -63,7 +63,7 @@ export default function DocumentEditor({
   const documentLabel = type === "quote" ? "Quote" : "Invoice";
   const recipientEmail = getDocumentRecipientEmail(job);
   const recipientName = getDocumentRecipientName(job);
-  const ocNumber = String(job.ocNumber || "").trim();
+  const clientReference = String(job.ocNumber || "").trim();
   const paymentReceiptStamp = type === "invoice" && paymentSummary?.paidAmount > 0 && paymentSummary?.total > 0
     ? paymentSummary.balanceAmount > 0
       ? "PART PAYMENT"
@@ -181,7 +181,7 @@ export default function DocumentEditor({
               </FormField>
             </div>
 
-            {(type === "invoice" || ocNumber) && (
+            {(type === "invoice" || clientReference) && (
               <div className="grid gap-4 sm:grid-cols-2">
                 {type === "invoice" ? (
                   <FormField label="Due date">
@@ -192,9 +192,9 @@ export default function DocumentEditor({
                     />
                   </FormField>
                 ) : null}
-                {ocNumber ? (
-                  <FormField label="OC number">
-                    <Input value={ocNumber} disabled />
+                {clientReference ? (
+                  <FormField label="Client reference / PO number">
+                    <Input value={clientReference} disabled />
                   </FormField>
                 ) : null}
               </div>

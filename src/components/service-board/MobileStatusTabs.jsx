@@ -1,14 +1,10 @@
 import { useEffect, useRef } from "react";
-import { CalendarDays } from "lucide-react";
 import { statuses } from "@/lib/job-status";
-import { getMobileBoardPanelId, TOMORROW_VIEW } from "./service-board-utils";
+import { getMobileBoardPanelId } from "./service-board-utils";
 
-export default function MobileStatusTabs({ counts, selectedView, tomorrowCount, onSelect }) {
+export default function MobileStatusTabs({ counts, selectedView, onSelect }) {
   const tabRefs = useRef([]);
-  const views = [
-    ...statuses.map((status) => ({ id: status, label: status, count: counts[status] || 0 })),
-    { id: TOMORROW_VIEW, label: "Tomorrow", count: tomorrowCount, icon: CalendarDays },
-  ];
+  const views = statuses.map((status) => ({ id: status, label: status, count: counts[status] || 0 }));
   const selectedIndex = views.findIndex((view) => view.id === selectedView);
 
   useEffect(() => {
@@ -40,7 +36,7 @@ export default function MobileStatusTabs({ counts, selectedView, tomorrowCount, 
 
   return (
     <div
-      className="mobile-status-tabs sticky z-30 min-w-0 overflow-hidden -mx-[var(--content-padding-x-mobile)] border-y bg-white/92 px-[var(--content-padding-x-mobile)] py-2 shadow-sm backdrop-blur sm:-mx-[var(--content-padding-x-sm)] sm:px-[var(--content-padding-x-sm)]"
+      className="mobile-status-tabs sticky z-30 min-w-0 overflow-hidden -mx-[var(--content-padding-x-mobile)] border-b bg-white/92 px-[var(--content-padding-x-mobile)] py-2 shadow-sm backdrop-blur sm:-mx-[var(--content-padding-x-sm)] sm:px-[var(--content-padding-x-sm)]"
       style={{ top: "calc(3.5rem + env(safe-area-inset-top))" }}
     >
       <div
@@ -50,7 +46,6 @@ export default function MobileStatusTabs({ counts, selectedView, tomorrowCount, 
       >
         {views.map((view, index) => {
           const isSelected = selectedView === view.id;
-          const Icon = view.icon;
 
           return (
             <button
@@ -67,11 +62,10 @@ export default function MobileStatusTabs({ counts, selectedView, tomorrowCount, 
               }`}
               aria-selected={isSelected}
               aria-controls={isSelected ? getMobileBoardPanelId(view.id) : undefined}
-              tabIndex={isSelected ? 0 : -1}
+              tabIndex={isSelected || (selectedIndex < 0 && index === 0) ? 0 : -1}
               onClick={() => onSelect(view.id)}
               onKeyDown={(event) => handleKeyDown(event, index)}
             >
-              {Icon ? <Icon className="h-4 w-4" /> : null}
               <span>{view.label}</span>
               <span
                 className={`inline-flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
