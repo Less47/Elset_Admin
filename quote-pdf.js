@@ -581,7 +581,7 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
     });
     rightY -= 11;
     if (model.ocNumber) {
-      drawRightText(`OC Number: ${model.ocNumber}`, {
+      drawRightText(`Client reference: ${model.ocNumber}`, {
         y: rightY,
         font: regularFont,
         size: 9.2,

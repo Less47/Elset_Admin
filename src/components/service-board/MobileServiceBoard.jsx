@@ -31,15 +31,16 @@ export default function MobileServiceBoard({
   onRemoveAllJobsFromTomorrow,
   onRemoveJobFromTomorrow,
   onSearchChange,
+  onSelectedViewChange,
   onShowTagLabelsChange,
   onStatusChange,
   onUrgencyChange,
   showHighUrgencyOnly,
   showTagLabels,
+  selectedView,
   tomorrowJobs,
   tomorrowPlanningDate,
 }) {
-  const [selectedView, setSelectedView] = useState(statuses[0]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [moveJob, setMoveJob] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
@@ -82,20 +83,19 @@ export default function MobileServiceBoard({
 
   const handleMoved = (job, nextStatus) => {
     setMoveJob(null);
-    setSelectedView(nextStatus);
+    onSelectedViewChange(nextStatus);
     setStatusMessage(`Job #${job.jobNumber} moved to ${nextStatus}.`);
   };
 
   return (
     <section
-      className="mobile-service-board grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-3"
+      className="mobile-service-board grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-3 pb-20"
       aria-label="Mobile Service Board"
     >
       <MobileStatusTabs
         counts={counts}
         selectedView={selectedView}
-        tomorrowCount={tomorrowJobs.length}
-        onSelect={setSelectedView}
+        onSelect={onSelectedViewChange}
       />
 
       <div className="flex w-full min-w-0 max-w-full items-center gap-2 rounded-2xl border bg-white/88 p-2 shadow-sm backdrop-blur">

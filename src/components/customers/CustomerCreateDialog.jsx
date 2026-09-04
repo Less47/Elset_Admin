@@ -108,13 +108,14 @@ export default function CustomerCreateDialog({ open, onOpenChange, onSave }) {
                 placeholder="Search the customer's main address"
               />
             </FormField>
-            <FormField label="Primary OC number">
+            <FormField label="OC number">
               <Input
                 className={TEXT_INPUT_CLASSNAME}
                 value={customer.primaryOcNumber}
                 onChange={(e) => setCustomer((prev) => ({ ...prev, primaryOcNumber: e.target.value }))}
-                placeholder="Optional client order/control number"
+                placeholder="e.g. PS123456"
               />
+              <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
             </FormField>
           </div>
 

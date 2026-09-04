@@ -380,7 +380,7 @@ export function useWorkspaceActions({
       customerEmail: customerRecord.email || billingContact?.email || "",
       customerPhone: customerRecord.phone || billingContact?.phone || "",
       jobAddress,
-      ocNumber: String(job.ocNumber || normalizedSiteInput?.ocNumber || "").trim(),
+      ocNumber: String(job.ocNumber || "").trim(),
       requesterContact,
       onsiteContact,
       billingContact,

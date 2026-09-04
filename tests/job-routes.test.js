@@ -147,11 +147,13 @@ test("job create supports existing customer/site, new customer/site, existing cu
             id: "site-new-job",
             address: "22 New Site Road, Sampleton VIC 3000",
             siteType: "commercial",
+            ocNumber: "PS123456",
           },
           job: {
             id: "job-new-customer",
             title: "Synthetic new-customer job",
             description: "Synthetic new-customer job.",
+            ocNumber: "CLIENT-PO-NEW-1",
           },
         }),
       });
@@ -159,7 +161,12 @@ test("job create supports existing customer/site, new customer/site, existing cu
       assert.equal(newCustomer.response.status, 200, newCustomer.payload.error);
       assert.equal(newCustomer.payload.result.customerId, "customer-new-job");
       assert.equal(newCustomer.payload.result.jobAddress, "22 New Site Road, Sampleton VIC 3000");
+      assert.equal(newCustomer.payload.result.ocNumber, "CLIENT-PO-NEW-1");
       assert.equal(newCustomer.payload.state.customers.some((customer) => customer.id === "customer-new-job"), true);
+      assert.equal(
+        newCustomer.payload.state.customers.find((customer) => customer.id === "customer-new-job").sites[0].ocNumber,
+        "PS123456"
+      );
 
       const newSite = await requestJson(baseUrl, "/api/jobs", {
         method: "POST",
@@ -225,7 +232,7 @@ test("job edit, schedule, tomorrow planning, and status updates persist", async 
           title: "Updated synthetic job",
           description: "Updated synthetic description.",
           urgency: "High",
-          ocNumber: "OC-UPDATED",
+          ocNumber: "CLIENT-PO-UPDATED",
           requesterContact: {
             name: "Request Example",
             phone: "0400 333 444",
@@ -236,6 +243,7 @@ test("job edit, schedule, tomorrow planning, and status updates persist", async 
 
       assert.equal(update.response.status, 200, update.payload.error);
       assert.equal(update.payload.result.title, "Updated synthetic job");
+      assert.equal(update.payload.result.ocNumber, "CLIENT-PO-UPDATED");
       assert.equal(update.payload.result.requesterContact.name, "Request Example");
 
       const schedule = await requestJson(baseUrl, "/api/jobs/demo-job-1001/schedule", {

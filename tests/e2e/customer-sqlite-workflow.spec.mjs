@@ -283,7 +283,7 @@ async function createCustomer(page) {
   await dialog.locator("input").nth(1).fill("e2e.customer@example.test");
   await dialog.locator("input").nth(2).fill("0400 111 222");
   await dialog.getByPlaceholder("Search the customer's main address").fill("1 E2E Customer Street, Flowtown VIC 3999");
-  await dialog.getByPlaceholder("Optional client order/control number").fill("OC-E2E-CUSTOMER");
+  await dialog.getByPlaceholder("e.g. PS123456").fill("OC-E2E-CUSTOMER");
   await dialog.getByRole("button", { name: "Create Customer" }).click();
   await expect(page.getByRole("dialog")).toContainText(createdCustomerName);
   await page.getByRole("button", { name: "Close" }).click();
@@ -332,7 +332,7 @@ async function createSite(page) {
   const siteDialog = page.getByRole("dialog");
   await expect(siteDialog).toContainText("New Site");
   await siteDialog.getByPlaceholder("Search this site address").fill(createdSiteAddress);
-  await siteDialog.getByPlaceholder("Optional client order/control number").fill("OC-E2E-SITE");
+  await siteDialog.getByPlaceholder("e.g. PS123456").fill("OC-E2E-SITE");
   await siteDialog.getByPlaceholder("Gate code, parking, access windows, call-on-arrival details...").fill("Use synthetic keypad 1234.");
   await siteDialog.getByPlaceholder("General context, layout, project details, recurring issues...").fill("Synthetic site notes.");
   await siteDialog.getByRole("button", { name: "Save Site Profile" }).click();
@@ -496,7 +496,7 @@ async function seedUnrelatedControlRecords(page) {
       urgency: "Low",
       scheduledDate: "2026-02-02",
       jobAddress: controlSiteAddress,
-      ocNumber: "OC-E2E-CONTROL",
+      ocNumber: "CLIENT-REF-E2E-CONTROL",
     },
   });
 
@@ -516,11 +516,15 @@ async function createExistingCustomerJob(page) {
   await workspace.getByRole("textbox", { name: "Search customers" }).fill(unrelatedCustomerName);
   await workspace.locator('[aria-label="Customer search results"] button', { hasText: unrelatedCustomerName }).first().click();
   await expect(workspace.getByText(fixtureSiteAddress, { exact: true }).first()).toBeVisible();
+  await expect(workspace.getByText("OC number:", { exact: true })).toHaveCount(1);
+  await expect(workspace.getByLabel("Client reference / PO number")).toBeVisible();
   await workspace.getByLabel("Job title").fill(jobOriginalTitle);
   await workspace.getByLabel("Description of work").fill(jobOriginalDescription);
-  await workspace.getByLabel("OC number").fill("OC-E2E-JOB");
+  await workspace.getByLabel("Client reference / PO number").fill("CLIENT-REF-E2E-JOB");
   await workspace.getByRole("button", { name: "Create Job" }).click();
   await expect(page).toHaveURL(/\/jobs\/[^/?#]+$/);
+  await expect(workspace.getByText("OC number", { exact: true })).toHaveCount(1);
+  await expect(workspace.getByText("Client reference / PO number", { exact: true })).toHaveCount(1);
 
   const createdJob = await waitForActiveJobByTitle(jobOriginalTitle, (job) =>
     job.customerId === fixtureCustomerId &&
@@ -533,15 +537,16 @@ async function createExistingCustomerJob(page) {
 async function editJobDetailsAndSchedule(page, jobId) {
   const workspace = await openJobFromHistory(page, jobOriginalTitle);
   await workspace.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(workspace.getByText("This belongs to the site and is managed from the Site profile.")).toBeVisible();
   await workspace.getByLabel("Job title").fill(jobEditedTitle);
   await workspace.getByLabel("Description of work").fill(jobEditedDescription);
-  await workspace.getByLabel("OC number").fill("OC-E2E-JOB-EDITED");
+  await workspace.getByLabel("Client reference / PO number").fill("CLIENT-REF-E2E-JOB-EDITED");
   await workspace.getByRole("button", { name: "Save changes" }).click();
 
   await waitForActiveJob(jobId, (job) =>
     job.title === jobEditedTitle &&
     job.description === jobEditedDescription &&
-    job.ocNumber === "OC-E2E-JOB-EDITED"
+    job.ocNumber === "CLIENT-REF-E2E-JOB-EDITED"
   );
 
   await workspace.getByRole("tab", { name: "Schedule" }).click();
@@ -854,7 +859,7 @@ test("SQLite core job workflow persists through browser refreshes", async ({ pag
       customerId: fixtureCustomerId,
       customerName: unrelatedCustomerName,
       jobAddress: fixtureSiteAddress,
-      ocNumber: "OC-E2E-JOB-EDITED",
+      ocNumber: "CLIENT-REF-E2E-JOB-EDITED",
       scheduledDate: "",
       serviceBoardTomorrowDate: "",
     });

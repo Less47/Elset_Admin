@@ -495,7 +495,12 @@ test("mobile navigation and one-status Service Board support the core workflow",
     await expect(tabs.getByRole("tab", { name: /To Do\s+2/ })).toHaveAttribute("aria-selected", "true");
     await expect(tabs.getByRole("tab", { name: /In Progress\s+1/ })).toBeVisible();
     await expect(tabs.getByRole("tab", { name: /Completed\s+1/ })).toBeVisible();
-    await expect(tabs.getByRole("tab", { name: /Tomorrow\s+1/ })).toBeVisible();
+    await expect(tabs.getByRole("tab", { name: /Tomorrow/ })).toHaveCount(0);
+    const tomorrowButton = page.getByRole("button", { name: "Tomorrow, 1 planned job" });
+    await expect(tomorrowButton).toBeVisible();
+    const addJobButton = page.getByRole("button", { name: "Add job", exact: true });
+    await expect(addJobButton).toBeVisible();
+    await expect(addJobButton).toHaveCSS("position", "fixed");
     await expect(page.locator("[data-service-board-status]")).toHaveCount(1);
     await expect(page.locator('[data-service-board-status="To Do"] .mobile-job-card')).toHaveCount(2);
 
@@ -541,11 +546,11 @@ test("mobile navigation and one-status Service Board support the core workflow",
     await expect(tabs.getByRole("tab", { name: /In Progress\s+1/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("button", { name: new RegExp(`Open Job #${plannedJobNumber}`) })).toBeFocused();
 
-    await tabs.getByRole("tab", { name: /Tomorrow\s+1/ }).click();
+    await tomorrowButton.click();
     await expect(page.locator('[data-mobile-board-view="Tomorrow"]')).toContainText("Mobile In Progress Job");
     await expect(page.locator("[data-desktop-tomorrow-tab]")).toHaveCount(0);
     await search.fill("no matching planned job");
-    await expect(tabs.getByRole("tab", { name: /Tomorrow\s+1/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Tomorrow, 1 planned job" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator('[data-mobile-board-view="Tomorrow"]')).toContainText("Mobile In Progress Job");
     await page.getByRole("button", { name: "Clear job search" }).click();
     const removeTomorrowResponse = page.waitForResponse((response) =>
@@ -553,7 +558,7 @@ test("mobile navigation and one-status Service Board support the core workflow",
     );
     await page.getByRole("button", { name: `Remove Job #${plannedJobNumber} from tomorrow` }).click();
     await removeTomorrowResponse;
-    await expect(tabs.getByRole("tab", { name: /Tomorrow\s+0/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Tomorrow, 0 planned jobs" })).toBeVisible();
 
     await tabs.getByRole("tab", { name: /In Progress\s+1/ }).click();
     const addTomorrowResponse = page.waitForResponse((response) =>
@@ -561,7 +566,7 @@ test("mobile navigation and one-status Service Board support the core workflow",
     );
     await page.getByRole("button", { name: `Add Job #${plannedJobNumber} to tomorrow` }).click();
     await addTomorrowResponse;
-    await expect(tabs.getByRole("tab", { name: /Tomorrow\s+1/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Tomorrow, 1 planned job" })).toBeVisible();
 
     const moveTrigger = page.getByRole("button", { name: `Move Job #${plannedJobNumber}` });
     await moveTrigger.click();
@@ -802,6 +807,10 @@ test("Create Job is a guarded page workflow using the existing record API", asyn
     await expect(page.getByRole("button", { name: "Create Job", exact: true })).toBeDisabled();
 
     const customerSearch = page.getByRole("textbox", { name: "Search customers" });
+    await expect(page.locator('[aria-label="Customer search results"]')).toHaveCount(0);
+    await expect(page.getByText("Enter at least 2 characters to search.", { exact: true })).toBeVisible();
+    await customerSearch.fill("A");
+    await expect(page.locator('[aria-label="Customer search results"]')).toHaveCount(0);
     await customerSearch.fill("Arcadia");
     await expect(page.locator('[aria-label="Customer search results"] button')).toHaveCount(1);
     await capture(page, testInfo, "create-job-mobile-customer-search-390x844.png", "Create Job customer search");

@@ -261,6 +261,7 @@ test("site update syncs matching job and maintenance-plan addresses", async () =
             site: {
               address: "55 Updated Lane, Sampleton VIC 3000",
               accessNotes: "Updated synthetic note.",
+              ocNumber: "PS654321",
             },
             previousAddress: "10 Example Lane, Sampleton VIC 3000",
           }),
@@ -269,10 +270,13 @@ test("site update syncs matching job and maintenance-plan addresses", async () =
 
       assert.equal(response.status, 200, payload.error);
       assert.equal(payload.state.jobs.find((job) => job.id === "demo-job-1001").jobAddress, "55 Updated Lane, Sampleton VIC 3000");
+      assert.equal(payload.state.jobs.find((job) => job.id === "demo-job-1001").ocNumber, "OC-DEMO-001");
       assert.equal(payload.state.maintenancePlans.find((plan) => plan.id === "demo-maintenance-plan").siteAddress, "55 Updated Lane, Sampleton VIC 3000");
 
       const state = getDbState(dbPath);
       assert.equal(state.customers[0].sites[0].address, "55 Updated Lane, Sampleton VIC 3000");
+      assert.equal(state.customers[0].sites[0].ocNumber, "PS654321");
+      assert.equal(state.jobs.find((job) => job.id === "demo-job-1001").ocNumber, "OC-DEMO-001");
     });
   }, fixture);
 });

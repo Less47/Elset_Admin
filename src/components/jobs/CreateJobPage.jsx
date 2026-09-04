@@ -29,6 +29,8 @@ import {
 
 const NOT_SET_VALUE = "not-set";
 const UNASSIGNED_VALUE = "unassigned";
+const MAX_CUSTOMER_SEARCH_RESULTS = 8;
+const MIN_CUSTOMER_SEARCH_LENGTH = 2;
 
 function createEmptySiteDraft() {
   return {
@@ -101,7 +103,7 @@ export default function CreateJobPage({
 
   const filteredCustomers = useMemo(() => {
     const query = customerSearch.toLowerCase().trim();
-    if (!query) return orderedCustomers;
+    if (query.length < MIN_CUSTOMER_SEARCH_LENGTH) return [];
 
     return orderedCustomers.filter((entry) =>
       [
@@ -115,6 +117,9 @@ export default function CreateJobPage({
       ].join(" ").toLowerCase().includes(query)
     );
   }, [customerSearch, orderedCustomers]);
+  const visibleCustomers = filteredCustomers.slice(0, MAX_CUSTOMER_SEARCH_RESULTS);
+  const customerSearchLength = customerSearch.trim().length;
+  const canSearchCustomers = customerSearchLength >= MIN_CUSTOMER_SEARCH_LENGTH;
 
   const selectedCustomer = useMemo(
     () => orderedCustomers.find((entry) => entry.id === selectedCustomerId) || null,
@@ -150,7 +155,6 @@ export default function CreateJobPage({
       setJob((current) => ({
         ...current,
         jobAddress: defaultSite.address,
-        ocNumber: defaultSite.ocNumber || "",
         requesterContact: null,
         onsiteContact: null,
         billingContact: null,
@@ -163,7 +167,6 @@ export default function CreateJobPage({
     setJob((current) => ({
       ...current,
       jobAddress: selectedCustomer.address || "",
-      ocNumber: "",
       requesterContact: null,
       onsiteContact: null,
       billingContact: null,
@@ -195,7 +198,7 @@ export default function CreateJobPage({
 
   const selectSite = (site) => {
     markDirty();
-    setJob((current) => ({ ...current, jobAddress: site.address, ocNumber: site.ocNumber || current.ocNumber || "" }));
+    setJob((current) => ({ ...current, jobAddress: site.address }));
     setChangingSite(false);
     setTouched((current) => ({ ...current, site: true }));
   };
@@ -219,7 +222,7 @@ export default function CreateJobPage({
         job: {
           ...job,
           jobAddress,
-          ocNumber: (job.ocNumber || "").trim() || (selectedSite?.ocNumber || siteInput?.ocNumber || ""),
+          ocNumber: (job.ocNumber || "").trim(),
         },
         customerMode,
         customer: customerMode === "existing" ? existingCustomer : customer,
@@ -333,31 +336,39 @@ export default function CreateJobPage({
                       autoComplete="off"
                     />
                   </div>
-                  <p className="text-xs text-slate-500">{filteredCustomers.length} customer{filteredCustomers.length === 1 ? "" : "s"} found</p>
+                  <p className="text-xs text-slate-500" aria-live="polite">
+                    {!canSearchCustomers
+                      ? "Enter at least 2 characters to search."
+                      : filteredCustomers.length > MAX_CUSTOMER_SEARCH_RESULTS
+                        ? `Showing the first ${MAX_CUSTOMER_SEARCH_RESULTS} of ${filteredCustomers.length} matching customers. Refine your search to narrow the results.`
+                        : `${filteredCustomers.length} customer${filteredCustomers.length === 1 ? "" : "s"} found`}
+                  </p>
                 </div>
 
-                <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-white/70" aria-label="Customer search results">
-                  {filteredCustomers.length === 0 ? (
-                    <p className="py-6 text-sm text-slate-500">No customers match that search.</p>
-                  ) : filteredCustomers.map((entry) => (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className="flex min-h-[4.5rem] w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-[var(--data-view-row-hover)] focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
-                      onClick={() => selectCustomer(entry)}
-                    >
-                      <span className="min-w-0">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-950">{entry.name}</span>
-                          {entry.customerType ? <Badge variant="secondary">{formatCustomerType(entry.customerType)}</Badge> : null}
+                {canSearchCustomers ? (
+                  <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-white/70" aria-label="Customer search results">
+                    {filteredCustomers.length === 0 ? (
+                      <p className="px-3 py-6 text-sm text-slate-500">No customers match that search.</p>
+                    ) : visibleCustomers.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="flex min-h-[4.5rem] w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-[var(--data-view-row-hover)] focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                        onClick={() => selectCustomer(entry)}
+                      >
+                        <span className="min-w-0">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-slate-950">{entry.name}</span>
+                            {entry.customerType ? <Badge variant="secondary">{formatCustomerType(entry.customerType)}</Badge> : null}
+                          </span>
+                          <span className="mt-1 block text-sm text-slate-600">{entry.address || "No address saved"}</span>
+                          <span className="mt-1 block text-sm text-slate-500">{[entry.email, entry.phone].filter(Boolean).join(" · ") || "No email or phone saved"}</span>
                         </span>
-                        <span className="mt-1 block text-sm text-slate-600">{entry.address || "No address saved"}</span>
-                        <span className="mt-1 block text-sm text-slate-500">{[entry.email, entry.phone].filter(Boolean).join(" · ") || "No email or phone saved"}</span>
-                      </span>
-                      <span className="mt-0.5 shrink-0 rounded-md border bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-900">Select</span>
-                    </button>
-                  ))}
-                </div>
+                        <span className="mt-0.5 shrink-0 rounded-md border bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-900">Select</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 <RequiredMessage id="customer-required" show={touched.customer && !hasCustomer}>Choose a customer.</RequiredMessage>
               </div>
             )
@@ -433,6 +444,9 @@ export default function CreateJobPage({
                   {selectedSite.contactName ? (
                     <p className="mt-2 text-sm text-slate-500">{[selectedSite.contactName, selectedSite.contactPhone, selectedSite.contactEmail].filter(Boolean).join(" · ")}</p>
                   ) : null}
+                  <p className="mt-2 text-sm text-slate-600">
+                    <span className="font-medium text-slate-700">OC number:</span> {selectedSite.ocNumber || "Not set"}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" className="h-11 rounded-lg" onClick={() => setChangingSite(true)}>Change site</Button>
@@ -513,7 +527,8 @@ export default function CreateJobPage({
                   <Input id="new-site-oc-number" className="h-11" value={siteDraft.ocNumber} onChange={(event) => {
                     markDirty();
                     setSiteDraft((current) => ({ ...current, ocNumber: event.target.value }));
-                  }} placeholder="Optional client reference" />
+                  }} placeholder="e.g. PS123456" />
+                  <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
                 </div>
               </div>
               <ContactSnapshotEditor
@@ -598,11 +613,11 @@ export default function CreateJobPage({
               <RequiredMessage id="job-description-error" show={touched.description && !hasDescription} />
             </div>
             <div className="grid gap-2 sm:max-w-md">
-              <Label htmlFor="job-oc-number">OC number</Label>
-              <Input id="job-oc-number" className="h-11" value={job.ocNumber} onChange={(event) => {
+              <Label htmlFor="job-client-reference">Client reference / PO number</Label>
+              <Input id="job-client-reference" className="h-11" value={job.ocNumber} onChange={(event) => {
                 markDirty();
                 setJob((current) => ({ ...current, ocNumber: event.target.value }));
-              }} placeholder="Optional invoice reference" />
+              }} placeholder="Optional purchase order or client reference" />
             </div>
           </div>
         </WorkspaceSection>

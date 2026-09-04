@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Menu, Plus, X } from "lucide-react";
+import { CalendarDays, LogOut, Menu, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,8 +21,11 @@ export default function MobileWorkspaceNavigation({
   onLogout,
   onNavigate,
   onNewJob,
+  onOpenTomorrow,
   roleLabel,
   themePalette,
+  tomorrowCount,
+  tomorrowSelected,
 }) {
   const [open, setOpen] = useState(false);
   const activeItem = items.find((item) => item.id === activeSection);
@@ -65,16 +68,20 @@ export default function MobileWorkspaceNavigation({
               <p className="truncate text-[11px] leading-4 opacity-70">{roleLabel} workspace</p>
             </div>
 
-            {canManageBusiness && activeSection === "service-board" ? (
+            {activeSection === "service-board" ? (
               <Button
                 type="button"
-                className="h-11 w-11 rounded-xl p-0"
+                className={`relative h-11 w-11 rounded-xl p-0 ${tomorrowSelected ? "ring-3 ring-white/55" : ""}`}
                 style={themePalette.primaryButton}
-                onClick={onNewJob}
-                aria-label="Add job"
-                title="Add job"
+                onClick={onOpenTomorrow}
+                aria-label={`Tomorrow, ${tomorrowCount} planned ${tomorrowCount === 1 ? "job" : "jobs"}`}
+                aria-pressed={tomorrowSelected}
+                title="Tomorrow"
               >
-                <Plus className="h-5 w-5" />
+                <CalendarDays className="h-5 w-5" />
+                <span className="absolute -bottom-1 -right-1 inline-flex min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-slate-900 shadow-sm">
+                  {tomorrowCount}
+                </span>
               </Button>
             ) : (
               <span className="h-11 w-11" aria-hidden="true" />
@@ -188,6 +195,23 @@ export default function MobileWorkspaceNavigation({
           </div>
         </DialogContent>
       </Dialog>
+
+      {canManageBusiness && activeSection === "service-board" ? (
+        <Button
+          type="button"
+          className="fixed z-40 h-14 w-14 rounded-2xl p-0 shadow-xl lg:hidden"
+          style={{
+            ...themePalette.primaryButton,
+            right: "calc(1.5rem + env(safe-area-inset-right))",
+            bottom: "calc(1rem + env(safe-area-inset-bottom))",
+          }}
+          onClick={onNewJob}
+          aria-label="Add job"
+          title="Add job"
+        >
+          <Plus className="h-6 w-6" />
+        </Button>
+      ) : null}
     </div>
   );
 }
