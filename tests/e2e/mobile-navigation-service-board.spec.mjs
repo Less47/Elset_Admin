@@ -39,6 +39,19 @@ const screenshotNames = [
   "job-details-desktop-overview-1280x720.png",
   "job-details-desktop-overview-1440x900.png",
   "job-details-desktop-overview-1920x1080.png",
+  "responsive-customers-mobile-390x844.png",
+  "responsive-customers-filter-sheet-mobile-390x844.png",
+  "responsive-sites-mobile-390x844.png",
+  "responsive-job-history-mobile-390x844.png",
+  "responsive-job-history-filter-sheet-mobile-390x844.png",
+  "responsive-invoices-mobile-390x844.png",
+  "responsive-maintenance-mobile-390x844.png",
+  "responsive-inventory-mobile-390x844.png",
+  "responsive-customers-tablet-820x1180.png",
+  "responsive-job-history-tablet-820x1180.png",
+  "responsive-customers-desktop-1280x720.png",
+  "responsive-sites-desktop-1280x720.png",
+  "responsive-job-history-desktop-1440x900.png",
 ];
 const accountPassword = "E2E-mobile-pass-123";
 const plannedJobId = "mobile-job-progress";
@@ -411,6 +424,7 @@ async function dragJobToStatus(page, source, jobId, status) {
 
 async function capture(page, testInfo, filename, label) {
   const screenshotPath = path.join(screenshotDir, filename);
+  await page.waitForTimeout(350);
   await page.screenshot({ path: screenshotPath, animations: "disabled" });
   await testInfo.attach(label, { path: screenshotPath, contentType: "image/png" });
 }
@@ -418,6 +432,18 @@ async function capture(page, testInfo, filename, label) {
 async function chooseSelectOption(page, label, option) {
   await page.getByRole("combobox", { name: label }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
+}
+
+async function navigateToWorkspaceSection(page, label, width) {
+  if (width < 1024) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    const navigation = page.getByRole("dialog", { name: "Application navigation" }).getByRole("navigation", { name: "Application" });
+    await navigation.getByRole("button", { name: label, exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Application navigation" })).toHaveCount(0);
+    return;
+  }
+
+  await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: label, exact: true }).click();
 }
 
 test.beforeAll(async () => {
@@ -668,6 +694,250 @@ test("mobile and tablet viewport matrix keeps filters, details, and overflow usa
       }
 
       await assertNoHorizontalOverflow(page);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test("mobile page controls keep records primary and preserve live filter state", async ({ browser }, testInfo) => {
+  const width = 390;
+  const context = await browser.newContext(mobileContextOptions(width, 844));
+  const page = await context.newPage();
+  try {
+    await loginAs(page, "mobileadmin");
+
+    await navigateToWorkspaceSection(page, "Customers", width);
+    const customerControls = page.locator("[data-responsive-page-controls]");
+    await expect(customerControls).toBeVisible();
+    await expect(customerControls.getByLabel("Search customers")).toBeVisible();
+    await expect(customerControls.getByLabel("Sort customers")).toBeVisible();
+    await expect(customerControls.getByRole("button", { name: "List view" })).toBeVisible();
+    await expect(customerControls.getByRole("button", { name: "Grid view" })).toBeVisible();
+    await expect(customerControls.getByRole("button", { name: "New Customer" })).toBeVisible();
+    await expect(page.locator("[data-result-summary]")).toContainText(/customers?$/);
+    await capture(page, testInfo, "responsive-customers-mobile-390x844.png", "Customers compact mobile controls");
+
+    const customerFilterButton = customerControls.locator('button[aria-haspopup="dialog"]');
+    await customerFilterButton.click();
+    let filters = page.getByRole("dialog", { name: "Filters" });
+    await expect(filters.getByRole("combobox", { name: "Record filter" })).toBeVisible();
+    await expect(filters.getByRole("combobox", { name: "Created" })).toBeVisible();
+    await expect(filters.getByRole("combobox", { name: "Customer type" })).toBeVisible();
+    await chooseSelectOption(page, "Record filter", "With jobs");
+    await expect(customerFilterButton).toHaveAttribute("data-active-count", "1");
+    await capture(page, testInfo, "responsive-customers-filter-sheet-mobile-390x844.png", "Customers mobile filter sheet");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(customerFilterButton).toBeFocused();
+    await expect(customerControls.getByRole("button", { name: "Filters, 1 active" })).toBeVisible();
+    await customerControls.getByRole("button", { name: "Filters, 1 active" }).click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    await expect(filters.getByRole("combobox", { name: "Record filter" })).toContainText("With jobs");
+    await chooseSelectOption(page, "Customer type", "Homeowner");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(page.locator("[data-result-summary]")).toHaveText("0 customers");
+    await expect(customerFilterButton).toHaveAttribute("data-active-count", "2");
+    await customerFilterButton.click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    await filters.getByRole("button", { name: "Reset" }).click();
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(customerControls.getByRole("button", { name: "Filters", exact: true })).toBeVisible();
+    await expect(page.locator("[data-result-summary]")).toHaveText("1 customer");
+    await customerControls.getByLabel("Search customers").fill("synthetic");
+    await expect(customerControls.getByRole("button", { name: "Clear search customers" })).toBeVisible();
+    await customerControls.getByRole("button", { name: "Clear search customers" }).click();
+    await customerControls.getByRole("button", { name: "Grid view" }).click();
+    await expect(customerControls.getByRole("button", { name: "Grid view" })).toHaveAttribute("aria-pressed", "true");
+
+    await navigateToWorkspaceSection(page, "Sites", width);
+    const siteControls = page.locator("[data-responsive-page-controls]");
+    await expect(siteControls.getByLabel("Search sites")).toBeVisible();
+    await expect(siteControls.getByLabel("Sort sites")).toBeVisible();
+    await expect(siteControls.getByRole("button", { name: "New Site" })).toBeVisible();
+    await capture(page, testInfo, "responsive-sites-mobile-390x844.png", "Sites compact mobile controls");
+    await siteControls.getByRole("button", { name: "Filters", exact: true }).click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    await expect(filters.getByRole("combobox", { name: "Site type" })).toBeVisible();
+    await chooseSelectOption(page, "Site type", "Not set");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(siteControls.getByRole("button", { name: "Filters, 1 active" })).toBeVisible();
+    await expect(page.locator("[data-result-summary]")).toHaveText("0 sites");
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Job History", width);
+    const historyControls = page.locator("[data-responsive-page-controls]");
+    await expect(historyControls.getByLabel("Search job history")).toBeVisible();
+    await expect(historyControls.getByLabel("Sort job history")).toBeVisible();
+    await capture(page, testInfo, "responsive-job-history-mobile-390x844.png", "Job History compact mobile controls");
+    const historyFilterButton = historyControls.locator('button[aria-haspopup="dialog"]');
+    await historyFilterButton.click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    for (const label of ["Status", "Urgency", "Documents", "Quick range", "Created from", "Created to"]) {
+      await expect(filters.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    await chooseSelectOption(page, "Status", "Completed");
+    await filters.getByLabel("Created from", { exact: true }).fill("2026-01-01");
+    await expect(historyFilterButton).toHaveAttribute("data-active-count", "2");
+    await capture(page, testInfo, "responsive-job-history-filter-sheet-mobile-390x844.png", "Job History mobile filter sheet");
+    await page.keyboard.press("Escape");
+    await expect(historyFilterButton).toBeFocused();
+    await expect(historyControls.getByRole("button", { name: "Filters, 2 active" })).toBeVisible();
+    await expect(page.locator("[data-result-summary]")).toHaveText("1 job · 0 open");
+    await historyControls.getByRole("button", { name: "Filters, 2 active" }).click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    await expect(filters.getByRole("combobox", { name: "Status" })).toContainText("Completed");
+    await expect(filters.getByLabel("Created from", { exact: true })).toHaveValue("2026-01-01");
+    await filters.getByRole("button", { name: "Reset" }).click();
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(page.locator("[data-result-summary]")).toHaveText("4 jobs · 3 open");
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Invoices", width);
+    const invoiceControls = page.locator("[data-responsive-page-controls]");
+    await expect(invoiceControls.getByLabel("Search invoices")).toBeVisible();
+    await expect(invoiceControls.getByLabel("Sort invoices")).toBeVisible();
+    await capture(page, testInfo, "responsive-invoices-mobile-390x844.png", "Invoices compact mobile controls");
+    await invoiceControls.getByRole("button", { name: "Filters", exact: true }).click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    await expect(filters.getByRole("combobox", { name: "Time range" })).toBeVisible();
+    await expect(filters.getByRole("combobox", { name: "Status filter" })).toBeVisible();
+    await chooseSelectOption(page, "Status filter", "Overdue");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(page.locator("[data-result-summary]")).toHaveText("1 invoice · 1 billing record");
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Maintenance", width);
+    const maintenanceControls = page.locator("[data-responsive-page-controls]");
+    await expect(maintenanceControls.getByLabel("Search maintenance plans")).toBeVisible();
+    await expect(maintenanceControls.getByRole("button", { name: "Add Maintenance Plan" })).toBeVisible();
+    await capture(page, testInfo, "responsive-maintenance-mobile-390x844.png", "Maintenance compact mobile controls");
+    await maintenanceControls.getByRole("button", { name: "Filters", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Filters" }).getByRole("combobox", { name: "Status" })).toBeVisible();
+    await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Done" }).click();
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Staff", width);
+    const staffControls = page.locator("[data-responsive-page-controls]");
+    await expect(staffControls.getByLabel("Search staff")).toBeVisible();
+    await expect(staffControls.getByLabel("Sort staff")).toBeVisible();
+    await expect(staffControls.getByRole("button", { name: "Add Staff" })).toBeVisible();
+    await expect(staffControls.getByRole("button", { name: /^Filters/ })).toHaveCount(0);
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Parts Inventory", width);
+    const inventoryControls = page.locator("[data-responsive-page-controls]");
+    await expect(inventoryControls.getByLabel("Search parts inventory")).toBeVisible();
+    await expect(inventoryControls.getByLabel("Sort parts inventory")).toBeVisible();
+    await expect(inventoryControls.getByRole("button", { name: "Add Part" })).toBeVisible();
+    await capture(page, testInfo, "responsive-inventory-mobile-390x844.png", "Parts Inventory compact mobile controls");
+    await inventoryControls.getByRole("button", { name: "Filters", exact: true }).click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    await expect(filters.getByRole("combobox", { name: "Stock filter" })).toBeVisible();
+    await chooseSelectOption(page, "Stock filter", "Needs reorder");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(page.locator("[data-result-summary]")).toHaveText("0 parts");
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Map", width);
+    const mapControls = page.locator("[data-responsive-page-controls]");
+    await expect(mapControls.getByLabel("Search map jobs")).toBeVisible();
+    await mapControls.getByRole("button", { name: "Filters", exact: true }).click();
+    filters = page.getByRole("dialog", { name: "Filters" });
+    for (const label of ["Jobs", "Site type", "Customer type"]) {
+      await expect(filters.getByRole("combobox", { name: label, exact: true })).toBeVisible();
+    }
+    await filters.getByRole("button", { name: "Done" }).click();
+
+    await navigateToWorkspaceSection(page, "Calendar", width);
+    await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Today" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Next" })).toBeVisible();
+    await expect(page.locator("[data-responsive-page-controls]")).toHaveCount(0);
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Statistics", width);
+    await expect(page.locator("[data-responsive-page-controls]")).toHaveCount(0);
+    await expect(page.getByText("Job Status Breakdown", { exact: true })).toBeVisible();
+
+    await navigateToWorkspaceSection(page, "Settings", width);
+    const settingsToolbar = page.locator(".floating-page-toolbar");
+    for (const label of ["Preferences", "Document Templates", "UI Settings", "Data Backup"]) {
+      await expect(settingsToolbar.getByRole("button", { name: label, exact: true })).toBeVisible();
+    }
+    await expect(settingsToolbar.locator("[data-settings-navigation]")).toHaveCSS("flex-wrap", "nowrap");
+    await assertNoHorizontalOverflow(page);
+
+    await navigateToWorkspaceSection(page, "Recycle Bin", width);
+    await expect(page.getByRole("tab", { name: "Deleted Jobs" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Deleted Customers" })).toBeVisible();
+    await expect(page.locator("[data-responsive-page-controls]")).toHaveCount(0);
+
+    await navigateToWorkspaceSection(page, "Service Board", width);
+    await expect(page.locator("[data-service-board-status]")).toHaveCount(1);
+    await expect(page.locator('button[aria-label^="Open board filters"]')).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+  } finally {
+    await context.close();
+  }
+});
+
+test("responsive page-control matrix keeps tablet hybrid and desktop-rich layouts", async ({ browser }, testInfo) => {
+  for (const viewport of [
+    { width: 375, height: 667 },
+    { width: 412, height: 915 },
+    { width: 768, height: 1024 },
+    { width: 820, height: 1180 },
+    { width: 1024, height: 768 },
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    const context = await browser.newContext(mobileContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    try {
+      await loginAs(page, "mobileadmin", viewport.width < 1024);
+      await navigateToWorkspaceSection(page, "Customers", viewport.width);
+
+      const compactControls = page.locator("[data-responsive-page-controls]");
+      if (viewport.width < 1280) {
+        await expect(compactControls).toBeVisible();
+        await expect(compactControls.getByLabel("Search customers")).toBeVisible();
+        await expect(compactControls.getByRole("button", { name: /^Filters/ })).toBeVisible();
+      } else {
+        await expect(compactControls).toBeHidden();
+        await expect(page.getByText("Record filter", { exact: true })).toBeVisible();
+        await expect(page.getByText("Customer type", { exact: true })).toBeVisible();
+      }
+
+      if (viewport.width === 820) {
+        await capture(page, testInfo, "responsive-customers-tablet-820x1180.png", "Customers tablet controls");
+      }
+      if (viewport.width === 1280) {
+        await capture(page, testInfo, "responsive-customers-desktop-1280x720.png", "Customers desktop controls");
+      }
+      await assertNoHorizontalOverflow(page);
+
+      await navigateToWorkspaceSection(page, "Job History", viewport.width);
+      if (viewport.width < 1280) {
+        await expect(page.locator("[data-responsive-page-controls]").getByLabel("Search job history")).toBeVisible();
+        await expect(page.getByText("Quick range", { exact: true })).toBeHidden();
+      } else {
+        await expect(page.getByText("Quick range", { exact: true })).toBeVisible();
+        await expect(page.getByText("Created from", { exact: true })).toBeVisible();
+      }
+      if (viewport.width === 820) {
+        await capture(page, testInfo, "responsive-job-history-tablet-820x1180.png", "Job History tablet controls");
+      }
+      if (viewport.width === 1440) {
+        await capture(page, testInfo, "responsive-job-history-desktop-1440x900.png", "Job History desktop controls");
+      }
+      await assertNoHorizontalOverflow(page);
+
+      if (viewport.width === 1280) {
+        await navigateToWorkspaceSection(page, "Sites", viewport.width);
+        await expect(page.getByText("Site type", { exact: true })).toBeVisible();
+        await capture(page, testInfo, "responsive-sites-desktop-1280x720.png", "Sites desktop controls");
+        await assertNoHorizontalOverflow(page);
+      }
     } finally {
       await context.close();
     }

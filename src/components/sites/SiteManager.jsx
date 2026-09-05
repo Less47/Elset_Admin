@@ -1,6 +1,17 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  CompactSortControl,
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PagePrimaryAction,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+  ViewModeToggle,
+} from "@/components/shared/ResponsivePageControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +21,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCustomerType, formatSiteType, siteTypeOptions } from "@/lib/app-support";
 
 const NOT_SET_FILTER_VALUE = "__not_set__";
+const siteSortOptions = [
+  { value: "activity", label: "Recent" },
+  { value: "jobs", label: "Most jobs" },
+  { value: "customer", label: "Customer" },
+  { value: "address", label: "Address" },
+];
 
 export default function SiteManager({
   customers,
@@ -26,10 +43,12 @@ export default function SiteManager({
   const [siteTypeFilter, setSiteTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useState("list");
   const [createSiteDialogOpen, setCreateSiteDialogOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [newSiteCustomerId, setNewSiteCustomerId] = useState("");
   const [newSiteCustomerSearch, setNewSiteCustomerSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const deferredNewSiteCustomerSearch = useDeferredValue(newSiteCustomerSearch);
+  const filterTriggerRef = useRef(null);
 
   const customerOptions = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
@@ -116,6 +135,7 @@ export default function SiteManager({
 
     return rows;
   }, [deferredSearch, getSiteDisplayName, siteRows, siteTypeFilter, sortBy, toTimestamp]);
+  const activeFilterCount = siteTypeFilter === "all" ? 0 : 1;
 
   const renderSiteCards = (className) => (
     <div className={className}>
@@ -170,7 +190,37 @@ export default function SiteManager({
   return (
     <>
       <div className="space-y-4">
-        <div className="floating-page-toolbar px-4 py-3">
+        <ResponsivePageControls
+          search={(
+            <PageSearchField
+              value={search}
+              onChange={setSearch}
+              placeholder="Search sites..."
+              label="Search sites"
+            />
+          )}
+          controls={(
+            <>
+              <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+              <CompactSortControl value={sortBy} onValueChange={setSortBy} options={siteSortOptions} label="Sort sites" />
+              <ViewModeToggle value={viewMode} onChange={setViewMode} label="Site view" />
+            </>
+          )}
+          action={(
+            <PagePrimaryAction
+              disabled={customerOptions.length === 0}
+              onClick={() => {
+                setNewSiteCustomerSearch("");
+                setCreateSiteDialogOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" /> New Site
+            </PagePrimaryAction>
+          )}
+          summary={<ResultSummary>{filteredSites.length} {filteredSites.length === 1 ? "site" : "sites"}</ResultSummary>}
+        />
+
+        <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
         <div className="grid gap-2 md:grid-cols-[minmax(200px,1.35fr)_minmax(130px,0.75fr)_minmax(115px,0.6fr)_minmax(190px,0.95fr)_minmax(140px,0.7fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
@@ -258,8 +308,8 @@ export default function SiteManager({
           ) : (
             viewMode === "list" ? (
               <>
-                <div className="text-xs 2xl:hidden">
-                  <div className="data-grid grid gap-px bg-slate-200">
+                <div className="overflow-x-auto text-xs 2xl:hidden">
+                  <div className="data-grid grid min-w-[620px] gap-px bg-slate-200 md:min-w-0">
                     <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                       <span>Site</span>
                       <span>Customer</span>
@@ -371,6 +421,30 @@ export default function SiteManager({
         </CardContent>
         </Card>
       </div>
+
+      <MobileFilterSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        returnFocusRef={filterTriggerRef}
+        activeCount={activeFilterCount}
+        description="Filter customer sites while keeping site records in view."
+        onReset={() => setSiteTypeFilter("all")}
+      >
+        <FilterSheetField id="mobile-site-type-filter" label="Site type">
+          <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
+            <SelectTrigger id="mobile-site-type-filter" className="h-11 w-full rounded-xl bg-white">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
+              {siteTypeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterSheetField>
+      </MobileFilterSheet>
 
       <Dialog
         open={createSiteDialogOpen}

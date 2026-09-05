@@ -121,3 +121,46 @@ test("supplier manual loading, matching, and UI remain removed", () => {
     assert.doesNotMatch(readSource(relativePath), /supplier.?manual|manualMatches/i);
   }
 });
+
+test("database pages share accessible responsive page controls without replacing desktop toolbars", () => {
+  const sharedSource = readSource("src/components/shared/ResponsivePageControls.jsx");
+  assert.match(sharedSource, /export function ResponsivePageControls/);
+  assert.match(sharedSource, /export function MobileFilterSheet/);
+  assert.match(sharedSource, /onCloseAutoFocus/);
+  assert.match(sharedSource, /safe-area-inset-bottom/);
+  assert.match(sharedSource, /motion-reduce/);
+  assert.match(sharedSource, /aria-haspopup="dialog"/);
+  assert.match(sharedSource, /aria-live="polite"/);
+
+  for (const relativePath of [
+    "src/components/customers/CustomerManager.jsx",
+    "src/components/sites/SiteManager.jsx",
+    "src/components/jobs/JobHistoryManager.jsx",
+    "src/components/invoices/InvoiceManager.jsx",
+    "src/components/maintenance/MaintenanceManager.jsx",
+    "src/components/staff/StaffManager.jsx",
+    "src/components/inventory/InventoryManager.jsx",
+    "src/components/map/JobsMapManager.jsx",
+  ]) {
+    const source = readSource(relativePath);
+    assert.match(source, /<ResponsivePageControls/);
+    assert.match(source, /floating-page-toolbar[^"]*hidden[^"]*xl:block/);
+  }
+});
+
+test("secondary page filters move into shared sheets while Staff avoids a redundant filter", () => {
+  for (const relativePath of [
+    "src/components/customers/CustomerManager.jsx",
+    "src/components/sites/SiteManager.jsx",
+    "src/components/jobs/JobHistoryManager.jsx",
+    "src/components/invoices/InvoiceManager.jsx",
+    "src/components/maintenance/MaintenanceManager.jsx",
+    "src/components/inventory/InventoryManager.jsx",
+    "src/components/map/JobsMapManager.jsx",
+  ]) {
+    assert.match(readSource(relativePath), /<MobileFilterSheet/);
+  }
+
+  const staffSource = readSource("src/components/staff/StaffManager.jsx");
+  assert.doesNotMatch(staffSource, /<MobileFilterSheet|<FilterButton/);
+});

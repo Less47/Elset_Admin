@@ -2,6 +2,14 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LoaderCircle } from "lucide-react";
+import {
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+} from "@/components/shared/ResponsivePageControls";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -171,6 +179,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
   const [jobFilter, setJobFilter] = useState(ALL_FILTER_VALUE);
   const [siteTypeFilter, setSiteTypeFilter] = useState(ALL_FILTER_VALUE);
   const [customerTypeFilter, setCustomerTypeFilter] = useState(ALL_FILTER_VALUE);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [mapConfig, setMapConfig] = useState(null);
   const [mapConfigError, setMapConfigError] = useState("");
   const [isLoadingMapConfig, setIsLoadingMapConfig] = useState(true);
@@ -178,6 +187,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
   const [geocodeError, setGeocodeError] = useState("");
   const [isLoadingGeocodes, setIsLoadingGeocodes] = useState(false);
   const deferredSearch = useDeferredValue(search);
+  const filterTriggerRef = useRef(null);
 
   const customerById = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),
@@ -295,6 +305,11 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
     () => jobsWithLocations.filter((job) => job.location && Number.isFinite(job.displayLat) && Number.isFinite(job.displayLon)),
     [jobsWithLocations]
   );
+  const activeFilterCount = [
+    jobFilter !== ALL_FILTER_VALUE,
+    siteTypeFilter !== ALL_FILTER_VALUE,
+    customerTypeFilter !== ALL_FILTER_VALUE,
+  ].filter(Boolean).length;
 
   useEffect(() => {
     let cancelled = false;
@@ -495,8 +510,23 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
   }, [isMapReady]);
 
   return (
+    <>
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-4 py-3">
+      <ResponsivePageControls
+        search={(
+          <PageSearchField value={search} onChange={setSearch} placeholder="Search map jobs..." label="Search map jobs" />
+        )}
+        controls={(
+          <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+        )}
+        summary={(
+          <ResultSummary>
+            {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"} · {pinnedJobs.length} mapped
+          </ResultSummary>
+        )}
+      />
+
+      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
           <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(140px,0.7fr)_minmax(150px,0.75fr)_minmax(165px,0.8fr)] md:items-end">
             <Input
               className="data-toolbar-field rounded-xl"
@@ -594,5 +624,47 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
         </CardContent>
       </Card>
     </div>
+    <MobileFilterSheet
+      open={filtersOpen}
+      onOpenChange={setFiltersOpen}
+      returnFocusRef={filterTriggerRef}
+      activeCount={activeFilterCount}
+      description="Choose which jobs and customer sites appear on the map."
+      onReset={() => {
+        setJobFilter(ALL_FILTER_VALUE);
+        setSiteTypeFilter(ALL_FILTER_VALUE);
+        setCustomerTypeFilter(ALL_FILTER_VALUE);
+      }}
+    >
+      <FilterSheetField id="mobile-map-job-filter" label="Jobs">
+        <Select value={jobFilter} onValueChange={setJobFilter}>
+          <SelectTrigger id="mobile-map-job-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="All jobs" /></SelectTrigger>
+          <SelectContent>
+            {JOB_FILTERS.map((filter) => <SelectItem key={filter.value} value={filter.value}>{filter.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-map-site-type-filter" label="Site type">
+        <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
+          <SelectTrigger id="mobile-map-site-type-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="All site types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_FILTER_VALUE}>All site types</SelectItem>
+            <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
+            {siteTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-map-customer-type-filter" label="Customer type">
+        <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
+          <SelectTrigger id="mobile-map-customer-type-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="All customer types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_FILTER_VALUE}>All customer types</SelectItem>
+            <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
+            {customerTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+    </MobileFilterSheet>
+    </>
   );
 }

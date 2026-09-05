@@ -2,6 +2,13 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
+import {
+  CompactSortControl,
+  PagePrimaryAction,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+} from "@/components/shared/ResponsivePageControls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,6 +21,13 @@ import {
   loginAccessRoleOptions,
   toTimestamp,
 } from "@/lib/app-support";
+
+const staffSortOptions = [
+  { value: "name-asc", label: "A-Z" },
+  { value: "name-desc", label: "Z-A" },
+  { value: "role", label: "Role" },
+  { value: "created-recent", label: "Newest" },
+];
 
 function StaffFormDialog({
   open,
@@ -287,7 +301,20 @@ export default function StaffManager({
   return (
     <>
       <div className="space-y-4">
-        <div className="floating-page-toolbar px-4 py-3">
+        <ResponsivePageControls
+          search={(
+            <PageSearchField value={search} onChange={setSearch} placeholder="Search staff..." label="Search staff" />
+          )}
+          controls={<CompactSortControl value={sortBy} onValueChange={setSortBy} options={staffSortOptions} label="Sort staff" />}
+          action={(
+            <PagePrimaryAction onClick={() => { setEditingStaff(null); setStaffDialogOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add Staff
+            </PagePrimaryAction>
+          )}
+          summary={<ResultSummary>{filteredStaff.length} staff {filteredStaff.length === 1 ? "member" : "members"}</ResultSummary>}
+        />
+
+        <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
           <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(155px,0.75fr)_minmax(130px,0.65fr)] md:items-end">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
@@ -327,7 +354,7 @@ export default function StaffManager({
         </div>
 
         <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
+        <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">
           {[
             { label: "Total staff", value: staffStats.totalStaff },
             { label: "Missing email", value: staffStats.missingEmail },
@@ -368,8 +395,8 @@ export default function StaffManager({
             </div>
           ) : (
             <>
-              <div className="text-xs 2xl:hidden">
-                <div className="data-grid grid gap-px bg-slate-200">
+              <div className="overflow-x-auto text-xs 2xl:hidden">
+                <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
                   <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                     <span>Staff</span>
                     <span>Contact</span>

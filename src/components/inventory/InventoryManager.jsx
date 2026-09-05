@@ -1,7 +1,17 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
+import {
+  CompactSortControl,
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PagePrimaryAction,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+} from "@/components/shared/ResponsivePageControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +27,15 @@ import {
   toTimestamp,
 } from "@/lib/app-support";
 import { money } from "@/lib/quote-template";
+
+const inventorySortOptions = [
+  { value: "name-asc", label: "A-Z" },
+  { value: "name-desc", label: "Z-A" },
+  { value: "stock-low", label: "Lowest stock" },
+  { value: "stock-high", label: "Highest stock" },
+  { value: "value-high", label: "Highest value" },
+  { value: "updated-recent", label: "Recently updated" },
+];
 
 function InventoryItemDialog({ open, onOpenChange, initialPart, onSave }) {
   const [draftPart, setDraftPart] = useState({
@@ -168,8 +187,10 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
   const [search, setSearch] = useState("");
   const [filterBy, setFilterBy] = useState("all");
   const [sortBy, setSortBy] = useState("name-asc");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [partDialogOpen, setPartDialogOpen] = useState(false);
   const [editingPart, setEditingPart] = useState(null);
+  const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
 
   const parts = useMemo(
@@ -232,11 +253,30 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
     return rows;
   }, [deferredSearch, filterBy, parts, sortBy]);
+  const activeFilterCount = filterBy === "all" ? 0 : 1;
 
   return (
     <>
       <div className="space-y-4">
-        <div className="floating-page-toolbar px-4 py-3">
+        <ResponsivePageControls
+          search={(
+            <PageSearchField value={search} onChange={setSearch} placeholder="Search parts..." label="Search parts inventory" />
+          )}
+          controls={(
+            <>
+              <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+              <CompactSortControl value={sortBy} onValueChange={setSortBy} options={inventorySortOptions} label="Sort parts inventory" />
+            </>
+          )}
+          action={(
+            <PagePrimaryAction onClick={() => { setEditingPart(null); setPartDialogOpen(true); }}>
+              <Plus className="h-4 w-4" /> Add Part
+            </PagePrimaryAction>
+          )}
+          summary={<ResultSummary>{filteredParts.length} {filteredParts.length === 1 ? "part" : "parts"}</ResultSummary>}
+        />
+
+        <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
           <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.75fr)_minmax(145px,0.75fr)_minmax(130px,0.65fr)] md:items-end">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
@@ -293,7 +333,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
         </div>
 
         <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-4">
+        <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">
           {[
             { label: "Parts", value: inventoryStats.totalParts },
             { label: "Units on hand", value: inventoryStats.totalUnits },
@@ -328,8 +368,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             </div>
           ) : (
             <>
-              <div className="text-xs 2xl:hidden">
-                <div className="data-grid grid gap-px bg-slate-200">
+              <div className="overflow-x-auto text-xs 2xl:hidden">
+                <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
                   <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                     <span>Part</span>
                     <span className="text-right">Stock</span>
@@ -459,6 +499,27 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
         </CardContent>
         </Card>
       </div>
+
+      <MobileFilterSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        returnFocusRef={filterTriggerRef}
+        activeCount={activeFilterCount}
+        description="Filter parts by their current stock level."
+        onReset={() => setFilterBy("all")}
+      >
+        <FilterSheetField id="mobile-inventory-stock-filter" label="Stock filter">
+          <Select value={filterBy} onValueChange={setFilterBy}>
+            <SelectTrigger id="mobile-inventory-stock-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All parts</SelectItem>
+              <SelectItem value="low-stock">Needs reorder</SelectItem>
+              <SelectItem value="out-of-stock">Out of stock</SelectItem>
+              <SelectItem value="in-stock">In stock</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterSheetField>
+      </MobileFilterSheet>
 
       <InventoryItemDialog
         open={partDialogOpen}

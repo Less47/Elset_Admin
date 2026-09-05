@@ -1,6 +1,17 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  CompactSortControl,
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PagePrimaryAction,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+  ViewModeToggle,
+} from "@/components/shared/ResponsivePageControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +20,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { customerTypeOptions, formatCustomerType } from "@/lib/app-support";
 
 const NOT_SET_FILTER_VALUE = "__not_set__";
+const customerSortOptions = [
+  { value: "name-asc", label: "A-Z" },
+  { value: "name-desc", label: "Z-A" },
+  { value: "created-newest", label: "Newest" },
+  { value: "created-oldest", label: "Oldest" },
+  { value: "jobs-most", label: "Most jobs" },
+  { value: "activity-recent", label: "Recent activity" },
+];
 
 export default function CustomerManager({
   customers,
@@ -24,7 +43,9 @@ export default function CustomerManager({
   const [customerTypeFilter, setCustomerTypeFilter] = useState("all");
   const [createdRange, setCreatedRange] = useState("all-time");
   const [viewMode, setViewMode] = useState("list");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterClock] = useState(() => ({ now: Date.now(), year: new Date().getFullYear() }));
+  const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
 
   const jobsByCustomerId = useMemo(() => {
@@ -134,6 +155,8 @@ export default function CustomerManager({
 
     return rows;
   }, [createdRange, customerRows, customerTypeFilter, deferredSearch, filterBy, filterClock, sortBy, toTimestamp]);
+  const activeFilterCount = [filterBy !== "all", createdRange !== "all-time", customerTypeFilter !== "all"]
+    .filter(Boolean).length;
 
   const renderCustomerCards = (className) => (
     <div className={className}>
@@ -186,8 +209,33 @@ export default function CustomerManager({
   );
 
   return (
+    <>
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-4 py-3">
+      <ResponsivePageControls
+        search={(
+          <PageSearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search customers..."
+            label="Search customers"
+          />
+        )}
+        controls={(
+          <>
+            <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+            <CompactSortControl value={sortBy} onValueChange={setSortBy} options={customerSortOptions} label="Sort customers" />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} label="Customer view" />
+          </>
+        )}
+        action={(
+          <PagePrimaryAction onClick={onCreateCustomer}>
+            <Plus className="h-4 w-4" /> New Customer
+          </PagePrimaryAction>
+        )}
+        summary={<ResultSummary>{filteredCustomers.length} {filteredCustomers.length === 1 ? "customer" : "customers"}</ResultSummary>}
+      />
+
+      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
         <div className="grid gap-2 md:grid-cols-[minmax(210px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.85fr)_minmax(120px,0.65fr)_minmax(130px,0.7fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
@@ -312,8 +360,8 @@ export default function CustomerManager({
         ) : (
           viewMode === "list" ? (
             <>
-              <div className="text-xs 2xl:hidden">
-                <div className="data-grid grid gap-px bg-slate-200">
+              <div className="overflow-x-auto text-xs 2xl:hidden">
+                <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
                   <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                     <span>Customer</span>
                     <span>Contact</span>
@@ -414,5 +462,60 @@ export default function CustomerManager({
       </CardContent>
       </Card>
     </div>
+    <MobileFilterSheet
+      open={filtersOpen}
+      onOpenChange={setFiltersOpen}
+      returnFocusRef={filterTriggerRef}
+      activeCount={activeFilterCount}
+      description="Filter customers without taking space away from the customer list."
+      onReset={() => {
+        setFilterBy("all");
+        setCreatedRange("all-time");
+        setCustomerTypeFilter("all");
+      }}
+    >
+      <FilterSheetField id="mobile-customer-record-filter" label="Record filter">
+        <Select value={filterBy} onValueChange={setFilterBy}>
+          <SelectTrigger id="mobile-customer-record-filter" className="h-11 w-full rounded-xl bg-white">
+            <SelectValue placeholder="Filter customers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All customers</SelectItem>
+            <SelectItem value="with-jobs">With jobs</SelectItem>
+            <SelectItem value="open-jobs">With open jobs</SelectItem>
+            <SelectItem value="no-jobs">No jobs yet</SelectItem>
+            <SelectItem value="missing-email">Missing email</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-customer-created-range" label="Created">
+        <Select value={createdRange} onValueChange={setCreatedRange}>
+          <SelectTrigger id="mobile-customer-created-range" className="h-11 w-full rounded-xl bg-white">
+            <SelectValue placeholder="Created range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all-time">All time</SelectItem>
+            <SelectItem value="last-30">Last 30 days</SelectItem>
+            <SelectItem value="last-90">Last 90 days</SelectItem>
+            <SelectItem value="this-year">This year</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-customer-type-filter" label="Customer type">
+        <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
+          <SelectTrigger id="mobile-customer-type-filter" className="h-11 w-full rounded-xl bg-white">
+            <SelectValue placeholder="Filter by type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
+            {customerTypeOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+    </MobileFilterSheet>
+    </>
   );
 }

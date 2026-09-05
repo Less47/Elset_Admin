@@ -263,7 +263,7 @@ async function openRecycleBin(page) {
 
 async function openCustomerProfile(page, customerName) {
   await openCustomers(page);
-  await page.getByPlaceholder("Search customers...").fill(customerName);
+  await page.locator('input[placeholder="Search customers..."]:visible').fill(customerName);
   const row = page.locator(".data-grid-row", { hasText: customerName }).first();
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: /Open/ }).click();
