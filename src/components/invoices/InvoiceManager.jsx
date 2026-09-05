@@ -1,5 +1,14 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  CompactSortControl,
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+} from "@/components/shared/ResponsivePageControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +21,13 @@ const invoiceTimeRangeOptions = [
   { value: "last-30", label: "Past month" },
   { value: "last-7", label: "Past week" },
   { value: "last-365", label: "Past year" },
+];
+const invoiceSortOptions = [
+  { value: "status", label: "Attention" },
+  { value: "due-date", label: "Due date" },
+  { value: "value-high", label: "Highest value" },
+  { value: "customer", label: "Customer" },
+  { value: "job-number", label: "Newest job" },
 ];
 
 export default function InvoiceManager({
@@ -30,7 +46,9 @@ export default function InvoiceManager({
   const [timeRange, setTimeRange] = useState("all-time");
   const [filterBy, setFilterBy] = useState("all");
   const [sortBy, setSortBy] = useState("status");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterClock] = useState(() => ({ now: Date.now() }));
+  const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
 
   const invoiceRows = useMemo(() => {
@@ -134,10 +152,30 @@ export default function InvoiceManager({
 
     return rows;
   }, [deferredSearch, filterBy, rangedRows, sortBy, toTimestamp]);
+  const activeFilterCount = [timeRange !== "all-time", filterBy !== "all"].filter(Boolean).length;
+  const visibleInvoiceCount = filteredRows.filter((row) => row.invoice).length;
 
   return (
+    <>
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-4 py-3">
+      <ResponsivePageControls
+        search={(
+          <PageSearchField value={search} onChange={setSearch} placeholder="Search invoices..." label="Search invoices" />
+        )}
+        controls={(
+          <>
+            <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+            <CompactSortControl value={sortBy} onValueChange={setSortBy} options={invoiceSortOptions} label="Sort invoices" />
+          </>
+        )}
+        summary={(
+          <ResultSummary>
+            {visibleInvoiceCount} {visibleInvoiceCount === 1 ? "invoice" : "invoices"} · {filteredRows.length} billing {filteredRows.length === 1 ? "record" : "records"}
+          </ResultSummary>
+        )}
+      />
+
+      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
         <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(130px,0.65fr)_minmax(150px,0.75fr)_minmax(155px,0.75fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
@@ -205,7 +243,7 @@ export default function InvoiceManager({
       </div>
 
       <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-6">
+      <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
           { label: "Not invoiced", value: invoiceStats.notInvoiced },
@@ -228,8 +266,8 @@ export default function InvoiceManager({
           </div>
         ) : (
           <>
-            <div className="text-xs 2xl:hidden">
-              <div className="data-grid grid gap-px bg-slate-200">
+            <div className="overflow-x-auto text-xs 2xl:hidden">
+              <div className="data-grid grid min-w-[560px] gap-px bg-slate-200 md:min-w-0">
                 <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                   <span>Job</span>
                   <span>Invoice</span>
@@ -368,5 +406,42 @@ export default function InvoiceManager({
       </CardContent>
       </Card>
     </div>
+    <MobileFilterSheet
+      open={filtersOpen}
+      onOpenChange={setFiltersOpen}
+      returnFocusRef={filterTriggerRef}
+      activeCount={activeFilterCount}
+      description="Filter billing records by time range and payment status."
+      onReset={() => {
+        setTimeRange("all-time");
+        setFilterBy("all");
+      }}
+    >
+      <FilterSheetField id="mobile-invoice-time-range" label="Time range">
+        <Select value={timeRange} onValueChange={setTimeRange}>
+          <SelectTrigger id="mobile-invoice-time-range" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {invoiceTimeRangeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-invoice-status-filter" label="Status filter">
+        <Select value={filterBy} onValueChange={setFilterBy}>
+          <SelectTrigger id="mobile-invoice-status-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All jobs</SelectItem>
+            <SelectItem value="outstanding">Outstanding</SelectItem>
+            <SelectItem value="not-invoiced">Not invoiced</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="unpaid">Unpaid</SelectItem>
+            <SelectItem value="deposit-paid">Deposit paid</SelectItem>
+            <SelectItem value="partially-paid">Partially paid</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+    </MobileFilterSheet>
+    </>
   );
 }

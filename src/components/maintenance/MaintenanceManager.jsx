@@ -1,7 +1,17 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
+import {
+  CompactSortControl,
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PagePrimaryAction,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+} from "@/components/shared/ResponsivePageControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +37,12 @@ import {
 } from "@/lib/app-support";
 import { statusThemes } from "@/lib/job-status";
 import { money } from "@/lib/quote-template";
+
+const maintenanceSortOptions = [
+  { value: "due-date", label: "Due date" },
+  { value: "customer", label: "Customer" },
+  { value: "created-recent", label: "Newest plan" },
+];
 
 function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, jobs, onSave }) {
   const orderedCustomers = useMemo(
@@ -285,8 +301,10 @@ export default function MaintenanceManager({
   const [search, setSearch] = useState("");
   const [filterBy, setFilterBy] = useState("all");
   const [sortBy, setSortBy] = useState("due-date");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
+  const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
 
   const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
@@ -366,6 +384,7 @@ export default function MaintenanceManager({
 
     return rows;
   }, [deferredSearch, filterBy, planRows, sortBy]);
+  const activeFilterCount = filterBy === "all" ? 0 : 1;
 
   const dueQueue = useMemo(
     () => planRows
@@ -385,7 +404,26 @@ export default function MaintenanceManager({
 
   return (
     <>
-      <div className="floating-page-toolbar mb-4 px-4 py-3">
+      <ResponsivePageControls
+        className="mb-4"
+        search={(
+          <PageSearchField value={search} onChange={setSearch} placeholder="Search maintenance..." label="Search maintenance plans" />
+        )}
+        controls={(
+          <>
+            <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+            <CompactSortControl value={sortBy} onValueChange={setSortBy} options={maintenanceSortOptions} label="Sort maintenance plans" />
+          </>
+        )}
+        action={(
+          <PagePrimaryAction onClick={() => { setEditingPlan(null); setPlanDialogOpen(true); }}>
+            <Plus className="h-4 w-4" /> Add Maintenance Plan
+          </PagePrimaryAction>
+        )}
+        summary={<ResultSummary>{filteredRows.length} maintenance {filteredRows.length === 1 ? "plan" : "plans"}</ResultSummary>}
+      />
+
+      <div className="floating-page-toolbar mb-4 hidden px-4 py-3 xl:block">
         <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.7fr)_minmax(145px,0.7fr)_minmax(190px,0.9fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
@@ -442,7 +480,7 @@ export default function MaintenanceManager({
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden rounded-3xl border-slate-200">
-          <div className="grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
+            <div className="hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
             {[
               { label: "Plans", value: maintenanceStats.totalPlans },
               { label: "Overdue", value: maintenanceStats.overdue },
@@ -616,6 +654,29 @@ export default function MaintenanceManager({
           </Card>
         </div>
       </div>
+
+      <MobileFilterSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        returnFocusRef={filterTriggerRef}
+        activeCount={activeFilterCount}
+        description="Filter maintenance plans by their current service state."
+        onReset={() => setFilterBy("all")}
+      >
+        <FilterSheetField id="mobile-maintenance-status-filter" label="Status">
+          <Select value={filterBy} onValueChange={setFilterBy}>
+            <SelectTrigger id="mobile-maintenance-status-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All plans</SelectItem>
+              <SelectItem value="needs-attention">Needs attention</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="due-soon">Due soon</SelectItem>
+              <SelectItem value="active-job">Active job</SelectItem>
+              <SelectItem value="upcoming">Upcoming</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterSheetField>
+      </MobileFilterSheet>
 
       <MaintenancePlanDialog
         open={planDialogOpen}

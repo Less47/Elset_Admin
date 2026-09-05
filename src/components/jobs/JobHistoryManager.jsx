@@ -1,5 +1,14 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
+import {
+  CompactSortControl,
+  FilterButton,
+  FilterSheetField,
+  MobileFilterSheet,
+  PageSearchField,
+  ResponsivePageControls,
+  ResultSummary,
+} from "@/components/shared/ResponsivePageControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +18,15 @@ import { statuses, statusThemes } from "@/lib/job-status";
 import { urgencyOptions } from "@/lib/app-support";
 
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
+const jobHistorySortOptions = [
+  { value: "activity-recent", label: "Recent" },
+  { value: "job-newest", label: "Newest job" },
+  { value: "job-oldest", label: "Oldest job" },
+  { value: "created-newest", label: "Newest created" },
+  { value: "scheduled-soon", label: "Scheduled soon" },
+  { value: "customer", label: "Customer" },
+  { value: "status", label: "Status" },
+];
 
 function getUrgencyBadgeClassName(urgency) {
   if (urgency === "High") return "bg-rose-100 text-rose-800";
@@ -31,7 +49,9 @@ export default function JobHistoryManager({
   const [createdRange, setCreatedRange] = useState("all-time");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterClock] = useState(() => ({ now: Date.now(), year: new Date().getFullYear() }));
+  const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
 
   const jobRows = useMemo(() => {
@@ -134,11 +154,42 @@ export default function JobHistoryManager({
       invoiced: 0,
     });
   }, [filteredJobs]);
+  const activeFilterCount = [
+    statusFilter !== "all",
+    urgencyFilter !== "all",
+    documentFilter !== "all",
+    createdRange !== "all-time",
+    Boolean(createdFrom),
+    Boolean(createdTo),
+  ].filter(Boolean).length;
 
   return (
+    <>
     <div className="space-y-4">
-      <div className="floating-page-toolbar px-4 py-3">
-        <div className="grid gap-2 md:grid-cols-[minmax(190px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)] xl:grid-cols-[minmax(200px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)_minmax(125px,0.65fr)_minmax(115px,0.6fr)_minmax(130px,0.66fr)_minmax(130px,0.66fr)] md:items-end">
+      <ResponsivePageControls
+        search={(
+          <PageSearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Search jobs..."
+            label="Search job history"
+          />
+        )}
+        controls={(
+          <>
+            <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
+            <CompactSortControl value={sortBy} onValueChange={setSortBy} options={jobHistorySortOptions} label="Sort job history" />
+          </>
+        )}
+        summary={(
+          <ResultSummary>
+            {historyStats.total} {historyStats.total === 1 ? "job" : "jobs"} · {historyStats.open} open
+          </ResultSummary>
+        )}
+      />
+
+      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
+        <div className="grid gap-2 md:grid-cols-[minmax(190px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)] 2xl:grid-cols-[minmax(200px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)_minmax(125px,0.65fr)_minmax(115px,0.6fr)_minmax(130px,0.66fr)_minmax(130px,0.66fr)] md:items-end">
           <div className="space-y-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
             <Input
@@ -256,7 +307,7 @@ export default function JobHistoryManager({
       </div>
 
       <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <div className="data-stat-grid grid gap-px border-b border-slate-200 bg-slate-200 md:grid-cols-5">
+        <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
           {[
             { label: "Jobs", value: historyStats.total },
             { label: "Open", value: historyStats.open },
@@ -278,8 +329,8 @@ export default function JobHistoryManager({
           </div>
         ) : (
           <>
-            <div className="text-xs 2xl:hidden">
-              <div className="data-grid grid gap-px bg-slate-200">
+            <div className="overflow-x-auto text-xs 2xl:hidden">
+              <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
                 <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
                   <span>Job</span>
                   <span>Customer</span>
@@ -389,5 +440,74 @@ export default function JobHistoryManager({
       </CardContent>
       </Card>
     </div>
+    <MobileFilterSheet
+      open={filtersOpen}
+      onOpenChange={setFiltersOpen}
+      returnFocusRef={filterTriggerRef}
+      activeCount={activeFilterCount}
+      description="Filter job records by status, urgency, documents, and creation date."
+      onReset={() => {
+        setStatusFilter("all");
+        setUrgencyFilter("all");
+        setDocumentFilter("all");
+        setCreatedRange("all-time");
+        setCreatedFrom("");
+        setCreatedTo("");
+      }}
+    >
+      <FilterSheetField id="mobile-job-status-filter" label="Status">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger id="mobile-job-status-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            {statuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-job-urgency-filter" label="Urgency">
+        <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+          <SelectTrigger id="mobile-job-urgency-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All urgency levels</SelectItem>
+            {urgencyOptions.map((urgency) => <SelectItem key={urgency} value={urgency}>{urgency}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-job-document-filter" label="Documents">
+        <Select value={documentFilter} onValueChange={setDocumentFilter}>
+          <SelectTrigger id="mobile-job-document-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All jobs</SelectItem>
+            <SelectItem value="quoted">With quote</SelectItem>
+            <SelectItem value="not-quoted">Without quote</SelectItem>
+            <SelectItem value="invoiced">With invoice</SelectItem>
+            <SelectItem value="not-invoiced">Without invoice</SelectItem>
+            <SelectItem value="completed-not-invoiced">Completed not invoiced</SelectItem>
+            <SelectItem value="invoice-overdue">Overdue invoice</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-job-created-range" label="Quick range">
+        <Select value={createdRange} onValueChange={setCreatedRange}>
+          <SelectTrigger id="mobile-job-created-range" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all-time">All time</SelectItem>
+            <SelectItem value="last-30">Last 30 days</SelectItem>
+            <SelectItem value="last-90">Last 90 days</SelectItem>
+            <SelectItem value="this-year">This year</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FilterSheetField id="mobile-job-created-from" label="Created from">
+          <Input id="mobile-job-created-from" type="date" className="h-11 rounded-xl bg-white" value={createdFrom} onChange={(event) => setCreatedFrom(event.target.value)} />
+        </FilterSheetField>
+        <FilterSheetField id="mobile-job-created-to" label="Created to">
+          <Input id="mobile-job-created-to" type="date" className="h-11 rounded-xl bg-white" value={createdTo} onChange={(event) => setCreatedTo(event.target.value)} />
+        </FilterSheetField>
+      </div>
+      <p className="text-xs leading-5 text-slate-500">Quick range and custom dates are combined when both are selected.</p>
+    </MobileFilterSheet>
+    </>
   );
 }
