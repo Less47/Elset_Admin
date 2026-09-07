@@ -32,7 +32,5 @@ primary_region = 'syd'
     timeout = '2s'
 
 [[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
-  cpus = 1
-  memory_mb = 256
+  size = 'shared-cpu-2x'
+  memory = '2gb'

@@ -71,6 +71,7 @@ export function useWorkspaceActions({
   setSelectedSiteContext,
   setSiteProfileOpen,
   themeSettings,
+  themeSettingsSave,
   workspaceStorageMode = "json",
 }) {
   const useSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
@@ -771,6 +772,48 @@ export function useWorkspaceActions({
 
     updateJob(jobId, { scheduledDate: toDateInputValue(scheduledDate) });
     return true;
+  }
+
+  async function calendarRescheduleRequest({ sourceDate, scheduledDate, jobs } = {}) {
+    if (!canManageBusiness) throw new Error("You do not have permission to reschedule jobs.");
+    if (!useSqliteApi) throw new Error("Bulk rescheduling requires the job record API.");
+    const payload = await requestWorkspaceUpdate({
+      fetchWithAuth,
+      path: jobs ? "/api/jobs/reschedule-day" : `/api/jobs/reschedule-day?sourceDate=${encodeURIComponent(sourceDate)}`,
+      method: jobs ? "POST" : "GET",
+      ...(jobs ? { body: { sourceDate, scheduledDate, jobs } } : {}),
+      errorMessage: jobs ? "Unable to update the job schedules." : "Unable to load the jobs for this day. Try again.",
+    }).catch((failure) => {
+      if (jobs) throw new Error(`Unable to confirm the move. Review the day to check the saved schedules before trying again. ${failure.message || ""}`.trim());
+      throw failure;
+    });
+    // Reconcile only the relevant dates/records, preserving other workspace
+    // state and the server's technician and imported-time fields verbatim.
+    const dates = new Set([sourceDate, scheduledDate].filter(Boolean));
+    const ids = new Set(jobs?.map((job) => job.id) || []);
+    const serverJobs = new Map(payload.state.jobs.map((job) => [job.id, job]));
+    const applyState = () => setData((previous) => {
+      const affected = new Set(ids);
+      for (const job of [...previous.jobs, ...serverJobs.values()]) if (dates.has(job.scheduledDate)) affected.add(job.id);
+      return {
+        ...previous,
+        jobs: [
+          ...previous.jobs.filter((job) => !affected.has(job.id)),
+          ...payload.state.jobs.filter((job) => affected.has(job.id)),
+        ],
+      };
+    });
+    if (!jobs) return { ...payload.result, applyState };
+    applyState();
+    return payload.result;
+  }
+
+  function handlePreviewDayReschedule(sourceDate) {
+    return calendarRescheduleRequest({ sourceDate });
+  }
+
+  function handleRescheduleDayJobs(operation) {
+    return calendarRescheduleRequest(operation);
   }
 
   function getPaymentComparable(payment) {
@@ -2139,6 +2182,7 @@ export function useWorkspaceActions({
 
   async function handleThemeSettingChange(key, value) {
     if (!canManageBusiness) return;
+    if (uiSettingKeys.includes(key)) return themeSettingsSave.change({ [key]: value });
     if (useSqliteApi) {
       const saved = await saveSettingsApiRequest({
         path: "/api/settings",
@@ -2162,48 +2206,17 @@ export function useWorkspaceActions({
 
   async function handleApplyThemePreset(values) {
     if (!canManageBusiness) return;
-    if (useSqliteApi) {
-      const saved = await saveSettingsApiRequest({
-        path: "/api/settings",
-        method: "PATCH",
-        body: { settings: values },
-        errorMessage: "Unable to apply the theme preset.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      settings: normalizeThemeSettings({
-        ...prev.settings,
-        ...values,
-      }),
-    }));
-
-    return true;
+    return themeSettingsSave.change(values);
   }
 
   async function handleResetUiSettings() {
     if (!canManageBusiness) return;
-    if (useSqliteApi) {
-      const saved = await saveSettingsApiRequest({
-        path: "/api/settings/reset",
-        method: "POST",
-        body: { group: "ui" },
-        errorMessage: "Unable to reset UI settings.",
-      });
-      return saved.ok;
-    }
+    return themeSettingsSave.change(pickSettings(defaultThemeSettings, uiSettingKeys));
+  }
 
-    setData((prev) => ({
-      ...prev,
-      settings: normalizeThemeSettings({
-        ...prev.settings,
-        ...pickSettings(defaultThemeSettings, uiSettingKeys),
-      }),
-    }));
-
-    return true;
+  function handleRetryThemeSave() {
+    if (!canManageBusiness) return;
+    themeSettingsSave.retry();
   }
 
   async function handleResetPreferences() {
@@ -2230,6 +2243,8 @@ export function useWorkspaceActions({
   }
 
   return {
+    themeSaveState: { status: themeSettingsSave.status, error: themeSettingsSave.error },
+    handleRetryThemeSave,
     createJob,
     handleAddInvoicePayment,
     handleAddJobNote,
@@ -2269,6 +2284,8 @@ export function useWorkspaceActions({
     handleSaveDocument,
     handleSaveSiteProfile,
     handleScheduleJob,
+    handlePreviewDayReschedule,
+    handleRescheduleDayJobs,
     handleSendDocument,
     handleStatusChange,
     handleThemeSettingChange,

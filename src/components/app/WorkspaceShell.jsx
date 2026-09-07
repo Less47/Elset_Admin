@@ -84,6 +84,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   } = derived;
   const {
     handleApplyThemePreset,
+    themeSaveState,
+    handleRetryThemeSave,
     handleCreateInventoryItem,
     handleCreateMaintenancePlan,
     handleCreateStaff,
@@ -108,6 +110,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleRestoreDeletedJob,
     handleSaveStaffLoginAccount,
     handleScheduleJob,
+    handlePreviewDayReschedule,
+    handleRescheduleDayJobs,
     handleStatusChange,
     handleThemeSettingChange,
     handleUpdateDocumentTemplate,
@@ -564,6 +568,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             jobs={data.jobs}
             onOpenJob={handleOpenJob}
             onScheduleJob={handleScheduleJob}
+            onPreviewDayReschedule={handlePreviewDayReschedule}
+            onRescheduleDayJobs={handleRescheduleDayJobs}
             addMonths={addMonths}
             getCalendarDays={getCalendarDays}
             parseDateInputValue={parseDateInputValue}
@@ -636,6 +642,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             activeSettingsTab={activeSettingsTab}
             onActiveSettingsTabChange={setActiveSettingsTab}
             settings={themeSettings}
+            themeSaveState={themeSaveState}
+            onRetryThemeSave={handleRetryThemeSave}
             onSettingChange={handleThemeSettingChange}
             onApplyPreset={handleApplyThemePreset}
             onResetUiSettings={handleResetUiSettings}
