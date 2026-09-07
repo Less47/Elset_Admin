@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
+import BuildIndicator from "@/components/app/BuildIndicator";
 import MobileWorkspaceNavigation from "@/components/app/MobileWorkspaceNavigation";
 import CalendarManager from "@/components/calendar/CalendarManager";
 import CustomerManager from "@/components/customers/CustomerManager";
@@ -224,12 +225,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       {!desktopServiceBoardFullScreen && (
         <aside className={isIconOnlySidebar ? "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[var(--sidebar-width)]" : "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[var(--sidebar-width)]"}>
           <div
-            className="overflow-hidden border shadow-sm backdrop-blur lg:flex lg:h-screen lg:flex-col lg:rounded-none lg:border-y-0 lg:border-r lg:border-l-0"
+            className="overflow-hidden border-2 shadow-sm backdrop-blur lg:flex lg:h-screen lg:flex-col lg:rounded-none lg:border-y-0 lg:border-r-2 lg:border-l-0"
             style={themePalette.sidebarShell}
           >
-            <div className={isIconOnlySidebar ? "flex items-center gap-2 overflow-x-auto p-2 lg:block lg:flex-1 lg:overflow-y-auto" : "p-4 lg:flex-1 lg:overflow-y-auto lg:p-5"}>
+            <div className={isIconOnlySidebar ? "flex items-center gap-2 overflow-x-auto p-2 lg:block lg:flex-1 lg:overflow-y-auto" : "p-3 lg:flex-1 lg:overflow-y-auto lg:p-4"}>
               <div
-                className={isIconOnlySidebar ? "flex h-12 w-12 shrink-0 justify-center overflow-hidden rounded-2xl border p-0 shadow-sm lg:mx-auto" : "overflow-hidden rounded-3xl border p-4 shadow-sm"}
+                className={isIconOnlySidebar ? "flex h-12 w-12 shrink-0 justify-center overflow-hidden rounded-2xl border p-0 shadow-sm lg:mx-auto" : "overflow-hidden rounded-3xl border p-3 shadow-sm"}
                 style={{
                   ...themePalette.sidebarHeader,
                   borderColor: themePalette.borderColor,
@@ -259,7 +260,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
               <nav
                 aria-label="Application"
-                className={isIconOnlySidebar ? "flex flex-1 items-center gap-2 overflow-x-auto lg:mt-4 lg:grid lg:justify-center" : "mt-4 grid gap-2"}
+                className={isIconOnlySidebar ? "flex flex-1 items-center gap-2 overflow-x-auto lg:mt-4 lg:grid lg:justify-center" : "mt-3 grid gap-1.5"}
               >
                 {visibleSideNavItems.map((item) => {
                   const Icon = item.icon;
@@ -279,7 +280,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                         className={
                           isIconOnlySidebar
                             ? "flex h-12 w-12 items-center justify-center rounded-2xl border p-0 text-left transition hover:translate-x-[1px] hover:shadow-sm"
-                            : "flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition hover:translate-x-[1px] hover:shadow-sm"
+                            : "flex w-full items-start gap-2.5 rounded-2xl border p-3 text-left transition hover:translate-x-[1px] hover:shadow-sm"
                         }
                         style={isActive ? themePalette.sidebarActiveButton : themePalette.sidebarInactiveButton}
                         title={item.label}
@@ -343,8 +344,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                 })}
               </nav>
 
-              <div className={isIconOnlySidebar ? "ml-2 shrink-0 border-l pl-2 lg:ml-0 lg:mt-4 lg:grid lg:justify-center lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4" : "mt-6 border-t pt-4"} style={{ borderColor: themePalette.borderColor }}>
-                <div className={isIconOnlySidebar ? "h-12 w-12 rounded-2xl border p-1 text-sm" : "rounded-2xl border p-4 text-sm"} style={themePalette.sidebarInactiveButton}>
+              <div className={isIconOnlySidebar ? "ml-2 shrink-0 border-l pl-2 lg:ml-0 lg:mt-4 lg:grid lg:justify-center lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4" : "mt-4 border-t pt-3"} style={{ borderColor: themePalette.borderColor }}>
+                <div className={isIconOnlySidebar ? "h-12 w-12 rounded-2xl border p-1 text-sm" : "rounded-2xl border p-3 text-sm"} style={themePalette.sidebarInactiveButton}>
                   {isIconOnlySidebar ? (
                     isAuthenticated ? (
                       <Button
@@ -382,6 +383,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                     </>
                   )}
                 </div>
+              </div>
+              <div className="mt-3 border-t pt-2" style={{ borderColor: themePalette.borderColor }}>
+                <BuildIndicator compact={isIconOnlySidebar} style={{ color: themePalette.sidebarInactiveMuted }} />
               </div>
             </div>
           </div>
@@ -427,14 +431,14 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
                 <div className="grid gap-4" data-desktop-service-board-layout>
                   {desktopServiceBoardFullScreen ? (
-                    <Card data-service-board-toolbar className="sticky top-3 z-20 rounded-xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
-                      <CardContent className="grid gap-3 p-3 md:p-4">
+                    <Card data-service-board-toolbar className="py-0 sticky top-3 z-20 rounded-xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+                      <CardContent className="grid gap-2 p-panel">
                         {renderServiceBoardControls("panel")}
                       </CardContent>
                     </Card>
                   ) : (
-                    <Card data-service-board-toolbar className="overflow-hidden rounded-xl shadow-xl" style={themePalette.heroCard}>
-                      <CardContent className="flex min-h-[104px] flex-col justify-center p-4 md:px-5 md:py-5">
+                    <Card data-service-board-toolbar className="py-0 overflow-hidden rounded-xl shadow-xl" style={themePalette.heroCard}>
+                      <CardContent className="flex flex-col justify-center p-panel">
                         {renderServiceBoardControls("hero")}
                       </CardContent>
                     </Card>

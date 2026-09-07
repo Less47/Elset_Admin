@@ -88,31 +88,31 @@ export function formatSiteType(type) {
 
 export const contentDensityStyles = {
   compact: {
+    sectionGap: "0.75rem",
+    mobileX: "0.75rem",
+    mobileY: "0.75rem",
+    smX: "0.875rem",
+    smY: "0.875rem",
+    lgX: "1rem",
+    lgY: "1rem",
+  },
+  comfortable: {
     sectionGap: "1rem",
-    mobileX: "0.875rem",
-    mobileY: "0.875rem",
+    mobileX: "0.75rem",
+    mobileY: "0.75rem",
     smX: "1rem",
     smY: "1rem",
     lgX: "1.25rem",
     lgY: "1.25rem",
   },
-  comfortable: {
+  spacious: {
     sectionGap: "1.5rem",
-    mobileX: "1rem",
-    mobileY: "1rem",
+    mobileX: "0.875rem",
+    mobileY: "0.875rem",
     smX: "1.25rem",
     smY: "1.25rem",
     lgX: "1.5rem",
     lgY: "1.5rem",
-  },
-  spacious: {
-    sectionGap: "1.875rem",
-    mobileX: "1.125rem",
-    mobileY: "1.125rem",
-    smX: "1.375rem",
-    smY: "1.375rem",
-    lgX: "1.875rem",
-    lgY: "1.875rem",
   },
 };
 

@@ -36,7 +36,7 @@ export default function MobileStatusTabs({ counts, selectedView, onSelect }) {
 
   return (
     <div
-      className="mobile-status-tabs sticky z-30 min-w-0 overflow-hidden -mx-[var(--content-padding-x-mobile)] border-b bg-white/92 px-[var(--content-padding-x-mobile)] py-2 shadow-sm backdrop-blur sm:-mx-[var(--content-padding-x-sm)] sm:px-[var(--content-padding-x-sm)]"
+      className="mobile-status-tabs sticky z-30 min-w-0 overflow-hidden -mx-[var(--content-padding-x-mobile)] border-b bg-white/92 px-[var(--content-padding-x-mobile)] py-1.5 shadow-sm backdrop-blur sm:-mx-[var(--content-padding-x-sm)] sm:px-[var(--content-padding-x-sm)]"
       style={{ top: "calc(3.5rem + env(safe-area-inset-top))" }}
     >
       <div
@@ -55,7 +55,7 @@ export default function MobileStatusTabs({ counts, selectedView, onSelect }) {
               }}
               type="button"
               role="tab"
-              className={`flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold outline-none transition focus-visible:ring-3 focus-visible:ring-sky-500/35 ${
+              className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-semibold outline-none transition focus-visible:ring-3 focus-visible:ring-sky-500/35 ${
                 isSelected
                   ? "border-sky-700 bg-slate-900 text-white shadow-sm"
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"

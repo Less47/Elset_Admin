@@ -144,7 +144,7 @@ export default function SiteManager({
           key={`${site.customer.id}-${site.id}`}
           onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
           title="Double-click to open site profile"
-          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -300,9 +300,9 @@ export default function SiteManager({
         </div>
 
         <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardContent className={viewMode === "list" ? "p-0" : "p-5"}>
+        <CardContent className={viewMode === "list" ? "p-0" : "p-panel"}>
           {filteredSites.length === 0 ? (
-            <div className={viewMode === "list" ? "p-6" : ""}>
+            <div className={viewMode === "list" ? "p-panel" : ""}>
               <EmptyState title="No sites found" text="Try adjusting the search or create a site from a customer record first." />
             </div>
           ) : (
@@ -310,7 +310,7 @@ export default function SiteManager({
               <>
                 <div className="overflow-x-auto text-xs 2xl:hidden">
                   <div className="data-grid grid min-w-[620px] gap-px bg-slate-200 md:min-w-0">
-                    <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                    <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
                       <span>Site</span>
                       <span>Customer</span>
                       <span>Activity</span>
@@ -322,7 +322,7 @@ export default function SiteManager({
                         key={`${site.customer.id}-${site.id}`}
                         onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
                         title="Double-click to open site profile"
-                        className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                        className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 transition [&>*]:bg-white"
                       >
                         <div className="min-w-0">
                           <div className="flex min-w-0 items-center gap-1.5">
@@ -357,7 +357,7 @@ export default function SiteManager({
                 <div className="hidden overflow-x-auto 2xl:block">
                 <div className="min-w-[1200px]">
                   <div className="data-grid grid gap-px bg-slate-200">
-                    <div className="data-grid-header grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                    <div className="data-grid-header grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
                       <span>Site</span>
                       <span>Customer</span>
                       <span>Type</span>
@@ -373,7 +373,7 @@ export default function SiteManager({
                         key={`${site.customer.id}-${site.id}`}
                         onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
                         title="Double-click to open site profile"
-                        className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                        className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -524,7 +524,7 @@ export default function SiteManager({
             </div>
 
             {selectedNewSiteCustomer ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected customer</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   <div>

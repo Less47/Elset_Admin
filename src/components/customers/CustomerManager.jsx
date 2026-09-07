@@ -165,7 +165,7 @@ export default function CustomerManager({
           key={customer.id}
           onDoubleClick={() => onOpenProfile(customer.id)}
           title="Double-click to open customer profile"
-          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -344,9 +344,9 @@ export default function CustomerManager({
       </div>
 
       <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardContent className={viewMode === "list" ? "p-0" : "p-5"}>
+      <CardContent className={viewMode === "list" ? "p-0" : "p-panel"}>
         {filteredCustomers.length === 0 ? (
-          <div className={viewMode === "list" ? "p-6" : ""}>
+          <div className={viewMode === "list" ? "p-panel" : ""}>
             <EmptyState
               title="No customers found"
               text="Try adjusting the search or filters, or create a new customer record."
@@ -362,7 +362,7 @@ export default function CustomerManager({
             <>
               <div className="overflow-x-auto text-xs 2xl:hidden">
                 <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
                     <span>Customer</span>
                     <span>Contact</span>
                     <span>Activity</span>
@@ -374,7 +374,7 @@ export default function CustomerManager({
                       key={customer.id}
                       onDoubleClick={() => onOpenProfile(customer.id)}
                       title="Double-click to open customer profile"
-                      className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 transition [&>*]:bg-white"
                     >
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-1.5">
@@ -406,7 +406,7 @@ export default function CustomerManager({
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1180px]">
                 <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
                     <span>Customer</span>
                     <span>Email</span>
                     <span>Phone</span>
@@ -422,7 +422,7 @@ export default function CustomerManager({
                       key={customer.id}
                       onDoubleClick={() => onOpenProfile(customer.id)}
                       title="Double-click to open customer profile"
-                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">

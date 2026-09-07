@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CalendarDays, LogOut, Menu, Plus, X } from "lucide-react";
+import BuildIndicator from "@/components/app/BuildIndicator";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -99,13 +100,13 @@ export default function MobileWorkspaceNavigation({
           showCloseButton={false}
         >
           <DialogHeader
-            className="gap-0 border-b p-4 pr-4"
+            className="gap-0 border-b p-3 pr-3"
             style={{
               ...themePalette.sidebarHeader,
               borderColor: themePalette.borderColor,
-              paddingTop: "calc(1rem + env(safe-area-inset-top))",
-              paddingRight: "calc(1rem + env(safe-area-inset-right))",
-              paddingLeft: "calc(1rem + env(safe-area-inset-left))",
+              paddingTop: "calc(0.75rem + env(safe-area-inset-top))",
+              paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
+              paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
             }}
           >
             <div className="flex items-center gap-3">
@@ -148,7 +149,7 @@ export default function MobileWorkspaceNavigation({
                   <button
                     key={item.id}
                     type="button"
-                    className="flex min-h-12 w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left text-sm font-semibold outline-none transition focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className="flex min-h-11 w-full items-center gap-2.5 rounded-2xl border px-3 py-2 text-left text-sm font-semibold outline-none transition focus-visible:ring-3 focus-visible:ring-ring/50"
                     style={isActive ? themePalette.sidebarActiveButton : themePalette.sidebarInactiveButton}
                     onClick={() => handleNavigate(item.id)}
                     aria-current={isActive ? "page" : undefined}
@@ -167,12 +168,12 @@ export default function MobileWorkspaceNavigation({
           </nav>
 
           <div
-            className="border-t px-4 py-3"
+            className="shrink-0 border-t px-3 py-2"
             style={{
               borderColor: themePalette.borderColor,
-              paddingRight: "calc(1rem + env(safe-area-inset-right))",
+              paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
               paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))",
-              paddingLeft: "calc(1rem + env(safe-area-inset-left))",
+              paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
             }}
           >
             <div className="flex items-center gap-3">
@@ -192,6 +193,9 @@ export default function MobileWorkspaceNavigation({
                 Sign out
               </Button>
             </div>
+            <div className="mt-2">
+              <BuildIndicator style={{ color: themePalette.sidebarInactiveMuted }} />
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -203,7 +207,7 @@ export default function MobileWorkspaceNavigation({
           style={{
             ...themePalette.primaryButton,
             right: "calc(1.5rem + env(safe-area-inset-right))",
-            bottom: "calc(1rem + env(safe-area-inset-bottom))",
+            bottom: "calc(0.75rem + env(safe-area-inset-bottom))",
           }}
           onClick={onNewJob}
           aria-label="Add job"

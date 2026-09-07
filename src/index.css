@@ -6,6 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    --spacing-panel: var(--panel-padding);
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -82,7 +83,7 @@
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
     --ui-border-color: var(--border);
-    --ui-border-width: 2px;
+    --panel-padding: 0.75rem;
     --data-view-accent: oklch(0.69 0.11 214);
     --data-view-surface: oklch(0.988 0.012 210);
     --data-view-header-start: oklch(0.954 0.034 213);
@@ -95,6 +96,18 @@
     --data-view-row-alt: oklch(0.988 0.011 210);
     --data-view-row-hover: oklch(0.958 0.03 208);
     --data-view-stat: oklch(0.992 0.008 210);
+}
+
+@media (min-width: 40rem) {
+  :root {
+    --panel-padding: 0.875rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --panel-padding: 1rem;
+  }
 }
 
 .dark {
@@ -203,14 +216,13 @@
   }
 
   .record-selection-panel {
-    border-width: 1px !important;
     border-color: var(--data-view-border) !important;
     background: var(--data-view-header-start) !important;
   }
 
   .record-workspace-section + .record-workspace-section {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
     border-top: 1px solid var(--data-view-border);
   }
 
@@ -227,7 +239,7 @@
   .record-inset-surface,
   .record-empty-state {
     border-style: solid;
-    border-width: 1px !important;
+    border-width: 1px;
   }
 
   .record-result-list,
@@ -409,6 +421,7 @@
   }
 
   .data-grid-header > * {
+    padding: 0.5rem 0.75rem;
     background: linear-gradient(180deg, var(--data-view-header-cell) 0%, color-mix(in oklab, var(--data-view-header-cell) 80%, var(--card)) 100%) !important;
   }
 
@@ -417,6 +430,8 @@
   }
 
   .data-grid-row > * {
+    padding: 0.5rem 0.75rem;
+    min-height: 2.75rem;
     background: var(--data-view-row) !important;
     transition: background-color 160ms ease;
   }
@@ -437,43 +452,6 @@
 }
 
 @layer utilities {
-  :where([class~="border"]) {
-    border-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-x"]) {
-    border-inline-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-y"]) {
-    border-block-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-t"]) {
-    border-top-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-r"]) {
-    border-right-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-b"]) {
-    border-bottom-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-l"]) {
-    border-left-width: var(--ui-border-width) !important;
-  }
-
-  :where([class~="border-none"]) {
-    border-width: 0 !important;
-    border-style: none !important;
-  }
-
-  :where([class~="last:border-r-0"]:last-child) {
-    border-right-width: 0 !important;
-  }
-
   :where(.border-slate-100, .border-slate-200, .border-slate-300, .border-slate-200\/80, .border-black\/5, .border-black\/10, .border-white\/80) {
     border-color: var(--ui-border-color) !important;
   }
@@ -482,18 +460,4 @@
     border-color: var(--ui-border-color) !important;
   }
 
-  [class*="after:border"]::after {
-    border-width: var(--ui-border-width) !important;
-  }
-
-  @media (min-width: 64rem) {
-    :where([class~="lg:border-y-0"]) {
-      border-top-width: 0 !important;
-      border-bottom-width: 0 !important;
-    }
-
-    :where([class~="lg:border-l-0"]) {
-      border-left-width: 0 !important;
-    }
-  }
 }

@@ -107,7 +107,7 @@ function StaffFormDialog({
           </div>
 
           {showLoginAccessSection ? (
-            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <button
                 type="button"
                 className="flex w-full items-start justify-between gap-3 text-left"
@@ -361,7 +361,7 @@ export default function StaffManager({
             { label: "Missing phone", value: staffStats.missingPhone },
             { label: canManageLogins ? "With login access" : "Complete profiles", value: canManageLogins ? staffStats.withLoginAccess : staffStats.completeProfiles },
           ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
+            <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
             </div>
@@ -376,7 +376,7 @@ export default function StaffManager({
           ) : null}
 
           {filteredStaff.length === 0 ? (
-            <div className="p-6">
+            <div className="p-panel">
               <EmptyState
                 title="No staff found"
                 text="Try adjusting the search, or add a new staff member."
@@ -397,7 +397,7 @@ export default function StaffManager({
             <>
               <div className="overflow-x-auto text-xs 2xl:hidden">
                 <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
                     <span>Staff</span>
                     <span>Contact</span>
                     <span className="text-right">Action</span>
@@ -406,7 +406,7 @@ export default function StaffManager({
                   {filteredStaff.map((staffMember) => (
                     <div
                       key={staffMember.id}
-                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 transition [&>*]:bg-white"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
@@ -436,7 +436,7 @@ export default function StaffManager({
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1120px]">
                 <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
                     <span>Staff Member</span>
                     <span>Role</span>
                     <span>Email</span>
@@ -448,7 +448,7 @@ export default function StaffManager({
                   {filteredStaff.map((staffMember) => (
                     <div
                       key={staffMember.id}
-                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>

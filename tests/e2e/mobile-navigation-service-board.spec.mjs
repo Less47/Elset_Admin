@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
+import { getBuildMetadata } from "../../scripts/build-metadata.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -393,7 +394,8 @@ async function assertRecordWorkspaceTop(page, desktop) {
   expect(metrics.headerTop).toBeGreaterThanOrEqual(expectedHeaderTop - 1);
   expect(metrics.headerTop).toBeLessThanOrEqual(expectedHeaderTop + 1);
   if (desktop) {
-    expect(metrics.firstContentTop - metrics.headerBottom).toBeGreaterThanOrEqual(23);
+    expect(metrics.firstContentTop - metrics.headerBottom).toBeGreaterThanOrEqual(15);
+    expect(metrics.firstContentTop - metrics.headerBottom).toBeLessThanOrEqual(17);
   }
   return metrics;
 }
@@ -465,6 +467,80 @@ test.afterAll(async () => {
 test.afterEach(async ({}, testInfo) => {
   if (testInfo.status !== testInfo.expectedStatus && serverOutput) {
     await testInfo.attach("server-output", { body: serverOutput, contentType: "text/plain" });
+  }
+});
+
+test("build indicator identifies desktop and mobile assets without obstructing navigation", async ({ browser }, testInfo) => {
+  const metadata = getBuildMetadata();
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1280, height: 720, compact: true },
+    { width: 390, height: 844 },
+    { width: 375, height: 667 },
+    { width: 820, height: 1180 },
+  ]) {
+    const mobile = viewport.width < 1024;
+    const context = await browser.newContext(mobile
+      ? mobileContextOptions(viewport.width, viewport.height)
+      : desktopContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    try {
+      if (viewport.compact) {
+        const fixture = readAugmentedFixture();
+        fixture.settings.sidebarWidth = "icon-only";
+        await page.route("**/api/app-state", (route) => route.request().method() === "GET"
+          ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+          : route.continue());
+      }
+      if (viewport.width === 375) {
+        const devtools = await context.newCDPSession(page);
+        await devtools.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top: 24, right: 8, bottom: 20, left: 8 },
+        });
+      }
+      await loginAs(page, "mobileadmin", mobile);
+      if (mobile) await page.getByRole("button", { name: "Open navigation" }).click();
+      const surface = mobile ? page.getByRole("dialog", { name: "Application navigation" }) : page.locator("aside");
+      const indicator = surface.locator("[data-build-indicator]");
+      await indicator.scrollIntoViewIfNeeded();
+      await expect(indicator).toBeInViewport();
+      await expect(indicator.getByText("ELSET Admin", { exact: true })).toBeVisible();
+      await expect(indicator.getByText(`v${metadata.version}`, { exact: true })).toBeVisible();
+      await expect(indicator.getByText(metadata.commit, { exact: true })).toBeVisible();
+      expect(await indicator.locator("button, a").count()).toBe(0);
+      expect(await indicator.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+      const navigation = surface.getByRole("navigation", { name: "Application" });
+      const recycleBin = navigation.getByRole("button", { name: "Recycle Bin", exact: true });
+      await recycleBin.scrollIntoViewIfNeeded();
+      await expect(recycleBin).toBeInViewport();
+      const recycleBox = await recycleBin.boundingBox();
+      const indicatorBox = await indicator.boundingBox();
+      expect(recycleBox.y + recycleBox.height).toBeLessThanOrEqual(indicatorBox.y);
+      await expect(surface.getByRole("button", { name: /Sign out/i })).toBeInViewport();
+      if (viewport.width === 375) {
+        await expect(indicator.locator("../..")).toHaveCSS("padding-bottom", "32px");
+        expect(indicatorBox.y + indicatorBox.height).toBeLessThanOrEqual(viewport.height - 20);
+      }
+      await capture(page, testInfo, `build-indicator-${viewport.width}x${viewport.height}.png`, "build indicator and navigation");
+      await recycleBin.click();
+      await expect(page.getByRole("tab", { name: "Deleted Jobs" })).toBeVisible();
+      if (mobile) await expect(surface).toBeHidden();
+      await navigateToWorkspaceSection(page, "Service Board", viewport.width);
+      await assertNoHorizontalOverflow(page);
+
+      if (viewport.width === 390) {
+        const trigger = page.getByRole("button", { name: "Open navigation" });
+        await trigger.click();
+        await page.keyboard.press("Escape");
+        await expect(trigger).toBeFocused();
+        await trigger.click();
+        await surface.getByRole("button", { name: "Sign out" }).click();
+        await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
+      }
+    } finally {
+      await context.close();
+    }
   }
 });
 
@@ -647,11 +723,11 @@ test("mobile and tablet viewport matrix keeps filters, details, and overflow usa
 
       if (viewport.width === 375) {
         await expect(page.locator(".mobile-workspace-navigation header")).toHaveCSS("padding-top", "24px");
-        await expect(page.locator(".mobile-safe-workspace")).toHaveCSS("padding-left", "24px");
+        await expect(page.locator(".mobile-safe-workspace")).toHaveCSS("padding-left", "20px");
         const filterTrigger = page.locator('button[aria-label^="Open board filters"]');
         await filterTrigger.click();
         const filters = page.getByRole("dialog", { name: "Board filters" });
-        await expect(filters.locator('[data-slot="dialog-body"]')).toHaveCSS("padding-bottom", "36px");
+        await expect(filters.locator('[data-slot="dialog-body"]')).toHaveCSS("padding-bottom", "32px");
         await filters.getByLabel("High urgency only").click();
         await capture(page, testInfo, "mobile-filters-375x667.png", "mobile filter sheet");
         await filters.getByRole("button", { name: "Close" }).click();
@@ -1191,6 +1267,68 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
   await testInfo.attach("card-containment-measurements", { body: JSON.stringify(measurements, null, 2), contentType: "application/json" });
 });
 
+test("visual density preserves touch targets, focus, and card gutters at every responsive size", async ({ browser }) => {
+  for (const viewport of [
+    { width: 375, height: 667 }, { width: 390, height: 844 }, { width: 412, height: 915 },
+    { width: 768, height: 1024 }, { width: 820, height: 1180 }, { width: 1024, height: 768 },
+    { width: 1280, height: 720 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 },
+  ]) {
+    const mobile = viewport.width < 1024;
+    const context = await browser.newContext(mobile
+      ? mobileContextOptions(viewport.width, viewport.height)
+      : desktopContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    try {
+      await loginAs(page, "mobileadmin", mobile);
+      const firstCard = page.locator(mobile ? "[data-mobile-job-id]" : '[draggable="true"] > [data-slot="card"]').first();
+      await expect(firstCard).toHaveCSS("border-top-width", "1px");
+      if (!mobile) {
+        // Explicit column gutters must override the shared panel padding token.
+        await expect(page.locator('[data-service-board-status] > [data-slot="card-content"]').first()).toHaveCSS("padding-left", "12px");
+        await expect(firstCard).toHaveCSS("padding-top", "0px");
+        await expect(firstCard.locator(':scope > [data-slot="card-content"]')).toHaveCSS("padding-top", "12px");
+        const wrapper = firstCard.locator("..");
+        const arrow = wrapper.locator(".service-board-tomorrow-action");
+        if (await arrow.count()) {
+          const arrowBox = await arrow.boundingBox();
+          const amountBox = await firstCard.locator('[title$=" value"]').first().boundingBox();
+          if (amountBox) expect(arrowBox.y + arrowBox.height).toBeLessThanOrEqual(amountBox.y);
+        }
+      }
+      await assertNoHorizontalOverflow(page);
+      await navigateToWorkspaceSection(page, "Customers", viewport.width);
+      const controls = page.locator(viewport.width < 1280 ? "[data-responsive-page-controls]" : ".floating-page-toolbar:visible").first();
+      const search = controls.locator("input").first();
+      await expect(search).toHaveCSS("border-top-width", "1px");
+      await expect(page.locator('.data-card > [data-slot="card-content"]')).toHaveCSS("padding-left", "0px");
+      if (mobile) {
+        const targets = await controls.locator('button, input').evaluateAll((elements) => elements
+          .filter((element) => element.getClientRects().length > 0)
+          .map((element) => ({ name: element.getAttribute("aria-label") || element.textContent, height: element.getBoundingClientRect().height, width: element.getBoundingClientRect().width })));
+        for (const target of targets) {
+          expect(target.height, `${viewport.width}: ${target.name}`).toBeGreaterThanOrEqual(44);
+          expect(target.width, `${viewport.width}: ${target.name}`).toBeGreaterThanOrEqual(44);
+        }
+        const filters = controls.locator('button[aria-haspopup="dialog"]');
+        await filters.click();
+        const sheet = page.getByRole("dialog", { name: "Filters", exact: true });
+        await expect(sheet).toHaveCSS("border-top-width", "1px");
+        await expect(sheet.locator('[data-slot="dialog-body"]')).toHaveCSS("padding-left", viewport.width < 640 ? "12px" : "14px");
+        await page.keyboard.press("Escape");
+        await expect(filters).toBeFocused();
+      }
+      await search.focus();
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Shift+Tab");
+      await expect(search).toBeFocused();
+      expect(await search.evaluate((element) => getComputedStyle(element).boxShadow)).toContain("3px");
+      await assertNoHorizontalOverflow(page);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
 test("Create Job is a guarded page workflow using the existing record API", async ({ browser }, testInfo) => {
   const context = await browser.newContext(mobileContextOptions(390, 844));
   const page = await context.newPage();
@@ -1586,7 +1724,7 @@ test("Create Job and Job Details use tablet and desktop workspace layouts", asyn
       await expect(page).toHaveURL(baseUrl + "/jobs/new");
       await expect(page.getByRole("dialog", { name: "Create New Job" })).toHaveCount(0);
       const createWorkspaceMetrics = await assertRecordWorkspaceTop(page, !viewport.mobile);
-      if (viewport.width === 390) expect(createWorkspaceMetrics.headerPaddingTop).toBeGreaterThanOrEqual(34);
+      if (viewport.width === 390) expect(createWorkspaceMetrics.headerPaddingTop).toBeGreaterThanOrEqual(32);
       await assertNoHorizontalOverflow(page);
       if (viewport.width === 820) await capture(page, testInfo, "create-job-ipad-820x1180.png", "Create Job iPad portrait");
       if (!viewport.mobile && [1280, 1440, 1920].includes(viewport.width)) {
@@ -1603,7 +1741,7 @@ test("Create Job and Job Details use tablet and desktop workspace layouts", asyn
       await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
       await expect(page.getByRole("dialog", { name: "Synthetic gate service" })).toHaveCount(0);
       const detailsWorkspaceMetrics = await assertRecordWorkspaceTop(page, !viewport.mobile);
-      if (viewport.width === 390) expect(detailsWorkspaceMetrics.headerPaddingTop).toBeGreaterThanOrEqual(34);
+      if (viewport.width === 390) expect(detailsWorkspaceMetrics.headerPaddingTop).toBeGreaterThanOrEqual(32);
       await assertNoHorizontalOverflow(page);
       if (viewport.width === 820) await capture(page, testInfo, "job-details-ipad-overview-820x1180.png", "Job Details iPad Overview");
       if (!viewport.mobile && [1280, 1440, 1920].includes(viewport.width)) {

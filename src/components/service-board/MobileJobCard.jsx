@@ -84,7 +84,7 @@ export default function MobileJobCard({
     >
       <button
         type="button"
-        className="block w-full px-3.5 pb-3 pt-3 text-left outline-none transition hover:bg-white/20 focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-sky-600/40"
+        className="block w-full px-3 py-2.5 text-left outline-none transition hover:bg-white/20 focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-sky-600/40"
         onClick={() => onOpen(job)}
         aria-label={openLabel}
       >
@@ -121,7 +121,7 @@ export default function MobileJobCard({
         </div>
       </button>
 
-      <div className="flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 bg-white/38 px-2.5 py-1.5">
+      <div className="flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 bg-white/38 px-2.5 py-1">
         {canManageTomorrow && onRemoveFromTomorrow ? (
           <Button
             type="button"

@@ -98,7 +98,7 @@ export default function MobileServiceBoard({
         onSelect={onSelectedViewChange}
       />
 
-      <div className="flex w-full min-w-0 max-w-full items-center gap-2 rounded-2xl border bg-white/88 p-2 shadow-sm backdrop-blur">
+      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5 rounded-2xl border bg-white/88 p-2 shadow-sm backdrop-blur">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <Input
@@ -168,7 +168,7 @@ export default function MobileServiceBoard({
         aria-label={`${selectedLabel} jobs`}
         data-service-board-status={isTomorrowView ? undefined : selectedView}
         data-mobile-board-view={selectedLabel}
-        className="w-full min-w-0 max-w-full rounded-2xl border bg-white/64 p-2.5 shadow-sm backdrop-blur sm:p-3"
+        className="w-full min-w-0 max-w-full rounded-2xl border bg-white/64 p-2.5 shadow-sm backdrop-blur"
       >
         <div className="flex min-h-11 items-center justify-between gap-3 px-1 pb-2">
           <div className="min-w-0">
@@ -202,7 +202,7 @@ export default function MobileServiceBoard({
             </p>
           </div>
         ) : (
-          <div className="grid gap-2.5">
+          <div className="grid gap-2">
             {selectedJobs.map((job) => (
               <MobileJobCard
                 key={job.id}

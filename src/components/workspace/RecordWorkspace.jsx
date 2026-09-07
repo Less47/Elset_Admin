@@ -24,11 +24,11 @@ export function RecordWorkspace({
     <main className="record-workspace min-h-[100dvh] min-w-0 text-slate-950">
       <header className="record-workspace-header sticky top-0 z-40 border-b backdrop-blur-xl lg:mx-[var(--content-padding-x-lg)] lg:rounded-xl lg:border lg:shadow-xl">
         <div
-          className={`mx-auto flex min-h-16 w-full ${maxWidth} items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-5 lg:px-6`}
+          className={`mx-auto flex min-h-16 w-full ${maxWidth} items-center gap-2 px-panel py-2 sm:gap-3`}
           style={{
-            paddingTop: "calc(0.625rem + env(safe-area-inset-top))",
-            paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
-            paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
+            paddingTop: "calc(0.5rem + env(safe-area-inset-top))",
+            paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
+            paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
           <Button
@@ -56,7 +56,7 @@ export function RecordWorkspace({
         </div>
       </header>
 
-      <div className={`mx-auto w-full ${maxWidth} px-3 pb-24 pt-3 sm:px-5 sm:pt-4 lg:px-[var(--content-padding-x-lg)] lg:pb-8 lg:pt-6`}>
+      <div className={`mx-auto w-full ${maxWidth} px-panel pb-24 pt-3 lg:px-[var(--content-padding-x-lg)] lg:pb-6 lg:pt-4`}>
         {children}
       </div>
     </main>
@@ -68,10 +68,10 @@ export function WorkspaceSection({ children, description = "", id, panel = false
     <section
       id={id}
       className={panel
-        ? "record-major-panel scroll-mt-28 rounded-xl border p-4 sm:p-5 lg:p-6"
+        ? "record-major-panel scroll-mt-28 rounded-xl border p-panel"
         : "record-workspace-section scroll-mt-28"}
     >
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold leading-5 text-slate-950 sm:text-lg">{title}</h2>
           {description ? <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{description}</p> : null}
@@ -89,7 +89,7 @@ export function WorkspaceActionBar({ children, maxWidth = "max-w-6xl", status = 
       className="record-workspace-action-bar fixed inset-x-0 bottom-0 z-40 border-t shadow-[0_-16px_36px_-30px_rgba(15,23,42,0.55)] backdrop-blur-xl lg:static lg:mt-4 lg:rounded-xl lg:border lg:shadow-sm"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <div className={`mx-auto flex min-h-16 w-full ${maxWidth} items-center justify-between gap-3 px-3 py-2.5 sm:px-4`}>
+      <div className={`mx-auto flex min-h-15 w-full ${maxWidth} items-center justify-between gap-2 px-panel py-2`}>
         <div className="min-w-0 flex-1 text-xs font-medium text-slate-600 sm:text-sm" aria-live="polite">{status}</div>
         <div className="flex shrink-0 items-center gap-2">{children}</div>
       </div>

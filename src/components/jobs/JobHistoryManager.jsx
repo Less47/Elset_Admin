@@ -315,7 +315,7 @@ export default function JobHistoryManager({
             { label: "Quoted", value: historyStats.quoted },
             { label: "Invoiced", value: historyStats.invoiced },
           ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
+            <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
             </div>
@@ -324,14 +324,14 @@ export default function JobHistoryManager({
 
         <CardContent className="p-0">
         {filteredJobs.length === 0 ? (
-          <div className="p-6">
+          <div className="p-panel">
             <EmptyState title="No jobs found" text="Try adjusting the search or filters to find the job you want." />
           </div>
         ) : (
           <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
               <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
                   <span>Job</span>
                   <span>Customer</span>
                   <span>Status</span>
@@ -343,7 +343,7 @@ export default function JobHistoryManager({
                     key={job.id}
                     onDoubleClick={() => onOpenJob(job)}
                     title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 transition [&>*]:bg-white"
                   >
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
@@ -376,7 +376,7 @@ export default function JobHistoryManager({
             <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1520px]">
               <div className="data-grid grid gap-px bg-slate-200">
-                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
                   <span>Job</span>
                   <span>Customer & Site</span>
                   <span>Status</span>
@@ -392,7 +392,7 @@ export default function JobHistoryManager({
                     key={job.id}
                     onDoubleClick={() => onOpenJob(job)}
                     title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
                   >
                     <div className="min-w-0">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>

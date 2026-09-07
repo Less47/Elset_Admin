@@ -19,11 +19,11 @@ const responsiveSheetClassName = "bottom-0 left-0 top-auto max-h-[min(90dvh,50re
 export function ResponsivePageControls({ search, controls, action, summary, className }) {
   return (
     <div className={cn("grid gap-2 xl:hidden", className)} data-responsive-page-controls>
-      <div className="floating-page-toolbar px-3 py-3 sm:px-4">
-        <div className={cn("grid gap-2", action && "md:grid-cols-[minmax(0,1fr)_auto]")}>
+      <div className="floating-page-toolbar p-2.5 sm:p-3">
+        <div className={cn("grid gap-1.5", action && "md:grid-cols-[minmax(0,1fr)_auto]")}>
           <div className="min-w-0">{search}</div>
           {controls ? (
-            <div className={cn("order-2 flex min-w-0 items-stretch gap-2", action && "md:col-span-2 md:row-start-2")}>
+            <div className={cn("order-2 flex min-w-0 items-stretch gap-1.5", action && "md:col-span-2 md:row-start-2")}>
               {controls}
             </div>
           ) : null}
@@ -116,7 +116,7 @@ export function ViewModeToggle({ value, onChange, label = "View mode" }) {
   ];
 
   return (
-    <div className="data-toggle-shell flex h-11 shrink-0 gap-1 rounded-xl border border-slate-300 bg-white p-1" role="group" aria-label={label}>
+    <div className="data-toggle-shell flex h-11 shrink-0 gap-1 rounded-xl bg-white" role="group" aria-label={label}>
       {options.map((option) => {
         const ViewIcon = option.Icon;
         return (
@@ -126,7 +126,7 @@ export function ViewModeToggle({ value, onChange, label = "View mode" }) {
           size="sm"
           variant="ghost"
           className={cn(
-            "h-full min-w-9 rounded-lg px-2 sm:min-w-0 sm:px-2.5",
+            "h-11 min-w-11 rounded-lg px-2 sm:px-2.5",
             value === option.value
               ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white"
               : "!text-slate-800 hover:!text-slate-950"
@@ -146,7 +146,7 @@ export function ViewModeToggle({ value, onChange, label = "View mode" }) {
 
 export function PagePrimaryAction({ children, className, ...props }) {
   return (
-    <Button className={cn("h-11 rounded-xl px-4", className)} {...props}>
+    <Button className={cn("h-11 rounded-xl px-3", className)} {...props}>
       {children}
     </Button>
   );
@@ -192,10 +192,10 @@ export function MobileFilterSheet({
         }}
       >
         <div
-          className="flex items-start justify-between gap-3 border-b px-4 pb-3 pt-4 sm:px-5"
+          className="flex items-start justify-between gap-3 border-b px-panel py-3"
           style={{
-            paddingLeft: "calc(1rem + env(safe-area-inset-left))",
-            paddingRight: "calc(1rem + env(safe-area-inset-right))",
+            paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
+            paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
           }}
         >
           <div className="min-w-0">
@@ -213,28 +213,28 @@ export function MobileFilterSheet({
         </div>
 
         <DialogBody
-          className="overscroll-contain px-4 py-4 sm:px-5"
+          className="overscroll-contain p-panel"
           style={{
-            paddingRight: "calc(1rem + env(safe-area-inset-right))",
-            paddingLeft: "calc(1rem + env(safe-area-inset-left))",
+            paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
+            paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
-          <div className="grid gap-4">{children}</div>
+          <div className="grid gap-3">{children}</div>
         </DialogBody>
 
         <div
-          className="flex shrink-0 items-center justify-between gap-3 border-t bg-white/90 px-4 py-3 backdrop-blur sm:px-5"
+          className="flex shrink-0 items-center justify-between gap-3 border-t bg-white/90 px-panel py-2 backdrop-blur"
           style={{
-            paddingRight: "calc(1rem + env(safe-area-inset-right))",
-            paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))",
-            paddingLeft: "calc(1rem + env(safe-area-inset-left))",
+            paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
+            paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))",
+            paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
           <Button type="button" variant="ghost" className="min-h-11 rounded-xl px-3" onClick={onReset} disabled={activeCount === 0}>
             Reset
           </Button>
           <DialogClose asChild>
-            <Button type="button" className="min-h-11 rounded-xl px-6">Done</Button>
+            <Button type="button" className="min-h-11 rounded-xl px-4">Done</Button>
           </DialogClose>
         </div>
       </DialogContent>
