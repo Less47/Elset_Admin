@@ -12,6 +12,8 @@ import {
   removeJobFromTomorrow,
   restoreDeletedJob,
   scheduleJob,
+  previewDayReschedule,
+  rescheduleDayJobs,
   updateJobDetails,
   WorkspaceJobError,
 } from "./server-workspace-jobs.js";
@@ -80,6 +82,19 @@ export function createJobRouter({
   const limitedRoleMiddleware = requireRole ? requireRole(["admin", "office", "technician"]) : ((_req, _res, next) => next());
   const manageMiddleware = [authMiddleware, manageRoleMiddleware];
   const limitedMiddleware = [authMiddleware, limitedRoleMiddleware];
+
+  router.get(
+    "/api/jobs/reschedule-day",
+    ...manageMiddleware,
+    (req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); },
+    handleJobRoute((db, req) => previewDayReschedule(db, req.query.sourceDate), env)
+  );
+
+  router.post(
+    "/api/jobs/reschedule-day",
+    ...manageMiddleware,
+    handleJobRoute((db, req) => rescheduleDayJobs(db, req.body), env)
+  );
 
   router.post(
     "/api/jobs",

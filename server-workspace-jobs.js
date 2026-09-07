@@ -1126,6 +1126,91 @@ export function scheduleJob(db, jobIdInput, scheduledDateInput) {
   })();
 }
 
+function requireCalendarDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new WorkspaceJobError("Choose a valid calendar date.");
+  }
+  const parsed = new Date(`${value}T12:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new WorkspaceJobError("Choose a valid calendar date.");
+  }
+  return value;
+}
+
+// A content token covers related notes/documents too, whose writes do not all
+// touch jobs.updated_at. It requires no schema change or client job payload.
+function schedulingRevision(job) {
+  function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+    return value;
+  }
+  return crypto.createHash("sha256").update(JSON.stringify(canonical(job))).digest("hex");
+}
+
+function isActiveCalendarJob(job) {
+  return job && statusValues.has(job.status) && job.status !== "Completed";
+}
+
+export function previewDayReschedule(db, sourceDateInput) {
+  const sourceDate = requireCalendarDate(sourceDateInput);
+  return db.transaction(() => ({
+    sourceDate,
+    jobs: loadWorkspaceStateFromDb(db).jobs
+      .filter((job) => job.scheduledDate === sourceDate && isActiveCalendarJob(job))
+      .map((job) => ({ job, revision: schedulingRevision(job) })),
+  }))();
+}
+
+export function rescheduleDayJobs(db, input) {
+  assertPlainObject(input);
+  if (Object.keys(input).some((key) => !["sourceDate", "scheduledDate", "jobs"].includes(key))) {
+    throw new WorkspaceJobError("Only job IDs, revision tokens and scheduling dates are accepted.");
+  }
+  const sourceDate = requireCalendarDate(input.sourceDate);
+  const scheduledDate = requireCalendarDate(input.scheduledDate);
+  if (sourceDate === scheduledDate) throw new WorkspaceJobError("Choose a different destination date.");
+  if (!Array.isArray(input.jobs) || !input.jobs.length) throw new WorkspaceJobError("Select at least one job.");
+  const seen = new Set();
+  const entries = input.jobs.map((entry) => {
+    assertPlainObject(entry, "Job selection");
+    if (Object.keys(entry).some((key) => !["id", "revision"].includes(key))) throw new WorkspaceJobError("Job selections accept only an ID and revision token.");
+    const id = normalizeId(entry.id, "Job ID");
+    if (seen.has(id)) throw new WorkspaceJobError("Select each job only once.");
+    seen.add(id);
+    if (typeof entry.revision !== "string" || !/^[a-f0-9]{64}$/.test(entry.revision)) throw new WorkspaceJobError("Reload the day before rescheduling its jobs.");
+    return { id, revision: entry.revision };
+  });
+
+  // Lock before reading revisions. Eligible, unchanged records commit together;
+  // conflicts are skipped explicitly. Any unexpected database error rolls back
+  // every write, so the response never reports an uncommitted success.
+  return db.transaction(() => {
+    const current = new Map(loadWorkspaceStateFromDb(db).jobs.map((job) => [job.id, job]));
+    const succeeded = [];
+    const failed = [];
+    for (const entry of entries) {
+      const job = current.get(entry.id);
+      let error = "";
+      if (!job) error = "This job was deleted or archived.";
+      else if (!isActiveCalendarJob(job)) error = "This job is no longer active.";
+      else if (job.scheduledDate !== sourceDate || schedulingRevision(job) !== entry.revision) error = "This job was changed elsewhere. Review it before trying again.";
+      if (error) {
+        failed.push({ id: entry.id, jobNumber: job?.jobNumber, error });
+        continue;
+      }
+      const updatedAt = new Date(Math.max(Date.now(), (Date.parse(job.updatedAt) || 0) + 1)).toISOString();
+      updateJobCore(db, job.id, { scheduledDate }, updatedAt);
+      succeeded.push({ id: job.id, jobNumber: job.jobNumber, revision: schedulingRevision({ ...job, scheduledDate, updatedAt }) });
+    }
+    if (succeeded.length) {
+      touchWorkspaceInfo(db);
+      runForeignKeyCheck(db);
+    }
+    return { sourceDate, scheduledDate, succeeded, failed };
+  }).immediate();
+}
+
 export function planJobForTomorrow(db, jobIdInput, tomorrowDateInput = "") {
   const jobId = normalizeId(jobIdInput, "Job ID");
   const tomorrowDate = normalizeDateInput(tomorrowDateInput) || getDefaultTomorrowDate();

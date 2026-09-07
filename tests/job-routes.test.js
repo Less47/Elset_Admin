@@ -108,6 +108,128 @@ function getDbState(dbPath) {
   }
 }
 
+function bulkFixture() {
+  const fixture = readFixture();
+  const base = fixture.jobs[0];
+  fixture.jobs = Array.from({ length: 8 }, (_, index) => ({
+    ...base,
+    ...(index ? { notes: [], photos: [], quote: null, invoice: null } : {}),
+    id: index ? `bulk-${index}` : base.id,
+    jobNumber: 1001 + index,
+    status: index % 2 ? "In Progress" : "To Do",
+    scheduledDate: "2026-09-14",
+    assignedTechnicianId: "demo-staff-admin",
+    assignedTechnicianName: "Jordan Vale",
+    scheduledTime: index % 2 ? "11:30" : "09:00",
+    importedScheduling: { startTime: "10:30", notes: "Keep imported time metadata" },
+  }));
+  return fixture;
+}
+
+async function bulkPreview(baseUrl, sourceDate = "2026-09-14") {
+  const { response, payload } = await requestJson(baseUrl, `/api/jobs/reschedule-day?sourceDate=${sourceDate}`);
+  assert.equal(response.status, 200, payload.error);
+  return payload.result.jobs.map(({ job, revision }) => ({ id: job.id, revision }));
+}
+
+async function bulkMove(baseUrl, jobs, sourceDate = "2026-09-14", scheduledDate = "2026-09-15") {
+  return requestJson(baseUrl, "/api/jobs/reschedule-day", { method: "POST", body: JSON.stringify({ sourceDate, scheduledDate, jobs }) });
+}
+
+test("bulk rescheduling persists eight date-only updates and preserves every other job field", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const before = getDbState(dbPath);
+    const entries = await bulkPreview(baseUrl);
+    assert.equal(entries.length, 8);
+    const { response, payload } = await bulkMove(baseUrl, entries, "2026-09-14", "2026-10-04");
+    assert.equal(response.status, 200, payload.error);
+    assert.equal(payload.result.succeeded.length, 8);
+    assert.deepEqual(payload.result.failed, []);
+    const after = getDbState(dbPath);
+    for (const previous of before.jobs) {
+      const saved = after.jobs.find((job) => job.id === previous.id);
+      const omitDates = ({ scheduledDate, updatedAt, ...rest }) => { assert.ok(scheduledDate); assert.ok(updatedAt); return rest; };
+      assert.equal(saved.scheduledDate, "2026-10-04");
+      assert.deepEqual(omitDates(saved), omitDates(previous));
+      assert.equal(payload.result.succeeded.find((entry) => entry.id === saved.id).revision, (await bulkPreview(baseUrl, "2026-10-04")).find((entry) => entry.id === saved.id).revision);
+    }
+    for (const key of ["customers", "staff", "settings", "inventoryItems", "maintenancePlans"]) assert.deepEqual(after[key], before[key]);
+    assert.deepEqual(await bulkPreview(baseUrl), []);
+  }), bulkFixture());
+});
+
+test("bulk conflicts skip edited, completed and deleted jobs and allow reviewed retry", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const entries = await bulkPreview(baseUrl);
+    await requestJson(baseUrl, "/api/jobs/bulk-1", { method: "PATCH", body: JSON.stringify({ title: "Changed on another device" }) });
+    await requestJson(baseUrl, "/api/jobs/bulk-2/status", { method: "PATCH", body: JSON.stringify({ status: "Completed" }) });
+    await requestJson(baseUrl, "/api/jobs/bulk-3", { method: "DELETE" });
+    const { payload } = await bulkMove(baseUrl, entries);
+    assert.equal(payload.result.succeeded.length, 5);
+    assert.deepEqual(payload.result.failed.map((entry) => entry.id).sort(), ["bulk-1", "bulk-2", "bulk-3"]);
+    const state = getDbState(dbPath);
+    assert.equal(state.jobs.find((job) => job.id === "bulk-1").scheduledDate, "2026-09-14");
+    assert.equal(state.jobs.find((job) => job.id === "bulk-1").title, "Changed on another device");
+    assert.equal(state.jobs.find((job) => job.id === "bulk-2").scheduledDate, "2026-09-14");
+    assert.equal(state.jobs.some((job) => job.id === "bulk-3"), false);
+    assert.equal(state.deletedJobs.some(({ job }) => job.id === "bulk-3"), true);
+    const remaining = await bulkPreview(baseUrl);
+    assert.deepEqual(remaining.map((entry) => entry.id), ["bulk-1"]);
+    assert.equal((await bulkMove(baseUrl, remaining)).payload.result.succeeded.length, 1);
+  }), bulkFixture());
+});
+
+test("bulk Undo uses post-move tokens and rejects newer related-record edits even with the same job timestamp", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const moved = (await bulkMove(baseUrl, await bulkPreview(baseUrl))).payload.result;
+    const timestamp = getDbState(dbPath).jobs.find((job) => job.id === "bulk-1").updatedAt;
+    await requestJson(baseUrl, "/api/jobs/bulk-1/notes", { method: "POST", body: JSON.stringify({ text: "New note after move" }) });
+    const db = openWorkspaceDb({ dbPath });
+    try { db.prepare("UPDATE jobs SET updated_at = ? WHERE id = ?").run(timestamp, "bulk-1"); } finally { db.close(); }
+    const beforeUndo = getDbState(dbPath);
+    const undo = await bulkMove(baseUrl, moved.succeeded.map(({ id, revision }) => ({ id, revision })), "2026-09-15", "2026-09-14");
+    assert.equal(undo.payload.result.succeeded.length, 7);
+    assert.deepEqual(undo.payload.result.failed.map((entry) => entry.id), ["bulk-1"]);
+    const after = getDbState(dbPath);
+    for (const previous of beforeUndo.jobs) {
+      const saved = after.jobs.find((job) => job.id === previous.id);
+      assert.equal(saved.scheduledDate, saved.id === "bulk-1" ? "2026-09-15" : "2026-09-14");
+      const { scheduledDate, updatedAt, ...rest } = saved;
+      assert.deepEqual({ ...rest, scheduledDate: previous.scheduledDate, updatedAt: previous.updatedAt }, previous);
+      assert.ok(scheduledDate && updatedAt);
+    }
+    assert.equal((await bulkMove(baseUrl, moved.succeeded.map(({ id, revision }) => ({ id, revision })), "2026-09-15", "2026-09-14")).payload.result.succeeded.length, 0);
+  }), bulkFixture());
+});
+
+test("bulk endpoint rejects invalid dates, duplicate IDs, unguarded/arbitrary payloads and unauthorized roles", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      const jobs = await bulkPreview(baseUrl);
+      const before = getDbState(dbPath);
+      for (const scheduledDate of ["", "2026-02-30", "2026-09-14", "2026-09-15T00:00:00Z"]) assert.equal((await bulkMove(baseUrl, jobs, "2026-09-14", scheduledDate)).response.status, 400);
+      for (const selection of [[], [jobs[0], jobs[0]], [{ id: jobs[0].id }], [{ ...jobs[0], status: "Completed" }]]) assert.equal((await bulkMove(baseUrl, selection)).response.status, 400);
+      assert.equal((await requestJson(baseUrl, "/api/jobs/reschedule-day", { method: "POST", body: JSON.stringify({ sourceDate: "2026-09-14", scheduledDate: "2026-09-15", jobs, state: {} }) })).response.status, 400);
+      assert.deepEqual(getDbState(dbPath), before);
+    });
+    await withServer(env, async (baseUrl) => {
+      assert.equal((await requestJson(baseUrl, "/api/jobs/reschedule-day?sourceDate=2026-09-14")).response.status, 403);
+      assert.equal((await bulkMove(baseUrl, [])).response.status, 403);
+    }, { role: "technician" });
+  }, bulkFixture());
+});
+
+test("unexpected bulk database failures roll back every date write", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const entries = await bulkPreview(baseUrl);
+    const before = getDbState(dbPath);
+    const db = openWorkspaceDb({ dbPath });
+    try { db.exec("CREATE TRIGGER fail_bulk BEFORE UPDATE OF scheduled_date ON jobs WHEN NEW.id = 'bulk-3' BEGIN SELECT RAISE(ABORT, 'Synthetic write failure'); END"); } finally { db.close(); }
+    assert.equal((await bulkMove(baseUrl, entries)).response.status, 500);
+    assert.deepEqual(getDbState(dbPath), before);
+  }), bulkFixture());
+});
+
 test("date scheduling and removal preserve status, assignment and commercial records", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {

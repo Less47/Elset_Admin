@@ -202,6 +202,10 @@ async function openCalendar(browser, width = 1440, height = 900, timezoneId = "A
   if (width < 1024) await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Calendar", exact: true }).click();
   await expect(page.locator("[data-calendar-month]")).toHaveText("September 2026");
+  // Finish the navigation drawer's exit before tests enable animations or send
+  // raw coordinate taps (which do not perform Playwright actionability checks).
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
+  await expect(page.locator("body")).not.toHaveAttribute("data-scroll-locked", "1");
   const writes = [];
   page.on("request", (request) => {
     if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method()) && new URL(request.url()).pathname.startsWith("/api/")) writes.push({ path: new URL(request.url()).pathname, method: request.method(), body: request.postDataJSON() });
@@ -219,7 +223,7 @@ async function noOverflow(page) {
 }
 async function screenshot(page, info, name) {
   await page.waitForTimeout(250);
-  const target = path.join(screenshotDir, name + ".png");
+  const target = path.join(screenshotDir, name + (name.startsWith("bulk-") && info.project.name === "webkit" ? "-webkit" : "") + ".png");
   await page.screenshot({ path: target, animations: "disabled" });
   await info.attach(name, { path: target, contentType: "image/png" });
 }
@@ -231,6 +235,426 @@ async function chooseQueueDate(page, id, date) {
   await expect(sheet).toBeHidden();
   await expect.poll(() => dbJob(id).scheduledDate).toBe(date);
 }
+
+async function clickDateArea(page, date, area = "center", touch = false) {
+  const cell = day(page, date);
+  await cell.scrollIntoViewIfNeeded();
+  const box = await cell.boundingBox();
+  const points = {
+    center: [box.width / 2, box.height / 2],
+    number: [20, 20],
+    bottom: [box.width / 2, box.height - 4],
+    "top-left": [3, 3],
+    "right-padding": [box.width - 4, box.height * 0.7],
+    "right-border": [box.width - 1.5, box.height * 0.7],
+  };
+  const [x, y] = points[area];
+  if (touch) await page.touchscreen.tap(box.x + x, box.y + y);
+  else await page.mouse.click(box.x + x, box.y + y);
+}
+
+function prepareBulkDay() {
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try {
+    for (const id of ["calendar-queue-0", "calendar-queue-1"]) scheduleJob(db, id, "2026-09-15");
+    for (const id of ["calendar-todo", "calendar-queue-2"]) scheduleJob(db, id, "2026-09-16");
+  } finally { db.close(); }
+}
+
+async function openBulkDay(page, date = "2026-09-15") {
+  await day(page, date).locator(".calendar-day-open").click({ position: { x: 12, y: 12 } });
+  await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+  await expect(panel.getByRole("checkbox", { name: /^Select all/ })).toBeVisible();
+  return panel;
+}
+
+for (const [width, height] of [[390, 844], [820, 1180], [1024, 768], [1440, 900]]) {
+  test(`bulk day selection, workload and eight-job persistence at ${width}x${height}`, async ({ browser }, info) => {
+    prepareBulkDay();
+    const originals = readWorkspaceState().jobs;
+    const { context, page, writes } = await openCalendar(browser, width, height, width === 1440 ? "Pacific/Honolulu" : "Australia/Sydney");
+    try {
+      await day(page, "2026-09-15").locator(".calendar-day-open").click({ position: { x: 12, y: 12 } });
+      await expect(page.getByRole("button", { name: "Reschedule day", exact: true })).toBeVisible();
+      await screenshot(page, info, `bulk-normal-${width}x${height}`);
+      await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+      const panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+      const all = panel.getByRole("checkbox", { name: "Select all 8", exact: true });
+      await expect(all).toBeChecked();
+      await expect(panel.getByRole("checkbox")).toHaveCount(9);
+      await expect(panel.getByRole("checkbox", { name: "Select Job #179", exact: true })).toHaveCount(0);
+      await expect(panel.getByLabel("Move selected jobs to", { exact: true })).toHaveValue("");
+      await expect(panel.getByRole("button", { name: "Move 8 jobs", exact: true })).toBeDisabled();
+      await screenshot(page, info, `bulk-selection-${width}x${height}`);
+      const individual = panel.getByRole("checkbox", { name: "Select Job #205", exact: true });
+      await individual.focus();
+      await page.keyboard.press("Space");
+      await expect(individual).not.toBeChecked();
+      await expect(all).toHaveAttribute("aria-checked", "mixed");
+      await expect(panel.getByRole("button", { name: "Move 7 jobs", exact: true })).toBeVisible();
+      await panel.getByRole("button", { name: "Clear all", exact: true }).click();
+      await expect(panel.getByRole("button", { name: "Move 0 jobs", exact: true })).toBeDisabled();
+      await all.check();
+      await expect(panel.getByRole("checkbox", { checked: true })).toHaveCount(9);
+      const dateInput = panel.getByLabel("Move selected jobs to", { exact: true });
+      await dateInput.fill("2026-09-15");
+      await expect(panel.getByRole("button", { name: "Move 8 jobs", exact: true })).toBeDisabled();
+      await expect(panel).toContainText("Choose a different date");
+      await dateInput.fill("2026-09-16");
+      await dateInput.focus();
+      await expect(panel).toContainText("Wednesday 16 September 2026");
+      await screenshot(page, info, `bulk-destination-${width}x${height}`);
+      const workload = panel.getByRole("region", { name: "Destination workload" });
+      await workload.scrollIntoViewIfNeeded();
+      await expect(workload.locator("dd")).toHaveText(["2 jobs", "8 jobs", "10 jobs"]);
+      await screenshot(page, info, `bulk-workload-${width}x${height}`);
+      await noOverflow(page);
+      expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      await panel.getByRole("button", { name: "Move 8 jobs", exact: true }).click();
+      const source = page.getByRole("dialog", { name: /15 September/ });
+      await expect(source).toContainText("8 jobs moved to Wednesday 16 September.");
+      await expect(source).toContainText("1 scheduled job");
+      await expect(source.getByRole("button", { name: "Reschedule day", exact: true })).toHaveCount(0);
+      await expect(source).toContainText("No active jobs available to reschedule.");
+      await screenshot(page, info, `bulk-success-${width}x${height}`);
+      const active = originals.filter((job) => job.scheduledDate === "2026-09-15" && job.status !== "Completed");
+      for (const original of active) {
+        expect(dbJob(original.id).scheduledDate).toBe("2026-09-16");
+        expect(unchangedFields(dbJob(original.id))).toEqual(unchangedFields(original));
+      }
+      expect(dbJob("calendar-completed").scheduledDate).toBe("2026-09-15");
+      await source.getByRole("button", { name: "Close calendar panel" }).click();
+      await expect(day(page, "2026-09-16").locator(".calendar-day-open")).toHaveAttribute("aria-label", /10 jobs$/);
+      await page.reload();
+      if (width < 1024) await page.getByRole("button", { name: "Open navigation" }).click();
+      await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Calendar", exact: true }).click();
+      await expect(day(page, "2026-09-16").locator(".calendar-day-open")).toHaveAttribute("aria-label", /10 jobs$/);
+      await expect(day(page, "2026-09-15").locator(".calendar-day-open")).toHaveAttribute("aria-label", /1 job$/);
+      expect(writes).toHaveLength(1);
+      expect(writes[0].path).toBe("/api/jobs/reschedule-day");
+      expect(writes[0].body.jobs).toHaveLength(8);
+      expect(Object.keys(writes[0].body).sort()).toEqual(["jobs", "scheduledDate", "sourceDate"]);
+    } finally { await context.close(); }
+  });
+}
+
+test("bulk day splitting, empty-day eligibility and focus transitions", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  try {
+    await day(page, "2026-09-08").locator(".calendar-day-open").click();
+    await expect(page.getByRole("dialog")).toContainText("No active jobs available to reschedule.");
+    await expect(page.getByRole("button", { name: "Reschedule day", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Close calendar panel" }).click();
+    let panel = await openBulkDay(page);
+    await expect(panel.getByRole("heading", { name: "Reschedule jobs", exact: true })).toBeFocused();
+    await panel.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog").getByRole("heading", { name: /15 September/ })).toBeFocused();
+    await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+    panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+    await panel.getByRole("checkbox", { name: "Select Job #205", exact: true }).uncheck();
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
+    await panel.getByRole("button", { name: "Move 5 jobs", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: /15 September/ })).toContainText("2 scheduled jobs");
+    await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+    panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+    await expect(panel.getByRole("checkbox", { name: "Select all 1", exact: true })).toBeChecked();
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-17");
+    await panel.getByRole("button", { name: "Move 1 job", exact: true }).click();
+    await expect.poll(() => dbJob("calendar-progress").scheduledDate).toBe("2026-09-17");
+    expect(readWorkspaceState().jobs.filter((job) => job.scheduledDate === "2026-09-16")).toHaveLength(5);
+    expect(writes.map(({ path }) => path)).toEqual(["/api/jobs/reschedule-day", "/api/jobs/reschedule-day"]);
+  } finally { await context.close(); }
+});
+
+test("bulk day partial conflict reports exact outcomes and requires review before retry", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  const original = dbJob("calendar-progress");
+  try {
+    let panel = await openBulkDay(page);
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { updateJobDetails(db, original.id, { title: "Edited elsewhere during selection" }); } finally { db.close(); }
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
+    await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
+    await expect(panel.locator("[data-bulk-result]")).toContainText("5 of 6 jobs moved.");
+    await expect(panel.getByRole("list", { name: "Jobs not moved" })).toContainText("Job #205");
+    await expect(panel.getByRole("list", { name: "Jobs not moved" })).toContainText("changed elsewhere");
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-15");
+    expect(dbJob(original.id).title).toBe("Edited elsewhere during selection");
+    await panel.getByRole("button", { name: "Review failed jobs", exact: true }).click();
+    panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+    await expect(panel.getByRole("checkbox", { name: "Select all 1", exact: true })).toBeChecked();
+    await expect(panel).toContainText("Edited elsewhere during selection");
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-17");
+    await panel.getByRole("button", { name: "Move 1 job", exact: true }).click();
+    await expect.poll(() => dbJob(original.id).scheduledDate).toBe("2026-09-17");
+    expect(writes).toHaveLength(2);
+  } finally {
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { updateJobDetails(db, original.id, { title: original.title }); } finally { db.close(); }
+    await context.close();
+  }
+});
+
+test("bulk day Undo restores dates, expires and refuses concurrent edits", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  const original = dbJob("calendar-progress");
+  try {
+    let panel = await openBulkDay(page);
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
+    await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(page.locator("[data-bulk-notice]")).toContainText("6 of 6 jobs restored");
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-15");
+    expect(unchangedFields(dbJob(original.id))).toEqual(unchangedFields(original));
+    await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+    panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
+    await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { updateJobDetails(db, original.id, { title: "Edited after move" }); } finally { db.close(); }
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(page.locator("[data-bulk-notice]")).toContainText("5 of 6 jobs restored");
+    await expect(page.getByRole("list", { name: "Jobs not restored" })).toContainText("Job #205");
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-16");
+    expect(dbJob(original.id).title).toBe("Edited after move");
+    await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+    panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-17");
+    await panel.getByRole("button", { name: "Move 5 jobs", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await page.clock.runFor(15_001);
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveCount(0);
+    expect(writes.filter((request) => request.path === "/api/app-state")).toHaveLength(0);
+  } finally {
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { updateJobDetails(db, original.id, { title: original.title }); } finally { db.close(); }
+    await context.close();
+  }
+});
+
+test("bulk day lost response reconciles through review without claiming success or duplicating the move", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  try {
+    const panel = await openBulkDay(page);
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
+    await page.route("**/api/jobs/reschedule-day", async (route) => {
+      await route.fetch();
+      await route.abort("failed");
+    });
+    await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
+    await expect(panel.getByRole("alert")).toContainText("Unable to confirm the move. Review the day");
+    await expect(page.locator("[data-bulk-notice]")).toHaveCount(0);
+    expect(dbJob("calendar-progress").scheduledDate).toBe("2026-09-16");
+    await panel.getByRole("button", { name: "Review day", exact: true }).click();
+    await expect(panel).toContainText("No active jobs available to reschedule.");
+    await panel.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: /15 September/ })).toContainText("1 scheduled job");
+    expect(writes).toHaveLength(1);
+  } finally { await context.close(); }
+});
+
+test("bulk day pending save disables duplicate submissions and sheet dismissal", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser, 390, 844);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  try {
+    const panel = await openBulkDay(page);
+    await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
+    await page.route("**/api/jobs/reschedule-day", async (route) => { await gate; await route.continue(); });
+    await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).tap();
+    await expect(panel.getByRole("button", { name: "Moving jobs…", exact: true })).toBeDisabled();
+    await expect(panel.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+    await expect(panel.getByRole("button", { name: "Close calendar panel", exact: true })).toBeDisabled();
+    await expect(panel.getByRole("checkbox", { name: "Select all 6", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeVisible();
+    expect(dbJob("calendar-progress").scheduledDate).toBe("2026-09-15");
+    release();
+    await expect(page.getByRole("dialog", { name: /15 September/ })).toContainText("6 jobs moved to Wednesday 16 September.");
+    expect(writes).toHaveLength(1);
+  } finally { release(); await context.close(); }
+});
+
+test("bulk day cancelled preview cannot overwrite a later single-job reschedule", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let snapshotReady;
+  const snapshot = new Promise((resolve) => { snapshotReady = resolve; });
+  try {
+    await page.route("**/api/jobs/reschedule-day?*", async (route) => {
+      const response = await route.fetch();
+      snapshotReady();
+      await gate;
+      await route.fulfill({ response });
+    });
+    await day(page, "2026-09-15").locator(".calendar-day-open").click({ position: { x: 12, y: 12 } });
+    await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
+    await snapshot;
+    await page.getByRole("button", { name: "Close calendar panel", exact: true }).click();
+    await chooseQueueDate(page, "calendar-progress", "2026-09-17");
+    const previewFinished = page.waitForResponse((response) => response.url().includes("/api/jobs/reschedule-day?"));
+    release();
+    await previewFinished;
+    await expect(calendarJob(page, "2026-09-17", "calendar-progress")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(day(page, "2026-09-15").locator(".calendar-day-open")).toHaveAttribute("aria-label", /6 jobs$/);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].path).toBe("/api/jobs/calendar-progress/schedule");
+  } finally { release(); await context.close(); }
+});
+
+for (const [width, height] of [[390, 844], [768, 1024], [820, 1180], [1024, 768], [1280, 720], [1440, 900]]) {
+  test(`date-cell single activation covers whitespace, close/reopen and keyboard at ${width}x${height}`, async ({ browser }, info) => {
+    const { context, page, writes } = await openCalendar(browser, width, height);
+    const touch = width < 1280;
+    try {
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      for (const area of ["center", "bottom", "number", "top-left", "right-padding", "right-border"]) {
+        await clickDateArea(page, "2026-09-08", area, touch);
+        const panel = page.getByRole("dialog", { name: /8 September/ });
+        await expect(panel).toBeVisible();
+        await expect(panel).toContainText("No jobs scheduled.");
+        await expect(day(page, "2026-09-08")).toHaveAttribute("data-selected", "true");
+        await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
+        if (touch) await panel.getByRole("button", { name: "Close calendar panel" }).tap();
+        else await panel.getByRole("button", { name: "Close calendar panel" }).click();
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        expect(await page.evaluate(() => getComputedStyle(document.body).pointerEvents)).toBe("auto");
+        expect(await day(page, "2026-09-08").evaluate((cell) => cell.closest('[inert], [aria-hidden="true"]'))).toBeNull();
+      }
+      await clickDateArea(page, "2026-09-06", "bottom", touch);
+      await expect(page.getByRole("dialog", { name: /6 September/ })).toBeVisible();
+      await clickDateArea(page, "2026-09-08", "bottom", touch);
+      await expect(page.getByRole("dialog", { name: /8 September/ })).toBeVisible();
+      await expect(page.getByRole("dialog")).toHaveCount(1);
+      await page.getByRole("button", { name: "Close calendar panel" }).click();
+      // The next, different date works on the very next gesture after close.
+      for (const date of ["2026-09-05", "2026-09-08", "2026-09-12"]) {
+        await clickDateArea(page, date, "bottom", touch);
+        await expect(page.getByRole("dialog")).toContainText("No jobs scheduled.");
+        await expect(day(page, date)).toHaveAttribute("data-selected", "true");
+        await page.getByRole("button", { name: "Close calendar panel" }).click();
+      }
+      await clickDateArea(page, "2026-09-15", "bottom", touch);
+      const populated = page.getByRole("dialog", { name: /15 September/ });
+      await expect(populated.locator("[data-calendar-queue-job]")).toHaveCount(7);
+      await screenshot(page, info, `date-cell-panel-${browser.browserType().name()}-${width}x${height}`);
+      await page.keyboard.press("Escape");
+      await expect(day(page, "2026-09-15").getByRole("button").first()).toBeFocused();
+      const keyboardDate = day(page, "2026-09-07").getByRole("button").first();
+      await expect(keyboardDate).toHaveAttribute("aria-current", "date");
+      for (const key of ["Enter", "Space"]) {
+        await keyboardDate.focus();
+        await page.keyboard.press(key);
+        await expect(page.getByRole("dialog", { name: /7 September/ })).toBeVisible();
+        await expect(keyboardDate).toHaveAttribute("aria-pressed", "true");
+        await page.keyboard.press("Escape");
+        await expect(keyboardDate).toBeFocused();
+      }
+      await noOverflow(page);
+      expect(writes).toEqual([]);
+    } finally { await context.close(); }
+  });
+}
+
+test("date-cell direct switching updates the open panel and job chips keep their own action", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  try {
+    await clickDateArea(page, "2026-09-05", "bottom");
+    const sheet = page.locator(".calendar-sheet");
+    await expect(sheet).toContainText("Saturday 5 September");
+    for (const date of ["2026-09-08", "2026-09-06", "2026-09-13", "2026-09-08"]) {
+      await clickDateArea(page, date, "bottom");
+      await expect(day(page, date)).toHaveAttribute("data-selected", "true");
+      await expect(page.getByRole("dialog")).toHaveCount(1);
+      await expect(sheet).toContainText(`${Number(date.slice(-2))} September`);
+      expect(await page.evaluate(() => getComputedStyle(document.body).pointerEvents)).toBe("auto");
+    }
+    const lastDate = day(page, "2026-09-12").getByRole("button").first();
+    await lastDate.focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet).toContainText("Saturday 12 September");
+    // The visible job chip is a sibling of the date button, never nested in it.
+    await calendarJob(page, "2026-09-15", "calendar-crowded-0").click();
+    await expect(page).toHaveURL(/\/jobs\/calendar-crowded-0$/);
+    await expect(page.locator(".calendar-sheet")).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Calendar", exact: true }).click();
+    await clickDateArea(page, "2026-09-06", "center");
+    await expect(page.getByRole("dialog", { name: /6 September/ })).toBeVisible();
+    expect(writes).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("date-cell activation ignores drag-generated clicks but accepts the next mouse gesture immediately", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  try {
+    const chip = calendarJob(page, "2026-09-15", "calendar-crowded-0");
+    await chip.dragTo(day(page, "2026-09-09"));
+    await expect.poll(() => dbJob("calendar-crowded-0").scheduledDate).toBe("2026-09-09");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // A compatibility click after dropping has no new pointerdown.
+    await day(page, "2026-09-09").getByRole("button").first().dispatchEvent("click", { detail: 1 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await clickDateArea(page, "2026-09-08", "bottom");
+    await expect(page.getByRole("dialog", { name: /8 September/ })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await calendarJob(page, "2026-09-09", "calendar-crowded-0").click();
+    await expect(page).toHaveURL(/\/jobs\/calendar-crowded-0$/);
+    await expect(page.locator(".calendar-sheet")).toHaveCount(0);
+    expect(writes).toHaveLength(1);
+  } finally { await context.close(); }
+});
+
+test("date-cell touch activation recovers immediately after drop, pointercancel, touchcancel and Escape", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser, 1024, 768);
+  const cdp = await context.newCDPSession(page);
+  const id = "calendar-crowded-0";
+  async function touch(type, point) {
+    await cdp.send("Input.dispatchTouchEvent", { type, touchPoints: point ? [{ x: point.x, y: point.y, id: 1 }] : [] });
+  }
+  async function begin(source, date) {
+    await source.scrollIntoViewIfNeeded();
+    const start = await source.boundingBox();
+    const end = await day(page, date).boundingBox();
+    const from = { x: start.x + start.width / 2, y: start.y + 20 };
+    await touch("touchStart", from);
+    await page.waitForTimeout(220);
+    await touch("touchMove", { x: from.x - 12, y: from.y });
+    await touch("touchMove", { x: end.x + end.width / 2, y: end.y + 20 });
+    await expect(day(page, date)).toHaveAttribute("data-drop-active", "true");
+  }
+  async function tapAfterDrag() {
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.locator(".calendar-drag-preview, [data-drop-active]")).toHaveCount(0);
+    const dateButton = day(page, "2026-09-08").getByRole("button").first();
+    await dateButton.dispatchEvent("mousedown", { detail: 1 });
+    await dateButton.dispatchEvent("click", { detail: 1 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await clickDateArea(page, "2026-09-08", "bottom", true);
+    await expect(page.getByRole("dialog", { name: /8 September/ })).toBeVisible();
+    await page.getByRole("button", { name: "Close calendar panel" }).tap();
+  }
+  try {
+    await begin(calendarJob(page, "2026-09-15", id), "2026-09-09");
+    await touch("touchEnd");
+    await expect.poll(() => dbJob(id).scheduledDate).toBe("2026-09-09");
+    await tapAfterDrag();
+    for (const cancellation of ["pointercancel", "touchcancel", "Escape"]) {
+      const chip = calendarJob(page, "2026-09-09", id);
+      await begin(chip, "2026-09-10");
+      if (cancellation === "pointercancel") await chip.dispatchEvent("pointercancel", { pointerType: "touch" });
+      if (cancellation === "Escape") await page.keyboard.press("Escape");
+      await touch("touchCancel");
+      await tapAfterDrag();
+      expect(dbJob(id).scheduledDate).toBe("2026-09-09");
+    }
+    expect(writes).toEqual([{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-09" } }]);
+    await noOverflow(page);
+  } finally { await context.close(); }
+});
 
 test("Calendar navigation, queue filters, crowded days and Job Details preserve context", async ({ browser }, info) => {
   const { context, page, writes } = await openCalendar(browser);
@@ -462,7 +886,7 @@ test("Reschedule chooses any date from the queue or a completed job's day sheet"
     await expect(sheet).toBeHidden();
     await expect.poll(() => dbJob(original.id).scheduledDate).toBe("2027-05-20");
     expect(unchangedFields(dbJob(original.id))).toEqual(unchangedFields(original));
-    await day(page, "2026-09-15").getByRole("button").first().click();
+    await day(page, "2026-09-15").getByRole("button").first().click({ position: { x: 20, y: 20 } });
     const dayPanel = page.getByRole("dialog", { name: /15 September/ });
     await dayPanel.locator('[data-calendar-queue-job="calendar-completed"]').getByRole("button", { name: "Reschedule", exact: true }).click();
     sheet = page.getByRole("dialog", { name: "Reschedule Job #179", exact: true });
@@ -583,7 +1007,7 @@ test("responsive Calendar matrix keeps scheduling usable in eight layouts", asyn
       await screenshot(page, info, `calendar-${width}x${height}`);
       if (width === 390) {
         const populatedDate = day(page, "2026-09-15").getByRole("button").first();
-        await populatedDate.click();
+        await populatedDate.click({ position: { x: 20, y: 20 } });
         const dayPanel = page.getByRole("dialog", { name: /15 September/ });
         await expect(dayPanel.locator("[data-calendar-queue-job]")).toHaveCount(7);
         await page.keyboard.press("Escape");

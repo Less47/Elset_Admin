@@ -8,6 +8,7 @@ import JobDetailsPage from "@/components/jobs/JobDetailsPage";
 import { RecordWorkspace, UnsavedChangesDialog, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
 import { useAppSession } from "@/hooks/useAppSession";
 import { useThemePalette } from "@/hooks/useThemePalette";
+import { useThemeSettingsSave } from "@/hooks/useThemeSettingsSave";
 import { useWorkspaceActions } from "@/hooks/useWorkspaceActions";
 import { useWorkspaceNavigation } from "@/hooks/useWorkspaceNavigation";
 import { useWorkspaceViewModel } from "@/hooks/useWorkspaceViewModel";
@@ -92,7 +93,13 @@ export default function App() {
     : null;
   const selectedJobForView = routeSelectedJob || selectedJob;
 
-  const { themeSettings, themePalette } = useThemePalette(data.settings);
+  const themeSettingsSave = useThemeSettingsSave({
+    settings: data.settings,
+    fetchWithAuth: session.fetchWithAuth,
+    setData,
+    sessionKey: session.authUser?.id || "",
+  });
+  const { themeSettings, themePalette } = useThemePalette(themeSettingsSave.settings);
   const workspaceViewModel = useWorkspaceViewModel({
     activeSection: effectiveActiveSection,
     activeSettingsTab: effectiveActiveSettingsTab,
@@ -127,6 +134,7 @@ export default function App() {
     setSelectedSiteContext,
     setSiteProfileOpen,
     themeSettings,
+    themeSettingsSave,
     workspaceStorageMode: session.workspaceStorageMode,
   });
 

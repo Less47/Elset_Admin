@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import ThemeColourField from "./ThemeColourField";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -452,6 +453,8 @@ export default function SettingsManager({
   activeSettingsTab,
   onActiveSettingsTabChange,
   settings,
+  themeSaveState,
+  onRetryThemeSave,
   onSettingChange,
   onApplyPreset,
   onResetUiSettings,
@@ -927,26 +930,18 @@ export default function SettingsManager({
               <CardHeader>
                 <CardTitle className="text-lg">Colour Controls</CardTitle>
                 <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, database tables, popup gradients, primary action buttons, and shared border colour.</p>
+                <div role="status" aria-label="Theme save status" aria-live="polite" aria-atomic="true" className="text-sm text-slate-600">
+                  {themeSaveState?.status === "error" ? (
+                    <div className="flex flex-wrap items-center gap-2 text-red-700">
+                      <span>Theme change could not be saved. {themeSaveState.error !== "Theme change could not be saved." ? themeSaveState.error : ""}</span>
+                      <Button type="button" variant="outline" className="min-h-11 rounded-xl" onClick={onRetryThemeSave}>Retry</Button>
+                    </div>
+                  ) : themeSaveState?.status === "saved" ? "Saved" : ["pending", "saving"].includes(themeSaveState?.status) ? "Saving…" : null}
+                </div>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 {themeColorFields.map((field) => (
-                  <div key={field.key} className="grid gap-2">
-                    <FormField label={field.label}>
-                      <div className="flex items-center gap-3">
-                        <Input
-                          type="color"
-                          className="h-10 w-16 rounded-xl p-1"
-                          value={normalizeHexColor(normalizedSettings[field.key], "#0F172A")}
-                          onChange={(event) => onSettingChange(field.key, event.target.value)}
-                        />
-                        <Input
-                          value={normalizedSettings[field.key]}
-                          onChange={(event) => onSettingChange(field.key, event.target.value)}
-                        />
-                      </div>
-                    </FormField>
-                    <p className="text-xs leading-5 text-slate-500">{field.description}</p>
-                  </div>
+                  <ThemeColourField key={field.key} field={field} value={normalizedSettings[field.key]} onChange={onSettingChange} />
                 ))}
               </CardContent>
             </Card>
