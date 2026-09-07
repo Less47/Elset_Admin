@@ -1,0 +1,160 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// Match the Service Board's intentional hold, scroll cancellation and movement thresholds.
+const HOLD_MS = 180;
+const CANCEL_DISTANCE = 10;
+const ACTIVATE_DISTANCE = 6;
+
+function dropDate(element) {
+  return element?.closest?.("[data-calendar-drop-date]")?.getAttribute("data-calendar-drop-date") ?? null;
+}
+
+export function useCalendarDrag({ enabled, onDrop }) {
+  const [drag, setDrag] = useState(null);
+  const session = useRef(null);
+  const holdTimer = useRef(null);
+  const suppressClickUntil = useRef(0);
+  const frame = useRef(null);
+
+  const clear = useCallback(() => {
+    if (session.current?.active) suppressClickUntil.current = Date.now() + 400;
+    window.clearTimeout(holdTimer.current);
+    window.cancelAnimationFrame(frame.current);
+    frame.current = null;
+    session.current = null;
+    setDrag(null);
+  }, []);
+
+  const publish = useCallback(() => {
+    if (frame.current) return;
+    frame.current = window.requestAnimationFrame(() => {
+      frame.current = null;
+      if (session.current?.active) setDrag({ ...session.current });
+    });
+  }, []);
+
+  useEffect(() => {
+    const move = (event) => {
+      const current = session.current;
+      if (!current?.touch) return;
+      const touch = Array.from(event.touches).find((item) => item.identifier === current.touchId);
+      if (!touch || event.touches.length !== 1) return clear();
+      const distance = Math.hypot(touch.clientX - current.startX, touch.clientY - current.startY);
+      if (!current.primed) {
+        if (distance > CANCEL_DISTANCE) clear();
+        return;
+      }
+      if (distance > ACTIVATE_DISTANCE) current.active = true;
+      if (!current.active) return;
+      event.preventDefault();
+      current.x = touch.clientX;
+      current.y = touch.clientY;
+      current.target = dropDate(document.elementFromPoint(current.x, current.y));
+      publish();
+    };
+    const end = (event) => {
+      const current = session.current;
+      if (!current?.touch) return;
+      const touch = Array.from(event.changedTouches).find((item) => item.identifier === current.touchId);
+      if (!touch) return;
+      const target = current.active ? dropDate(document.elementFromPoint(touch.clientX, touch.clientY)) : null;
+      if (current.active) event.preventDefault();
+      clear();
+      if (target !== null) onDrop(current.job.id, target);
+    };
+    const cancelOnEscape = (event) => { if (event.key === "Escape") clear(); };
+    // Starting native mouse drag emits pointercancel; only cancel our touch session here.
+    const cancelTouchPointer = () => { if (session.current?.touch) clear(); };
+    const cancelMultipleTouches = (event) => { if (event.touches.length > 1) clear(); };
+    window.addEventListener("touchmove", move, { passive: false });
+    window.addEventListener("touchend", end, { passive: false });
+    window.addEventListener("touchstart", cancelMultipleTouches, { passive: true });
+    window.addEventListener("touchcancel", clear);
+    window.addEventListener("pointercancel", cancelTouchPointer);
+    window.addEventListener("blur", clear);
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => {
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("touchstart", cancelMultipleTouches);
+      window.removeEventListener("touchcancel", clear);
+      window.removeEventListener("pointercancel", cancelTouchPointer);
+      window.removeEventListener("blur", clear);
+      window.removeEventListener("keydown", cancelOnEscape);
+    };
+  }, [clear, onDrop, publish]);
+
+  useEffect(() => () => {
+    window.clearTimeout(holdTimer.current);
+    window.cancelAnimationFrame(frame.current);
+  }, []);
+
+  function getDragProps(job, allow = true) {
+    return {
+      draggable: enabled && allow,
+      onDragStart(event) {
+        if (!enabled || !allow || event.target.closest("[data-calendar-action]")) {
+          event.preventDefault();
+          return;
+        }
+        session.current = { job, active: true, touch: false, target: null };
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("application/x-elset-calendar-job", job.id);
+        setDrag({ ...session.current });
+      },
+      onDragEnd: clear,
+      onTouchStart(event) {
+        if (!enabled || !allow || event.touches.length !== 1 || event.target.closest("[data-calendar-action]")) return;
+        const touch = event.touches[0];
+        window.clearTimeout(holdTimer.current);
+        session.current = {
+          job, touch: true, touchId: touch.identifier, active: false, primed: false,
+          startX: touch.clientX, startY: touch.clientY, x: touch.clientX, y: touch.clientY, target: null,
+        };
+        holdTimer.current = window.setTimeout(() => {
+          if (session.current?.touchId === touch.identifier) session.current.primed = true;
+        }, HOLD_MS);
+      },
+      onContextMenu(event) { if (session.current?.touch) event.preventDefault(); },
+    };
+  }
+
+  const dropProps = {
+    onDragOver(event) {
+      if (!session.current?.active) return;
+      const target = dropDate(event.target);
+      if (target === null) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      if (session.current.target !== target) {
+        session.current.target = target;
+        publish();
+      }
+    },
+    onDragLeave(event) {
+      if (session.current && !event.currentTarget.contains(event.relatedTarget)) {
+        session.current.target = null;
+        publish();
+      }
+    },
+    onDrop(event) {
+      const current = session.current;
+      if (!current?.active) return;
+      const target = dropDate(event.target);
+      event.preventDefault();
+      clear();
+      if (target !== null) onDrop(current.job.id, target);
+    },
+  };
+
+  function allowClick(event) {
+    if (event.detail !== 0 && Date.now() < suppressClickUntil.current) {
+      event.preventDefault();
+      event.stopPropagation();
+      return false;
+    }
+    return true;
+  }
+
+  return { drag, getDragProps, dropProps, allowClick, cancelDrag: clear };
+}
