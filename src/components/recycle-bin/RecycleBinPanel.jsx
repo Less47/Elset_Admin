@@ -57,7 +57,7 @@ export default function RecycleBinPanel({
                   <EmptyState title="Job recycle bin is empty" text="Deleted jobs will appear here for 7 days before automatic removal." />
                 ) : (
                   sortedDeletedJobs.map((record) => (
-                    <div key={`${record.job.id}-${record.deletedAt}`} className="rounded-2xl border bg-white p-4">
+                    <div key={`${record.job.id}-${record.deletedAt}`} className="rounded-2xl border bg-white p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{record.job.jobNumber}</p>
@@ -121,7 +121,7 @@ export default function RecycleBinPanel({
                   sortedDeletedCustomers.map((record) => {
                     const relatedDeletedJobs = deletedJobs.filter((entry) => entry.job.customerId === record.customer.id).length;
                     return (
-                      <div key={`${record.customer.id}-${record.deletedAt}`} className="rounded-2xl border bg-white p-4">
+                      <div key={`${record.customer.id}-${record.deletedAt}`} className="rounded-2xl border bg-white p-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <p className="font-semibold text-slate-900">{record.customer.name}</p>

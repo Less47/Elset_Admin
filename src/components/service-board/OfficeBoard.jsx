@@ -353,12 +353,12 @@ function JobCard({
   const isGridView = viewMode === "grid";
   const isCompactView = viewMode === "compact";
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
-  const cardClassName = `w-full min-w-0 max-w-full ${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl" : "rounded-2xl"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
-  const cardContentClassName = isGridView ? "flex h-full flex-col px-3.5 py-1 md:max-xl:px-3 md:max-xl:py-0.5" : isCompactView ? "px-2.5 py-0" : "p-4";
+  const cardClassName = `w-full min-w-0 max-w-full ${isGridView ? "h-full overflow-visible rounded-2xl" : isCompactView ? "rounded-xl py-2.5" : "rounded-2xl py-0"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
+  const cardContentClassName = isGridView ? "flex h-full flex-col px-3.5 py-1 md:max-xl:px-3 md:max-xl:py-0.5" : isCompactView ? "px-2.5 py-0" : "p-3";
   const headerMetaClassName = "flex min-w-0 max-w-1/2 flex-col items-end";
   const urgencyClassName = `h-auto min-w-0 max-w-full whitespace-normal ${urgencyTone[job.urgency]}`;
-  const descriptionClassName = isCompactView ? "mt-2 line-clamp-1 text-sm text-slate-700" : isGridView ? "mt-2 line-clamp-2 text-sm text-slate-700" : "mt-3 line-clamp-3 text-sm text-slate-700";
-  const actionRowClassName = isCompactView ? "mt-3 flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2";
+  const descriptionClassName = isCompactView ? "mt-2 line-clamp-1 text-sm text-slate-700" : isGridView ? "mt-2 line-clamp-2 text-sm text-slate-700" : "mt-2 line-clamp-3 text-sm text-slate-700";
+  const actionRowClassName = "mt-3 flex flex-wrap gap-2";
   const cardIndicators = buildJobCardIndicators({
     job,
     invoiceStatus,
@@ -451,7 +451,7 @@ function JobCard({
             {isCompactExpanded ? (
               <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 border-t border-white/80 pt-3 text-xs text-slate-600">
                 <div className="rounded-xl border border-white/80 bg-white/70 px-3 py-2">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
                     <span className="shrink-0 text-slate-500">Site</span>
                     <span className="min-w-0 line-clamp-2 text-right font-medium text-slate-800">{compactAddress}</span>
                   </div>
@@ -500,18 +500,20 @@ function JobCard({
             </div>
           ) : (
             <>
-          <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="mb-2" />
+          <div className="mb-2 flex min-h-7 items-center pr-8">
+            <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="" />
+          </div>
 
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
               <p className="font-semibold leading-5 text-slate-950">{job.customerName}</p>
               <p className="text-xs text-slate-600">{job.title}</p>
             </div>
             {shouldShowHeaderMeta ? (
-              <div className={`${headerMetaClassName} gap-2`}>
+              <div className={`${headerMetaClassName} gap-1.5`}>
                 {jobValueMeta ? (
-                  <div className="min-w-0 max-w-full rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-semibold text-slate-900 shadow-sm" title={`${jobValueMeta.label} value`}>
+                  <div className="min-w-0 max-w-full rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-slate-900 shadow-sm" title={`${jobValueMeta.label} value`}>
                     {jobValueMeta.amount}
                   </div>
                 ) : null}
@@ -523,27 +525,27 @@ function JobCard({
           {job.description ? <p className={descriptionClassName}>{job.description}</p> : null}
 
           {viewMode === "list" ? (
-            <div className="mt-4 grid min-w-0 grid-cols-1 gap-2 text-xs text-slate-600">
-              <div className="flex items-start justify-between gap-3">
+            <div className="mt-3 grid min-w-0 grid-cols-1 gap-1.5 text-xs text-slate-600">
+              <div className="flex items-start justify-between gap-2">
                 <span className="shrink-0">Site</span>
                 <span className="min-w-0 line-clamp-2 max-w-[220px] text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
               </div>
-              <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="min-w-0">Scheduled</span>
                 <span className="min-w-0 text-right font-medium text-slate-800">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
               </div>
             </div>
           ) : (
-            <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 text-xs text-slate-600">
+            <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 text-xs text-slate-600">
               <div className="rounded-xl border border-white/80 bg-white/70 px-3 py-2">
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2">
                   <span className="shrink-0 text-slate-500">Site</span>
                   <span className="min-w-0 line-clamp-2 text-right font-medium text-slate-800">{job.jobAddress || "Not set"}</span>
                 </div>
               </div>
               {!isGridView ? (
                 <div className="grid min-w-0 grid-cols-1 gap-2">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="min-w-0">Scheduled</span>
                     <span className="min-w-0 text-right font-medium text-slate-800">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
                   </div>
@@ -768,7 +770,7 @@ export function OfficeBoard({
             ? shouldAutoFillGridCards
               ? "grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
               : "grid grid-cols-1 gap-3 sm:grid-cols-2"
-            : viewMode === "compact" ? "grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-4";
+            : viewMode === "compact" ? "grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-3";
           const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;
 
           return (
@@ -782,7 +784,7 @@ export function OfficeBoard({
                 onDropJob(jobId, status);
               }}
             >
-            <CardHeader className="gap-4">
+            <CardHeader className="gap-3 px-3">
               <div className="grid gap-2">
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <CardTitle className="min-w-0">{status}</CardTitle>
@@ -818,7 +820,7 @@ export function OfficeBoard({
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="min-w-0 max-w-full">
+            <CardContent className="min-w-0 max-w-full px-3">
               <div className={`w-full min-w-0 max-w-full ${jobLayoutClassName}`}>
                 {sortedColumnJobs.length === 0 ? (
                   <div className={viewMode === "grid" ? "col-span-full" : ""}>

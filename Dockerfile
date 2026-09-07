@@ -10,7 +10,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+ARG ELSET_BUILD_SHA
+RUN ELSET_REQUIRE_BUILD_SHA=true npm run build
 
 ENV NODE_ENV=production
 ENV PORT=8080

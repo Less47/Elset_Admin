@@ -128,7 +128,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
         </DialogHeader>
 
         <DialogBody className="overflow-y-auto">
-        <div className="grid gap-6 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]">
+        <div className="grid gap-4 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]">
           <div className="grid gap-4 lg:self-start">
             <Card className="rounded-3xl border-slate-200">
               <CardHeader>
@@ -288,21 +288,21 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
             <CardContent>
               <div className="grid gap-3">
                 {!isEditingSite && site.accessNotes ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{site.accessNotes}</p>
                   </div>
                 ) : null}
 
                 {!isEditingSite && site.profileNotes ? (
-                  <div className="rounded-2xl border bg-white p-4">
+                  <div className="rounded-2xl border bg-white p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{site.profileNotes}</p>
                   </div>
                 ) : null}
 
                 {isEditingSite ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Add gate or project</p>
                     <div className="mt-3 grid gap-3">
                       <div className="grid gap-3 sm:grid-cols-2">
@@ -366,7 +366,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                   <EmptyState title="No gate or project records yet" text="Add each gate, operator, or project area here so the site history stays grouped together." />
                 ) : (
                   (isEditingSite ? draftSite.assets : site.assets || []).map((asset) => (
-                    <div key={asset.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <div key={asset.id} className="rounded-2xl border bg-white p-3 shadow-sm">
                       {isEditingSite ? (
                         <div className="grid gap-3">
                           <div className="grid gap-3 sm:grid-cols-2">

@@ -252,7 +252,7 @@ export default function JobDetailsPage({
         {pageError ? <div className="mb-5" role="alert"><WorkspaceMessage tone="error">{pageError}</WorkspaceMessage></div> : null}
 
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start">
-          <aside className="record-major-panel min-w-0 rounded-xl border p-4 lg:sticky lg:top-28 lg:self-start">
+          <aside className="record-major-panel min-w-0 rounded-xl border p-panel lg:sticky lg:top-28 lg:self-start">
             <div className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-700"><UserRound className="h-4 w-4" /></span>
               <div className="min-w-0">
@@ -260,7 +260,7 @@ export default function JobDetailsPage({
                 <p className="truncate font-semibold text-slate-950">{job.customerName || "Not set"}</p>
               </div>
             </div>
-            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5 lg:grid-cols-1">
+            <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-1">
               <InfoItem label="Site">{job.jobAddress || "Not set"}</InfoItem>
               <InfoItem label="Scheduled">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</InfoItem>
               <InfoItem label="Technician">{job.assignedTechnicianName || "Unassigned"}</InfoItem>
@@ -276,19 +276,19 @@ export default function JobDetailsPage({
 
           <div className="record-major-panel min-w-0 rounded-xl border">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="record-workspace-tabs min-w-0 gap-0">
-              <div className="record-tab-strip rounded-t-lg bg-[var(--data-view-header-start)] px-3 py-2 sm:px-4">
+              <div className="record-tab-strip rounded-t-lg bg-[var(--data-view-header-start)] px-panel py-1.5">
                 <TabsList
                   aria-label="Job details sections"
-                  className="grid h-auto min-h-11 w-full gap-1 rounded-lg p-1"
+                  className="grid h-auto min-h-11 w-full gap-1 rounded-lg p-0"
                   style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
                 >
                   {visibleTabs.map((tab) => (
-                    <TabsTrigger key={tab.value} value={tab.value} className="min-h-11 min-w-0 whitespace-normal border-0 px-1 text-center text-xs leading-tight sm:px-3 sm:text-sm">{tab.label}</TabsTrigger>
+                    <TabsTrigger key={tab.value} value={tab.value} className="min-h-11 min-w-0 whitespace-normal border-0 px-1 text-center text-xs leading-tight sm:px-2 sm:text-sm">{tab.label}</TabsTrigger>
                   ))}
                 </TabsList>
               </div>
 
-              <div className="bg-white/80 px-3 pb-5 pt-4 sm:px-5 sm:pt-5 lg:px-6">
+              <div className="bg-white/80 p-panel">
                 <TabsContent value="overview" className="mt-0">
                   <WorkspaceSection
                     title="Job summary"
@@ -298,7 +298,7 @@ export default function JobDetailsPage({
                     ) : null}
                   >
                     {overviewEditing ? (
-                      <div className="grid gap-5">
+                      <div className="grid gap-4">
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-title">Job title</Label>
                           <Input id="edit-job-title" className="h-11" value={overviewDraft.title} onChange={(event) => setOverviewDraft((current) => ({ ...current, title: event.target.value }))} aria-invalid={!overviewDraft.title.trim()} />
@@ -342,7 +342,7 @@ export default function JobDetailsPage({
                         </div>
                         <details className="record-inset-surface rounded-lg p-3 sm:p-4">
                           <summary className="cursor-pointer font-medium text-slate-950">Job contacts</summary>
-                          <div className="mt-5 grid gap-4">
+                          <div className="mt-4 grid gap-3">
                             <ContactSnapshotEditor title="Requester" description="Who asked for this work." contacts={customerContacts} fallbackRole="Requester" value={overviewDraft.requesterContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, requesterContact: contact }))} />
                             <ContactSnapshotEditor title="On-site contact" description="Who the team should speak with on arrival." contacts={customerContacts} fallbackRole="On-site contact" value={overviewDraft.onsiteContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, onsiteContact: contact }))} />
                             <ContactSnapshotEditor title="Billing contact" description="Who quotes and invoices should be sent to." contacts={customerContacts} fallbackRole="Billing contact" value={overviewDraft.billingContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, billingContact: contact }))} />
@@ -357,12 +357,12 @@ export default function JobDetailsPage({
                         </div>
                       </div>
                     ) : (
-                      <div className="grid gap-5">
+                      <div className="grid gap-4">
                         <div>
                           <p className="text-sm font-medium text-slate-500">Description</p>
                           <p className="mt-2 whitespace-pre-wrap text-base leading-7 text-slate-800">{job.description}</p>
                         </div>
-                        <dl className="record-subtle-divider-y grid gap-x-6 gap-y-4 py-4 sm:grid-cols-2">
+                        <dl className="record-subtle-divider-y grid gap-x-4 gap-y-3 py-3 sm:grid-cols-2">
                           <InfoItem label="Customer">{job.customerName || "Not set"}</InfoItem>
                           <InfoItem label="Customer contact">{[job.customerPhone, job.customerEmail].filter(Boolean).join(" · ") || "Not set"}</InfoItem>
                           <InfoItem label="Site">{job.jobAddress || "Not set"}</InfoItem>
@@ -450,7 +450,7 @@ export default function JobDetailsPage({
                   <TabsContent value="documents" className="mt-0">
                     <WorkspaceSection title="Documents" description="Existing quote and invoice actions remain connected to the current document workflow.">
                       <div className="grid gap-4 md:grid-cols-2">
-                        <article className="record-thin-border rounded-lg border-sky-200 bg-sky-50 p-4">
+                        <article className="record-thin-border rounded-lg border-sky-200 bg-sky-50 p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <FileText className="h-5 w-5 text-sky-700" />
@@ -463,7 +463,7 @@ export default function JobDetailsPage({
                           {onOpenDocument ? <Button type="button" className="mt-4 h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("quote")}>Open Quote Editor</Button> : null}
                         </article>
 
-                        <article className="record-thin-border rounded-lg border-emerald-200 bg-emerald-50 p-4">
+                        <article className="record-thin-border rounded-lg border-emerald-200 bg-emerald-50 p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <FileText className="h-5 w-5 text-emerald-700" />
@@ -508,7 +508,7 @@ export default function JobDetailsPage({
                       {(job.notes || []).length === 0 ? (
                         <p className="record-empty-state rounded-lg px-4 py-4 text-sm">No notes yet.</p>
                       ) : job.notes.map((entry) => (
-                        <article key={entry.id} className="py-4">
+                        <article key={entry.id} className="py-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="font-medium text-slate-900">{entry.author}</p>
                             <time className="text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString()}</time>
@@ -560,7 +560,7 @@ export default function JobDetailsPage({
             </Tabs>
 
             {canDeleteJob ? (
-              <div className="px-4 pb-5 pt-0 sm:px-7 lg:px-9">
+              <div className="px-panel pb-3 pt-0">
                 <Button type="button" variant="destructive" className="h-11 rounded-lg" onClick={async () => {
                   const deleted = await onDeleteJob();
                   if (deleted) onDeleted();

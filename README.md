@@ -51,6 +51,18 @@ npm run server
 
 Then open `http://localhost:3101`.
 
+## Application version and build
+
+The bottom of the desktop sidebar and mobile navigation drawer shows `ELSET Admin` and `v<version> · <commit>`. The version comes directly from `package.json`; builds never increment it. The commit is the first seven characters of Git HEAD when Vite starts or builds. Restart the dev server after switching commits to refresh it. Uncommitted edits still belong to the displayed HEAD; commit a release's changes before building/deploying it.
+
+Vite injects only the version and commit into the frontend bundle. No metadata API, browser network lookup, credentials or filesystem paths are included. If Git is unavailable locally, the commit displays `local`. An explicit `ELSET_BUILD_SHA` environment variable can supply a source revision for CI or a source archive; malformed values are ignored locally.
+
+Production Docker builds require a valid `ELSET_BUILD_SHA` build argument because `.git` is excluded from the image. Use `npm run deploy:fly` for Fly deployments: it resolves the SHA automatically and passes it to the Docker build. The build fails clearly if the argument is missing, rather than publishing a production image labelled `local`. Fly secrets and runtime environment variables cannot supply build-time metadata.
+
+For CI that builds Docker directly, pass the checkout's revision as `--build-arg ELSET_BUILD_SHA=<source-commit>` (for example, the CI-provided SHA). The footer remains tied to the built frontend assets, so an older cached bundle continues to show its older revision. No cache-clearing behavior is added.
+
+Build integration references: [Vite define](https://vite.dev/config/shared-options#define) and [Fly build arguments](https://fly.io/docs/reference/configuration/#specify-docker-build-arguments).
+
 ## Environment Setup
 
 Copy `.env.example` to `.env` and fill in the runtime values you need:
@@ -245,7 +257,7 @@ flyctl secrets set BETTER_AUTH_SECRET=replace-me SMTP_HOST=smtp.resend.com SMTP_
 After updating secrets, deploy again or restart the machine:
 
 ```bash
-flyctl deploy -a elset-admin
+npm run deploy:fly -- -a elset-admin
 ```
 
 You can confirm what Fly has configured with:

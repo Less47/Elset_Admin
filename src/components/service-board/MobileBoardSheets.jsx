@@ -20,10 +20,10 @@ const mobileSheetClassName = "bottom-0 left-0 top-auto max-h-[min(86dvh,46rem)] 
 function SheetHeader({ children, description }) {
   return (
     <DialogHeader
-      className="gap-1 border-b px-4 pb-3 pt-4 pr-4 sm:px-5"
+      className="gap-1 border-b p-panel pr-panel"
       style={{
-        paddingLeft: "calc(1rem + env(safe-area-inset-left))",
-        paddingRight: "calc(1rem + env(safe-area-inset-right))",
+        paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
+        paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
       }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -67,14 +67,14 @@ export function MobileBoardFilters({
         </SheetHeader>
 
         <DialogBody
-          className="overscroll-contain px-4 py-4 sm:px-5"
+          className="overscroll-contain p-panel"
           style={{
-            paddingRight: "calc(1rem + env(safe-area-inset-right))",
-            paddingBottom: "calc(1rem + env(safe-area-inset-bottom))",
-            paddingLeft: "calc(1rem + env(safe-area-inset-left))",
+            paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
+            paddingBottom: "calc(var(--panel-padding) + env(safe-area-inset-bottom))",
+            paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-slate-500" />
@@ -94,7 +94,7 @@ export function MobileBoardFilters({
 
             <label
               htmlFor="mobile-high-urgency-filter"
-              className="flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-2xl border bg-white/70 px-4 py-3"
+              className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-white/70 px-3 py-2.5"
             >
               <span>
                 <span className="block text-sm font-semibold text-slate-900">High urgency only</span>
@@ -110,7 +110,7 @@ export function MobileBoardFilters({
 
             <label
               htmlFor="mobile-show-tag-labels"
-              className="flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-2xl border bg-white/70 px-4 py-3"
+              className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-white/70 px-3 py-2.5"
             >
               <span>
                 <span className="block text-sm font-semibold text-slate-900">Show indicator labels</span>
@@ -130,7 +130,7 @@ export function MobileBoardFilters({
                 <span className="text-xs font-medium text-slate-500 group-open:hidden">Show</span>
                 <span className="hidden text-xs font-medium text-slate-500 group-open:inline">Hide</span>
               </summary>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-3 border-t px-4 py-4 text-xs text-slate-700">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3 border-t p-panel text-xs text-slate-700">
                 {serviceBoardIndicatorLegend.map((indicator) => (
                   <div key={indicator.id} className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${indicator.dotClassName}`} />
@@ -189,11 +189,11 @@ export function MobileStatusChangeSheet({ job, onClose, onMoved, onStatusChange,
         </SheetHeader>
 
         <DialogBody
-          className="overscroll-contain px-4 py-4 sm:px-5"
+          className="overscroll-contain p-panel"
           style={{
-            paddingRight: "calc(1rem + env(safe-area-inset-right))",
-            paddingBottom: "calc(1rem + env(safe-area-inset-bottom))",
-            paddingLeft: "calc(1rem + env(safe-area-inset-left))",
+            paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
+            paddingBottom: "calc(var(--panel-padding) + env(safe-area-inset-bottom))",
+            paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move job to</p>

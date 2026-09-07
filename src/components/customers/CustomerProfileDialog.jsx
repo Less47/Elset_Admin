@@ -226,7 +226,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
         </DialogHeader>
 
         <DialogBody>
-        <div className="grid gap-6 lg:grid-cols-[300px_1fr] xl:grid-cols-[300px_minmax(280px,0.9fr)_minmax(460px,1.35fr)]">
+        <div className="grid gap-4 lg:grid-cols-[300px_1fr] xl:grid-cols-[300px_minmax(280px,0.9fr)_minmax(460px,1.35fr)]">
           <div className="grid gap-4 xl:self-start">
             <Card className="rounded-3xl border-slate-200">
               <CardHeader>
@@ -269,10 +269,10 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                         placeholder="Search the customer's main address"
                       />
                     </FormField>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
                       Account email and phone stay as the customer-level fallback. Add individual people below for site access, requester, and billing contacts.
                     </div>
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Billing default</p>
                         <p className="mt-1 text-xs leading-5 text-slate-600">
@@ -351,14 +351,14 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
               <CardContent className="grid gap-3">
                 {isEditing ? (
                   <>
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-xs leading-5 text-slate-600">
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
                       The account email and phone above stay separate as the main customer fallback. Add named people here for site access, requester, or billing-specific contacts.
                     </div>
                     {draftCustomer.contacts.length === 0 ? (
                       <EmptyState title="No saved contacts yet" text="Add the people who actually handle site access, work requests, or accounts for this customer." />
                     ) : (
                       draftCustomer.contacts.map((contact) => (
-                        <div key={contact.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                        <div key={contact.id} className="rounded-2xl border bg-white p-3 shadow-sm">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex flex-wrap gap-2">
                               {contact.role ? <Badge variant="secondary">{contact.role}</Badge> : null}
@@ -433,7 +433,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                   <EmptyState title="No contacts saved yet" text="Edit this customer to add the people who handle access, requests, or billing." />
                 ) : (
                   displayContacts.map((contact) => (
-                    <div key={contact.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <div key={contact.id} className="rounded-2xl border bg-white p-3 shadow-sm">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-900">{getContactDisplayName(contact)}</p>
@@ -500,7 +500,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
             <CardContent>
               <div className="grid gap-3">
                 {isEditing ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Add site</p>
                     <div className="mt-3 grid gap-3">
                       <AddressAutocompleteInput
@@ -559,7 +559,7 @@ export default function CustomerProfileDialog({ open, onOpenChange, customer, jo
                   <EmptyState title="No sites saved yet" text="Add a site address to the customer or one of their jobs to see it here." />
                 ) : (
                   customerSites.map((site) => (
-                    <div key={site.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                    <div key={site.id} className="rounded-2xl border bg-white p-3 shadow-sm">
                       {isEditing ? (
                         <div className="grid gap-4">
                           <p className="text-sm font-medium text-slate-900">{site.address || "No address saved"}</p>

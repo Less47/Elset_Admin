@@ -16,6 +16,7 @@
     "reset:local-admin-password": "node scripts/reset-local-admin-password.mjs",
     "demo:data": "node scripts/generate-demo-data.mjs",
     "build": "vite build",
+    "deploy:fly": "node scripts/deploy-fly.mjs",
     "lint": "eslint .",
     "test": "node --test",
     "test:e2e": "npm run build && playwright test --config=playwright.config.mjs --tsconfig=tsconfig.app.json",

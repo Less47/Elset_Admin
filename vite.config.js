@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import path from "path"
+import { getBuildMetadata } from "./scripts/build-metadata.mjs"
 
 function preventApiPortConflict(apiPort) {
   return {
@@ -24,6 +25,9 @@ export default defineConfig(({ mode }) => {
   const frontendPort = Number(env.ELSET_FRONTEND_PORT || 5173)
 
   return {
+    define: {
+      __ELSET_BUILD__: JSON.stringify(getBuildMetadata()),
+    },
     plugins: [react(), tailwindcss(), preventApiPortConflict(apiPort)],
     server: {
       port: frontendPort,

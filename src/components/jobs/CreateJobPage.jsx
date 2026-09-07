@@ -260,7 +260,7 @@ export default function CreateJobPage({
           title="Customer"
           description="Choose an existing customer or add a new customer without leaving this job."
         >
-          <div className="data-toggle-shell mb-4 grid grid-cols-2 rounded-lg border p-1 sm:max-w-md" aria-label="Customer type">
+          <div className="data-toggle-shell mb-3 grid grid-cols-2 gap-1 rounded-lg sm:max-w-md" aria-label="Customer type">
             <Button
               type="button"
               variant="ghost"
@@ -304,7 +304,7 @@ export default function CreateJobPage({
 
           {customerMode === "existing" ? (
             selectedCustomer && !changingCustomer ? (
-              <div className="record-selection-panel flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between sm:p-4">
+              <div className="record-selection-panel flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <UserRound className="h-4 w-4 text-sky-700" aria-hidden="true" />
@@ -323,7 +323,7 @@ export default function CreateJobPage({
               </div>
             ) : (
               <div className="grid gap-4">
-                <div className="grid gap-2">
+                <div className="grid gap-1.5">
                   <Label htmlFor="customer-search">Search customers</Label>
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
@@ -353,7 +353,7 @@ export default function CreateJobPage({
                       <button
                         key={entry.id}
                         type="button"
-                        className="flex min-h-[4.5rem] w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-[var(--data-view-row-hover)] focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                        className="flex min-h-16 w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-[var(--data-view-row-hover)] focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
                         onClick={() => selectCustomer(entry)}
                       >
                         <span className="min-w-0">
@@ -373,8 +373,8 @@ export default function CreateJobPage({
               </div>
             )
           ) : (
-            <div className="grid gap-4 sm:gap-5">
-              <div className="grid gap-2">
+            <div className="grid gap-3 sm:gap-4">
+              <div className="grid gap-1.5">
                 <Label htmlFor="new-customer-name">Customer or company name</Label>
                 <Input
                   id="new-customer-name"
@@ -390,15 +390,15 @@ export default function CreateJobPage({
                 />
                 <RequiredMessage id="new-customer-name-error" show={touched.customer && !customer.name.trim()} />
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
-                <div className="grid gap-2">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                <div className="grid gap-1.5">
                   <Label htmlFor="new-customer-email">Email</Label>
                   <Input id="new-customer-email" type="email" className="h-11" value={customer.email} onChange={(event) => {
                     markDirty();
                     setCustomer((current) => ({ ...current, email: event.target.value }));
                   }} />
                 </div>
-                <div className="grid gap-2">
+                <div className="grid gap-1.5">
                   <Label htmlFor="new-customer-phone">Phone number</Label>
                   <Input id="new-customer-phone" type="tel" className="h-11" value={customer.phone} onChange={(event) => {
                     markDirty();
@@ -406,7 +406,7 @@ export default function CreateJobPage({
                   }} />
                 </div>
               </div>
-              <div className="grid gap-2 sm:max-w-sm">
+              <div className="grid gap-1.5 sm:max-w-sm">
                 <Label>Customer type</Label>
                 <Select value={customer.customerType || NOT_SET_VALUE} onValueChange={(value) => {
                   markDirty();
@@ -433,7 +433,7 @@ export default function CreateJobPage({
             <WorkspaceMessage>Select a customer to see their saved sites.</WorkspaceMessage>
           ) : siteMode === "select" && selectedCustomerSites.length > 0 ? (
             selectedSite && !changingSite ? (
-              <div className="record-selection-panel flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between sm:p-4">
+              <div className="record-selection-panel flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <MapPin className="h-4 w-4 text-sky-700" aria-hidden="true" />
@@ -464,7 +464,7 @@ export default function CreateJobPage({
                     <button
                       key={site.id}
                       type="button"
-                      className="flex min-h-[4.5rem] w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-[var(--data-view-row-hover)] focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
+                      className="flex min-h-16 w-full items-start justify-between gap-3 px-3 py-3 text-left outline-none transition hover:bg-[var(--data-view-row-hover)] focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
                       onClick={() => selectSite(site)}
                     >
                       <span className="min-w-0">
@@ -486,7 +486,7 @@ export default function CreateJobPage({
               </div>
             )
           ) : (
-            <div className="grid gap-4 sm:gap-5">
+            <div className="grid gap-3 sm:gap-4">
               {customerMode === "existing" && selectedCustomerSites.length > 0 ? (
                 <Button type="button" variant="ghost" className="h-11 justify-self-start rounded-lg" onClick={() => {
                   markDirty();
@@ -494,7 +494,7 @@ export default function CreateJobPage({
                   selectSite(selectedCustomerSites[0]);
                 }}>Use a saved site</Button>
               ) : null}
-              <div className="grid gap-2">
+              <div className="grid gap-1.5">
                 <Label htmlFor="new-site-address">{customerMode === "new" ? "Primary site address" : "Site address"}</Label>
                 <AddressAutocompleteInput
                   id="new-site-address"
@@ -508,8 +508,8 @@ export default function CreateJobPage({
                 />
                 <RequiredMessage id="site-address-error" show={touched.site && !hasAddress}>Enter a site address.</RequiredMessage>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
-                <div className="grid gap-2">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                <div className="grid gap-1.5">
                   <Label>Site type</Label>
                   <Select value={siteDraft.siteType || NOT_SET_VALUE} onValueChange={(value) => {
                     markDirty();
@@ -522,7 +522,7 @@ export default function CreateJobPage({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2">
+                <div className="grid gap-1.5">
                   <Label htmlFor="new-site-oc-number">OC number</Label>
                   <Input id="new-site-oc-number" className="h-11" value={siteDraft.ocNumber} onChange={(event) => {
                     markDirty();
@@ -554,7 +554,7 @@ export default function CreateJobPage({
                   }));
                 }}
               />
-              <div className="grid gap-2">
+              <div className="grid gap-1.5">
                 <Label htmlFor="new-site-access-notes">Access notes</Label>
                 <Textarea id="new-site-access-notes" rows={3} value={siteDraft.accessNotes} onChange={(event) => {
                   markDirty();
@@ -578,8 +578,8 @@ export default function CreateJobPage({
           title="Job details"
           description="Describe the work request using the same details stored on the existing job record."
         >
-          <div className="grid gap-4 sm:gap-5">
-            <div className="grid gap-2">
+          <div className="grid gap-3 sm:gap-4">
+            <div className="grid gap-1.5">
               <Label htmlFor="job-title">Job title</Label>
               <Input
                 id="job-title"
@@ -596,7 +596,7 @@ export default function CreateJobPage({
               />
               <RequiredMessage id="job-title-error" show={touched.title && !hasTitle} />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               <Label htmlFor="job-description">Description of work</Label>
               <Textarea
                 id="job-description"
@@ -612,7 +612,7 @@ export default function CreateJobPage({
               />
               <RequiredMessage id="job-description-error" show={touched.description && !hasDescription} />
             </div>
-            <div className="grid gap-2 sm:max-w-md">
+            <div className="grid gap-1.5 sm:max-w-md">
               <Label htmlFor="job-client-reference">Client reference / PO number</Label>
               <Input id="job-client-reference" className="h-11" value={job.ocNumber} onChange={(event) => {
                 markDirty();
@@ -628,15 +628,15 @@ export default function CreateJobPage({
           title="Schedule & assignment"
           description="Set the visit date, technician, and urgency. New jobs continue to start in To Do."
         >
-          <div className="grid gap-4 md:grid-cols-2 md:gap-5">
-            <div className="grid gap-2">
+          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+            <div className="grid gap-1.5">
               <Label htmlFor="job-scheduled-date">Scheduled date</Label>
               <Input id="job-scheduled-date" className="h-11" type="date" value={job.scheduledDate} onChange={(event) => {
                 markDirty();
                 setJob((current) => ({ ...current, scheduledDate: event.target.value }));
               }} />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               <Label>Assigned technician</Label>
               <Select value={job.assignedTechnicianId || UNASSIGNED_VALUE} onValueChange={(value) => {
                 markDirty();
@@ -654,7 +654,7 @@ export default function CreateJobPage({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
               <Label>Urgency</Label>
               <Select value={job.urgency} onValueChange={(value) => {
                 markDirty();
@@ -673,7 +673,7 @@ export default function CreateJobPage({
           <details className="record-inset-surface mt-5 rounded-lg p-3 sm:p-4">
             <summary className="cursor-pointer font-medium text-slate-950">Job contacts (optional)</summary>
             <p className="mt-2 text-sm leading-6 text-slate-600">Leave these blank to use the saved site and customer billing contacts.</p>
-            <div className="mt-5 grid gap-4">
+            <div className="mt-4 grid gap-3">
               <ContactSnapshotEditor title="Requester" description="Who asked for the work or booked the visit." contacts={availableContacts} fallbackRole="Requester" value={job.requesterContact} onChange={(contact) => {
                 markDirty();
                 setJob((current) => ({ ...current, requesterContact: contact }));
@@ -698,7 +698,7 @@ export default function CreateJobPage({
         status={isSubmitting ? "Creating job…" : isDirty ? "Unsaved job" : ""}
       >
         <Button type="button" variant="outline" className="h-11 rounded-lg px-4" onClick={() => onCancel()} disabled={isSubmitting}>Cancel</Button>
-        <Button type="button" className="h-11 rounded-lg px-5 hover:opacity-90" disabled={!canSave} aria-busy={isSubmitting} onClick={handleSubmit}>
+        <Button type="button" className="h-11 rounded-lg px-4 hover:opacity-90" disabled={!canSave} aria-busy={isSubmitting} onClick={handleSubmit}>
           {isSubmitting ? "Creating…" : "Create Job"}
         </Button>
       </WorkspaceActionBar>

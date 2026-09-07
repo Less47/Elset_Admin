@@ -252,7 +252,7 @@ export default function InvoiceManager({
           { label: "Outstanding", value: money(invoiceStats.outstandingValue) },
           { label: "Received", value: money(invoiceStats.receivedValue) },
         ].map((stat) => (
-          <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
+          <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
             <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
           </div>
@@ -261,14 +261,14 @@ export default function InvoiceManager({
 
       <CardContent className="p-0">
         {filteredRows.length === 0 ? (
-          <div className="p-6">
+          <div className="p-panel">
             <EmptyState title="No billing records found" text="Try adjusting the search or filters." />
           </div>
         ) : (
           <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
               <div className="data-grid grid min-w-[560px] gap-px bg-slate-200 md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
                   <span>Job</span>
                   <span>Invoice</span>
                   <span>Payment</span>
@@ -278,7 +278,7 @@ export default function InvoiceManager({
                 {filteredRows.map((row) => (
                   <div
                     key={row.job.id}
-                    className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                    className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 transition [&>*]:bg-white"
                   >
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
@@ -319,7 +319,7 @@ export default function InvoiceManager({
             <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1540px]">
               <div className="data-grid grid gap-px bg-slate-200">
-                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
                   <span>Job</span>
                   <span>Customer</span>
                   <span>Work</span>
@@ -334,7 +334,7 @@ export default function InvoiceManager({
                 {filteredRows.map((row) => (
                   <div
                     key={row.job.id}
-                    className="data-grid-row grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                    className="data-grid-row grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
                   >
                     <p className="font-semibold text-slate-950">#{row.job.jobNumber}</p>
                     <div className="min-w-0">

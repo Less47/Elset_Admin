@@ -340,7 +340,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             { label: "Needs reorder", value: inventoryStats.lowStock + inventoryStats.outOfStock },
             { label: "Stock value", value: money(inventoryStats.inventoryValue) },
           ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-white px-5 py-4">
+            <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
               <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
             </div>
@@ -349,7 +349,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
         <CardContent className="p-0">
           {filteredParts.length === 0 ? (
-            <div className="p-6">
+            <div className="p-panel">
               <EmptyState
                 title="No parts found"
                 text="Add a part or adjust the search and filters to see inventory records."
@@ -370,7 +370,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <>
               <div className="overflow-x-auto text-xs 2xl:hidden">
                 <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-3 [&>*]:py-2">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
                     <span>Part</span>
                     <span className="text-right">Stock</span>
                     <span className="text-right">Value</span>
@@ -384,7 +384,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   return (
                     <div
                       key={part.id}
-                      className="data-grid-row grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 transition [&>*]:bg-white [&>*]:px-3 [&>*]:py-2"
+                      className="data-grid-row grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 transition [&>*]:bg-white"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{part.name}</p>
@@ -429,7 +429,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1320px]">
                 <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100 [&>*]:px-5 [&>*]:py-3">
+                  <div className="data-grid-header grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
                     <span>Part</span>
                     <span>SKU</span>
                     <span>Category</span>
@@ -450,7 +450,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   return (
                     <div
                       key={part.id}
-                      className="data-grid-row grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white [&>*]:px-5 [&>*]:py-3"
+                      className="data-grid-row grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">{part.name}</p>

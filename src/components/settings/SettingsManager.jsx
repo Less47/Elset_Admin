@@ -195,7 +195,7 @@ function WorkspacePreview({ settings }) {
 
             <div className="grid gap-4">
               <div
-                className="rounded-2xl border p-5 shadow-sm"
+                className="rounded-2xl border p-panel shadow-sm"
                 style={{
                   backgroundColor: heroSurface,
                   borderColor,
@@ -230,7 +230,7 @@ function WorkspacePreview({ settings }) {
               </div>
 
               <div
-                className="rounded-2xl border p-5 shadow-sm"
+                className="rounded-2xl border p-panel shadow-sm"
                 style={{
                   backgroundImage: dialogSurfaceGradient,
                   backgroundColor: dialogSurface,
@@ -245,7 +245,7 @@ function WorkspacePreview({ settings }) {
               </div>
 
               <div
-                className="rounded-2xl border p-5 shadow-sm"
+                className="rounded-2xl border p-panel shadow-sm"
                 style={{
                   backgroundImage: `linear-gradient(135deg, ${dataViewTheme.headerStart} 0%, ${dataViewTheme.headerEnd} 100%)`,
                   backgroundColor: dataViewTheme.surface,
@@ -415,7 +415,7 @@ function ExactDocumentPreview({ requestBody }) {
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-4">
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-3">
         {previewUrl ? (
           <div className="mx-auto w-full min-w-[640px] max-w-[794px] overflow-hidden rounded-sm bg-white shadow-lg">
             <iframe
@@ -425,9 +425,9 @@ function ExactDocumentPreview({ requestBody }) {
             />
           </div>
         ) : previewStatus === "error" ? (
-          <div className="p-6 text-sm text-rose-700">{previewError}</div>
+          <div className="p-panel text-sm text-rose-700">{previewError}</div>
         ) : (
-          <div className="p-6 text-sm text-slate-600">Rendering exact preview...</div>
+          <div className="p-panel text-sm text-slate-600">Rendering exact preview...</div>
         )}
       </div>
 
@@ -651,7 +651,7 @@ export default function SettingsManager({
   };
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       <div className="floating-page-toolbar flex flex-col gap-2 overflow-x-auto overscroll-x-contain px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
           <Badge className={isAuthenticated ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
@@ -678,8 +678,8 @@ export default function SettingsManager({
       </div>
 
       {activeSettingsTab === "preferences" && (
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="grid gap-6">
+        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -761,13 +761,13 @@ export default function SettingsManager({
             </Card>
           </div>
 
-          <div className="grid gap-6">
+          <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Current Defaults</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Company Identity</p>
                   <p className="mt-2 font-medium text-slate-900">{normalizedSettings.companyName || "Not set"}</p>
                   <p className="mt-1 text-slate-700">
@@ -776,7 +776,7 @@ export default function SettingsManager({
                       .join("  •  ") || "ABN / ACN not set"}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Bank Account</p>
                   <p className="mt-2 font-medium text-slate-900">{normalizedSettings.bankAccountName || "Not set"}</p>
                   <p className="mt-1 text-slate-700">
@@ -785,15 +785,15 @@ export default function SettingsManager({
                       .join(" / ") || "Bank details not set"}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Primary Sender</p>
                   <p className="mt-2 font-medium text-slate-900">{normalizedSettings.defaultSenderEmail || "Not set"}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Reply To</p>
                   <p className="mt-2 font-medium text-slate-900">{normalizedSettings.replyToEmail || "Not set"}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Signature</p>
                   <p className="mt-2 whitespace-pre-wrap text-slate-700">{normalizedSettings.emailSignature || "Not set"}</p>
                 </div>
@@ -804,8 +804,8 @@ export default function SettingsManager({
       )}
 
       {activeSettingsTab === "templates" && (
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="grid gap-6">
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -885,8 +885,8 @@ export default function SettingsManager({
       )}
 
       {activeSettingsTab === "ui" && (
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="grid gap-6">
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -902,7 +902,7 @@ export default function SettingsManager({
                   <button
                     key={preset.id}
                     type="button"
-                    className="rounded-2xl border border-slate-200 p-4 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                    className="rounded-2xl border border-slate-200 p-3 text-left transition hover:border-slate-300 hover:bg-slate-50"
                     onClick={() => onApplyPreset(preset.values)}
                   >
                     <div className="flex items-center justify-between gap-3">
@@ -955,7 +955,7 @@ export default function SettingsManager({
               <CardHeader>
                 <CardTitle className="text-lg">Layout</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-6">
+              <CardContent className="grid gap-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField label="Sidebar width">
                     <Select value={normalizedSettings.sidebarWidth} onValueChange={(value) => onSettingChange("sidebarWidth", value)}>
@@ -996,8 +996,8 @@ export default function SettingsManager({
       )}
 
       {activeSettingsTab === "backup" && (
-        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="grid gap-6">
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -1013,7 +1013,7 @@ export default function SettingsManager({
                 </Badge>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                   {isSqliteBackupMode
                     ? "Login accounts, active sessions, SMTP credentials, API keys, and environment secrets are left out of SQLite workspace backups."
                     : "Active session tokens are left out of the file for security, but the backup still includes the core workspace records and saved login accounts."}
@@ -1064,7 +1064,7 @@ export default function SettingsManager({
                 </Badge>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   {isSqliteBackupMode
                     ? "This will overwrite workspace records only. Login accounts, sessions, SMTP credentials, API keys, and environment settings are not restored."
                     : "This will overwrite customers, jobs, staff, settings, templates, deleted records, and saved login accounts on the shared server."}
@@ -1143,7 +1143,7 @@ export default function SettingsManager({
                 </DialogHeader>
 
                 <form className="grid gap-4" onSubmit={handleBackupRestore}>
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                     {isSqliteBackupMode
                       ? "This replaces the SQLite workspace snapshot only. Login accounts and secrets are left untouched."
                       : "This replaces customers, jobs, staff, templates, deleted records, and saved login accounts with the uploaded backup file."}
@@ -1208,7 +1208,7 @@ export default function SettingsManager({
                 </Badge>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950">
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950">
                   The API key is only sent to the server for this request and is not saved in the app. The importer uses ServiceM8 UUIDs to update existing imported records instead of duplicating them.
                 </div>
 
@@ -1230,7 +1230,7 @@ export default function SettingsManager({
                   {serviceM8ImportOptionFields.map((field) => (
                     <label
                       key={field.key}
-                      className="flex cursor-pointer gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm"
+                      className="flex cursor-pointer gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm"
                     >
                       <Checkbox
                         checked={Boolean(serviceM8Options[field.key])}
@@ -1291,14 +1291,14 @@ export default function SettingsManager({
                   <div className="grid gap-4">
                     <div className="grid gap-3 md:grid-cols-3">
                       {serviceM8SummaryCards.map((item) => (
-                        <div key={item.key} className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <div key={item.key} className="rounded-2xl border border-slate-200 bg-white p-3">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
                           <p className="mt-2 text-2xl font-semibold text-slate-950">{item.value}</p>
                         </div>
                       ))}
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
                       <p className="font-semibold text-slate-950">Fetched From ServiceM8</p>
                       <p className="mt-2 leading-6">
                         {serviceM8Summary.fetched?.clients || 0} clients, {serviceM8Summary.fetched?.jobs || 0} jobs, {serviceM8Summary.fetched?.companyContacts || 0} contacts, {serviceM8Summary.fetched?.jobMaterials || 0} line items, {serviceM8Summary.fetched?.jobPayments || 0} payments, and {serviceM8Summary.fetched?.jobNotes || 0} notes.
@@ -1306,7 +1306,7 @@ export default function SettingsManager({
                     </div>
 
                     {serviceM8Summary.sampleCustomers?.length ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <p className="text-sm font-semibold text-slate-950">Customer Preview</p>
                         <div className="mt-3 grid gap-2">
                           {serviceM8Summary.sampleCustomers.map((customer, index) => (
@@ -1320,7 +1320,7 @@ export default function SettingsManager({
                     ) : null}
 
                     {serviceM8Summary.sampleJobs?.length ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <p className="text-sm font-semibold text-slate-950">Job Preview</p>
                         <div className="mt-3 grid gap-2">
                           {serviceM8Summary.sampleJobs.map((job, index) => (
@@ -1337,7 +1337,7 @@ export default function SettingsManager({
                     ) : null}
 
                     {serviceM8Summary.warnings?.length ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                         <p className="font-semibold">Warnings</p>
                         <div className="mt-2 grid gap-1">
                           {serviceM8Summary.warnings.slice(0, 6).map((warning, index) => (
@@ -1360,7 +1360,7 @@ export default function SettingsManager({
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-2">
                 {backupCards.map((item) => (
-                  <div key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-950">{item.value}</p>
                   </div>
@@ -1375,16 +1375,16 @@ export default function SettingsManager({
               <p className="mt-1 text-sm text-slate-600">A couple of guardrails so the export stays useful when you need it.</p>
             </CardHeader>
             <CardContent className="grid gap-4 text-sm text-slate-700">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 Download backups regularly after major admin changes like bulk customer imports, maintenance plan updates, or template edits.
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 Store the JSON file somewhere secure because it contains customer records, operational history, and login account data.
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 The file is exported directly from the server-side data store, so it reflects the shared workspace rather than only your current browser state.
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                 Before restoring a backup, download a fresh copy of the current workspace so you can roll back if the uploaded file is older than expected.
               </div>
             </CardContent>

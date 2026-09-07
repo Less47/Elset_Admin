@@ -111,7 +111,7 @@ function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, job
         </DialogHeader>
 
         <DialogBody>
-          <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
             <Card className="rounded-2xl">
               <CardHeader>
                 <CardTitle className="text-base">Plan Details</CardTitle>
@@ -478,7 +478,7 @@ export default function MaintenanceManager({
         </div>
       </div>
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden rounded-3xl border-slate-200">
             <div className="hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
             {[
@@ -488,19 +488,19 @@ export default function MaintenanceManager({
               { label: "Active jobs", value: maintenanceStats.activeJobs },
               { label: "Contract value", value: money(maintenanceStats.contractValue) },
             ].map((stat) => (
-              <div key={stat.label} className="bg-white px-5 py-4">
+              <div key={stat.label} className="bg-white px-panel py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
               </div>
             ))}
           </div>
 
-          <CardContent className="grid gap-4 p-5">
+          <CardContent className="grid gap-4 p-panel">
             {filteredRows.length === 0 ? (
               <EmptyState title="No maintenance plans found" text="Try adjusting the search or filters, or add your first plan." />
             ) : (
               filteredRows.map((row) => (
-                <div key={row.plan.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div key={row.plan.id} className="rounded-3xl border border-slate-200 bg-white p-panel shadow-sm">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap gap-2">
@@ -545,22 +545,22 @@ export default function MaintenanceManager({
                   </div>
 
                   <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-                    <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="rounded-2xl border bg-slate-50 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next due</p>
                       <p className="mt-2 font-semibold text-slate-950">{row.plan.nextDueDate ? formatDate(row.plan.nextDueDate) : "Not set"}</p>
                     </div>
-                    <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="rounded-2xl border bg-slate-50 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Estimated time</p>
                       <p className="mt-2 font-semibold text-slate-950">{row.plan.estimatedDurationHours > 0 ? `${row.plan.estimatedDurationHours} hrs` : "Not set"}</p>
                     </div>
-                    <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="rounded-2xl border bg-slate-50 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Contract price</p>
                       <p className="mt-2 font-semibold text-slate-950">{row.plan.contractPrice > 0 ? money(row.plan.contractPrice) : "Not set"}</p>
                     </div>
                   </div>
 
                   <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.95fr]">
-                    <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="rounded-2xl border bg-slate-50 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Checklist</p>
                       {row.plan.checklist.length === 0 ? (
                         <p className="mt-2 text-sm text-slate-500">No checklist saved yet.</p>
@@ -574,7 +574,7 @@ export default function MaintenanceManager({
                       )}
                     </div>
 
-                    <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="rounded-2xl border bg-slate-50 p-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recent activity</p>
                       <div className="mt-2 grid gap-2 text-sm text-slate-700">
                         <p>Last generated: <span className="font-medium text-slate-950">{row.plan.lastGeneratedAt ? formatDate(row.plan.lastGeneratedAt) : "Not yet"}</span></p>
@@ -590,7 +590,7 @@ export default function MaintenanceManager({
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
+        <div className="grid gap-4">
           <Card className="rounded-3xl border-slate-200">
             <CardHeader>
               <CardTitle className="text-lg">Due Queue</CardTitle>
@@ -601,7 +601,7 @@ export default function MaintenanceManager({
                 <EmptyState title="Nothing urgent" text="Overdue plans and visits due soon will appear here." />
               ) : (
                 dueQueue.map((row) => (
-                  <div key={`due-${row.plan.id}`} className="rounded-2xl border bg-slate-50 p-4">
+                  <div key={`due-${row.plan.id}`} className="rounded-2xl border bg-slate-50 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-950">{row.plan.planName}</p>
@@ -632,7 +632,7 @@ export default function MaintenanceManager({
                 <EmptyState title="No active maintenance jobs" text="Generated maintenance jobs will appear here until they are completed." />
               ) : (
                 activeRows.map((row) => (
-                  <div key={`active-${row.plan.id}`} className="rounded-2xl border bg-slate-50 p-4">
+                  <div key={`active-${row.plan.id}`} className="rounded-2xl border bg-slate-50 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-950">{row.plan.planName}</p>
