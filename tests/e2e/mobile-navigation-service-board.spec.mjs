@@ -1062,6 +1062,135 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
   }
 });
 
+test("Service Board cards respect column padding across tablet, desktop, and mobile widths", async ({ browser }, testInfo) => {
+  const measurements = [];
+  const viewports = [
+    { width: 768, height: 1024 },
+    { width: 820, height: 1180 },
+    { width: 1024, height: 768 },
+    { width: 1180, height: 820 },
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ];
+
+  async function checkContainment(page, viewport, scenario, viewMode = "List") {
+    const columns = page.locator("[data-service-board-status]");
+    await expect(columns).toHaveCount(viewport.width < 1024 ? 1 : 3);
+    const metrics = await columns.evaluateAll((elements) => elements.map((column) => {
+      const mobile = column.hasAttribute("data-mobile-board-view");
+      const content = mobile ? column : column.querySelector(':scope > [data-slot="card-content"]');
+      const list = mobile ? column.querySelector(":scope > .grid") : content.firstElementChild;
+      const contentRect = content.getBoundingClientRect();
+      const style = getComputedStyle(content);
+      const left = contentRect.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+      const right = contentRect.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+      const rect = column.getBoundingClientRect();
+      const cards = Array.from(list.children).map((wrapper) => {
+        const card = mobile ? wrapper : wrapper.querySelector('[data-slot="card"]');
+        const cardRect = card.getBoundingClientRect();
+        const cardStyle = getComputedStyle(card);
+        const body = card.querySelector('[data-slot="card-content"]');
+        return {
+          left: cardRect.left,
+          right: cardRect.right,
+          width: cardRect.width,
+          boxSizing: cardStyle.boxSizing,
+          margins: [parseFloat(cardStyle.marginLeft), parseFloat(cardStyle.marginRight)],
+          overflowingChildren: body ? Array.from(body.querySelectorAll("*"))
+            .filter((child) => child.scrollWidth > child.clientWidth + 1 && getComputedStyle(child).overflowX === "visible")
+            .map((child) => ({ text: child.textContent.slice(0, 60), className: child.getAttribute("class") })) : [],
+        };
+      });
+      return { status: column.dataset.serviceBoardStatus, top: rect.top, columnRight: rect.right, left, right, cards };
+    }));
+    measurements.push({ viewport, scenario, viewMode, columns: metrics });
+    for (const column of metrics) {
+      expect(column.columnRight).toBeLessThanOrEqual(viewport.width + 1);
+      expect(column.top).toBeCloseTo(metrics[0].top, 0);
+      expect(column.cards.length).toBeGreaterThan(0);
+      for (const card of column.cards) {
+        expect(card.boxSizing).toBe("border-box");
+        expect(card.margins).toEqual([0, 0]);
+        expect(card.left).toBeGreaterThanOrEqual(column.left - 1);
+        expect(card.right).toBeLessThanOrEqual(column.right + 1);
+        expect(card.overflowingChildren, `${viewport.width} ${scenario} ${viewMode} ${column.status}`).toEqual([]);
+        if (viewMode !== "Grid") {
+          expect(card.left).toBeCloseTo(column.left, 0);
+          expect(card.right).toBeCloseTo(column.right, 0);
+        }
+      }
+    }
+    await assertNoHorizontalOverflow(page);
+  }
+
+  for (const viewport of viewports) {
+    const context = await browser.newContext(viewport.width <= 1180
+      ? mobileContextOptions(viewport.width, viewport.height)
+      : desktopContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    let fixture = readAugmentedFixture();
+    // Keep long-text stress data isolated from the shared workflow fixtures and APIs.
+    await page.route("**/api/app-state", (route) => route.request().method() === "GET"
+      ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+      : route.continue());
+    try {
+      await loginAs(page, "mobileadmin", viewport.width < 1024);
+      await page.locator(viewport.width < 1024 ? "[data-mobile-job-id]" : '[draggable="true"]').first().waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      await checkContainment(page, viewport, "normal");
+      if (viewport.width === 820 || viewport.width === 1024) {
+        await capture(page, testInfo, `service-board-containment-after-${viewport.width}x${viewport.height}.png`, "Service Board card containment");
+      }
+      if (viewport.width < 1024) {
+        await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Move Job #1002", exact: true })).toBeVisible();
+        continue;
+      }
+
+      const longToken = "ServiceM8UnbrokenReference".repeat(8);
+      fixture = {
+        ...fixture,
+        jobs: fixture.jobs.map((job) => ({
+          ...job,
+          customerName: `Customer${longToken}`,
+          title: `Job${longToken}`,
+          description: `ServiceM8 notes: ${longToken}`,
+          jobAddress: `33 ${longToken}, Caroline Springs VIC 3023, Australia`,
+          scheduledDate: "",
+          urgency: "Medium",
+          maintenancePlanName: "Containment test",
+          invoice: { ...fixture.jobs[0].invoice, items: [{ id: "wide-amount", qty: 1, rate: 1234567890.12 }] },
+        })),
+      };
+      await page.reload();
+      await page.locator('[draggable="true"]').first().waitFor();
+      await page.getByText("Show tag info", { exact: true }).locator("..").getByRole("checkbox").check();
+      for (const viewMode of ["List", "Compact", "Grid"]) {
+        for (const status of ["To Do", "In Progress", "Completed"]) {
+          await page.getByRole("button", { name: `${status} ${viewMode} view`, exact: true }).click();
+        }
+        await checkContainment(page, viewport, "long text and large amounts", viewMode);
+        if (viewMode === "Compact") {
+          for (const status of ["To Do", "In Progress", "Completed"]) {
+            await page.locator(`[data-service-board-status="${status}"] [draggable="true"] button[aria-expanded="false"]`).first().click();
+          }
+          await checkContainment(page, viewport, "expanded compact", viewMode);
+          await expect(page.locator("[data-service-board-status]").getByRole("button", { name: "View Job", exact: true })).toHaveCount(3);
+        }
+      }
+      await page.getByRole("button", { name: "Show only To Do", exact: true }).click();
+      const focusedCards = page.locator('[data-service-board-status="To Do"] [draggable="true"]');
+      await expect(focusedCards).toHaveCount(2);
+      await page.getByRole("button", { name: "Show all columns", exact: true }).click();
+      await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
+    } finally {
+      await context.close();
+    }
+  }
+  await testInfo.attach("card-containment-measurements", { body: JSON.stringify(measurements, null, 2), contentType: "application/json" });
+});
+
 test("Create Job is a guarded page workflow using the existing record API", async ({ browser }, testInfo) => {
   const context = await browser.newContext(mobileContextOptions(390, 844));
   const page = await context.newPage();
