@@ -1,0 +1,72 @@
+.calendar-workspace { container: calendar / inline-size; }
+.calendar-layout { display: grid; min-width: 0; gap: 12px; align-items: start; }
+.calendar-mini-pane, .calendar-queue-pane { display: none; min-width: 0; }
+.calendar-center { min-width: 0; container: calendar-center / inline-size; }
+.calendar-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; }
+.calendar-toolbar-title { grid-column: 1; grid-row: 1; min-width: 0; line-height: 22px; }
+.calendar-month-navigation { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
+.calendar-toolbar-actions { grid-column: 2; grid-row: 1; justify-self: end; }
+@container calendar-center (min-width: 420px) {
+  .calendar-toolbar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .calendar-month-navigation { grid-column: 2; grid-row: 1; }
+  .calendar-toolbar-actions { grid-column: 3; }
+}
+.calendar-mini-expanded { width: min(100%, 320px); margin-bottom: 12px; }
+.calendar-mini-date { min-width: 0; min-height: 24px; }
+.calendar-mini-expanded .calendar-mini-date { min-height: 36px; }
+.calendar-month-grid { grid-template-rows: repeat(6, minmax(72px, 1fr)); }
+.calendar-day { border-color: var(--data-view-grid-line); }
+.calendar-day:nth-child(7n) { border-right: 0; }
+.calendar-day:nth-last-child(-n+7) { border-bottom: 0; }
+.calendar-day-select { min-height: 44px; }
+.calendar-day-selected { box-shadow: inset 0 0 0 2px var(--color-sky-600); }
+.calendar-month-grid[data-calendar-dragging] .calendar-day:not(.calendar-day-target) { background-color: var(--color-sky-50); border-color: var(--color-sky-200); }
+.calendar-day-target { box-shadow: inset 0 0 0 3px var(--color-orange-500); background-color: var(--color-orange-50); }
+.calendar-day-jobs { display: none; }
+.calendar-job-chip { min-height: 24px; }
+.calendar-more { min-height: 24px; }
+.calendar-queue-card { overflow-wrap: anywhere; touch-action: pan-y; }
+.calendar-queue-card[draggable=true], .calendar-job-chip[draggable=true] { cursor: grab; }
+.calendar-job-open, .calendar-job-chip { -webkit-touch-callout: none; user-select: none; }
+.calendar-sheet-header { padding-top: calc(12px + env(safe-area-inset-top)); padding-left: calc(12px + env(safe-area-inset-left)); padding-right: calc(12px + env(safe-area-inset-right)); }
+.calendar-sheet-body { padding-left: calc(12px + env(safe-area-inset-left)); padding-right: calc(12px + env(safe-area-inset-right)); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+.calendar-sheet .calendar-queue-list { overflow: visible; }
+.calendar-sheet .calendar-queue > header { padding-left: 0; padding-right: 0; }
+.calendar-sheet .calendar-queue-list { padding-left: 0; padding-right: 0; }
+.calendar-drag-preview { pointer-events: none; position: fixed; z-index: 90; width: 190px; max-width: calc(100vw - 24px); padding: 8px 12px; border: 1px solid var(--color-sky-400); border-radius: 12px; background: white; box-shadow: 0 8px 24px #0f172a22; }
+
+@media (min-width: 640px) {
+  .calendar-month-grid { min-height: calc(100dvh - 190px); grid-template-rows: repeat(6, minmax(112px, 1fr)); }
+  .calendar-day-jobs { display: grid; }
+  .calendar-day-select { min-height: 32px; }
+  .calendar-mobile-count, .calendar-mobile-dots { display: none; }
+}
+
+@media (min-width: 1024px) and (orientation: landscape) {
+  .calendar-layout { grid-template-columns: minmax(0, 1fr) 240px; }
+  .calendar-queue-pane { display: block; position: sticky; top: 12px; }
+  .calendar-queue-pane > .calendar-queue { max-height: calc(100dvh - 40px); }
+  .calendar-jobs-toggle { display: none; }
+  @container calendar (min-width: 840px) {
+    .calendar-layout { grid-template-columns: 156px minmax(0, 1fr) 240px; }
+    .calendar-mini-pane { display: block; position: sticky; top: 12px; }
+    .calendar-navigator-toggle, .calendar-mini-expanded { display: none; }
+  }
+  @container calendar (min-width: 1040px) {
+    .calendar-layout { grid-template-columns: 180px minmax(0, 1fr) 280px; }
+  }
+  @container calendar (min-width: 1320px) {
+    .calendar-layout { grid-template-columns: 200px minmax(0, 1fr) 320px; }
+  }
+}
+
+@media (pointer: coarse) and (min-width: 640px) {
+  .calendar-day-select, .calendar-job-chip, .calendar-more { min-height: 44px; }
+  .calendar-chip-number, .calendar-chip-customer { display: block; overflow: hidden; text-overflow: ellipsis; line-height: 16px; }
+  .calendar-chip-separator { display: none; }
+  .calendar-month-grid { grid-template-rows: repeat(6, minmax(140px, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-workspace *, .calendar-sheet * { scroll-behavior: auto; transition-duration: 0s; animation-duration: 0s; }
+}

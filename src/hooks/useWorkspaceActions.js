@@ -114,6 +114,7 @@ export function useWorkspaceActions({
     method = "POST",
     body,
     errorMessage = "Unable to update the job records.",
+    onError,
   }) {
     try {
       const payload = await requestWorkspaceUpdate({
@@ -126,7 +127,8 @@ export function useWorkspaceActions({
       const state = applyServerState(payload.state);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : errorMessage);
+      if (onError) onError(error);
+      else window.alert(error instanceof Error ? error.message : errorMessage);
       return { ok: false, result: null, state: null };
     }
   }
@@ -748,8 +750,13 @@ export function useWorkspaceActions({
     return true;
   }
 
-  async function handleScheduleJob(jobId, scheduledDate) {
+  async function handleScheduleJob(jobId, scheduledDate, { onError, recordOnly = false } = {}) {
     if (!canManageBusiness) return false;
+
+    if (recordOnly && !useSqliteApi) {
+      onError?.(new Error("Scheduling requires the job record API, which is unavailable in this workspace storage mode."));
+      return false;
+    }
 
     if (useSqliteApi) {
       const saved = await saveJobApiRequest({
@@ -757,6 +764,7 @@ export function useWorkspaceActions({
         method: "PATCH",
         body: { scheduledDate: toDateInputValue(scheduledDate) },
         errorMessage: "Unable to update the job schedule.",
+        onError,
       });
       return saved.ok;
     }

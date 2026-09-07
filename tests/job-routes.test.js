@@ -108,6 +108,35 @@ function getDbState(dbPath) {
   }
 }
 
+test("date scheduling and removal preserve status, assignment and commercial records", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      const assigned = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "PATCH", body: JSON.stringify({ assignedTechnicianId: "demo-staff-admin", urgency: "High" }) });
+      assert.equal(assigned.response.status, 200);
+      for (const status of ["To Do", "In Progress", "Completed"]) {
+        const statusResult = await requestJson(baseUrl, "/api/jobs/demo-job-1001/status", { method: "PATCH", body: JSON.stringify({ status }) });
+        assert.equal(statusResult.response.status, 200);
+        const before = getDbState(dbPath).jobs.find((job) => job.id === "demo-job-1001");
+        assert.equal(before.assignedTechnicianId, "demo-staff-admin");
+        assert.ok(before.quote);
+        assert.ok(before.invoice);
+        const { scheduledDate: previousDate, updatedAt: previousUpdate, ...unchanged } = before;
+        assert.equal(typeof previousDate, "string");
+        assert.equal(typeof previousUpdate, "string");
+        for (const scheduledDate of ["2026-09-15", "2026-10-04", ""]) {
+          const result = await requestJson(baseUrl, "/api/jobs/demo-job-1001/schedule", { method: "PATCH", body: JSON.stringify({ scheduledDate }) });
+          assert.equal(result.response.status, 200);
+          const saved = getDbState(dbPath).jobs.find((job) => job.id === before.id);
+          const { scheduledDate: savedDate, updatedAt, ...remaining } = saved;
+          assert.equal(savedDate, scheduledDate);
+          assert.equal(typeof updatedAt, "string");
+          assert.deepEqual(remaining, unchanged);
+        }
+      }
+    });
+  });
+});
+
 test("job create supports existing customer/site, new customer/site, existing customer/new site, and server job numbers", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {

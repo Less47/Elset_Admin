@@ -1,187 +1,163 @@
-import { useMemo, useState } from "react";
-import { X } from "lucide-react";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { Badge } from "@/components/ui/badge";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { CalendarDays, ChevronLeft, ChevronRight, ListFilter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { statuses, statusThemes } from "@/lib/job-status";
+import { Input } from "@/components/ui/input";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import CalendarJobCard from "./CalendarJobCard";
+import { MainCalendar, MiniCalendar } from "./CalendarMonth";
+import CalendarQueue from "./CalendarQueue";
+import CalendarSheet from "./CalendarSheet";
+import { filterQueueJobs, formatCalendarDate, groupCalendarJobs, isCalendarDate } from "./calendar-utils";
+import { useCalendarDrag } from "./useCalendarDrag";
+import "./Calendar.css";
 
-export default function CalendarManager({
-  jobs,
-  onOpenJob,
-  onScheduleJob,
-  addMonths,
-  getCalendarDays,
-  parseDateInputValue,
-  toDateInputValue,
-}) {
-  const [viewMonth, setViewMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState("");
-  const [isDayPanelOpen, setIsDayPanelOpen] = useState(false);
+export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, addMonths, getCalendarDays, parseDateInputValue, toDateInputValue }) {
+  // The selected date is also the single source of truth for both displayed months.
+  const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
+  const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState({ urgency: "all", schedule: "all" });
+  const [navigatorOpen, setNavigatorOpen] = useState(false);
+  const [panel, setPanel] = useState(null);
+  const [scheduleDraft, setScheduleDraft] = useState("");
+  const [pending, setPending] = useState(null);
+  const [error, setError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const savingRef = useRef(false);
+  const returnFocusRef = useRef(null);
+  const jobsTrigger = useRef(null);
+  const todayTrigger = useRef(null);
+  const coarsePointer = useMediaQuery("(pointer: coarse)");
+  const persistentQueue = useMediaQuery("(min-width: 1024px) and (orientation: landscape)");
 
-  const calendarDays = useMemo(() => getCalendarDays(viewMonth), [getCalendarDays, viewMonth]);
-  const selectedDateObject = parseDateInputValue(selectedDate) || new Date();
-  const selectedDateLabel = selectedDate
-    ? selectedDateObject.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-    : "No date selected";
-  const monthLabel = viewMonth.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+  const selectedDateObject = useMemo(() => parseDateInputValue(selectedDate), [parseDateInputValue, selectedDate]);
+  const days = useMemo(() => getCalendarDays(selectedDateObject), [getCalendarDays, selectedDateObject]);
+  const monthLabel = selectedDateObject.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+  const displayedJobs = useMemo(() => pending ? jobs.map((job) => job.id === pending.jobId ? { ...job, scheduledDate: pending.date } : job) : jobs, [jobs, pending]);
+  const jobsByDate = useMemo(() => groupCalendarJobs(displayedJobs, toDateInputValue), [displayedJobs, toDateInputValue]);
+  const queueJobs = useMemo(() => filterQueueJobs(displayedJobs, { search, ...filters }), [displayedJobs, search, filters]);
+  const selectedJobs = jobsByDate.get(selectedDate) || [];
+  const scheduleJob = panel?.type === "schedule" ? displayedJobs.find((job) => job.id === panel.jobId) : null;
 
-  const scheduledJobsByDate = useMemo(() => {
-    return jobs.reduce((map, job) => {
-      const dateKey = toDateInputValue(job.scheduledDate);
-      if (!dateKey) return map;
-      const current = map.get(dateKey) || [];
-      map.set(dateKey, [...current, job]);
-      return map;
-    }, new Map());
-  }, [jobs, toDateInputValue]);
+  const saveSchedule = useCallback(async (jobId, date) => {
+    if (savingRef.current) return false;
+    if (date !== "" && !isCalendarDate(date)) {
+      setError("Choose a valid calendar date.");
+      return false;
+    }
+    const job = jobs.find((entry) => entry.id === jobId);
+    if (!job) return false;
+    setError("");
+    if (toDateInputValue(job.scheduledDate) === date) {
+      setPanel((current) => current?.type === "schedule" ? null : current);
+      return true;
+    }
+    savingRef.current = true;
+    setPending({ jobId, date });
+    setAnnouncement(`Saving schedule for Job #${job.jobNumber}…`);
+    let failureMessage = "Unable to update the job schedule. The original date has been restored. Try again.";
+    try {
+      const saved = await onScheduleJob(jobId, date, {
+        recordOnly: true,
+        onError: (failure) => { failureMessage = failure instanceof Error ? failure.message : String(failure); },
+      });
+      if (!saved) {
+        setError(failureMessage);
+        setAnnouncement(`Schedule unchanged for Job #${job.jobNumber}.`);
+        return false;
+      }
+      setAnnouncement(date ? `Job #${job.jobNumber} scheduled for ${formatCalendarDate(date)}.` : `Scheduled date removed from Job #${job.jobNumber}.`);
+      setPanel((current) => current?.type === "schedule" && current.jobId === jobId ? null : current);
+      return true;
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : failureMessage);
+      setAnnouncement(`Schedule unchanged for Job #${job.jobNumber}.`);
+      return false;
+    } finally {
+      savingRef.current = false;
+      setPending(null);
+    }
+  }, [jobs, onScheduleJob, toDateInputValue]);
 
-  const selectedDateJobs = useMemo(() => {
-    return [...(scheduledJobsByDate.get(selectedDate) || [])].sort((a, b) => {
-      const statusDiff = statuses.indexOf(a.status) - statuses.indexOf(b.status);
-      if (statusDiff !== 0) return statusDiff;
-      return (a.jobNumber || 0) - (b.jobNumber || 0);
-    });
-  }, [scheduledJobsByDate, selectedDate]);
+  const dragApi = useCalendarDrag({ enabled: !pending, onDrop: saveSchedule });
 
-  function selectDate(dateKey) {
-    setSelectedDate(dateKey);
-    setIsDayPanelOpen(true);
-    const parsedDate = parseDateInputValue(dateKey);
-    if (parsedDate) setViewMonth(new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1));
+  function openJob(job) {
+    returnFocusRef.current = null;
+    setPanel(null);
+    dragApi.cancelDrag();
+    onOpenJob(job);
   }
 
+  function openSchedule(job, trigger) {
+    returnFocusRef.current = trigger?.closest(".calendar-sheet") ? (persistentQueue ? todayTrigger.current : jobsTrigger.current) : trigger;
+    setScheduleDraft(toDateInputValue(job.scheduledDate) || selectedDate);
+    setError("");
+    setPanel({ type: "schedule", jobId: job.id, action: job.scheduledDate ? "Reschedule" : "Schedule" });
+  }
+
+  function openDay(date, trigger) {
+    setSelectedDate(date);
+    returnFocusRef.current = trigger;
+    setPanel({ type: "day" });
+  }
+
+  const miniProps = {
+    days, monthLabel, selectedDate,
+    onSelect: setSelectedDate,
+    onMonthChange: (amount) => setSelectedDate(toDateInputValue(addMonths(selectedDateObject, amount))),
+    onToday: () => setSelectedDate(toDateInputValue(new Date())),
+  };
+  const queueProps = {
+    jobs: queueJobs, search, onSearch: setSearch, filters, onFilters: setFilters,
+    onOpenJob: openJob, onSchedule: openSchedule,
+    onUnschedule: (job) => saveSchedule(job.id, ""), dragApi, busy: Boolean(pending),
+  };
+  const panelTitle = panel?.type === "schedule" ? `${panel.action} Job #${scheduleJob?.jobNumber || ""}` : panel?.type === "day" ? formatCalendarDate(selectedDate, { weekday: "long", day: "numeric", month: "long" }) : "Scheduling jobs";
+
   return (
-    <div className="space-y-4">
-      <div className="floating-page-toolbar px-4 py-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <CardTitle className="text-2xl font-semibold leading-8 text-slate-950">{monthLabel}</CardTitle>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, -1))}>
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-lg"
-              onClick={() => {
-                const today = new Date();
-                setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-                selectDate(toDateInputValue(today));
-              }}
-            >
-              Today
-            </Button>
-            <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setViewMonth((prev) => addMonths(prev, 1))}>
-              Next
-            </Button>
-          </div>
+    <div className="calendar-workspace min-w-0" data-calendar-workspace>
+      <div className="calendar-layout">
+        <div className="calendar-mini-pane"><MiniCalendar {...miniProps} /></div>
+        <div className="calendar-center space-y-3">
+          <header className="floating-page-toolbar calendar-toolbar min-w-0 p-2.5" data-calendar-toolbar>
+            <h1 className="calendar-toolbar-title text-base font-semibold text-white sm:text-lg" data-calendar-month>{monthLabel}</h1>
+            <div className="calendar-month-navigation flex items-center gap-1">
+              <Button type="button" variant="outline" className="h-11 w-11 bg-white/95 p-0" aria-label="Previous" title="Previous month" onClick={() => miniProps.onMonthChange(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button type="button" ref={todayTrigger} variant="outline" className="h-11 bg-white/95 px-3 text-xs" onClick={miniProps.onToday}>Today</Button>
+              <Button type="button" variant="outline" className="h-11 w-11 bg-white/95 p-0" aria-label="Next" title="Next month" onClick={() => miniProps.onMonthChange(1)}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+            <div className="calendar-toolbar-actions flex items-center gap-2">
+              <Button type="button" variant="outline" className="calendar-navigator-toggle h-11 bg-white/95 px-2 text-xs" aria-expanded={navigatorOpen} aria-controls="calendar-expanded-navigator" onClick={() => setNavigatorOpen((value) => !value)}><CalendarDays className="h-4 w-4" /> Dates</Button>
+              <Button type="button" ref={jobsTrigger} className="calendar-jobs-toggle h-11 px-3 text-xs" onClick={() => { returnFocusRef.current = jobsTrigger.current; setPanel({ type: "jobs" }); }}><ListFilter className="h-4 w-4" /> Jobs <span className="rounded-full bg-white/25 px-1.5">{queueJobs.length}</span></Button>
+            </div>
+          </header>
+          {navigatorOpen ? <div className="calendar-mini-expanded" id="calendar-expanded-navigator"><MiniCalendar {...miniProps} /></div> : null}
+          {error ? <div className="flex items-start justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900" role="alert"><span>{error}</span><Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Dismiss scheduling error" onClick={() => setError("")}><X className="h-4 w-4" /></Button></div> : null}
+          <MainCalendar days={days} monthLabel={monthLabel} selectedDate={selectedDate} onSelect={setSelectedDate} jobsByDate={jobsByDate} dragApi={dragApi} onOpenJob={openJob} onOpenDay={openDay} coarsePointer={coarsePointer} />
+          <p className="text-xs text-slate-700" role="status" aria-live="polite">{dragApi.drag?.target != null ? `Move Job #${dragApi.drag.job.jobNumber} to ${dragApi.drag.target ? formatCalendarDate(dragApi.drag.target) : "Unscheduled"}` : announcement}</p>
         </div>
-      </div>
-      <div>
-        <Card className="gap-0 overflow-hidden rounded-xl border-slate-900 py-0">
-          <CardContent className="p-0">
-            <div className="grid grid-cols-7 gap-px border-b border-slate-900 bg-slate-900 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <div key={day} className="bg-slate-100 px-2 py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-px bg-slate-900">
-              {calendarDays.map((day) => {
-                const dayJobs = scheduledJobsByDate.get(day.key) || [];
-                const isSelected = selectedDate === day.key;
-                return (
-                  <button
-                    key={day.key}
-                    type="button"
-                    onClick={() => selectDate(day.key)}
-                    className={`min-h-32 bg-white p-2 text-left transition hover:bg-slate-50 ${
-                      !day.inMonth ? "text-slate-400" : "text-slate-900"
-                    } ${isSelected ? "ring-2 ring-inset ring-slate-900" : ""}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold ${day.isToday ? "bg-slate-900 text-white" : ""}`}>
-                        {day.date.getDate()}
-                      </span>
-                      {dayJobs.length > 0 ? (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{dayJobs.length}</span>
-                      ) : null}
-                    </div>
-                    <div className="mt-2 grid gap-1">
-                      {dayJobs.slice(0, 3).map((job) => (
-                        <div key={job.id} className="truncate rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                          #{job.jobNumber} {job.customerName}
-                        </div>
-                      ))}
-                      {dayJobs.length > 3 ? (
-                        <p className="px-1 text-xs text-slate-500">+{dayJobs.length - 3} more</p>
-                      ) : null}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="calendar-queue-pane">{persistentQueue ? <CalendarQueue {...queueProps} /> : null}</div>
       </div>
 
-      <div className={`fixed inset-0 z-40 transition ${isDayPanelOpen ? "pointer-events-auto" : "pointer-events-none"}`}>
-        <button
-          type="button"
-          className={`absolute inset-0 bg-slate-950/20 transition-opacity ${isDayPanelOpen ? "opacity-100" : "opacity-0"}`}
-          onClick={() => setIsDayPanelOpen(false)}
-          aria-label="Close selected day panel"
-        />
-        <aside
-          className={`absolute right-0 top-0 flex h-full w-full max-w-[420px] flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ${
-            isDayPanelOpen ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Day</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950">{selectedDateLabel}</h2>
-            </div>
-            <Button type="button" size="icon" variant="ghost" className="shrink-0 rounded-xl" onClick={() => setIsDayPanelOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
+      <CalendarSheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) setPanel(null); }} title={panelTitle} description={panel?.type === "schedule" ? "Change the scheduled date for this job." : panel?.type === "day" ? `${selectedJobs.length} scheduled ${selectedJobs.length === 1 ? "job" : "jobs"}` : "To Do and In Progress jobs"} error={error} returnFocusRef={returnFocusRef}>
+        {panel?.type === "jobs" ? <CalendarQueue {...queueProps} inSheet /> : null}
+        {panel?.type === "day" ? (
+          <div className="grid gap-3" data-calendar-day-detail>
+            {selectedJobs.length ? selectedJobs.map((job) => <CalendarJobCard key={job.id} job={job} onOpenJob={openJob} onSchedule={openSchedule} onUnschedule={() => saveSchedule(job.id, "")} dragApi={dragApi} draggable={false} busy={Boolean(pending)} />) : <p className="py-2 text-sm text-slate-600">No jobs scheduled.</p>}
           </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-5">
-            <div className="grid gap-4">
-              {selectedDateJobs.length === 0 ? (
-                <EmptyState title="No jobs scheduled" text="Jobs scheduled to this date will appear here." />
-              ) : (
-                selectedDateJobs.map((job) => (
-                  <div key={job.id} className="rounded-2xl border bg-white p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                        <p className="truncate font-semibold text-slate-900">{job.customerName}</p>
-                        <p className="mt-1 text-sm text-slate-600">{job.title}</p>
-                      </div>
-                      <Badge className={(statusThemes[job.status] || statusThemes["To Do"]).badge}>{job.status}</Badge>
-                    </div>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-600">{job.jobAddress}</p>
-                    <div className="mt-4 flex flex-wrap justify-end gap-2">
-                      <Button variant="outline" size="sm" className="rounded-lg" onClick={() => onScheduleJob(job.id, "")}>
-                        Clear Date
-                      </Button>
-                      <Button size="sm" className="rounded-lg" onClick={() => onOpenJob(job)}>
-                        View Job
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
+        ) : null}
+        {scheduleJob ? (
+          <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); saveSchedule(scheduleJob.id, scheduleDraft); }}>
+            <div className="min-w-0"><p className="break-words text-sm font-semibold">{scheduleJob.customerName}</p><p className="mt-1 break-words text-xs text-slate-600">{scheduleJob.title}</p></div>
+            <div className="space-y-1.5"><label htmlFor="calendar-schedule-date" className="text-xs font-semibold">Scheduled date</label><Input id="calendar-schedule-date" type="date" className="h-11 w-full" value={scheduleDraft} onChange={(event) => setScheduleDraft(event.target.value)} required disabled={Boolean(pending)} /></div>
+            <div className="flex flex-wrap justify-end gap-2 border-t pt-3">
+              {scheduleJob.scheduledDate ? <Button type="button" variant="outline" className="h-11 text-xs" disabled={Boolean(pending)} onClick={() => saveSchedule(scheduleJob.id, "")}>Remove scheduled date</Button> : null}
+              <Button type="submit" className="h-11 px-4 text-xs" disabled={Boolean(pending)} aria-busy={Boolean(pending)}>{pending ? "Saving…" : "Save date"}</Button>
             </div>
-          </div>
-        </aside>
-        </div>
+          </form>
+        ) : null}
+      </CalendarSheet>
+      {dragApi.drag?.touch ? createPortal(<div className="calendar-drag-preview" style={{ left: Math.min(Math.max(8, dragApi.drag.x + 12), window.innerWidth - 202), top: Math.max(8, dragApi.drag.y - 80) }} aria-hidden="true"><p className="text-xs font-semibold text-slate-950">Moving Job #{dragApi.drag.job.jobNumber}</p><p className="truncate text-xs text-slate-600">{dragApi.drag.job.customerName}</p><p className="mt-1 text-xs font-medium text-sky-800">{dragApi.drag.target === null ? "Choose a destination" : dragApi.drag.target === "" ? "Remove scheduled date" : `Drop on ${formatCalendarDate(dragApi.drag.target)}`}</p></div>, document.body) : null}
     </div>
   );
 }
