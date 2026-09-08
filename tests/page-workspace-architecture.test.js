@@ -140,12 +140,30 @@ test("database pages share accessible responsive page controls without replacing
     "src/components/maintenance/MaintenanceManager.jsx",
     "src/components/staff/StaffManager.jsx",
     "src/components/inventory/InventoryManager.jsx",
-    "src/components/map/JobsMapManager.jsx",
   ]) {
     const source = readSource(relativePath);
     assert.match(source, /<ResponsivePageControls/);
     assert.match(source, /floating-page-toolbar[^"]*hidden[^"]*xl:block/);
   }
+
+  const mapSource = readSource("src/components/map/JobsMapManager.jsx");
+  assert.match(mapSource, /<ResponsivePageControls/);
+  assert.match(mapSource, /map-desktop-filter-bar[^"]*hidden[^"]*xl:block/);
+});
+
+test("Map owns an edge-to-edge, resize-aware workspace instead of a contained card", () => {
+  const shellSource = readSource("src/components/app/WorkspaceShell.jsx");
+  const mapSource = readSource("src/components/map/JobsMapManager.jsx");
+
+  assert.match(shellSource, /mapWorkspaceOpen/);
+  assert.match(shellSource, /map-workspace-shell[^"]*lg:pl-\[var\(--sidebar-width\)\]/);
+  assert.match(mapSource, /data-map-workspace/);
+  assert.match(mapSource, /data-map-canvas/);
+  assert.match(mapSource, /map-filter-surface/);
+  assert.match(mapSource, /ResizeObserver/);
+  assert.match(mapSource, /invalidateSize/);
+  assert.match(mapSource, /L\.control\.zoom\(\{ position: "bottomright" \}\)/);
+  assert.doesNotMatch(mapSource, /<Card|<CardContent|h-\[60vh\]|calc\(100vh-18rem\)/);
 });
 
 test("secondary page filters move into shared sheets while Staff avoids a redundant filter", () => {
