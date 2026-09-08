@@ -369,6 +369,69 @@
     color: #0f172a !important;
   }
 
+  .map-workspace-app {
+    isolation: isolate;
+  }
+
+  .map-workspace-shell,
+  .map-workspace {
+    min-height: 0;
+  }
+
+  .map-filter-surface {
+    border: 1px solid color-mix(in oklab, var(--workspace-hero-text) 24%, var(--ui-border-color)) !important;
+    border-radius: var(--radius-xl) !important;
+    background: var(--workspace-hero-bg) !important;
+    color: var(--workspace-hero-text) !important;
+    box-shadow: 0 14px 34px -20px rgb(15 23 42 / 0.52) !important;
+    backdrop-filter: blur(12px);
+  }
+
+  .map-filter-surface .text-slate-600 {
+    color: color-mix(in oklab, var(--workspace-hero-text) 82%, transparent) !important;
+  }
+
+  .map-filter-surface .data-toolbar-field,
+  .map-filter-surface input,
+  .map-filter-surface button[role="combobox"],
+  .map-filter-surface .data-toolbar-button {
+    background: color-mix(in oklab, white 94%, var(--workspace-hero-bg)) !important;
+    color: #0f172a !important;
+  }
+
+  .map-floating-controls {
+    position: absolute;
+    z-index: 1000;
+    top: 0.75rem;
+    right: calc(0.75rem + env(safe-area-inset-right));
+    left: calc(0.75rem + env(safe-area-inset-left));
+  }
+
+  .map-floating-controls .map-filter-surface {
+    padding: 0.625rem !important;
+  }
+
+  .map-desktop-filter-bar {
+    width: min(calc(100% - 2rem), 58rem);
+  }
+
+  .map-workspace .leaflet-container {
+    background: #dce8ed;
+    font-family: inherit;
+  }
+
+  .map-workspace .leaflet-control-zoom a {
+    color: #0f172a;
+  }
+
+  @media (min-width: 40rem) {
+    .map-floating-controls {
+      top: 1rem;
+      right: calc(1rem + env(safe-area-inset-right));
+      left: calc(1rem + env(safe-area-inset-left));
+    }
+  }
+
   .data-toolbar-field {
     border-color: var(--data-view-border-strong) !important;
     background: color-mix(in oklab, var(--card) 92%, var(--data-view-surface)) !important;

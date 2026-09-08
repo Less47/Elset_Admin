@@ -16,14 +16,22 @@ import { cn } from "@/lib/utils";
 
 const responsiveSheetClassName = "bottom-0 left-0 top-auto max-h-[min(90dvh,50rem)] w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-b-none rounded-t-3xl border-x-0 border-b-0 p-0 data-closed:slide-out-to-bottom-4 data-open:slide-in-from-bottom-4 motion-reduce:transition-none motion-reduce:data-closed:animate-none motion-reduce:data-open:animate-none sm:left-1/2 sm:w-[min(100%-2rem,42rem)] sm:-translate-x-1/2 sm:rounded-b-3xl sm:border-x sm:border-b";
 
-export function ResponsivePageControls({ search, controls, action, summary, className }) {
+export function ResponsivePageControls({ search, controls, action, summary, className, compact = false, surfaceClassName }) {
   return (
     <div className={cn("grid gap-2 xl:hidden", className)} data-responsive-page-controls>
-      <div className="floating-page-toolbar p-2.5 sm:p-3">
-        <div className={cn("grid gap-1.5", action && "md:grid-cols-[minmax(0,1fr)_auto]")}>
+      <div className={cn("floating-page-toolbar p-2.5 sm:p-3", surfaceClassName)}>
+        <div className={cn(
+          "grid gap-1.5",
+          action && "md:grid-cols-[minmax(0,1fr)_auto]",
+          compact && "grid-cols-[minmax(0,1fr)_auto] items-center"
+        )}>
           <div className="min-w-0">{search}</div>
           {controls ? (
-            <div className={cn("order-2 flex min-w-0 items-stretch gap-1.5", action && "md:col-span-2 md:row-start-2")}>
+            <div className={cn(
+              "order-2 flex min-w-0 items-stretch gap-1.5",
+              action && "md:col-span-2 md:row-start-2",
+              compact && "col-start-2 row-start-1"
+            )}>
               {controls}
             </div>
           ) : null}
@@ -152,9 +160,9 @@ export function PagePrimaryAction({ children, className, ...props }) {
   );
 }
 
-export function ResultSummary({ children }) {
+export function ResultSummary({ children, className }) {
   return (
-    <p className="px-1 text-sm font-medium text-slate-700" role="status" aria-live="polite" data-result-summary>
+    <p className={cn("px-1 text-sm font-medium text-slate-700", className)} role="status" aria-live="polite" data-result-summary>
       {children}
     </p>
   );

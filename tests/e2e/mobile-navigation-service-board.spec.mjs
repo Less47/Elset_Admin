@@ -53,6 +53,10 @@ const screenshotNames = [
   "responsive-customers-desktop-1280x720.png",
   "responsive-sites-desktop-1280x720.png",
   "responsive-job-history-desktop-1440x900.png",
+  "fullscreen-map-workspace-390x844.png",
+  "fullscreen-map-workspace-820x1180.png",
+  "fullscreen-map-workspace-1024x768.png",
+  "fullscreen-map-workspace-1440x900.png",
 ];
 const accountPassword = "E2E-mobile-pass-123";
 const plannedJobId = "mobile-job-progress";
@@ -446,6 +450,47 @@ async function navigateToWorkspaceSection(page, label, width) {
   }
 
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: label, exact: true }).click();
+}
+
+async function mockMapServices(page) {
+  await page.route("**/__map-test-tiles/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+        <rect width="256" height="256" fill="#dcecf0"/>
+        <path d="M-20 74 C52 30 126 128 276 62 M-14 212 C76 154 174 220 278 142" fill="none" stroke="#f8fafc" stroke-width="18"/>
+        <path d="M82 -20 C112 62 78 140 148 276 M222 -18 C184 62 232 132 192 274" fill="none" stroke="#c3d9de" stroke-width="5"/>
+        <path d="M-20 74 C52 30 126 128 276 62 M-14 212 C76 154 174 220 278 142" fill="none" stroke="#afc9cf" stroke-width="2"/>
+        <circle cx="196" cy="42" r="28" fill="#c8e0cf"/>
+      </svg>`,
+    });
+  });
+  await page.route("**/api/map/config", async (route) => {
+    const tileUrl = `${baseUrl}/__map-test-tiles/{z}/{x}/{y}.svg`;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        tiles: { url: tileUrl, retinaUrl: tileUrl, attribution: "ELSET test map", maxZoom: 20 },
+      }),
+    });
+  });
+  await page.route("**/api/map/geocode", async (route) => {
+    const addresses = route.request().postDataJSON()?.addresses || [];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        results: addresses.map((address, index) => ({
+          address,
+          location: { lat: -37.8136 + index * 0.012, lon: 144.9631 + index * 0.012 },
+        })),
+      }),
+    });
+  });
 }
 
 test.beforeAll(async () => {
@@ -954,6 +999,161 @@ test("mobile page controls keep records primary and preserve live filter state",
     await assertNoHorizontalOverflow(page);
   } finally {
     await context.close();
+  }
+});
+
+test("Map search and all secondary filters remain functional without stealing map interaction", async ({ browser }) => {
+  const width = 390;
+  const context = await browser.newContext(mobileContextOptions(width, 844));
+  const page = await context.newPage();
+  try {
+    await mockMapServices(page);
+    await loginAs(page, "mobileadmin");
+    await navigateToWorkspaceSection(page, "Map", width);
+
+    const map = page.locator("[data-map-canvas]");
+    const controls = page.locator("[data-responsive-page-controls]");
+    await expect(map).toHaveAttribute("data-map-ready", "true");
+    await expect(page.locator(".leaflet-marker-icon")).toHaveCount(4);
+    await expect(controls.locator("[data-result-summary]")).toHaveText("4 jobs · 4 mapped");
+
+    const mapStateBeforeControlClick = await map.evaluate((element) => ({
+      center: element.dataset.mapCenter,
+      zoom: element.dataset.mapZoom,
+    }));
+    await controls.getByLabel("Search map jobs").click();
+    expect(await map.evaluate((element) => ({
+      center: element.dataset.mapCenter,
+      zoom: element.dataset.mapZoom,
+    }))).toEqual(mapStateBeforeControlClick);
+
+    await controls.getByLabel("Search map jobs").fill("Completed mobile regression job");
+    await expect(controls.locator("[data-result-summary]")).toHaveText("1 job · 1 mapped");
+    await controls.getByRole("button", { name: "Clear search map jobs" }).click();
+    await expect(controls.locator("[data-result-summary]")).toHaveText("4 jobs · 4 mapped");
+
+    const openFilters = async () => {
+      await controls.getByRole("button", { name: /^Filters/ }).click();
+      return page.getByRole("dialog", { name: "Filters" });
+    };
+
+    let filters = await openFilters();
+    await chooseSelectOption(page, "Jobs", "Completed");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(controls.locator("[data-result-summary]")).toHaveText("1 job · 1 mapped");
+
+    filters = await openFilters();
+    await filters.getByRole("button", { name: "Reset" }).click();
+    await chooseSelectOption(page, "Site type", "Not set");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(controls.locator("[data-result-summary]")).toHaveText("0 jobs · 0 mapped");
+
+    filters = await openFilters();
+    await filters.getByRole("button", { name: "Reset" }).click();
+    await chooseSelectOption(page, "Customer type", "Strata");
+    await filters.getByRole("button", { name: "Done" }).click();
+    await expect(controls.locator("[data-result-summary]")).toHaveText("4 jobs · 4 mapped");
+
+    const zoomBefore = Number(await map.getAttribute("data-map-zoom"));
+    await page.locator(".leaflet-control-zoom-in").click();
+    await expect.poll(async () => Number(await map.getAttribute("data-map-zoom"))).toBe(zoomBefore + 1);
+    await page.locator(".leaflet-marker-icon span").last().click();
+    await expect(page.getByRole("button", { name: "Job Details" })).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+  } finally {
+    await context.close();
+  }
+});
+
+test("Map fills the application workspace across the responsive viewport matrix", async ({ browser }, testInfo) => {
+  const screenshotSizes = new Set(["390x844", "820x1180", "1024x768", "1440x900"]);
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+    { width: 768, height: 1024 },
+    { width: 820, height: 1180 },
+    { width: 1024, height: 768 },
+    { width: 1280, height: 720 },
+    { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    const mobile = viewport.width < 1024;
+    const context = await browser.newContext(mobile
+      ? mobileContextOptions(viewport.width, viewport.height)
+      : desktopContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    try {
+      await mockMapServices(page);
+      await loginAs(page, "mobileadmin", mobile);
+      await navigateToWorkspaceSection(page, "Map", viewport.width);
+      if (mobile) {
+        await expect.poll(() => page.evaluate(() => document.body.hasAttribute("data-scroll-locked"))).toBe(false);
+      }
+
+      const map = page.locator("[data-map-canvas]");
+      await expect(map).toHaveAttribute("data-map-ready", "true");
+      await expect(page.locator(".leaflet-marker-icon")).toHaveCount(4);
+
+      const metrics = await page.evaluate((desktop) => {
+        const mapElement = document.querySelector("[data-map-canvas]");
+        const controls = document.querySelector("[data-map-controls]")?.getClientRects().length
+          ? document.querySelector("[data-map-controls]")
+          : document.querySelector("[data-responsive-page-controls]");
+        const zoom = document.querySelector(".leaflet-control-zoom");
+        const aside = document.querySelector("aside");
+        const mobileHeader = document.querySelector(".mobile-workspace-navigation header");
+        const rect = (element) => element ? element.getBoundingClientRect().toJSON() : null;
+        return {
+          map: rect(mapElement),
+          controls: rect(controls),
+          zoom: rect(zoom),
+          navigationEdge: desktop ? rect(aside)?.right : rect(mobileHeader)?.bottom,
+          bodyScrollHeight: document.body.scrollHeight,
+          documentScrollHeight: document.documentElement.scrollHeight,
+        };
+      }, !mobile);
+
+      expect(metrics.map.right).toBeCloseTo(viewport.width, 0);
+      expect(metrics.map.bottom).toBeCloseTo(viewport.height, 0);
+      if (mobile) {
+        expect(metrics.map.left).toBeCloseTo(0, 0);
+        expect(metrics.map.top).toBeCloseTo(metrics.navigationEdge, 0);
+      } else {
+        expect(metrics.map.top).toBeCloseTo(0, 0);
+        expect(metrics.map.left).toBeCloseTo(metrics.navigationEdge, 0);
+      }
+      expect(metrics.controls.left).toBeGreaterThan(metrics.map.left);
+      expect(metrics.controls.right).toBeLessThan(metrics.map.right);
+      expect(metrics.controls.left + metrics.controls.width / 2).toBeCloseTo(
+        metrics.map.left + metrics.map.width / 2,
+        0
+      );
+      expect(metrics.controls.height).toBeLessThan(metrics.map.height * 0.25);
+      const controlsOverlapZoom = !(
+        metrics.controls.right <= metrics.zoom.left
+        || metrics.controls.left >= metrics.zoom.right
+        || metrics.controls.bottom <= metrics.zoom.top
+        || metrics.controls.top >= metrics.zoom.bottom
+      );
+      expect(controlsOverlapZoom).toBe(false);
+      expect(metrics.bodyScrollHeight).toBeLessThanOrEqual(viewport.height);
+      expect(metrics.documentScrollHeight).toBeLessThanOrEqual(viewport.height);
+      await assertNoHorizontalOverflow(page);
+
+      const sizeKey = `${viewport.width}x${viewport.height}`;
+      if (screenshotSizes.has(sizeKey)) {
+        await capture(page, testInfo, `fullscreen-map-workspace-${sizeKey}.png`, `Full workspace Map ${sizeKey}`);
+      }
+      if (viewport.width === 1440) {
+        await chooseSelectOption(page, "Job filter", "Completed");
+        await chooseSelectOption(page, "Site type", "Residential");
+        await chooseSelectOption(page, "Customer type", "Strata");
+        await expect(page.locator(".leaflet-marker-icon")).toHaveCount(1);
+      }
+    } finally {
+      await context.close();
+    }
   }
 });
 

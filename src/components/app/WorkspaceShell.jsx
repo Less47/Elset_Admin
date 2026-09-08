@@ -128,6 +128,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
   const desktopServiceBoardFullScreen = isDesktopLayout && isServiceBoardFullScreen;
+  const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
 
   const handleMobileNavigate = (sectionId) => {
     const navigationStarted = setActiveSection(sectionId);
@@ -207,7 +208,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   };
 
   return (
-    <>
+    <div className={mapWorkspaceOpen ? "map-workspace-app fixed inset-0 flex min-h-0 flex-col overflow-hidden lg:block" : "contents"}>
       {!isDesktopLayout && !workspacePage ? (
         <MobileWorkspaceNavigation
           activeSection={activeSection}
@@ -402,6 +403,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             ? "min-w-0 lg:pl-[var(--sidebar-offset)] lg:pt-4"
             : desktopServiceBoardFullScreen
             ? "min-w-0 space-y-4 px-3 py-3 sm:px-4 sm:py-4"
+            : mapWorkspaceOpen
+            ? "map-workspace-shell min-h-0 min-w-0 flex-1 overflow-hidden lg:h-full lg:pl-[var(--sidebar-width)]"
             : activeSection === "service-board"
             ? "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] pb-[var(--content-padding-y-mobile)] pt-0 sm:px-[var(--content-padding-x-sm)] sm:pb-[var(--content-padding-y-sm)] sm:pt-0 lg:px-[var(--content-padding-x-lg)] lg:pb-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)] lg:pt-[var(--content-padding-y-lg)]"
             : "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] py-[var(--content-padding-y-mobile)] sm:px-[var(--content-padding-x-sm)] sm:py-[var(--content-padding-y-sm)] lg:px-[var(--content-padding-x-lg)] lg:py-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)]"
@@ -409,9 +412,16 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       >
         {workspacePage}
 
-        <div className={workspacePage ? undefined : "contents"} hidden={Boolean(workspacePage)} aria-hidden={workspacePage ? true : undefined}>
+        <div
+          className={workspacePage ? undefined : mapWorkspaceOpen ? "relative h-full min-h-0" : "contents"}
+          hidden={Boolean(workspacePage)}
+          aria-hidden={workspacePage ? true : undefined}
+        >
         {authError ? (
-          <Card className="rounded-3xl border-amber-200 bg-amber-50">
+          <Card className={mapWorkspaceOpen
+            ? "absolute bottom-4 left-4 z-[1100] max-w-[min(30rem,calc(100%-2rem))] rounded-xl border-amber-200 bg-amber-50 shadow-lg"
+            : "rounded-3xl border-amber-200 bg-amber-50"}
+          >
             <CardContent className="p-4 text-sm text-amber-950">
               {authError}
             </CardContent>
@@ -691,6 +701,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         ) : null}
         </div>
       </div>
-    </>
+    </div>
   );
 }

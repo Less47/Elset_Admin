@@ -10,8 +10,6 @@ import {
   ResponsivePageControls,
   ResultSummary,
 } from "@/components/shared/ResponsivePageControls";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   buildCustomerSites,
@@ -400,23 +398,42 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
 
     const tileUrl = window.devicePixelRatio > 1 ? mapConfig.retinaUrl : mapConfig.url;
     const map = L.map(mapContainerRef.current, {
-      zoomControl: true,
+      zoomControl: false,
       scrollWheelZoom: true,
     }).setView(MELBOURNE_CENTER, 10);
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
 
     L.tileLayer(tileUrl, {
       attribution: mapConfig.attribution,
       maxZoom: mapConfig.maxZoom || 20,
     }).addTo(map);
 
+    const syncMapState = () => {
+      const container = mapContainerRef.current;
+      if (!container) return;
+      const center = map.getCenter();
+      container.dataset.mapReady = "true";
+      container.dataset.mapZoom = String(map.getZoom());
+      container.dataset.mapCenter = `${center.lat.toFixed(6)},${center.lng.toFixed(6)}`;
+    };
+
+    map.on("moveend zoomend", syncMapState);
+    syncMapState();
+
     mapRef.current = map;
     setIsMapReady(true);
 
-    requestAnimationFrame(() => {
+    const initialResizeFrame = requestAnimationFrame(() => {
       map.invalidateSize();
     });
+    const settledResizeTimer = window.setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
 
     return () => {
+      cancelAnimationFrame(initialResizeFrame);
+      window.clearTimeout(settledResizeTimer);
       setIsMapReady(false);
       map.remove();
       mapRef.current = null;
@@ -486,7 +503,8 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
 
     const bounds = L.latLngBounds(pinnedJobs.map((job) => [job.displayLat, job.displayLon]));
     mapRef.current.fitBounds(bounds, {
-      padding: [36, 36],
+      paddingTopLeft: [48, 116],
+      paddingBottomRight: [48, 48],
       maxZoom: 13,
     });
   }, [isMapReady, pinnedJobs]);
@@ -496,8 +514,10 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
       return undefined;
     }
 
+    let resizeFrame = 0;
     const observer = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
         mapRef.current?.invalidateSize();
       });
     });
@@ -505,14 +525,22 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
     observer.observe(mapContainerRef.current);
 
     return () => {
+      cancelAnimationFrame(resizeFrame);
       observer.disconnect();
     };
   }, [isMapReady]);
 
+  const stopMapControlEvent = (event) => {
+    event.stopPropagation();
+  };
+
   return (
     <>
-    <div className="space-y-4">
+    <section className="map-workspace relative h-full min-h-0 w-full overflow-hidden bg-slate-100" aria-label="Jobs map workspace" data-map-workspace>
       <ResponsivePageControls
+        className="map-floating-controls"
+        compact
+        surfaceClassName="map-filter-surface"
         search={(
           <PageSearchField value={search} onChange={setSearch} placeholder="Search map jobs..." label="Search map jobs" />
         )}
@@ -520,25 +548,33 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
           <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
         )}
         summary={(
-          <ResultSummary>
+          <ResultSummary className="map-result-summary w-fit rounded-full border border-white/80 bg-white/95 px-2.5 py-1 text-xs text-slate-800 shadow-sm backdrop-blur">
             {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"} · {pinnedJobs.length} mapped
           </ResultSummary>
         )}
       />
 
-      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(140px,0.7fr)_minmax(150px,0.75fr)_minmax(165px,0.8fr)] md:items-end">
-            <Input
-              className="data-toolbar-field rounded-xl"
-              placeholder="Search job number, customer, title, or address..."
+      <div
+        className="map-desktop-filter-bar map-filter-surface absolute left-1/2 top-4 z-[1000] hidden -translate-x-1/2 px-3 py-2.5 xl:block"
+        data-map-controls
+        onClick={stopMapControlEvent}
+        onDoubleClick={stopMapControlEvent}
+        onPointerDown={stopMapControlEvent}
+        onTouchStart={stopMapControlEvent}
+        onWheel={stopMapControlEvent}
+      >
+          <div className="grid grid-cols-[minmax(320px,1fr)_150px_150px_180px] items-end gap-2">
+            <PageSearchField
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={setSearch}
+              placeholder="Search job number, customer, title, or address..."
+              label="Search map jobs"
             />
 
             <div className="grid gap-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job Filter</p>
+              <label htmlFor="desktop-map-job-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Job Filter</label>
               <Select value={jobFilter} onValueChange={setJobFilter}>
-                <SelectTrigger className="rounded-xl bg-white">
+                <SelectTrigger id="desktop-map-job-filter" className="h-11 w-full rounded-xl bg-white" aria-label="Job filter">
                   <SelectValue placeholder="All jobs" />
                 </SelectTrigger>
                 <SelectContent>
@@ -552,9 +588,9 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             </div>
 
             <div className="grid gap-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site Type</p>
+              <label htmlFor="desktop-map-site-type-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Site Type</label>
               <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
-                <SelectTrigger className="rounded-xl bg-white">
+                <SelectTrigger id="desktop-map-site-type-filter" className="h-11 w-full rounded-xl bg-white" aria-label="Site type">
                   <SelectValue placeholder="All site types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -570,9 +606,9 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             </div>
 
             <div className="grid gap-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer Type</p>
+              <label htmlFor="desktop-map-customer-type-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Customer Type</label>
               <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-                <SelectTrigger className="rounded-xl bg-white">
+                <SelectTrigger id="desktop-map-customer-type-filter" className="h-11 w-full rounded-xl bg-white" aria-label="Customer type">
                   <SelectValue placeholder="All customer types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -589,41 +625,36 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
           </div>
       </div>
 
-      <Card className="rounded-3xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
-        <CardContent className="grid gap-3">
+      {isLoadingMapConfig ? (
+        <div className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-slate-600" data-map-loading>
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+          <span>Loading map tiles...</span>
+        </div>
+      ) : (
+        <div ref={mapContainerRef} className="h-full min-h-0 w-full" aria-label="Jobs map" data-map-canvas />
+      )}
 
-          {mapConfigError ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-              {mapConfigError}
-            </div>
-          ) : null}
-
-          {geocodeError ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {geocodeError}
-            </div>
-          ) : null}
-
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
-            {isLoadingMapConfig ? (
-              <div className="flex h-[60vh] min-h-[420px] items-center justify-center gap-3 text-sm text-slate-500 md:h-[64vh] md:min-h-[520px] xl:h-[calc(100vh-18rem)]">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                <span>Loading map tiles...</span>
-              </div>
-            ) : (
-              <div ref={mapContainerRef} className="h-[60vh] min-h-[420px] w-full md:h-[64vh] md:min-h-[520px] xl:h-[calc(100vh-18rem)]" />
-            )}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] grid max-w-[min(30rem,calc(100%-5rem))] gap-2 sm:bottom-4 sm:left-4" data-map-status>
+        {mapConfigError ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50/95 px-3 py-2 text-sm text-rose-800 shadow-sm backdrop-blur">
+            {mapConfigError}
           </div>
+        ) : null}
 
-          {isLoadingGeocodes ? (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              <span>Geocoding saved job addresses...</span>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+        {geocodeError ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-2 text-sm text-amber-900 shadow-sm backdrop-blur">
+            {geocodeError}
+          </div>
+        ) : null}
+
+        {isLoadingGeocodes ? (
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-sm text-slate-700 shadow-sm backdrop-blur">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            <span>Geocoding saved job addresses...</span>
+          </div>
+        ) : null}
+      </div>
+    </section>
     <MobileFilterSheet
       open={filtersOpen}
       onOpenChange={setFiltersOpen}
