@@ -1,8 +1,10 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
-import { LayoutGrid, List, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   FilterButton,
   FilterSheetField,
   MobileFilterSheet,
@@ -15,7 +17,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { customerTypeOptions, formatCustomerType } from "@/lib/app-support";
 
@@ -235,22 +236,22 @@ export default function CustomerManager({
         summary={<ResultSummary>{filteredCustomers.length} {filteredCustomers.length === 1 ? "customer" : "customers"}</ResultSummary>}
       />
 
-      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-        <div className="grid gap-2 md:grid-cols-[minmax(210px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.85fr)_minmax(120px,0.65fr)_minmax(130px,0.7fr)] md:items-end">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-            <Input
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search customers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+      <DesktopPageControls
+        search={(
+          <DesktopControlField label="Search" size="search">
+            <PageSearchField compact value={search} onChange={setSearch} placeholder="Search customers..." label="Search customers" />
+          </DesktopControlField>
+        )}
+        viewToggle={(
+          <DesktopControlField label="View" size="view">
+            <ViewModeToggle compact value={viewMode} onChange={setViewMode} label="Customer view" />
+          </DesktopControlField>
+        )}
+        filters={(
+          <>
+          <DesktopControlField htmlFor="desktop-customer-sort" label="Sort by" size="small">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Sort customers" />
               </SelectTrigger>
               <SelectContent>
@@ -262,12 +263,11 @@ export default function CustomerManager({
                 <SelectItem value="activity-recent">Recent activity</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Record filter</p>
+          <DesktopControlField htmlFor="desktop-customer-record-filter" label="Record filter" size="medium">
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-record-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Filter customers" />
               </SelectTrigger>
               <SelectContent>
@@ -278,12 +278,11 @@ export default function CustomerManager({
                 <SelectItem value="missing-email">Missing email</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Created</p>
+          <DesktopControlField htmlFor="desktop-customer-created-range" label="Created" size="small">
             <Select value={createdRange} onValueChange={setCreatedRange}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-created-range" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Created range" />
               </SelectTrigger>
               <SelectContent>
@@ -293,12 +292,11 @@ export default function CustomerManager({
                 <SelectItem value="this-year">This year</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Customer type</p>
+          <DesktopControlField htmlFor="desktop-customer-type-filter" label="Customer type" size="medium">
             <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-type-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
@@ -311,37 +309,15 @@ export default function CustomerManager({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-        </div>
-
-        <div className="mt-2 grid gap-2 md:grid-cols-[minmax(240px,1fr)_minmax(145px,0.32fr)] md:items-end">
-          <div className="data-toggle-shell grid h-11 grid-cols-2 gap-1 rounded-lg border border-slate-300 bg-white p-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "list" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
-              onClick={() => setViewMode("list")}
-            >
-              <List className="mr-2 h-4 w-4" /> List
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "grid" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
-              onClick={() => setViewMode("grid")}
-            >
-              <LayoutGrid className="mr-2 h-4 w-4" /> Grid
-            </Button>
-          </div>
-
-          <Button className="h-11 rounded-lg px-4" onClick={onCreateCustomer}>
-            <Plus className="mr-2 h-4 w-4" /> New Customer
-          </Button>
-        </div>
-      </div>
+          </DesktopControlField>
+          </>
+        )}
+        actions={(
+          <PagePrimaryAction compact onClick={onCreateCustomer}>
+            <Plus className="h-4 w-4" /> New Customer
+          </PagePrimaryAction>
+        )}
+      />
 
       <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
       <CardContent className={viewMode === "list" ? "p-0" : "p-panel"}>

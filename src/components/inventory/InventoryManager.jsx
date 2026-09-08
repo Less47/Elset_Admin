@@ -4,6 +4,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   FilterButton,
   FilterSheetField,
   MobileFilterSheet,
@@ -276,22 +278,23 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
           summary={<ResultSummary>{filteredParts.length} {filteredParts.length === 1 ? "part" : "parts"}</ResultSummary>}
         />
 
-        <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.75fr)_minmax(145px,0.75fr)_minmax(130px,0.65fr)] md:items-end">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-              <Input
-                className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-                placeholder="Search part, SKU, supplier, or location..."
+        <DesktopPageControls
+          search={(
+            <DesktopControlField label="Search" size="search">
+              <PageSearchField
+                compact
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={setSearch}
+                placeholder="Search part, SKU, supplier, or location..."
+                label="Search parts inventory"
               />
-            </div>
-
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Stock filter</p>
+            </DesktopControlField>
+          )}
+          filters={(
+            <>
+            <DesktopControlField htmlFor="desktop-inventory-stock-filter" label="Stock filter" size="medium">
               <Select value={filterBy} onValueChange={setFilterBy}>
-                <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectTrigger id="desktop-inventory-stock-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -301,12 +304,11 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   <SelectItem value="in-stock">In stock</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </DesktopControlField>
 
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+            <DesktopControlField htmlFor="desktop-inventory-sort" label="Sort by" size="medium">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectTrigger id="desktop-inventory-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -318,19 +320,21 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   <SelectItem value="updated-recent">Recently updated</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <Button
-              className="h-11 self-end rounded-lg px-5"
+            </DesktopControlField>
+            </>
+          )}
+          actions={(
+            <PagePrimaryAction
+              compact
               onClick={() => {
                 setEditingPart(null);
                 setPartDialogOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" /> Add Part
-            </Button>
-          </div>
-        </div>
+              <Plus className="h-4 w-4" /> Add Part
+            </PagePrimaryAction>
+          )}
+        />
 
         <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
         <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">

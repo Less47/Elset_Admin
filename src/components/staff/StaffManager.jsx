@@ -4,6 +4,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   PagePrimaryAction,
   PageSearchField,
   ResponsivePageControls,
@@ -314,22 +316,22 @@ export default function StaffManager({
           summary={<ResultSummary>{filteredStaff.length} staff {filteredStaff.length === 1 ? "member" : "members"}</ResultSummary>}
         />
 
-        <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-          <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(155px,0.75fr)_minmax(130px,0.65fr)] md:items-end">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-              <Input
-                className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-                placeholder={canManageLogins ? "Search by name, role, email, phone, or username..." : "Search by name, role, email, or phone..."}
+        <DesktopPageControls
+          search={(
+            <DesktopControlField label="Search" size="search">
+              <PageSearchField
+                compact
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={setSearch}
+                placeholder={canManageLogins ? "Search by name, role, email, phone, or username..." : "Search by name, role, email, or phone..."}
+                label="Search staff"
               />
-            </div>
-
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+            </DesktopControlField>
+          )}
+          filters={(
+            <DesktopControlField htmlFor="desktop-staff-sort" label="Sort by" size="medium">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectTrigger id="desktop-staff-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                   <SelectValue placeholder="Sort staff" />
                 </SelectTrigger>
                 <SelectContent>
@@ -339,19 +341,20 @@ export default function StaffManager({
                   <SelectItem value="created-recent">Newest staff</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <Button
-              className="h-11 self-end rounded-lg px-5"
+            </DesktopControlField>
+          )}
+          actions={(
+            <PagePrimaryAction
+              compact
               onClick={() => {
                 setEditingStaff(null);
                 setStaffDialogOpen(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" /> Add Staff
-            </Button>
-          </div>
-        </div>
+              <Plus className="h-4 w-4" /> Add Staff
+            </PagePrimaryAction>
+          )}
+        />
 
         <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
         <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">

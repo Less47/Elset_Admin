@@ -53,6 +53,25 @@ const screenshotNames = [
   "responsive-customers-desktop-1280x720.png",
   "responsive-sites-desktop-1280x720.png",
   "responsive-job-history-desktop-1440x900.png",
+  "standard-controls-customers-1440x900.png",
+  "standard-controls-sites-1440x900.png",
+  "standard-controls-job-history-1440x900.png",
+  "standard-controls-invoices-1440x900.png",
+  "standard-controls-customers-1024x768.png",
+  "standard-controls-sites-1024x768.png",
+  "standard-controls-job-history-1024x768.png",
+  "standard-controls-invoices-1024x768.png",
+  "standard-controls-customers-820x1180.png",
+  "standard-controls-sites-820x1180.png",
+  "standard-controls-job-history-820x1180.png",
+  "standard-controls-invoices-820x1180.png",
+  "standard-controls-customers-390x844.png",
+  "standard-controls-sites-390x844.png",
+  "standard-controls-job-history-390x844.png",
+  "standard-controls-invoices-390x844.png",
+  "standard-controls-maintenance-1440x900.png",
+  "standard-controls-staff-1440x900.png",
+  "standard-controls-parts-inventory-1440x900.png",
   "fullscreen-map-workspace-390x844.png",
   "fullscreen-map-workspace-820x1180.png",
   "fullscreen-map-workspace-1024x768.png",
@@ -1213,6 +1232,234 @@ test("responsive page-control matrix keeps tablet hybrid and desktop-rich layout
         await expect(page.getByText("Site type", { exact: true })).toBeVisible();
         await capture(page, testInfo, "responsive-sites-desktop-1280x720.png", "Sites desktop controls");
         await assertNoHorizontalOverflow(page);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test("standardized page controls stay aligned, accessible, and overflow-free at required viewports", async ({ browser }, testInfo) => {
+  const pageSpecs = [
+    {
+      section: "Customers",
+      slug: "customers",
+      compactSearchLabel: "Search customers",
+      desktopSearchLabel: "Search customers",
+      desktopFilters: ["Sort by", "Record filter", "Created", "Customer type"],
+      action: "New Customer",
+      hasViewToggle: true,
+    },
+    {
+      section: "Sites",
+      slug: "sites",
+      compactSearchLabel: "Search sites",
+      desktopSearchLabel: "Search sites",
+      desktopFilters: ["Sort by", "Site type"],
+      action: "New Site",
+      hasViewToggle: true,
+    },
+    {
+      section: "Job History",
+      slug: "job-history",
+      compactSearchLabel: "Search job history",
+      desktopSearchLabel: "Search job history",
+      desktopFilters: ["Sort by", "Status", "Urgency", "Documents", "Quick range", "Created from", "Created to"],
+    },
+    {
+      section: "Invoices",
+      slug: "invoices",
+      compactSearchLabel: "Search invoices",
+      desktopSearchLabel: "Search billing records",
+      desktopFilters: ["Time range", "Status filter", "Sort by"],
+    },
+  ];
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1024, height: 768 },
+    { width: 820, height: 1180 },
+    { width: 390, height: 844 },
+  ]) {
+    const context = await browser.newContext(mobileContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    try {
+      await loginAs(page, "mobileadmin", viewport.width < 1024);
+
+      for (const pageSpec of pageSpecs) {
+        await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+        const desktopControls = page.locator("[data-desktop-page-controls]");
+        const compactControls = page.locator("[data-responsive-page-controls]");
+
+        if (viewport.width >= 1280) {
+          await expect(desktopControls).toBeVisible();
+          await expect(compactControls).toBeHidden();
+          await expect(desktopControls.getByLabel(pageSpec.desktopSearchLabel)).toBeVisible();
+
+          for (const filterLabel of pageSpec.desktopFilters) {
+            await expect(desktopControls.getByText(filterLabel, { exact: true })).toBeVisible();
+          }
+
+          const metrics = await desktopControls.evaluate((toolbar) => {
+            const search = toolbar.querySelector(".page-controls__search");
+            const left = toolbar.querySelector(".page-controls__left");
+            const right = toolbar.querySelector(".page-controls__right");
+            const fields = left ? [...left.children].filter((element) => element.classList.contains("page-controls__field")) : [];
+            const visualControls = fields.map((field) => field.querySelector('input, button[role="combobox"], [role="group"]'));
+            const fieldControls = [...toolbar.querySelectorAll('.page-controls__field input, .page-controls__field button[role="combobox"]')];
+            const rect = (element) => element?.getBoundingClientRect().toJSON() || null;
+            const fieldRects = fields.map(rect);
+            const visualControlRects = visualControls.map(rect);
+            const sameRowGaps = visualControlRects.slice(1).flatMap((current, index) => {
+              const previous = visualControlRects[index];
+              return previous && current && Math.abs(previous.top - current.top) < 1
+                ? [current.left - previous.right]
+                : [];
+            });
+            return {
+              toolbar: rect(toolbar),
+              search: rect(search),
+              leftGap: left ? getComputedStyle(left).gap : null,
+              right: rect(right),
+              fieldContainment: visualControlRects.map((control, index) => ({
+                left: control && fieldRects[index] ? control.left - fieldRects[index].left : null,
+                right: control && fieldRects[index] ? fieldRects[index].right - control.right : null,
+              })),
+              fieldControlHeights: fieldControls.map((element) => element.getBoundingClientRect().height),
+              sameRowGaps,
+            };
+          });
+
+          expect(metrics.search?.width).toBe(320);
+          expect(metrics.leftGap).toBe("10px");
+          expect(metrics.fieldControlHeights.length).toBeGreaterThan(0);
+          for (const height of metrics.fieldControlHeights) expect(height).toBe(40);
+          for (const containment of metrics.fieldContainment) {
+            expect(containment.left).not.toBeNull();
+            expect(containment.right).not.toBeNull();
+            expect(containment.left).toBeGreaterThanOrEqual(-0.5);
+            expect(containment.right).toBeGreaterThanOrEqual(-0.5);
+          }
+          for (const gap of metrics.sameRowGaps) {
+            expect(gap).toBeGreaterThanOrEqual(9.5);
+            expect(gap).toBeLessThanOrEqual(10.5);
+          }
+
+          if (pageSpec.action) {
+            const action = desktopControls.getByRole("button", { name: pageSpec.action });
+            await expect(action).toBeVisible();
+            const actionBox = await action.boundingBox();
+            expect(metrics.right).not.toBeNull();
+            expect(metrics.toolbar.right - metrics.right.right).toBeLessThanOrEqual(17);
+            expect(actionBox.height).toBe(40);
+          } else {
+            expect(metrics.right).toBeNull();
+          }
+
+          if (pageSpec.hasViewToggle) {
+            const listButton = desktopControls.getByRole("button", { name: "List view" });
+            const gridButton = desktopControls.getByRole("button", { name: "Grid view" });
+            const viewGroup = desktopControls.getByRole("group", { name: pageSpec.section === "Customers" ? "Customer view" : "Site view" });
+            await expect(listButton).toHaveAttribute("title", "List view");
+            await expect(gridButton).toHaveAttribute("title", "Grid view");
+            await expect(listButton).toHaveAttribute("aria-pressed", "true");
+            await expect(viewGroup).toHaveCSS("border-top-width", "0px");
+            await expect(viewGroup).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+            for (const button of [listButton, gridButton]) {
+              await expect(button).toHaveCSS("border-top-width", "1px");
+              const box = await button.boundingBox();
+              expect(box.width).toBeGreaterThanOrEqual(36);
+              expect(box.width).toBeLessThanOrEqual(40);
+              expect(box.height).toBeGreaterThanOrEqual(36);
+              expect(box.height).toBeLessThanOrEqual(40);
+            }
+          }
+        } else {
+          await expect(compactControls).toBeVisible();
+          await expect(desktopControls).toBeHidden();
+          await expect(compactControls.getByLabel(pageSpec.compactSearchLabel)).toBeVisible();
+          await expect(compactControls.getByRole("button", { name: /^Filters/ })).toBeVisible();
+        }
+
+        await assertNoHorizontalOverflow(page);
+        const sizeKey = `${viewport.width}x${viewport.height}`;
+        await capture(
+          page,
+          testInfo,
+          `standard-controls-${pageSpec.slug}-${sizeKey}.png`,
+          `${pageSpec.section} standardized controls ${sizeKey}`
+        );
+
+        if (viewport.width === 1440 && pageSpec.section === "Customers") {
+          const search = desktopControls.getByLabel("Search customers");
+          await search.fill("no matching customer record");
+          await expect(page.getByText("No customers found", { exact: true })).toBeVisible();
+          await desktopControls.getByRole("button", { name: "Clear search", exact: true }).click();
+
+          const sort = desktopControls.getByRole("combobox", { name: "Sort by" });
+          await sort.click();
+          await page.getByRole("option", { name: "Alphabetical Z-A" }).click();
+          await expect(sort).toContainText("Alphabetical Z-A");
+
+          const recordFilter = desktopControls.getByRole("combobox", { name: "Record filter" });
+          await recordFilter.click();
+          await page.getByRole("option", { name: "With jobs", exact: true }).click();
+          await expect(recordFilter).toContainText("With jobs");
+
+          const gridButton = desktopControls.getByRole("button", { name: "Grid view" });
+          const listButton = desktopControls.getByRole("button", { name: "List view" });
+          await gridButton.click();
+          await expect(gridButton).toHaveAttribute("aria-pressed", "true");
+          await listButton.click();
+          await expect(listButton).toHaveAttribute("aria-pressed", "true");
+
+          await desktopControls.getByRole("button", { name: "New Customer" }).click();
+          await expect(page.getByRole("dialog", { name: "Create Customer" })).toBeVisible();
+          await page.keyboard.press("Escape");
+          await expect(page.getByRole("dialog", { name: "Create Customer" })).toHaveCount(0);
+        }
+      }
+
+      if (viewport.width === 1440) {
+        for (const pageSpec of [
+          {
+            section: "Maintenance",
+            slug: "maintenance",
+            searchLabel: "Search maintenance plans",
+            filters: ["Filter", "Sort by"],
+            action: "Add Maintenance Plan",
+          },
+          {
+            section: "Staff",
+            slug: "staff",
+            searchLabel: "Search staff",
+            filters: ["Sort by"],
+            action: "Add Staff",
+          },
+          {
+            section: "Parts Inventory",
+            slug: "parts-inventory",
+            searchLabel: "Search parts inventory",
+            filters: ["Stock filter", "Sort by"],
+            action: "Add Part",
+          },
+        ]) {
+          await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+          const desktopControls = page.locator("[data-desktop-page-controls]");
+          await expect(desktopControls).toBeVisible();
+          await expect(desktopControls.getByLabel(pageSpec.searchLabel)).toBeVisible();
+          for (const filterLabel of pageSpec.filters) {
+            await expect(desktopControls.getByText(filterLabel, { exact: true })).toBeVisible();
+          }
+          await expect(desktopControls.getByRole("button", { name: pageSpec.action })).toBeVisible();
+          await assertNoHorizontalOverflow(page);
+          await capture(
+            page,
+            testInfo,
+            `standard-controls-${pageSpec.slug}-1440x900.png`,
+            `${pageSpec.section} standardized desktop controls`
+          );
+        }
       }
     } finally {
       await context.close();

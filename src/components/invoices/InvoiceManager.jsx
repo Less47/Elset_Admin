@@ -2,6 +2,8 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   FilterButton,
   FilterSheetField,
   MobileFilterSheet,
@@ -175,22 +177,17 @@ export default function InvoiceManager({
         )}
       />
 
-      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-        <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(130px,0.65fr)_minmax(150px,0.75fr)_minmax(155px,0.75fr)] md:items-end">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-            <Input
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search billing records..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Time range</p>
+      <DesktopPageControls
+        search={(
+          <DesktopControlField label="Search" size="search">
+            <PageSearchField compact value={search} onChange={setSearch} placeholder="Search billing records..." label="Search billing records" />
+          </DesktopControlField>
+        )}
+        filters={(
+          <>
+          <DesktopControlField htmlFor="desktop-invoice-time-range" label="Time range" size="small">
             <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-invoice-time-range" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -201,12 +198,11 @@ export default function InvoiceManager({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status filter</p>
+          <DesktopControlField htmlFor="desktop-invoice-status-filter" label="Status filter" size="medium">
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-invoice-status-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -221,12 +217,11 @@ export default function InvoiceManager({
                 <SelectItem value="paid">Paid</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+          <DesktopControlField htmlFor="desktop-invoice-sort" label="Sort by" size="medium">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-invoice-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -237,10 +232,10 @@ export default function InvoiceManager({
                 <SelectItem value="job-number">Newest job number</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-        </div>
-      </div>
+          </DesktopControlField>
+          </>
+        )}
+      />
 
       <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
       <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-6">

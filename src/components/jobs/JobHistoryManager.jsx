@@ -2,6 +2,8 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   FilterButton,
   FilterSheetField,
   MobileFilterSheet,
@@ -188,22 +190,23 @@ export default function JobHistoryManager({
         )}
       />
 
-      <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-        <div className="grid gap-2 md:grid-cols-[minmax(190px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)] 2xl:grid-cols-[minmax(200px,1.2fr)_minmax(135px,0.7fr)_minmax(120px,0.62fr)_minmax(140px,0.72fr)_minmax(125px,0.65fr)_minmax(115px,0.6fr)_minmax(130px,0.66fr)_minmax(130px,0.66fr)] md:items-end">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-            <Input
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search job, customer, address, or status..."
+      <DesktopPageControls
+        search={(
+          <DesktopControlField label="Search" size="search">
+            <PageSearchField
+              compact
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
+              placeholder="Search job, customer, address, or status..."
+              label="Search job history"
             />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+          </DesktopControlField>
+        )}
+        filters={(
+          <>
+          <DesktopControlField htmlFor="desktop-job-history-sort" label="Sort by" size="medium">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-history-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -216,11 +219,11 @@ export default function JobHistoryManager({
                 <SelectItem value="status">Status</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status</p>
+          </DesktopControlField>
+
+          <DesktopControlField htmlFor="desktop-job-status-filter" label="Status" size="medium">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-status-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -232,12 +235,11 @@ export default function JobHistoryManager({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Urgency</p>
+          <DesktopControlField htmlFor="desktop-job-urgency-filter" label="Urgency" size="medium">
             <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-urgency-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -249,12 +251,11 @@ export default function JobHistoryManager({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Documents</p>
+          <DesktopControlField htmlFor="desktop-job-document-filter" label="Documents" size="large">
             <Select value={documentFilter} onValueChange={setDocumentFilter}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-document-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -267,12 +268,11 @@ export default function JobHistoryManager({
                 <SelectItem value="invoice-overdue">Overdue invoice</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Quick range</p>
+          <DesktopControlField htmlFor="desktop-job-created-range" label="Quick range" size="small">
             <Select value={createdRange} onValueChange={setCreatedRange}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-created-range" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -282,29 +282,30 @@ export default function JobHistoryManager({
                 <SelectItem value="this-year">This year</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Created from</p>
+          <DesktopControlField htmlFor="desktop-job-created-from" label="Created from" size="date">
             <Input
+              id="desktop-job-created-from"
               type="date"
               className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               value={createdFrom}
               onChange={(e) => setCreatedFrom(e.target.value)}
             />
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Created to</p>
+          <DesktopControlField htmlFor="desktop-job-created-to" label="Created to" size="date">
             <Input
+              id="desktop-job-created-to"
               type="date"
               className="data-toolbar-field rounded-lg border-slate-300 bg-white"
               value={createdTo}
               onChange={(e) => setCreatedTo(e.target.value)}
             />
-          </div>
-        </div>
-      </div>
+          </DesktopControlField>
+          </>
+        )}
+      />
 
       <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
         <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">

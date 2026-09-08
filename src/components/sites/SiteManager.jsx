@@ -1,8 +1,10 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
-import { LayoutGrid, List, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   FilterButton,
   FilterSheetField,
   MobileFilterSheet,
@@ -220,22 +222,28 @@ export default function SiteManager({
           summary={<ResultSummary>{filteredSites.length} {filteredSites.length === 1 ? "site" : "sites"}</ResultSummary>}
         />
 
-        <div className="floating-page-toolbar hidden px-4 py-3 xl:block">
-        <div className="grid gap-2 md:grid-cols-[minmax(200px,1.35fr)_minmax(130px,0.75fr)_minmax(115px,0.6fr)_minmax(190px,0.95fr)_minmax(140px,0.7fr)] md:items-end">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-            <Input
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search customer, site, address, notes, or gate/project details..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+        <DesktopPageControls
+          search={(
+            <DesktopControlField label="Search" size="search">
+              <PageSearchField
+                compact
+                value={search}
+                onChange={setSearch}
+                placeholder="Search customer, site, address, notes, or gate/project details..."
+                label="Search sites"
+              />
+            </DesktopControlField>
+          )}
+          viewToggle={(
+            <DesktopControlField label="View" size="view">
+              <ViewModeToggle compact value={viewMode} onChange={setViewMode} label="Site view" />
+            </DesktopControlField>
+          )}
+          filters={(
+            <>
+          <DesktopControlField htmlFor="desktop-site-sort" label="Sort by" size="medium">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-site-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -245,12 +253,11 @@ export default function SiteManager({
                 <SelectItem value="address">Address</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site type</p>
+          <DesktopControlField htmlFor="desktop-site-type-filter" label="Site type" size="medium">
             <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-site-type-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
@@ -263,41 +270,22 @@ export default function SiteManager({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="data-toggle-shell grid h-11 grid-cols-2 gap-1 self-end rounded-lg border border-slate-300 bg-white p-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "list" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
-              onClick={() => setViewMode("list")}
-            >
-              <List className="mr-2 h-4 w-4" /> List
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className={`h-full min-w-0 justify-center rounded-md px-3 ${viewMode === "grid" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "!text-slate-800 hover:!text-slate-950"}`}
-              onClick={() => setViewMode("grid")}
-            >
-              <LayoutGrid className="mr-2 h-4 w-4" /> Grid
-            </Button>
-          </div>
-
-          <Button
-            className="h-11 self-end rounded-lg px-5"
+          </DesktopControlField>
+            </>
+          )}
+          actions={(
+          <PagePrimaryAction
+            compact
             disabled={customerOptions.length === 0}
             onClick={() => {
               setNewSiteCustomerSearch("");
               setCreateSiteDialogOpen(true);
             }}
           >
-            <Plus className="mr-2 h-4 w-4" /> New Site
-          </Button>
-        </div>
-        </div>
+            <Plus className="h-4 w-4" /> New Site
+          </PagePrimaryAction>
+          )}
+        />
 
         <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
         <CardContent className={viewMode === "list" ? "p-0" : "p-panel"}>

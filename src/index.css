@@ -369,6 +369,103 @@
     color: #0f172a !important;
   }
 
+  .page-controls {
+    --page-controls-search-width: 20rem;
+    --page-controls-gap: 0.625rem;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
+
+  .page-controls__left {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--page-controls-gap);
+  }
+
+  .page-controls__right {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-end;
+    gap: var(--page-controls-gap);
+    margin-left: auto;
+  }
+
+  .page-controls__field {
+    display: grid;
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 0.25rem;
+  }
+
+  .page-controls__label {
+    overflow: hidden;
+    color: color-mix(in oklab, var(--workspace-hero-text) 76%, transparent);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1rem;
+    letter-spacing: 0.14em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .page-controls__search {
+    width: var(--page-controls-search-width);
+    max-width: var(--page-controls-search-width);
+    flex-basis: var(--page-controls-search-width);
+  }
+
+  .page-controls__view-toggle {
+    width: max-content;
+  }
+
+  .floating-page-toolbar .page-controls__view-button {
+    border-color: var(--data-view-border-strong) !important;
+    background: color-mix(in oklab, white 94%, var(--workspace-hero-bg)) !important;
+    color: #0f172a !important;
+  }
+
+  .floating-page-toolbar .page-controls__view-button:hover {
+    background: color-mix(in oklab, white 88%, var(--workspace-hero-bg)) !important;
+  }
+
+  .floating-page-toolbar .page-controls__view-button.is-active {
+    border-color: var(--primary) !important;
+    background: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+  }
+
+  .page-controls__filter--small {
+    width: 7.5rem;
+  }
+
+  .page-controls__filter--medium,
+  .page-controls__filter--date {
+    width: 9rem;
+  }
+
+  .page-controls__filter--large {
+    width: 11rem;
+  }
+
+  .page-controls__field :is(input, button[role="combobox"]) {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 2.5rem !important;
+  }
+
+  .page-controls__field button[role="combobox"] [data-slot="select-value"] {
+    min-width: 0;
+  }
+
+  .page-controls__right > button {
+    height: 2.5rem;
+  }
+
   .map-workspace-app {
     isolation: isolate;
   }

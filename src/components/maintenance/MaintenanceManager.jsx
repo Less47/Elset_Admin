@@ -4,6 +4,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import {
   CompactSortControl,
+  DesktopControlField,
+  DesktopPageControls,
   FilterButton,
   FilterSheetField,
   MobileFilterSheet,
@@ -423,22 +425,24 @@ export default function MaintenanceManager({
         summary={<ResultSummary>{filteredRows.length} maintenance {filteredRows.length === 1 ? "plan" : "plans"}</ResultSummary>}
       />
 
-      <div className="floating-page-toolbar mb-4 hidden px-4 py-3 xl:block">
-        <div className="grid gap-2 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.7fr)_minmax(145px,0.7fr)_minmax(190px,0.9fr)] md:items-end">
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search</p>
-            <Input
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
-              placeholder="Search plan, customer, site, or checklist..."
+      <DesktopPageControls
+        className="mb-4"
+        search={(
+          <DesktopControlField label="Search" size="search">
+            <PageSearchField
+              compact
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
+              placeholder="Search plan, customer, site, or checklist..."
+              label="Search maintenance plans"
             />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Filter</p>
+          </DesktopControlField>
+        )}
+        filters={(
+          <>
+          <DesktopControlField htmlFor="desktop-maintenance-filter" label="Filter" size="medium">
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-maintenance-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -450,12 +454,11 @@ export default function MaintenanceManager({
                 <SelectItem value="upcoming">Upcoming</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </DesktopControlField>
 
-          <div className="space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sort by</p>
+          <DesktopControlField htmlFor="desktop-maintenance-sort" label="Sort by" size="medium">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-maintenance-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -464,19 +467,21 @@ export default function MaintenanceManager({
                 <SelectItem value="created-recent">Newest plan</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <Button
-            className="h-11 self-end rounded-xl px-5"
+          </DesktopControlField>
+          </>
+        )}
+        actions={(
+          <PagePrimaryAction
+            compact
             onClick={() => {
               setEditingPlan(null);
               setPlanDialogOpen(true);
             }}
           >
-            <Plus className="mr-2 h-4 w-4" /> Add Maintenance Plan
-          </Button>
-        </div>
-      </div>
+            <Plus className="h-4 w-4" /> Add Maintenance Plan
+          </PagePrimaryAction>
+        )}
+      />
 
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden rounded-3xl border-slate-200">

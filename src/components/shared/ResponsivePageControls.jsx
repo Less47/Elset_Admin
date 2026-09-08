@@ -16,6 +16,44 @@ import { cn } from "@/lib/utils";
 
 const responsiveSheetClassName = "bottom-0 left-0 top-auto max-h-[min(90dvh,50rem)] w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-b-none rounded-t-3xl border-x-0 border-b-0 p-0 data-closed:slide-out-to-bottom-4 data-open:slide-in-from-bottom-4 motion-reduce:transition-none motion-reduce:data-closed:animate-none motion-reduce:data-open:animate-none sm:left-1/2 sm:w-[min(100%-2rem,42rem)] sm:-translate-x-1/2 sm:rounded-b-3xl sm:border-x sm:border-b";
 
+const desktopFieldSizeClassNames = {
+  search: "page-controls__search",
+  view: "page-controls__view-toggle",
+  small: "page-controls__filter page-controls__filter--small",
+  medium: "page-controls__filter page-controls__filter--medium",
+  large: "page-controls__filter page-controls__filter--large",
+  date: "page-controls__filter page-controls__filter--date",
+};
+
+export function DesktopPageControls({ search, viewToggle, filters, actions, className }) {
+  return (
+    <div className={cn("page-controls floating-page-toolbar hidden px-4 py-3 xl:flex", className)} data-desktop-page-controls>
+      <div className="page-controls__left">
+        {search}
+        {viewToggle}
+        {filters}
+      </div>
+      {actions ? <div className="page-controls__right">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function DesktopControlField({ children, className, htmlFor, label, size = "medium" }) {
+  return (
+    <div
+      className={cn("page-controls__field", desktopFieldSizeClassNames[size] || desktopFieldSizeClassNames.medium, className)}
+      data-control-size={size}
+    >
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="page-controls__label">{label}</label>
+      ) : (
+        <span className="page-controls__label">{label}</span>
+      )}
+      {children}
+    </div>
+  );
+}
+
 export function ResponsivePageControls({ search, controls, action, summary, className, compact = false, surfaceClassName }) {
   return (
     <div className={cn("grid gap-2 xl:hidden", className)} data-responsive-page-controls>
@@ -47,12 +85,15 @@ export function ResponsivePageControls({ search, controls, action, summary, clas
   );
 }
 
-export function PageSearchField({ value, onChange, placeholder, label }) {
+export function PageSearchField({ value, onChange, placeholder, label, compact = false }) {
   return (
     <div className="relative min-w-0">
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 !text-slate-500" aria-hidden="true" />
       <Input
-        className="data-toolbar-field h-11 rounded-xl border-slate-300 bg-white pl-9 pr-11 text-base"
+        className={cn(
+          "data-toolbar-field border-slate-300 bg-white pl-9 pr-11",
+          compact ? "h-10 rounded-lg text-sm" : "h-11 rounded-xl text-base"
+        )}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -61,9 +102,12 @@ export function PageSearchField({ value, onChange, placeholder, label }) {
       {value ? (
         <button
           type="button"
-          className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl !text-slate-500 outline-none hover:!text-slate-900 focus-visible:ring-3 focus-visible:ring-sky-500/35"
+          className={cn(
+            "absolute right-0 top-0 flex items-center justify-center !text-slate-500 outline-none hover:!text-slate-900 focus-visible:ring-3 focus-visible:ring-sky-500/35",
+            compact ? "h-10 w-10 rounded-lg" : "h-11 w-11 rounded-xl"
+          )}
           onClick={() => onChange("")}
-          aria-label={`Clear ${label.toLowerCase()}`}
+          aria-label={compact ? "Clear search" : `Clear ${label.toLowerCase()}`}
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -117,14 +161,18 @@ export function CompactSortControl({ value, onValueChange, options, label }) {
   );
 }
 
-export function ViewModeToggle({ value, onChange, label = "View mode" }) {
+export function ViewModeToggle({ value, onChange, label = "View mode", compact = false }) {
   const options = [
     { value: "list", label: "List", Icon: List },
     { value: "grid", label: "Grid", Icon: LayoutGrid },
   ];
 
   return (
-    <div className="data-toggle-shell flex h-11 shrink-0 gap-1 rounded-xl bg-white" role="group" aria-label={label}>
+    <div
+      className={cn("flex shrink-0 items-end gap-1.5", compact ? "h-10" : "h-11")}
+      role="group"
+      aria-label={label}
+    >
       {options.map((option) => {
         const ViewIcon = option.Icon;
         return (
@@ -134,17 +182,19 @@ export function ViewModeToggle({ value, onChange, label = "View mode" }) {
           size="sm"
           variant="ghost"
           className={cn(
-            "h-11 min-w-11 rounded-lg px-2 sm:px-2.5",
+            "page-controls__view-button border border-slate-300",
+            compact ? "h-9 w-9 min-w-9 rounded-md p-0" : "h-11 min-w-11 rounded-lg px-2 sm:px-2.5",
             value === option.value
-              ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white"
+              ? "is-active"
               : "!text-slate-800 hover:!text-slate-950"
           )}
           onClick={() => onChange(option.value)}
           aria-label={`${option.label} view`}
           aria-pressed={value === option.value}
+          title={`${option.label} view`}
         >
           <ViewIcon className="h-4 w-4" aria-hidden="true" />
-          <span className="hidden sm:inline">{option.label}</span>
+          <span className={compact ? "sr-only" : "hidden sm:inline"}>{option.label}</span>
         </Button>
         );
       })}
@@ -152,9 +202,9 @@ export function ViewModeToggle({ value, onChange, label = "View mode" }) {
   );
 }
 
-export function PagePrimaryAction({ children, className, ...props }) {
+export function PagePrimaryAction({ children, className, compact = false, ...props }) {
   return (
-    <Button className={cn("h-11 rounded-xl px-3", className)} {...props}>
+    <Button className={cn(compact ? "h-10 rounded-lg px-3" : "h-11 rounded-xl px-3", className)} {...props}>
       {children}
     </Button>
   );

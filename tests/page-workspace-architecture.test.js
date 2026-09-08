@@ -122,9 +122,11 @@ test("supplier manual loading, matching, and UI remain removed", () => {
   }
 });
 
-test("database pages share accessible responsive page controls without replacing desktop toolbars", () => {
+test("database pages share accessible responsive and desktop page controls", () => {
   const sharedSource = readSource("src/components/shared/ResponsivePageControls.jsx");
   assert.match(sharedSource, /export function ResponsivePageControls/);
+  assert.match(sharedSource, /export function DesktopPageControls/);
+  assert.match(sharedSource, /export function DesktopControlField/);
   assert.match(sharedSource, /export function MobileFilterSheet/);
   assert.match(sharedSource, /onCloseAutoFocus/);
   assert.match(sharedSource, /safe-area-inset-bottom/);
@@ -143,8 +145,26 @@ test("database pages share accessible responsive page controls without replacing
   ]) {
     const source = readSource(relativePath);
     assert.match(source, /<ResponsivePageControls/);
-    assert.match(source, /floating-page-toolbar[^"]*hidden[^"]*xl:block/);
+    assert.match(source, /<DesktopPageControls/);
+    assert.doesNotMatch(source, /floating-page-toolbar[^"]*hidden[^"]*xl:block/);
   }
+
+  const customerSource = readSource("src/components/customers/CustomerManager.jsx");
+  const siteSource = readSource("src/components/sites/SiteManager.jsx");
+  for (const source of [customerSource, siteSource]) {
+    assert.match(source, /<ViewModeToggle compact/);
+    assert.doesNotMatch(source, /<LayoutGrid|<List/);
+  }
+
+  const styles = readSource("src/index.css");
+  assert.match(styles, /--page-controls-search-width: 20rem/);
+  assert.match(styles, /--page-controls-gap: 0\.625rem/);
+  assert.match(styles, /\.page-controls__right[\s\S]*?margin-left: auto/);
+  assert.match(styles, /\.page-controls__field :is\(input, button\[role="combobox"\]\)[\s\S]*?min-width: 0 !important;[\s\S]*?max-width: 100% !important;/);
+  assert.match(styles, /\.page-controls__view-button\.is-active/);
+  assert.match(styles, /\.page-controls__filter--small[\s\S]*?width: 7\.5rem/);
+  assert.match(styles, /\.page-controls__filter--medium,[\s\S]*?width: 9rem/);
+  assert.match(styles, /\.page-controls__filter--large[\s\S]*?width: 11rem/);
 
   const mapSource = readSource("src/components/map/JobsMapManager.jsx");
   assert.match(mapSource, /<ResponsivePageControls/);
