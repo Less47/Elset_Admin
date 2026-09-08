@@ -3,6 +3,14 @@ import { ChevronRight, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -253,6 +261,7 @@ export default function StaffManager({
   const [staffDialogOpen, setStaffDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const deferredSearch = useDeferredValue(search);
+  const isMobileRecordLayout = useMobileRecordLayout();
 
   const loginAccountsByStaffId = useMemo(() => {
     return new Map(
@@ -356,7 +365,12 @@ export default function StaffManager({
           )}
         />
 
-        <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+        <Card
+          className={isMobileRecordLayout
+            ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
+            : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+          data-mobile-record-results-shell={isMobileRecordLayout ? "" : undefined}
+        >
         <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">
           {[
             { label: "Total staff", value: staffStats.totalStaff },
@@ -396,8 +410,58 @@ export default function StaffManager({
                 )}
               />
             </div>
+          ) : isMobileRecordLayout ? (
+            <MobileRecordList label="Staff records">
+              {filteredStaff.map((staffMember) => {
+                const headingId = `mobile-staff-${encodeURIComponent(staffMember.id)}`;
+
+                return (
+                  <MobileRecordCard key={staffMember.id} labelledBy={headingId} recordId={staffMember.id}>
+                    <MobileRecordHeader>
+                      <div className="min-w-0">
+                        <h3 id={headingId} className="line-clamp-2 font-semibold text-slate-950 [overflow-wrap:anywhere]">
+                          {staffMember.name}
+                        </h3>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-500 [overflow-wrap:anywhere]">
+                          {staffMember.role || "Role not set"}
+                        </p>
+                      </div>
+                    </MobileRecordHeader>
+
+                    <MobileRecordBody>
+                      <p className="line-clamp-1">
+                        <span className="font-medium text-slate-500">Email: </span>
+                        <span className="text-slate-800">{staffMember.email || "Not set"}</span>
+                      </p>
+                      <p>
+                        <span className="font-medium text-slate-500">Phone: </span>
+                        <span className="text-slate-800">{staffMember.phone || "Not set"}</span>
+                      </p>
+                      <p className="text-xs">
+                        <span className="font-medium text-slate-500">Created: </span>
+                        <span className="text-slate-700">{formatDate(staffMember.createdAt)}</span>
+                      </p>
+                    </MobileRecordBody>
+
+                    <MobileRecordActions>
+                      <Button
+                        variant="outline"
+                        className="border-slate-300 px-3"
+                        aria-label={`Edit staff member ${staffMember.name}`}
+                        onClick={() => {
+                          setEditingStaff(staffMember);
+                          setStaffDialogOpen(true);
+                        }}
+                      >
+                        Edit Staff
+                      </Button>
+                    </MobileRecordActions>
+                  </MobileRecordCard>
+                );
+              })}
+            </MobileRecordList>
           ) : (
-            <>
+            <div data-desktop-record-results>
               <div className="overflow-x-auto text-xs 2xl:hidden">
                 <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
                   <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
@@ -479,9 +543,9 @@ export default function StaffManager({
                     </div>
                   ))}
                 </div>
+                </div>
               </div>
-              </div>
-            </>
+            </div>
           )}
         </CardContent>
         </Card>

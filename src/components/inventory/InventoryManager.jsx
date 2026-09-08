@@ -3,6 +3,16 @@ import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+  MobileRecordStat,
+  MobileRecordStats,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -194,6 +204,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
   const [editingPart, setEditingPart] = useState(null);
   const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
+  const isMobileRecordLayout = useMobileRecordLayout();
 
   const parts = useMemo(
     () => (inventoryItems || []).map(normalizeInventoryRecord).filter(Boolean),
@@ -370,8 +381,71 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                 )}
               />
             </div>
+          ) : isMobileRecordLayout ? (
+            <MobileRecordList className="p-2.5" label="Parts inventory records">
+              {filteredParts.map((part) => {
+                const status = getInventoryStockStatus(part);
+                const stockValue = part.quantity * part.unitCost;
+                const headingId = `mobile-inventory-${encodeURIComponent(part.id)}`;
+
+                return (
+                  <MobileRecordCard key={part.id} labelledBy={headingId} recordId={part.id}>
+                    <MobileRecordHeader>
+                      <div className="min-w-0">
+                        <h3 id={headingId} className="line-clamp-2 font-semibold text-slate-950 [overflow-wrap:anywhere]">
+                          {part.name}
+                        </h3>
+                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-500 [overflow-wrap:anywhere]">
+                          {part.sku || "No SKU"} - {part.category}
+                        </p>
+                      </div>
+                      <Badge className={`${status.className} shrink-0`}>{status.label}</Badge>
+                    </MobileRecordHeader>
+
+                    <MobileRecordBody>
+                      <p className="line-clamp-1">
+                        <span className="font-medium text-slate-500">Supplier: </span>
+                        <span className="text-slate-800">{part.supplier || "Not set"}</span>
+                      </p>
+                      <p className="line-clamp-1">
+                        <span className="font-medium text-slate-500">Location: </span>
+                        <span className="text-slate-800">{part.location || "Not set"}</span>
+                      </p>
+                    </MobileRecordBody>
+
+                    <MobileRecordStats className="grid-cols-3">
+                      <MobileRecordStat label="Qty">{part.quantity}</MobileRecordStat>
+                      <MobileRecordStat label="Reorder">{part.reorderLevel}</MobileRecordStat>
+                      <MobileRecordStat label="Value">{money(stockValue)}</MobileRecordStat>
+                    </MobileRecordStats>
+
+                    <MobileRecordActions>
+                      <Button
+                        variant="outline"
+                        className="border-slate-300 px-3"
+                        aria-label={`Edit part ${part.name}`}
+                        onClick={() => {
+                          setEditingPart(part);
+                          setPartDialogOpen(true);
+                        }}
+                      >
+                        Edit Part
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="border-rose-200 px-3 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                        aria-label={`Delete part ${part.name}`}
+                        onClick={() => onDeletePart(part.id)}
+                      >
+                        Delete
+                      </Button>
+                    </MobileRecordActions>
+                  </MobileRecordCard>
+                );
+              })}
+            </MobileRecordList>
           ) : (
-            <>
+            <div data-desktop-record-results>
               <div className="overflow-x-auto text-xs 2xl:hidden">
                 <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
                   <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
@@ -496,9 +570,9 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   );
                   })}
                 </div>
+                </div>
               </div>
-              </div>
-            </>
+            </div>
           )}
         </CardContent>
         </Card>

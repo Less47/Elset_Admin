@@ -1,6 +1,14 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -55,6 +63,7 @@ export default function JobHistoryManager({
   const [filterClock] = useState(() => ({ now: Date.now(), year: new Date().getFullYear() }));
   const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
+  const mobileRecordLayout = useMobileRecordLayout();
 
   const jobRows = useMemo(() => {
     return jobs.map((job) => ({
@@ -307,7 +316,12 @@ export default function JobHistoryManager({
         )}
       />
 
-      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+      <Card
+        className={mobileRecordLayout
+          ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
+          : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+        data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
+      >
         <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
           {[
             { label: "Jobs", value: historyStats.total },
@@ -324,12 +338,63 @@ export default function JobHistoryManager({
         </div>
 
         <CardContent className="p-0">
-        {filteredJobs.length === 0 ? (
-          <div className="p-panel">
-            <EmptyState title="No jobs found" text="Try adjusting the search or filters to find the job you want." />
-          </div>
+        {mobileRecordLayout ? (
+          filteredJobs.length === 0 ? (
+            <div className="p-panel">
+              <EmptyState title="No jobs found" text="Try adjusting the search or filters to find the job you want." />
+            </div>
+          ) : (
+            <MobileRecordList label="Job history records">
+              {filteredJobs.map((job) => {
+                const headingId = `mobile-job-history-${encodeURIComponent(job.id)}-title`;
+
+                return (
+                  <MobileRecordCard key={job.id} labelledBy={headingId} recordId={job.id}>
+                    <MobileRecordHeader>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
+                        <h3 id={headingId} className="mt-0.5 line-clamp-2 font-semibold leading-5 text-slate-950">{job.title}</h3>
+                      </div>
+                      <Badge className={`${statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"} max-w-[9rem]`}>{job.status}</Badge>
+                    </MobileRecordHeader>
+
+                    <MobileRecordBody>
+                      <p className="line-clamp-1 font-medium text-slate-900">{job.customerName}</p>
+                      <p className="line-clamp-2">{job.jobAddress || "No site address saved"}</p>
+                      <p className="text-xs">
+                        <span className="font-semibold text-slate-700">Scheduled</span>{" "}
+                        {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}
+                      </p>
+                    </MobileRecordBody>
+
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                      <Badge className={getUrgencyBadgeClassName(job.urgency)}>{job.urgency || "Low"}</Badge>
+                      <Badge variant="secondary">{job.hasQuote ? "Quote saved" : "No quote"}</Badge>
+                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-rose-200" : ""}`}>{job.invoiceStatus.label}</Badge>
+                    </div>
+
+                    <MobileRecordActions>
+                      <Button
+                        variant="outline"
+                        aria-label={`Open Job #${job.jobNumber}: ${job.title}`}
+                        onClick={() => onOpenJob(job)}
+                      >
+                        Open Job
+                      </Button>
+                    </MobileRecordActions>
+                  </MobileRecordCard>
+                );
+              })}
+            </MobileRecordList>
+          )
         ) : (
-          <>
+          <div data-desktop-record-results>
+          {filteredJobs.length === 0 ? (
+            <div className="p-panel">
+              <EmptyState title="No jobs found" text="Try adjusting the search or filters to find the job you want." />
+            </div>
+          ) : (
+            <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
               <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
                 <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
@@ -436,7 +501,9 @@ export default function JobHistoryManager({
               </div>
             </div>
             </div>
-          </>
+            </>
+          )}
+          </div>
         )}
       </CardContent>
       </Card>

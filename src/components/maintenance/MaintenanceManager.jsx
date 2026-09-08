@@ -3,6 +3,16 @@ import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+  MobileRecordStat,
+  MobileRecordStats,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -308,6 +318,7 @@ export default function MaintenanceManager({
   const [editingPlan, setEditingPlan] = useState(null);
   const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
+  const mobileRecordLayout = useMobileRecordLayout();
 
   const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
 
@@ -483,7 +494,80 @@ export default function MaintenanceManager({
         )}
       />
 
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+      {mobileRecordLayout ? (
+        filteredRows.length === 0 ? (
+          <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+            <CardContent className="p-panel">
+              <EmptyState title="No maintenance plans found" text="Try adjusting the search or filters, or add your first plan." />
+            </CardContent>
+          </Card>
+        ) : (
+          <MobileRecordList label="Maintenance plan records">
+            {filteredRows.map((row) => {
+              const headingId = `mobile-maintenance-${encodeURIComponent(row.plan.id)}-title`;
+
+              return (
+                <MobileRecordCard key={row.plan.id} labelledBy={headingId} recordId={row.plan.id}>
+                  <MobileRecordHeader>
+                    <div className="min-w-0">
+                      <h3 id={headingId} className="line-clamp-2 font-semibold leading-5 text-slate-950">{row.plan.planName}</h3>
+                      <Badge variant="secondary" className="mt-1.5">{row.frequencyLabel}</Badge>
+                    </div>
+                    <Badge className={`${row.status.className} max-w-[9rem]`}>{row.status.label}</Badge>
+                  </MobileRecordHeader>
+
+                  <MobileRecordBody>
+                    <p className="line-clamp-1 font-medium text-slate-900">{row.customer?.name || "Unknown customer"}</p>
+                    <p className="line-clamp-2">{row.plan.siteAddress || "No site address"}</p>
+                    {row.activeJob ? <p className="text-xs font-semibold text-sky-800">Job #{row.activeJob.jobNumber} open</p> : null}
+                  </MobileRecordBody>
+
+                  <MobileRecordStats>
+                    <MobileRecordStat label="Next due">{row.plan.nextDueDate ? formatDate(row.plan.nextDueDate) : "Not set"}</MobileRecordStat>
+                    {row.plan.estimatedDurationHours > 0 ? (
+                      <MobileRecordStat label="Estimated time">{row.plan.estimatedDurationHours} hrs</MobileRecordStat>
+                    ) : null}
+                    {row.plan.contractPrice > 0 ? (
+                      <MobileRecordStat label="Contract price">{money(row.plan.contractPrice)}</MobileRecordStat>
+                    ) : null}
+                  </MobileRecordStats>
+
+                  <MobileRecordActions>
+                    {row.activeJob ? (
+                      <Button aria-label={`View active job for ${row.plan.planName}`} onClick={() => onOpenJob(row.activeJob)}>
+                        View Active Job
+                      </Button>
+                    ) : (
+                      <Button aria-label={`Generate job for ${row.plan.planName}`} onClick={() => onGenerateJob(row.plan.id)}>
+                        Generate Job
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      aria-label={`Edit plan ${row.plan.planName}`}
+                      onClick={() => {
+                        setEditingPlan(row.plan);
+                        setPlanDialogOpen(true);
+                      }}
+                    >
+                      Edit Plan
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                      aria-label={`Delete plan ${row.plan.planName}`}
+                      onClick={() => onDeletePlan(row.plan.id)}
+                    >
+                      Delete
+                    </Button>
+                  </MobileRecordActions>
+                </MobileRecordCard>
+              );
+            })}
+          </MobileRecordList>
+        )
+      ) : (
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]" data-desktop-record-results>
         <Card className="overflow-hidden rounded-3xl border-slate-200">
             <div className="hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
             {[
@@ -659,6 +743,7 @@ export default function MaintenanceManager({
           </Card>
         </div>
       </div>
+      )}
 
       <MobileFilterSheet
         open={filtersOpen}

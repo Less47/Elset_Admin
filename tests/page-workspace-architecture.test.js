@@ -171,6 +171,39 @@ test("database pages share accessible responsive and desktop page controls", () 
   assert.match(mapSource, /map-desktop-filter-bar[^"]*hidden[^"]*xl:block/);
 });
 
+test("database pages declare the shared semantic phone record system and desktop result boundary", () => {
+  const sharedSource = readSource("src/components/shared/MobileRecordList.jsx");
+  const layoutHookSource = readSource("src/hooks/useMobileRecordLayout.js");
+
+  assert.match(layoutHookSource, /export function useMobileRecordLayout/);
+  assert.match(layoutHookSource, /max-width: 47\.999rem/);
+  assert.match(sharedSource, /export function MobileRecordList/);
+  assert.match(sharedSource, /<ul/);
+  assert.match(sharedSource, /data-mobile-record-list/);
+  assert.match(sharedSource, /export function MobileRecordCard/);
+  assert.match(sharedSource, /<article/);
+  assert.match(sharedSource, /aria-labelledby/);
+  assert.match(sharedSource, /data-mobile-record-card/);
+  assert.match(sharedSource, /export function MobileRecordActions/);
+  assert.match(sharedSource, /min-h-11/);
+
+  for (const relativePath of [
+    "src/components/customers/CustomerManager.jsx",
+    "src/components/sites/SiteManager.jsx",
+    "src/components/jobs/JobHistoryManager.jsx",
+    "src/components/invoices/InvoiceManager.jsx",
+    "src/components/maintenance/MaintenanceManager.jsx",
+    "src/components/staff/StaffManager.jsx",
+    "src/components/inventory/InventoryManager.jsx",
+  ]) {
+    const source = readSource(relativePath);
+    assert.match(source, /useMobileRecordLayout\(\)/);
+    assert.match(source, /<MobileRecordList/);
+    assert.match(source, /<MobileRecordCard/);
+    assert.match(source, /data-desktop-record-results/);
+  }
+});
+
 test("Map owns an edge-to-edge, resize-aware workspace instead of a contained card", () => {
   const shellSource = readSource("src/components/app/WorkspaceShell.jsx");
   const mapSource = readSource("src/components/map/JobsMapManager.jsx");

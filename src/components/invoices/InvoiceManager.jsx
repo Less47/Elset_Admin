@@ -1,6 +1,16 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+  MobileRecordStat,
+  MobileRecordStats,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -52,6 +62,7 @@ export default function InvoiceManager({
   const [filterClock] = useState(() => ({ now: Date.now() }));
   const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
+  const mobileRecordLayout = useMobileRecordLayout();
 
   const invoiceRows = useMemo(() => {
     return jobs
@@ -237,7 +248,12 @@ export default function InvoiceManager({
         )}
       />
 
-      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
+      <Card
+        className={mobileRecordLayout
+          ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
+          : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+        data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
+      >
       <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
@@ -255,12 +271,80 @@ export default function InvoiceManager({
       </div>
 
       <CardContent className="p-0">
-        {filteredRows.length === 0 ? (
-          <div className="p-panel">
-            <EmptyState title="No billing records found" text="Try adjusting the search or filters." />
-          </div>
+        {mobileRecordLayout ? (
+          filteredRows.length === 0 ? (
+            <div className="p-panel">
+              <EmptyState title="No billing records found" text="Try adjusting the search or filters." />
+            </div>
+          ) : (
+            <MobileRecordList label="Invoice records">
+              {filteredRows.map((row) => {
+                const headingId = `mobile-invoice-${encodeURIComponent(row.job.id)}-title`;
+
+                return (
+                  <MobileRecordCard key={row.job.id} labelledBy={headingId} recordId={row.job.id}>
+                    <MobileRecordHeader>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
+                        <h3 id={headingId} className="mt-0.5 line-clamp-2 font-semibold leading-5 text-slate-950">{row.job.customerName}</h3>
+                      </div>
+                      <Badge className={`${row.invoiceStatus.className} max-w-[9rem]`}>{row.invoiceStatus.label}</Badge>
+                    </MobileRecordHeader>
+
+                    <MobileRecordBody>
+                      <p className="line-clamp-2 font-medium text-slate-800">{row.job.title}</p>
+                      {row.job.jobAddress ? <p className="line-clamp-2">{row.job.jobAddress}</p> : null}
+                      {row.job.ocNumber ? <p className="line-clamp-1 text-xs">Client ref {row.job.ocNumber}</p> : null}
+                      {row.invoice ? (
+                        <p className="text-xs">
+                          Issued {formatDate(row.invoice.issueDate)}
+                          {row.invoice.dueDate ? ` · Due ${formatDate(row.invoice.dueDate)}` : ""}
+                        </p>
+                      ) : null}
+                    </MobileRecordBody>
+
+                    <MobileRecordStats>
+                      <MobileRecordStat label="Total">{row.invoice ? money(row.total) : money(0)}</MobileRecordStat>
+                      <MobileRecordStat label="Payment">
+                        {row.invoice ? (
+                          <>
+                            <span className="block">Paid {money(row.paymentSummary.paidAmount)}</span>
+                            <span className="block text-xs font-medium text-slate-500">Balance {money(row.paymentSummary.balanceAmount)}</span>
+                          </>
+                        ) : "No invoice"}
+                      </MobileRecordStat>
+                    </MobileRecordStats>
+
+                    <MobileRecordActions>
+                      <Button variant="outline" aria-label={`Open Job #${row.job.jobNumber}`} onClick={() => onOpenJob(row.job)}>
+                        Job
+                      </Button>
+                      {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
+                        <Button variant="outline" aria-label={`Open sent invoice for Job #${row.job.jobNumber}`} onClick={() => onOpenSentInvoice(row.job)}>
+                          Open Invoice
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="outline"
+                        aria-label={`${row.invoice ? "Open invoice editor" : "Create invoice"} for Job #${row.job.jobNumber}`}
+                        onClick={() => onOpenInvoice(row.job)}
+                      >
+                        {row.invoice ? "Open Invoice Editor" : "Create Invoice"}
+                      </Button>
+                    </MobileRecordActions>
+                  </MobileRecordCard>
+                );
+              })}
+            </MobileRecordList>
+          )
         ) : (
-          <>
+          <div data-desktop-record-results>
+          {filteredRows.length === 0 ? (
+            <div className="p-panel">
+              <EmptyState title="No billing records found" text="Try adjusting the search or filters." />
+            </div>
+          ) : (
+            <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
               <div className="data-grid grid min-w-[560px] gap-px bg-slate-200 md:min-w-0">
                 <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
@@ -396,7 +480,9 @@ export default function InvoiceManager({
               </div>
             </div>
             </div>
-          </>
+            </>
+          )}
+          </div>
         )}
       </CardContent>
       </Card>

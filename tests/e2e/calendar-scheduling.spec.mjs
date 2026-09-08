@@ -221,6 +221,25 @@ async function noOverflow(page) {
   const sizes = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
 }
+async function expectCompactMobileToolbar(page) {
+  const month = page.locator("[data-calendar-month]");
+  const previous = page.getByRole("button", { name: "Previous month", exact: true });
+  const today = page.getByRole("button", { name: "Today", exact: true });
+  const next = page.getByRole("button", { name: "Next month", exact: true });
+  const jobs = page.getByRole("button", { name: /^Jobs \d+$/ });
+  await expect(page.getByRole("button", { name: "Dates", exact: true })).toHaveCount(0);
+  await expect(page.locator(".calendar-mini-expanded")).toHaveCount(0);
+  for (const control of [month, previous, today, next, jobs]) await expect(control).toBeVisible();
+  const boxes = await Promise.all([month, previous, today, next, jobs].map((control) => control.boundingBox()));
+  const centers = boxes.map((box) => box.y + box.height / 2);
+  expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
+  for (let index = 0; index < boxes.length - 1; index += 1) {
+    expect(boxes[index].x + boxes[index].width).toBeLessThanOrEqual(boxes[index + 1].x + 1);
+  }
+  const toolbarBox = await page.locator("[data-calendar-toolbar]").boundingBox();
+  expect(toolbarBox.height).toBeLessThanOrEqual(54);
+  await noOverflow(page);
+}
 async function screenshot(page, info, name) {
   await page.waitForTimeout(250);
   const target = path.join(screenshotDir, name + (name.startsWith("bulk-") && info.project.name === "webkit" ? "-webkit" : "") + ".png");
@@ -506,7 +525,7 @@ test("bulk day cancelled preview cannot overwrite a later single-job reschedule"
   } finally { release(); await context.close(); }
 });
 
-for (const [width, height] of [[390, 844], [768, 1024], [820, 1180], [1024, 768], [1280, 720], [1440, 900]]) {
+for (const [width, height] of [[390, 844], [430, 932], [768, 1024], [820, 1180], [1024, 768], [1280, 720], [1440, 900]]) {
   test(`date-cell single activation covers whitespace, close/reopen and keyboard at ${width}x${height}`, async ({ browser }, info) => {
     const { context, page, writes } = await openCalendar(browser, width, height);
     const touch = width < 1280;
@@ -527,8 +546,9 @@ for (const [width, height] of [[390, 844], [768, 1024], [820, 1180], [1024, 768]
       }
       await clickDateArea(page, "2026-09-06", "bottom", touch);
       await expect(page.getByRole("dialog", { name: /6 September/ })).toBeVisible();
-      await clickDateArea(page, "2026-09-08", "bottom", touch);
-      await expect(page.getByRole("dialog", { name: /8 September/ })).toBeVisible();
+      const visibleSwitchDate = width >= 768 ? "2026-09-11" : "2026-09-08";
+      await clickDateArea(page, visibleSwitchDate, "bottom", touch);
+      await expect(page.getByRole("dialog", { name: new RegExp(`${Number(visibleSwitchDate.slice(-2))} September`) })).toBeVisible();
       await expect(page.getByRole("dialog")).toHaveCount(1);
       await page.getByRole("button", { name: "Close calendar panel" }).click();
       // The next, different date works on the very next gesture after close.
@@ -541,8 +561,38 @@ for (const [width, height] of [[390, 844], [768, 1024], [820, 1180], [1024, 768]
       await clickDateArea(page, "2026-09-15", "bottom", touch);
       const populated = page.getByRole("dialog", { name: /15 September/ });
       await expect(populated.locator("[data-calendar-queue-job]")).toHaveCount(7);
+      if (width >= 1024 && width > height) {
+        await populated.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+        const [panelBox, workspaceBox, mainBox, navigationBox, queueBox] = await Promise.all([
+          populated.boundingBox(),
+          page.locator("[data-calendar-workspace]").boundingBox(),
+          page.locator("[data-calendar-main]").boundingBox(),
+          page.getByRole("navigation", { name: "Application" }).boundingBox(),
+          page.locator(".calendar-queue-pane").boundingBox(),
+        ]);
+        expect(panelBox.x).toBeGreaterThanOrEqual(workspaceBox.x - 1);
+        expect(panelBox.x).toBeLessThanOrEqual(workspaceBox.x + 1);
+        expect(panelBox.x).toBeGreaterThanOrEqual(navigationBox.x + navigationBox.width);
+        expect(panelBox.width).toBeGreaterThanOrEqual(width >= 1200 ? 319 : 287);
+        expect(panelBox.width).toBeLessThanOrEqual(381);
+        expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(queueBox.x + 1);
+        expect(mainBox.x + mainBox.width - (panelBox.x + panelBox.width)).toBeGreaterThan(100);
+        const queueSearch = page.locator(".calendar-queue-pane").getByRole("searchbox", { name: "Search scheduling queue" });
+        await queueSearch.fill("Charnwood");
+        await expect(queueJob(page, "calendar-progress")).toBeVisible();
+        await expect(populated).toBeVisible();
+        await queueSearch.fill("");
+      }
       await screenshot(page, info, `date-cell-panel-${browser.browserType().name()}-${width}x${height}`);
-      await page.keyboard.press("Escape");
+      if (width === 1440) {
+        await populated.getByRole("button", { name: "Close calendar panel" }).click();
+        const exitingPanel = page.locator('.calendar-day-panel[data-state="closed"]');
+        await expect(exitingPanel).toHaveCSS("pointer-events", "none");
+        await expect(exitingPanel).toHaveCSS("animation-name", "calendar-day-panel-out");
+        await expect(exitingPanel).toHaveCount(0);
+      } else {
+        await page.keyboard.press("Escape");
+      }
       await expect(day(page, "2026-09-15").getByRole("button").first()).toBeFocused();
       const keyboardDate = day(page, "2026-09-07").getByRole("button").first();
       await expect(keyboardDate).toHaveAttribute("aria-current", "date");
@@ -566,7 +616,7 @@ test("date-cell direct switching updates the open panel and job chips keep their
     await clickDateArea(page, "2026-09-05", "bottom");
     const sheet = page.locator(".calendar-sheet");
     await expect(sheet).toContainText("Saturday 5 September");
-    for (const date of ["2026-09-08", "2026-09-06", "2026-09-13", "2026-09-08"]) {
+    for (const date of ["2026-09-09", "2026-09-11", "2026-09-12", "2026-09-10"]) {
       await clickDateArea(page, date, "bottom");
       await expect(day(page, date)).toHaveAttribute("data-selected", "true");
       await expect(page.getByRole("dialog")).toHaveCount(1);
@@ -686,7 +736,7 @@ test("Calendar navigation, queue filters, crowded days and Job Details preserve 
     await page.getByRole("option", { name: "High", exact: true }).click();
     await filters.getByRole("button", { name: "Done", exact: true }).click();
     await expect(queueJob(page, "calendar-todo")).toBeVisible();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Next month", exact: true }).click();
     await expect(page.locator("[data-calendar-month]")).toHaveText("October 2026");
     await expect(page.locator("[data-mini-month]")).toHaveText("October 2026");
     await expect(search).toHaveValue("212");
@@ -717,12 +767,17 @@ test("mouse dragging schedules, reschedules and unschedules using only the date 
   const { context, page, writes } = await openCalendar(browser);
   const original = dbJob("calendar-todo");
   try {
+    await clickDateArea(page, "2026-09-05", "bottom");
+    const dayPanel = page.getByRole("dialog", { name: /5 September/ });
+    await expect(dayPanel).toBeVisible();
     await queueJob(page, "calendar-todo").dragTo(day(page, "2026-09-09"));
     await expect.poll(() => dbJob("calendar-todo").scheduledDate).toBe("2026-09-09");
     await expect(day(page, "2026-09-09").locator('[data-calendar-job="calendar-todo"]')).toBeVisible();
+    await expect(dayPanel).toBeVisible();
     await day(page, "2026-09-09").locator('[data-calendar-job="calendar-todo"]').dragTo(day(page, "2026-09-11"));
     await expect.poll(() => dbJob("calendar-todo").scheduledDate).toBe("2026-09-11");
     await expect(day(page, "2026-09-09").locator('[data-calendar-job="calendar-todo"]')).toHaveCount(0);
+    await expect(dayPanel).toBeVisible();
     await screenshot(page, info, "desktop-rescheduled-job");
     await day(page, "2026-09-11").locator('[data-calendar-job="calendar-todo"]').dragTo(page.locator("[data-calendar-unscheduled]"));
     await expect.poll(() => dbJob("calendar-todo").scheduledDate).toBe("");
@@ -982,8 +1037,20 @@ test("iPad touch supports deliberate dragging, cancellation and ordinary queue s
   } finally { await context.close(); }
 });
 
-test("responsive Calendar matrix keeps scheduling usable in eight layouts", async ({ browser }, info) => {
-  const viewports = [[390, 844], [768, 1024], [820, 1180], [1024, 768], [1180, 820], [1280, 720], [1440, 900], [1920, 1080]];
+test("mobile Calendar toolbar stays in one row from 320px through 430px", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser, 430, 932);
+  try {
+    for (const [width, height] of [[430, 932], [390, 844], [360, 800], [320, 720]]) {
+      await page.setViewportSize({ width, height });
+      await expect(page.locator("[data-calendar-month]")).toHaveText("September 2026");
+      await expectCompactMobileToolbar(page);
+    }
+    expect(writes).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("responsive Calendar matrix keeps scheduling usable in nine layouts", async ({ browser }, info) => {
+  const viewports = [[390, 844], [430, 932], [768, 1024], [820, 1180], [1024, 768], [1180, 820], [1280, 720], [1440, 900], [1920, 1080]];
   for (const [index, [width, height]] of viewports.entries()) {
     const { context, page, writes } = await openCalendar(browser, width, height);
     try {
@@ -991,10 +1058,10 @@ test("responsive Calendar matrix keeps scheduling usable in eight layouts", asyn
       const columns = await page.locator(".calendar-layout").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
       expect(columns).toBe(width >= 1180 ? 3 : width === 1024 ? 2 : 1);
       if (width >= 1180) await expect(page.locator(".calendar-mini-pane")).toBeVisible();
-      else {
+      else if (width >= 768) {
         await page.getByRole("button", { name: "Dates", exact: true }).click();
         await expect(page.locator(".calendar-mini-expanded")).toBeVisible();
-        if (width === 390) {
+        if (width === 768) {
           const navigator = page.locator(".calendar-mini-expanded");
           await navigator.locator('[data-mini-date="2026-09-07"]').focus();
           await page.keyboard.press("ArrowRight");
@@ -1003,6 +1070,8 @@ test("responsive Calendar matrix keeps scheduling usable in eight layouts", asyn
           await navigator.getByRole("button", { name: "Go to today in date navigator" }).click();
         }
         await page.getByRole("button", { name: "Dates", exact: true }).click();
+      } else {
+        await expectCompactMobileToolbar(page);
       }
       await screenshot(page, info, `calendar-${width}x${height}`);
       if (width === 390) {

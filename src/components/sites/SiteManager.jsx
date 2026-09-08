@@ -2,6 +2,14 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -51,6 +59,7 @@ export default function SiteManager({
   const deferredSearch = useDeferredValue(search);
   const deferredNewSiteCustomerSearch = useDeferredValue(newSiteCustomerSearch);
   const filterTriggerRef = useRef(null);
+  const isMobileRecordLayout = useMobileRecordLayout();
 
   const customerOptions = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
@@ -205,7 +214,9 @@ export default function SiteManager({
             <>
               <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
               <CompactSortControl value={sortBy} onValueChange={setSortBy} options={siteSortOptions} label="Sort sites" />
-              <ViewModeToggle value={viewMode} onChange={setViewMode} label="Site view" />
+              <div className="hidden md:block">
+                <ViewModeToggle value={viewMode} onChange={setViewMode} label="Site view" />
+              </div>
             </>
           )}
           action={(
@@ -287,15 +298,69 @@ export default function SiteManager({
           )}
         />
 
-        <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <CardContent className={viewMode === "list" ? "p-0" : "p-panel"}>
+        <Card
+          className={isMobileRecordLayout
+            ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
+            : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+          data-mobile-record-results-shell={isMobileRecordLayout ? "" : undefined}
+        >
+        <CardContent className={isMobileRecordLayout ? "p-0" : viewMode !== "list" ? "p-panel" : "p-0"}>
           {filteredSites.length === 0 ? (
-            <div className={viewMode === "list" ? "p-panel" : ""}>
+            <div className={!isMobileRecordLayout && viewMode === "list" ? "p-panel" : ""}>
               <EmptyState title="No sites found" text="Try adjusting the search or create a site from a customer record first." />
             </div>
+          ) : isMobileRecordLayout ? (
+            <MobileRecordList label="Sites">
+              {filteredSites.map((site) => {
+                const displayName = getSiteDisplayName(site);
+                const headingId = `mobile-site-${encodeURIComponent(site.customer.id)}-${encodeURIComponent(site.id)}-title`;
+                return (
+                  <MobileRecordCard
+                    key={`${site.customer.id}-${site.id}`}
+                    labelledBy={headingId}
+                    recordId={`${site.customer.id}-${site.id}`}
+                  >
+                    <MobileRecordHeader>
+                      <div className="min-w-0">
+                        <h3 id={headingId} className="line-clamp-2 text-[15px] font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">
+                          {displayName}
+                        </h3>
+                        {site.address && site.address !== displayName ? (
+                          <p className="mt-1 line-clamp-2 text-xs leading-4 text-slate-600 [overflow-wrap:anywhere]">{site.address}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex max-w-[48%] shrink-0 flex-wrap justify-end gap-1">
+                        {site.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
+                        {site.siteType ? <Badge className="bg-emerald-100 text-emerald-800">{formatSiteType(site.siteType)}</Badge> : null}
+                      </div>
+                    </MobileRecordHeader>
+
+                    <MobileRecordBody>
+                      <p className="text-slate-700">
+                        <span className="font-medium text-slate-500">Customer: </span>
+                        <span className="font-medium text-slate-900">{site.customer.name}</span>
+                      </p>
+                    </MobileRecordBody>
+
+                    <MobileRecordActions>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-slate-300 px-3"
+                        aria-label={`Open site ${displayName}`}
+                        onClick={() => onOpenSite(site.customer.id, site.id)}
+                      >
+                        Open Site
+                      </Button>
+                    </MobileRecordActions>
+                  </MobileRecordCard>
+                );
+              })}
+            </MobileRecordList>
           ) : (
-            viewMode === "list" ? (
-              <>
+            <div data-desktop-record-results>
+              {viewMode === "list" ? (
+                <>
                 <div className="overflow-x-auto text-xs 2xl:hidden">
                   <div className="data-grid grid min-w-[620px] gap-px bg-slate-200 md:min-w-0">
                     <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
@@ -401,10 +466,11 @@ export default function SiteManager({
                   </div>
                 </div>
                 </div>
-              </>
-            ) : (
-              renderSiteCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")
-            )
+                </>
+              ) : (
+                renderSiteCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")
+              )}
+            </div>
           )}
         </CardContent>
         </Card>

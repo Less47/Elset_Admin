@@ -48,6 +48,11 @@ const screenshotNames = [
   "responsive-invoices-mobile-390x844.png",
   "responsive-maintenance-mobile-390x844.png",
   "responsive-inventory-mobile-390x844.png",
+  "mobile-records-invoices-320x568.png",
+  "mobile-records-maintenance-320x568.png",
+  "mobile-records-maintenance-390x844.png",
+  "mobile-records-staff-390x844.png",
+  "mobile-records-inventory-390x844.png",
   "responsive-customers-tablet-820x1180.png",
   "responsive-job-history-tablet-820x1180.png",
   "responsive-customers-desktop-1280x720.png",
@@ -162,6 +167,148 @@ function readAugmentedFixture() {
       scheduledDate: "2026-01-30",
       createdAt: "2026-01-30T00:00:00.000Z",
       updatedAt: "2026-01-30T04:00:00.000Z",
+    },
+  ];
+
+  return fixture;
+}
+
+function readMobileRecordFixture() {
+  const fixture = readAugmentedFixture();
+  const longToken = "LongOperationalReference".repeat(5);
+  const maintenancePlanId = "mobile-maintenance-plan";
+
+  fixture.customers = [
+    ...fixture.customers,
+    {
+      id: "mobile-customer-long",
+      name: `Zeta ${longToken}`,
+      email: `dispatch${longToken}@example.test`,
+      phone: "0400 000 299",
+      customerType: "business",
+      address: `99 ${longToken} Road, Sampleton VIC 3000`,
+      sites: [
+        {
+          id: "mobile-site-long",
+          label: `Loading Bay ${longToken}`,
+          address: `99 ${longToken} Road, Sampleton VIC 3000`,
+          siteType: "commercial",
+          accessNotes: "Use the marked loading bay.",
+          notes: "Long-value containment fixture.",
+          contactName: "Mobile Test Contact",
+          contactPhone: "0400 000 298",
+          assets: [],
+          createdAt: "2026-02-01T00:00:00.000Z",
+          updatedAt: "2026-02-01T00:00:00.000Z",
+        },
+      ],
+      siteAccessNotes: [],
+      externalRefs: {},
+      createdAt: "2026-02-01T00:00:00.000Z",
+    },
+  ];
+
+  fixture.jobs = fixture.jobs.map((job) => {
+    if (job.id === "demo-job-1001") {
+      return {
+        ...job,
+        invoice: {
+          ...job.invoice,
+          sentHistory: [{ id: "mobile-sent-invoice", sentAt: "2026-01-04T00:00:00.000Z" }],
+        },
+      };
+    }
+    if (job.id === plannedJobId) {
+      return {
+        ...job,
+        maintenancePlanId,
+        maintenancePlanName: "Quarterly gate safety inspection",
+      };
+    }
+    return job;
+  });
+
+  fixture.jobs.push({
+    ...fixture.jobs[0],
+    id: "mobile-job-long-record",
+    jobNumber: 1099,
+    title: `Inspect ${longToken}`,
+    description: `Long-value containment fixture ${longToken}`,
+    customerId: "mobile-customer-long",
+    customerName: `Zeta ${longToken}`,
+    customerEmail: `dispatch${longToken}@example.test`,
+    customerPhone: "0400 000 299",
+    jobAddress: `99 ${longToken} Road, Sampleton VIC 3000`,
+    ocNumber: `PO-${longToken}`,
+    status: "Completed",
+    urgency: "Low",
+    scheduledDate: "2026-02-05",
+    quote: null,
+    invoice: null,
+    maintenancePlanId: "",
+    maintenancePlanName: "",
+    createdAt: "2026-02-01T00:00:00.000Z",
+    updatedAt: "2026-02-05T00:00:00.000Z",
+  });
+
+  fixture.maintenancePlans = [
+    {
+      id: maintenancePlanId,
+      planName: "Quarterly gate safety inspection",
+      customerId: "demo-customer-arcadia",
+      siteAddress: "10 Example Lane, Sampleton VIC 3000",
+      frequency: "quarterly",
+      nextDueDate: "2026-09-15",
+      estimatedDurationHours: 2,
+      contractPrice: 450,
+      checklist: ["Inspect safety edge", "Test emergency release"],
+      notes: "Synthetic maintenance record for mobile presentation coverage.",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    },
+    {
+      id: "mobile-maintenance-long",
+      planName: `Annual inspection ${longToken}`,
+      customerId: "mobile-customer-long",
+      siteAddress: `99 ${longToken} Road, Sampleton VIC 3000`,
+      frequency: "annual",
+      nextDueDate: "2099-12-15",
+      estimatedDurationHours: 1,
+      contractPrice: 325,
+      checklist: ["Inspect controller"],
+      notes: `Long-value containment fixture ${longToken}`,
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    },
+  ];
+
+  fixture.staff = [
+    ...fixture.staff,
+    {
+      id: "mobile-staff-long",
+      name: `Taylor ${longToken}`,
+      role: "Service Technician",
+      email: `taylor${longToken}@example.test`,
+      phone: "0400 000 297",
+      createdAt: "2026-02-01T00:00:00.000Z",
+    },
+  ];
+
+  fixture.inventoryItems = [
+    ...fixture.inventoryItems,
+    {
+      id: "mobile-inventory-long",
+      name: `Controller ${longToken}`,
+      sku: `SKU-${longToken}`,
+      category: "Automation",
+      supplier: `Supplier ${longToken}`,
+      location: `Shelf ${longToken}`,
+      quantity: 0,
+      reorderLevel: 2,
+      unitCost: 275,
+      notes: "Long-value containment fixture.",
+      createdAt: "2026-02-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
     },
   ];
 
@@ -373,6 +520,55 @@ async function assertNoHorizontalOverflow(page) {
   }));
   expect(dimensions.bodyScrollWidth).toBeLessThanOrEqual(dimensions.bodyClientWidth + 1);
   expect(dimensions.documentScrollWidth).toBeLessThanOrEqual(dimensions.documentClientWidth + 1);
+}
+
+async function assertMobileRecordListContained(page) {
+  const list = page.locator("[data-mobile-record-list]");
+  await expect(list).toBeVisible();
+  await expect(page.locator("[data-desktop-record-results]")).toHaveCount(0);
+
+  const metrics = await list.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    viewportWidth: document.documentElement.clientWidth,
+    rect: element.getBoundingClientRect().toJSON(),
+    cards: [...element.querySelectorAll("[data-mobile-record-card]")].map((card) => ({
+      clientWidth: card.clientWidth,
+      scrollWidth: card.scrollWidth,
+      rect: card.getBoundingClientRect().toJSON(),
+      headingCount: card.querySelectorAll("article[aria-labelledby] h3").length,
+      labelResolves: (() => {
+        const article = card.querySelector("article[aria-labelledby]");
+        const heading = article?.querySelector("h3");
+        return Boolean(article && heading && document.getElementById(article.getAttribute("aria-labelledby")) === heading);
+      })(),
+      actions: [...card.querySelectorAll("button")].map((button) => ({
+        height: button.getBoundingClientRect().height,
+        left: button.getBoundingClientRect().left,
+        right: button.getBoundingClientRect().right,
+      })),
+    })),
+  }));
+
+  expect(metrics.clientWidth).toBeGreaterThan(0);
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+  expect(metrics.rect.left).toBeGreaterThanOrEqual(-1);
+  expect(metrics.rect.right).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+  expect(metrics.cards.length).toBeGreaterThan(0);
+  for (const card of metrics.cards) {
+    expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth + 1);
+    expect(card.rect.left).toBeGreaterThanOrEqual(metrics.rect.left - 1);
+    expect(card.rect.right).toBeLessThanOrEqual(metrics.rect.right + 1);
+    expect(card.headingCount).toBe(1);
+    expect(card.labelResolves).toBe(true);
+    expect(card.actions.length).toBeGreaterThan(0);
+    for (const action of card.actions) {
+      expect(action.height).toBeGreaterThanOrEqual(44);
+      expect(action.left).toBeGreaterThanOrEqual(card.rect.left - 1);
+      expect(action.right).toBeLessThanOrEqual(card.rect.right + 1);
+    }
+  }
+  await assertNoHorizontalOverflow(page);
 }
 
 async function assertDesktopBoardSpacing(page) {
@@ -852,10 +1048,13 @@ test("mobile page controls keep records primary and preserve live filter state",
     await expect(customerControls).toBeVisible();
     await expect(customerControls.getByLabel("Search customers")).toBeVisible();
     await expect(customerControls.getByLabel("Sort customers")).toBeVisible();
-    await expect(customerControls.getByRole("button", { name: "List view" })).toBeVisible();
-    await expect(customerControls.getByRole("button", { name: "Grid view" })).toBeVisible();
+    await expect(customerControls.getByRole("button", { name: "List view" })).toHaveCount(0);
+    await expect(customerControls.getByRole("button", { name: "Grid view" })).toHaveCount(0);
     await expect(customerControls.getByRole("button", { name: "New Customer" })).toBeVisible();
     await expect(page.locator("[data-result-summary]")).toContainText(/customers?$/);
+    await expect(page.locator("[data-mobile-record-list]")).toBeVisible();
+    await expect(page.locator("button", { hasText: "Open Profile" })).toBeVisible();
+    await expect(page.locator("[data-desktop-record-results]")).toHaveCount(0);
     await capture(page, testInfo, "responsive-customers-mobile-390x844.png", "Customers compact mobile controls");
 
     const customerFilterButton = customerControls.locator('button[aria-haspopup="dialog"]');
@@ -886,14 +1085,13 @@ test("mobile page controls keep records primary and preserve live filter state",
     await customerControls.getByLabel("Search customers").fill("synthetic");
     await expect(customerControls.getByRole("button", { name: "Clear search customers" })).toBeVisible();
     await customerControls.getByRole("button", { name: "Clear search customers" }).click();
-    await customerControls.getByRole("button", { name: "Grid view" }).click();
-    await expect(customerControls.getByRole("button", { name: "Grid view" })).toHaveAttribute("aria-pressed", "true");
 
     await navigateToWorkspaceSection(page, "Sites", width);
     const siteControls = page.locator("[data-responsive-page-controls]");
     await expect(siteControls.getByLabel("Search sites")).toBeVisible();
     await expect(siteControls.getByLabel("Sort sites")).toBeVisible();
     await expect(siteControls.getByRole("button", { name: "New Site" })).toBeVisible();
+    await expect(page.locator("button", { hasText: "Open Site" })).toBeVisible();
     await capture(page, testInfo, "responsive-sites-mobile-390x844.png", "Sites compact mobile controls");
     await siteControls.getByRole("button", { name: "Filters", exact: true }).click();
     filters = page.getByRole("dialog", { name: "Filters" });
@@ -908,6 +1106,7 @@ test("mobile page controls keep records primary and preserve live filter state",
     const historyControls = page.locator("[data-responsive-page-controls]");
     await expect(historyControls.getByLabel("Search job history")).toBeVisible();
     await expect(historyControls.getByLabel("Sort job history")).toBeVisible();
+    await expect(page.locator("button", { hasText: "Open Job" }).first()).toBeVisible();
     await capture(page, testInfo, "responsive-job-history-mobile-390x844.png", "Job History compact mobile controls");
     const historyFilterButton = historyControls.locator('button[aria-haspopup="dialog"]');
     await historyFilterButton.click();
@@ -936,6 +1135,9 @@ test("mobile page controls keep records primary and preserve live filter state",
     const invoiceControls = page.locator("[data-responsive-page-controls]");
     await expect(invoiceControls.getByLabel("Search invoices")).toBeVisible();
     await expect(invoiceControls.getByLabel("Sort invoices")).toBeVisible();
+    const invoiceRecords = page.getByRole("list", { name: "Invoice records" });
+    await expect(invoiceRecords.getByRole("button", { name: /^Open Job #/ }).first()).toBeVisible();
+    await expect(invoiceRecords.getByRole("button", { name: /^Create invoice for Job #/ }).first()).toBeVisible();
     await capture(page, testInfo, "responsive-invoices-mobile-390x844.png", "Invoices compact mobile controls");
     await invoiceControls.getByRole("button", { name: "Filters", exact: true }).click();
     filters = page.getByRole("dialog", { name: "Filters" });
@@ -944,6 +1146,8 @@ test("mobile page controls keep records primary and preserve live filter state",
     await chooseSelectOption(page, "Status filter", "Overdue");
     await filters.getByRole("button", { name: "Done" }).click();
     await expect(page.locator("[data-result-summary]")).toHaveText("1 invoice · 1 billing record");
+    await expect(page.locator('[data-mobile-record-card][data-record-id="demo-job-1001"]')).toBeVisible();
+    await expect(page.locator("[data-mobile-record-card]")).toHaveCount(1);
     await assertNoHorizontalOverflow(page);
 
     await navigateToWorkspaceSection(page, "Maintenance", width);
@@ -962,6 +1166,7 @@ test("mobile page controls keep records primary and preserve live filter state",
     await expect(staffControls.getByLabel("Sort staff")).toBeVisible();
     await expect(staffControls.getByRole("button", { name: "Add Staff" })).toBeVisible();
     await expect(staffControls.getByRole("button", { name: /^Filters/ })).toHaveCount(0);
+    await expect(page.locator("button", { hasText: "Edit Staff" }).first()).toBeVisible();
     await assertNoHorizontalOverflow(page);
 
     await navigateToWorkspaceSection(page, "Parts Inventory", width);
@@ -969,6 +1174,7 @@ test("mobile page controls keep records primary and preserve live filter state",
     await expect(inventoryControls.getByLabel("Search parts inventory")).toBeVisible();
     await expect(inventoryControls.getByLabel("Sort parts inventory")).toBeVisible();
     await expect(inventoryControls.getByRole("button", { name: "Add Part" })).toBeVisible();
+    await expect(page.locator("button", { hasText: "Edit Part" }).first()).toBeVisible();
     await capture(page, testInfo, "responsive-inventory-mobile-390x844.png", "Parts Inventory compact mobile controls");
     await inventoryControls.getByRole("button", { name: "Filters", exact: true }).click();
     filters = page.getByRole("dialog", { name: "Filters" });
@@ -1018,6 +1224,301 @@ test("mobile page controls keep records primary and preserve live filter state",
     await assertNoHorizontalOverflow(page);
   } finally {
     await context.close();
+  }
+});
+
+test("phone database pages use contained record cards with visible identities, statuses, and actions", async ({ browser }, testInfo) => {
+  const pageSpecs = [
+    {
+      section: "Customers",
+      recordSelector: '[data-record-id="demo-customer-arcadia"]',
+      identity: "Arcadia Example Apartments",
+      status: "Strata",
+      statusIsBadge: true,
+      action: "Open Profile",
+      expectedTexts: ["accounts@arcadia-example.test", "0400 000 201"],
+      longRecordSelector: '[data-record-id="mobile-customer-long"]',
+    },
+    {
+      section: "Sites",
+      recordSelector: '[data-record-id^="demo-customer-arcadia-"]',
+      identity: "10 Example Lane, Sampleton VIC 3000",
+      status: "Residential",
+      statusIsBadge: true,
+      action: "Open Site",
+      expectedTexts: ["Arcadia Example Apartments", "Primary"],
+      longRecordSelector: '[data-record-id^="mobile-customer-long-"]',
+    },
+    {
+      section: "Job History",
+      recordSelector: `[data-record-id="${plannedJobId}"]`,
+      identity: "Mobile In Progress Job",
+      status: "In Progress",
+      statusIsBadge: true,
+      action: "Open Job",
+      expectedTexts: ["Job #1003", "Arcadia Example Apartments", "10 Example Lane", "Scheduled", "High", "No quote", "Not invoiced"],
+      longRecordSelector: '[data-record-id="mobile-job-long-record"]',
+    },
+    {
+      section: "Invoices",
+      recordSelector: '[data-record-id="mobile-job-high-priority"]',
+      identity: "Urgent safety edge repair",
+      status: "Not invoiced",
+      statusIsBadge: true,
+      action: "Create Invoice",
+      expectedTexts: ["Job #1002", "Arcadia Example Apartments", "10 Example Lane", "Client ref OC-DEMO-001", "Total", "$0.00", "No invoice", "Job"],
+      longRecordSelector: '[data-record-id="mobile-job-long-record"]',
+    },
+    {
+      section: "Maintenance",
+      recordSelector: '[data-record-id="mobile-maintenance-plan"]',
+      identity: "Quarterly gate safety inspection",
+      status: "Active job",
+      statusIsBadge: true,
+      action: "View Active Job",
+      expectedTexts: ["Quarterly", "Arcadia Example Apartments", "10 Example Lane", "Job #1003 open", "15/09/2026", "2 hrs", "$450.00", "Edit Plan", "Delete"],
+      longRecordSelector: '[data-record-id="mobile-maintenance-long"]',
+    },
+    {
+      section: "Staff",
+      recordSelector: '[data-record-id="demo-staff-admin"]',
+      identity: "Jordan Vale",
+      status: "Office Manager",
+      action: "Edit Staff",
+      expectedTexts: ["jordan.vale@example.test", "0400 000 101", "Created"],
+      longRecordSelector: '[data-record-id="mobile-staff-long"]',
+    },
+    {
+      section: "Parts Inventory",
+      recordSelector: '[data-record-id="demo-inventory-controller"]',
+      identity: "Demo controller",
+      status: "In stock",
+      statusIsBadge: true,
+      action: "Edit Part",
+      expectedTexts: ["DEMO-CONTROLLER", "Automation", "Example Supplier", "Demo shelf", "Qty", "Reorder", "Value", "$300.00", "Delete"],
+      longRecordSelector: '[data-record-id="mobile-inventory-long"]',
+    },
+  ];
+
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 360, height: 800 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+  ]) {
+    const context = await browser.newContext(mobileContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    const fixture = readMobileRecordFixture();
+    await page.route("**/api/app-state", (route) => route.request().method() === "GET"
+      ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+      : route.continue());
+
+    try {
+      await loginAs(page, "mobileadmin");
+
+      for (const pageSpec of pageSpecs) {
+        await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+        await assertMobileRecordListContained(page);
+
+        const list = page.locator("[data-mobile-record-list]");
+        const card = list.locator(pageSpec.recordSelector);
+        await expect(card).toBeVisible();
+        await expect(card.getByText(pageSpec.identity, { exact: false }).first()).toBeVisible();
+        if (pageSpec.statusIsBadge) {
+          await expect(card.locator('[data-slot="badge"]', { hasText: pageSpec.status })).toBeVisible();
+        } else {
+          await expect(card.getByText(pageSpec.status, { exact: true }).first()).toBeVisible();
+        }
+        for (const expectedText of pageSpec.expectedTexts) {
+          await expect(card.getByText(expectedText, { exact: false }).first()).toBeVisible();
+        }
+        await expect(card.locator("button", { hasText: pageSpec.action })).toHaveCount(1);
+
+        if (["Customers", "Sites"].includes(pageSpec.section)) {
+          await expect(card.locator("dl")).toHaveCount(0);
+          await expect(card.getByText("Jobs", { exact: true })).toHaveCount(0);
+          await expect(card.getByText("Open", { exact: true })).toHaveCount(0);
+          await expect(card.getByText("Last activity", { exact: true })).toHaveCount(0);
+          if (pageSpec.section === "Sites") await expect(card.getByText("Assets", { exact: true })).toHaveCount(0);
+        }
+
+        if (["Customers", "Sites", "Job History", "Invoices", "Staff"].includes(pageSpec.section)) {
+          const resultsShell = page.locator("[data-mobile-record-results-shell]");
+          await expect(resultsShell).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+          await expect(resultsShell).toHaveCSS("border-top-width", "0px");
+          await expect(resultsShell).toHaveCSS("overflow-y", "visible");
+          await expect(resultsShell.locator('[data-slot="card-content"]')).toHaveCSS("padding-left", "0px");
+        }
+
+        const screenshotName = viewport.width === 320
+          ? {
+              Invoices: "mobile-records-invoices-320x568.png",
+              Maintenance: "mobile-records-maintenance-320x568.png",
+            }[pageSpec.section]
+          : viewport.width === 390
+            ? {
+                Maintenance: "mobile-records-maintenance-390x844.png",
+                Staff: "mobile-records-staff-390x844.png",
+                "Parts Inventory": "mobile-records-inventory-390x844.png",
+              }[pageSpec.section]
+            : null;
+        if (screenshotName) await capture(page, testInfo, screenshotName, `${pageSpec.section} mobile records ${viewport.width}x${viewport.height}`);
+
+        const longRecord = list.locator(pageSpec.longRecordSelector);
+        await expect(longRecord).toHaveCount(1);
+        const longRecordMetrics = await longRecord.evaluate((cardElement) => ({
+          clientWidth: cardElement.clientWidth,
+          scrollWidth: cardElement.scrollWidth,
+          height: cardElement.getBoundingClientRect().height,
+        }));
+        expect(longRecordMetrics.scrollWidth).toBeLessThanOrEqual(longRecordMetrics.clientWidth + 1);
+        expect(longRecordMetrics.height).toBeLessThanOrEqual(420);
+      }
+
+      if (viewport.width === 390) {
+        await navigateToWorkspaceSection(page, "Customers", viewport.width);
+        const customerCard = page.locator('[data-mobile-record-card][data-record-id="demo-customer-arcadia"]');
+        const openProfile = customerCard.getByRole("button", { name: "Open profile for Arcadia Example Apartments" });
+        await expect(openProfile).toHaveCount(1);
+        await openProfile.click();
+        await expect(page.getByRole("dialog", { name: "Arcadia Example Apartments" })).toHaveCount(1);
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog", { name: "Arcadia Example Apartments" })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "List view" })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Grid view" })).toHaveCount(0);
+
+        await navigateToWorkspaceSection(page, "Sites", viewport.width);
+        const siteCard = page.locator('[data-mobile-record-card][data-record-id^="demo-customer-arcadia-"]');
+        const openSite = siteCard.getByRole("button", { name: "Open site 10 Example Lane, Sampleton VIC 3000" });
+        await expect(openSite).toHaveCount(1);
+        await openSite.click();
+        await expect(page.getByRole("dialog", { name: "10 Example Lane, Sampleton VIC 3000" })).toHaveCount(1);
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+
+        await navigateToWorkspaceSection(page, "Job History", viewport.width);
+        await chooseSelectOption(page, "Sort job history", "Oldest job");
+        await expect(page.locator("[data-mobile-record-card]").first()).toHaveAttribute("data-record-id", "demo-job-1001");
+        const historyFilter = page.locator('[data-responsive-page-controls] button[aria-haspopup="dialog"]');
+        await historyFilter.click();
+        await chooseSelectOption(page, "Status", "Completed");
+        await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Done" }).click();
+        const completedCards = page.locator("[data-mobile-record-card]");
+        expect(await completedCards.count()).toBeGreaterThan(0);
+        for (const text of await completedCards.allTextContents()) expect(text).toContain("Completed");
+        await historyFilter.click();
+        await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Reset" }).click();
+        await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Done" }).click();
+        const openJob = page.locator('[data-mobile-record-card][data-record-id="demo-job-1001"]').getByRole("button", { name: "Open Job #1001: Synthetic gate service" });
+        await expect(openJob).toHaveCount(1);
+        await openJob.click();
+        await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
+        await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toHaveCount(1);
+        await page.getByRole("button", { name: "Back to Job History" }).click();
+
+        await navigateToWorkspaceSection(page, "Invoices", viewport.width);
+        const sentInvoiceCard = page.locator('[data-mobile-record-card][data-record-id="demo-job-1001"]');
+        await expect(sentInvoiceCard.getByRole("button", { name: "Open Job #1001", exact: true })).toHaveCount(1);
+        await expect(sentInvoiceCard.getByRole("button", { name: "Open sent invoice for Job #1001", exact: true })).toHaveCount(1);
+        await expect(sentInvoiceCard.getByRole("button", { name: "Open invoice editor for Job #1001", exact: true })).toHaveCount(1);
+        const createInvoice = page.locator('[data-mobile-record-card][data-record-id="mobile-job-high-priority"]').locator("button", { hasText: "Create Invoice" });
+        await expect(createInvoice).toHaveCount(1);
+        await createInvoice.click();
+        await expect(page.getByRole("dialog", { name: "Invoice - Urgent safety edge repair" })).toHaveCount(1);
+        await page.keyboard.press("Escape");
+
+        await navigateToWorkspaceSection(page, "Maintenance", viewport.width);
+        const maintenanceCard = page.locator('[data-mobile-record-card][data-record-id="mobile-maintenance-plan"]');
+        await expect(maintenanceCard.getByRole("button", { name: "View active job for Quarterly gate safety inspection" })).toHaveCount(1);
+        await expect(maintenanceCard.getByRole("button", { name: "Edit plan Quarterly gate safety inspection" })).toHaveCount(1);
+        await expect(maintenanceCard.getByRole("button", { name: "Delete plan Quarterly gate safety inspection" })).toHaveCount(1);
+        const maintenanceFilter = page.locator('[data-responsive-page-controls] button[aria-haspopup="dialog"]');
+        await maintenanceFilter.click();
+        await chooseSelectOption(page, "Status", "Upcoming");
+        await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Done" }).click();
+        await expect(page.locator('[data-mobile-record-card][data-record-id="mobile-maintenance-long"]')).toBeVisible();
+        await expect(maintenanceCard).toHaveCount(0);
+        await maintenanceFilter.click();
+        await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Reset" }).click();
+        await page.getByRole("dialog", { name: "Filters" }).getByRole("button", { name: "Done" }).click();
+
+        await navigateToWorkspaceSection(page, "Staff", viewport.width);
+        const editStaff = page.locator('[data-mobile-record-card][data-record-id="demo-staff-admin"]').getByRole("button", { name: "Edit staff member Jordan Vale" });
+        await expect(editStaff).toHaveCount(1);
+        await editStaff.click();
+        await expect(page.getByRole("dialog", { name: "Edit Staff Member" })).toHaveCount(1);
+        await page.keyboard.press("Escape");
+
+        await navigateToWorkspaceSection(page, "Parts Inventory", viewport.width);
+        const editPart = page.locator('[data-mobile-record-card][data-record-id="demo-inventory-controller"]').getByRole("button", { name: "Edit part Demo controller" });
+        await expect(editPart).toHaveCount(1);
+        await editPart.click();
+        await expect(page.getByRole("dialog", { name: "Edit Part" })).toHaveCount(1);
+        await page.keyboard.press("Escape");
+      }
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test("tablet and desktop database pages retain their existing fitted result grids", async ({ browser }) => {
+  const pageSpecs = [
+    { section: "Customers", action: "Open", headers: ["Customer", "Contact", "Activity", "Jobs"] },
+    { section: "Sites", action: "Open", headers: ["Site", "Customer", "Activity", "Work"] },
+    { section: "Job History", action: "Open", headers: ["Job", "Customer", "Status", "Open"] },
+    { section: "Invoices", action: "Job", headers: ["Job", "Invoice", "Payment", "Actions"] },
+    { section: "Maintenance", action: "View Active Job" },
+    { section: "Staff", action: "Edit", headers: ["Staff", "Contact", "Action"] },
+    { section: "Parts Inventory", action: "Edit", headers: ["Part", "Stock", "Value", "Action"] },
+  ];
+
+  for (const viewport of [
+    { width: 768, height: 1024 },
+    { width: 820, height: 1180 },
+    { width: 1024, height: 768 },
+    { width: 1280, height: 720 },
+    { width: 1440, height: 900 },
+  ]) {
+    const context = await browser.newContext(viewport.width < 1024
+      ? mobileContextOptions(viewport.width, viewport.height)
+      : desktopContextOptions(viewport.width, viewport.height));
+    const page = await context.newPage();
+    const fixture = readMobileRecordFixture();
+    await page.route("**/api/app-state", (route) => route.request().method() === "GET"
+      ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+      : route.continue());
+
+    try {
+      await loginAs(page, "mobileadmin", viewport.width < 1024);
+      for (const pageSpec of pageSpecs) {
+        await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+        await expect(page.locator("[data-mobile-record-list]")).toHaveCount(0);
+        const desktopResults = page.locator("[data-desktop-record-results]");
+        await expect(desktopResults).toBeVisible();
+        await expect(desktopResults.getByRole("button", { name: pageSpec.action, exact: true }).first()).toBeVisible();
+
+        if (pageSpec.headers) {
+          const visibleHeader = desktopResults.locator(".data-grid-header:visible");
+          await expect(visibleHeader).toHaveCount(1);
+          expect((await visibleHeader.locator(":scope > *").allTextContents()).map((text) => text.trim())).toEqual(pageSpec.headers);
+          await expect(desktopResults.locator(".data-grid-row:visible").first()).toBeVisible();
+          const scroller = desktopResults.locator(".overflow-x-auto:visible").first();
+          const dimensions = await scroller.evaluate((element) => ({
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+          }));
+          expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
+        } else {
+          for (const text of ["Checklist", "Recent activity", "Due Queue", "Active Maintenance Jobs"]) {
+            await expect(desktopResults.getByText(text, { exact: true }).first()).toBeVisible();
+          }
+        }
+        await assertNoHorizontalOverflow(page);
+      }
+    } finally {
+      await context.close();
+    }
   }
 });
 
@@ -1747,7 +2248,10 @@ test("visual density preserves touch targets, focus, and card gutters at every r
       const controls = page.locator(viewport.width < 1280 ? "[data-responsive-page-controls]" : ".floating-page-toolbar:visible").first();
       const search = controls.locator("input").first();
       await expect(search).toHaveCSS("border-top-width", "1px");
-      await expect(page.locator('.data-card > [data-slot="card-content"]')).toHaveCSS("padding-left", "0px");
+      const customerResultsContent = page.locator(viewport.width < 768
+        ? '[data-mobile-record-results-shell] > [data-slot="card-content"]'
+        : '.data-card > [data-slot="card-content"]');
+      await expect(customerResultsContent).toHaveCSS("padding-left", "0px");
       if (mobile) {
         const targets = await controls.locator('button, input').evaluateAll((elements) => elements
           .filter((element) => element.getClientRects().length > 0)

@@ -2,6 +2,14 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
+  MobileRecordActions,
+  MobileRecordBody,
+  MobileRecordCard,
+  MobileRecordHeader,
+  MobileRecordList,
+} from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import {
   CompactSortControl,
   DesktopControlField,
   DesktopPageControls,
@@ -48,6 +56,7 @@ export default function CustomerManager({
   const [filterClock] = useState(() => ({ now: Date.now(), year: new Date().getFullYear() }));
   const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
+  const isMobileRecordLayout = useMobileRecordLayout();
 
   const jobsByCustomerId = useMemo(() => {
     return jobs.reduce((map, job) => {
@@ -225,7 +234,9 @@ export default function CustomerManager({
           <>
             <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
             <CompactSortControl value={sortBy} onValueChange={setSortBy} options={customerSortOptions} label="Sort customers" />
-            <ViewModeToggle value={viewMode} onChange={setViewMode} label="Customer view" />
+            <div className="hidden md:block">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} label="Customer view" />
+            </div>
           </>
         )}
         action={(
@@ -319,10 +330,15 @@ export default function CustomerManager({
         )}
       />
 
-      <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-      <CardContent className={viewMode === "list" ? "p-0" : "p-panel"}>
+      <Card
+        className={isMobileRecordLayout
+          ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
+          : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+        data-mobile-record-results-shell={isMobileRecordLayout ? "" : undefined}
+      >
+      <CardContent className={isMobileRecordLayout ? "p-0" : viewMode !== "list" ? "p-panel" : "p-0"}>
         {filteredCustomers.length === 0 ? (
-          <div className={viewMode === "list" ? "p-panel" : ""}>
+          <div className={!isMobileRecordLayout && viewMode === "list" ? "p-panel" : ""}>
             <EmptyState
               title="No customers found"
               text="Try adjusting the search or filters, or create a new customer record."
@@ -333,9 +349,52 @@ export default function CustomerManager({
               )}
             />
           </div>
+        ) : isMobileRecordLayout ? (
+          <MobileRecordList label="Customers">
+            {filteredCustomers.map((customer) => {
+              const headingId = `mobile-customer-${encodeURIComponent(customer.id)}-title`;
+              return (
+                <MobileRecordCard key={customer.id} labelledBy={headingId} recordId={customer.id}>
+                  <MobileRecordHeader>
+                    <div className="min-w-0">
+                      <h3 id={headingId} className="line-clamp-2 text-[15px] font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">
+                        {customer.name}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 text-xs leading-4 text-slate-600 [overflow-wrap:anywhere]">
+                        {customer.address || "No address saved"}
+                      </p>
+                    </div>
+                    {customer.customerType ? (
+                      <Badge className="max-w-[44%] shrink-0 bg-slate-100 text-slate-700">
+                        {formatCustomerType(customer.customerType)}
+                      </Badge>
+                    ) : null}
+                  </MobileRecordHeader>
+
+                  <MobileRecordBody>
+                    <p className="line-clamp-1 text-slate-700"><span className="sr-only">Email: </span>{customer.email || "No email"}</p>
+                    <p className="line-clamp-1 text-slate-700"><span className="sr-only">Phone: </span>{customer.phone || "No phone"}</p>
+                  </MobileRecordBody>
+
+                  <MobileRecordActions>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-slate-300 px-3"
+                      aria-label={`Open profile for ${customer.name}`}
+                      onClick={() => onOpenProfile(customer.id)}
+                    >
+                      Open Profile
+                    </Button>
+                  </MobileRecordActions>
+                </MobileRecordCard>
+              );
+            })}
+          </MobileRecordList>
         ) : (
-          viewMode === "list" ? (
-            <>
+          <div data-desktop-record-results>
+            {viewMode === "list" ? (
+              <>
               <div className="overflow-x-auto text-xs 2xl:hidden">
                 <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
                   <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
@@ -430,10 +489,11 @@ export default function CustomerManager({
                 </div>
               </div>
               </div>
-            </>
-          ) : (
-            renderCustomerCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")
-          )
+              </>
+            ) : (
+              renderCustomerCards("grid gap-4 lg:grid-cols-2 2xl:grid-cols-3")
+            )}
+          </div>
         )}
       </CardContent>
       </Card>
