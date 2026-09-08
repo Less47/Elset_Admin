@@ -2183,6 +2183,9 @@ export function useWorkspaceActions({
   async function handleThemeSettingChange(key, value) {
     if (!canManageBusiness) return;
     if (uiSettingKeys.includes(key)) return themeSettingsSave.change({ [key]: value });
+    if (preferenceSettingKeys.includes(key) && useSqliteApi) {
+      return themeSettingsSave.changePreferences({ [key]: value });
+    }
     if (useSqliteApi) {
       const saved = await saveSettingsApiRequest({
         path: "/api/settings",
@@ -2222,13 +2225,10 @@ export function useWorkspaceActions({
   async function handleResetPreferences() {
     if (!canManageBusiness) return;
     if (useSqliteApi) {
-      const saved = await saveSettingsApiRequest({
-        path: "/api/settings/reset",
-        method: "POST",
-        body: { group: "preferences" },
-        errorMessage: "Unable to reset preference settings.",
-      });
-      return saved.ok;
+      return themeSettingsSave.changePreferences(
+        pickSettings(defaultThemeSettings, preferenceSettingKeys),
+        { immediate: true }
+      );
     }
 
     setData((prev) => ({
@@ -2243,7 +2243,7 @@ export function useWorkspaceActions({
   }
 
   return {
-    themeSaveState: { status: themeSettingsSave.status, error: themeSettingsSave.error },
+    themeSaveState: { status: themeSettingsSave.status, error: themeSettingsSave.error, scope: themeSettingsSave.scope },
     handleRetryThemeSave,
     createJob,
     handleAddInvoicePayment,

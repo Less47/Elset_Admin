@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createThemeSettingsSaveQueue, THEME_SAVE_DEBOUNCE_MS } from "../src/hooks/theme-settings-save-queue.js";
+import { createThemeSettingsSaveQueue, PREFERENCE_SAVE_DEBOUNCE_MS, THEME_SAVE_DEBOUNCE_MS } from "../src/hooks/theme-settings-save-queue.js";
 
 function harness() {
   let now = 0;
@@ -55,6 +55,21 @@ test("theme changes are immediate and debounce for 400ms after the latest of ten
   requests[0].resolve();
   await tick();
   assert.equal(queue.getSnapshot().status, "saved");
+});
+
+test("twenty preference keystrokes stay local and coalesce into one save after 600ms", async () => {
+  const { queue, requests, tick } = harness();
+  assert.equal(PREFERENCE_SAVE_DEBOUNCE_MS, 600);
+  for (const character of "abcdefghijklmnopqrst") {
+    const previous = queue.getSnapshot().overrides.bankAccountName || "";
+    queue.change({ bankAccountName: `${previous}${character}` }, PREFERENCE_SAVE_DEBOUNCE_MS);
+    assert.equal(queue.getSnapshot().overrides.bankAccountName, `${previous}${character}`);
+    await tick(20);
+  }
+  await tick(579);
+  assert.equal(requests.length, 0);
+  await tick(1);
+  assert.deepEqual(requests.map((request) => request.patch), [{ bankAccountName: "abcdefghijklmnopqrst" }]);
 });
 
 test("one request stays in flight while further changes merge, and an old acknowledgement cannot revert the UI", async () => {

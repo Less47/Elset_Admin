@@ -689,9 +689,19 @@ export default function SettingsManager({
                   <CardTitle className="text-lg">Company Details</CardTitle>
                   <p className="mt-1 text-sm text-slate-600">These values are the single source of truth for generated quotes, invoices, outgoing emails, and workspace branding.</p>
                 </div>
-                <Button variant="outline" className="rounded-xl" onClick={onResetPreferences}>
-                  Reset Preferences
-                </Button>
+                <div className="grid justify-items-start gap-2 lg:justify-items-end">
+                  <Button variant="outline" className="rounded-xl" onClick={onResetPreferences}>
+                    Reset Preferences
+                  </Button>
+                  <div role="status" aria-label="Preferences save status" aria-live="polite" aria-atomic="true" className="text-sm text-slate-600">
+                    {themeSaveState?.scope !== "preferences" ? null : themeSaveState?.status === "error" ? (
+                      <div className="flex flex-wrap items-center gap-2 text-red-700">
+                        <span>Preference changes could not be saved. {themeSaveState.error !== "Preference changes could not be saved." ? themeSaveState.error : ""}</span>
+                        <Button type="button" variant="outline" className="min-h-11 rounded-xl" onClick={onRetryThemeSave}>Retry</Button>
+                      </div>
+                    ) : themeSaveState?.status === "saved" ? "Saved" : ["pending", "saving"].includes(themeSaveState?.status) ? "Saving…" : null}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 {companyFields.map((field) => (
@@ -699,6 +709,7 @@ export default function SettingsManager({
                     <FormField label={field.label}>
                       {field.multiline ? (
                         <Textarea
+                          data-setting-key={field.key}
                           rows={4}
                           value={normalizedSettings[field.key]}
                           placeholder={field.placeholder}
@@ -706,6 +717,7 @@ export default function SettingsManager({
                         />
                       ) : (
                         <Input
+                          data-setting-key={field.key}
                           value={normalizedSettings[field.key]}
                           placeholder={field.placeholder}
                           onChange={(event) => onSettingChange(field.key, event.target.value)}
@@ -726,6 +738,7 @@ export default function SettingsManager({
                 {bankFields.map((field) => (
                   <FormField key={field.key} label={field.label}>
                     <Input
+                      data-setting-key={field.key}
                       value={normalizedSettings[field.key]}
                       placeholder={field.placeholder}
                       onChange={(event) => onSettingChange(field.key, event.target.value)}
@@ -745,6 +758,7 @@ export default function SettingsManager({
                   {emailFields.map((field) => (
                     <FormField key={field.key} label={field.label}>
                       <Input
+                        data-setting-key={field.key}
                         value={normalizedSettings[field.key]}
                         placeholder={field.placeholder}
                         onChange={(event) => onSettingChange(field.key, event.target.value)}
@@ -755,6 +769,7 @@ export default function SettingsManager({
 
                 <FormField label="Email signature">
                   <Textarea
+                    data-setting-key="emailSignature"
                     rows={5}
                     value={normalizedSettings.emailSignature}
                     onChange={(event) => onSettingChange("emailSignature", event.target.value)}
@@ -931,7 +946,7 @@ export default function SettingsManager({
                 <CardTitle className="text-lg">Colour Controls</CardTitle>
                 <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, database tables, popup gradients, primary action buttons, and shared border colour.</p>
                 <div role="status" aria-label="Theme save status" aria-live="polite" aria-atomic="true" className="text-sm text-slate-600">
-                  {themeSaveState?.status === "error" ? (
+                  {themeSaveState?.scope === "preferences" ? null : themeSaveState?.status === "error" ? (
                     <div className="flex flex-wrap items-center gap-2 text-red-700">
                       <span>Theme change could not be saved. {themeSaveState.error !== "Theme change could not be saved." ? themeSaveState.error : ""}</span>
                       <Button type="button" variant="outline" className="min-h-11 rounded-xl" onClick={onRetryThemeSave}>Retry</Button>

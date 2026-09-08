@@ -10,7 +10,11 @@ import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 
 import { updateWorkspaceSettings } from "../../server-workspace-settings.js";
-import { defaultWorkspaceSettings as defaultThemeSettings, workspaceUiSettingKeys as uiSettingKeys } from "../../server-workspace-setting-keys.js";
+import {
+  defaultWorkspaceSettings as defaultThemeSettings,
+  workspacePreferenceSettingKeys as preferenceSettingKeys,
+  workspaceUiSettingKeys as uiSettingKeys,
+} from "../../server-workspace-setting-keys.js";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturePath = path.join(repoRoot, "fixtures/demo-workspace.json");
 const screenshotDir = path.join(repoRoot, "test-results/theme");
@@ -58,6 +62,15 @@ function readWorkspaceState() {
   });
   try {
     return loadWorkspaceStateFromDb(db);
+  } finally {
+    db.close();
+  }
+}
+
+function writeWorkspaceSettings(settings) {
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try {
+    updateWorkspaceSettings(db, settings);
   } finally {
     db.close();
   }
@@ -195,7 +208,7 @@ async function navigate(page, label, width) {
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: label, exact: true }).click();
 }
 
-async function openSettings(browser, width = 1440, height = 900) {
+async function openSettings(browser, width = 1440, height = 900, tab = "UI Settings") {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: width < 1280, isMobile: width < 768, locale: "en-AU", reducedMotion: "reduce" });
   const page = await context.newPage();
   await page.goto(baseUrl);
@@ -203,7 +216,7 @@ async function openSettings(browser, width = 1440, height = 900) {
   await page.getByPlaceholder("Enter your password").fill(accountPassword);
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
   await navigate(page, "Settings", width);
-  await page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
+  await page.locator(".floating-page-toolbar").getByRole("button", { name: tab, exact: true }).click();
   const writes = [];
   const dialogs = [];
   page.on("request", (request) => {
@@ -215,6 +228,17 @@ async function openSettings(browser, width = 1440, height = 900) {
   return { context, page, writes, dialogs };
 }
 const status = (page) => page.getByRole("status", { name: "Theme save status" });
+const preferenceStatus = (page) => page.getByRole("status", { name: "Preferences save status" });
+const preferenceInput = (page, key) => page.locator(`[data-setting-key="${key}"]`);
+const selectRange = (input, start, end = start) => input.evaluate((element, range) => {
+  element.focus();
+  element.setSelectionRange(range.start, range.end);
+}, { start, end });
+const selection = (input) => input.evaluate((element) => ({
+  active: document.activeElement === element,
+  end: element.selectionEnd,
+  start: element.selectionStart,
+}));
 const colourInput = (page) => page.getByLabel("Primary action colour", { exact: true });
 function setColours(page, values) {
   // Native picker automation can take >400ms between calls in WebKit. Dispatch
@@ -256,6 +280,223 @@ async function delayedSettings(page, transform = (payload) => payload) {
   });
   return { requests, maximum: () => maximum };
 }
+
+function restoreOriginalPreferences() {
+  writeWorkspaceSettings(Object.fromEntries(
+    preferenceSettingKeys.map((key) => [key, originalRecords.preferences[key] ?? defaultThemeSettings[key]])
+  ));
+}
+
+test("preference drafts preserve textarea selection, DOM identity, and latest values through a stale two-second save", async ({ browser }) => {
+  const initial = {
+    bankAccountName: "ELSET Account",
+    bankAccountNumber: "123456789",
+    bankBsb: "033505",
+    defaultSenderEmail: "admin@elset.com.au",
+    emailSignature: "ELSET PTY LTD\n0422662095\nadmin@elset.com.au\nElset.com.au",
+  };
+  writeWorkspaceSettings(initial);
+  const { context, page, writes, dialogs } = await openSettings(browser, 1440, 900, "Preferences");
+  const delayed = await delayedSettings(page, (payload) => ({
+    ...payload,
+    result: {
+      ...payload.result,
+      settings: { ...payload.result.settings, bankBsb: "000000", emailSignature: "STALE SERVER RESPONSE" },
+    },
+    state: {
+      ...payload.state,
+      settings: { ...payload.state.settings, bankBsb: "000000", emailSignature: "STALE SERVER RESPONSE" },
+    },
+  }));
+
+  try {
+    const signature = preferenceInput(page, "emailSignature");
+    await signature.evaluate((element) => { window.__elsetPreferenceTextarea = element; });
+
+    const firstSelectionStart = initial.emailSignature.indexOf("PTY");
+    await selectRange(signature, firstSelectionStart, firstSelectionStart + 3);
+    await signature.pressSequentially("TEST");
+    const firstSignature = initial.emailSignature.replace("PTY", "TEST");
+    await expect(signature).toHaveValue(firstSignature);
+    expect(await selection(signature)).toEqual({ active: true, start: firstSelectionStart + 4, end: firstSelectionStart + 4 });
+    expect(await signature.evaluate((element) => element === window.__elsetPreferenceTextarea)).toBe(true);
+    expect(writes).toHaveLength(0);
+
+    await expect.poll(() => delayed.requests.length).toBe(1);
+    expect(delayed.requests[0].patch).toEqual({ emailSignature: firstSignature });
+
+    const phoneSelectionStart = firstSignature.indexOf("266");
+    await selectRange(signature, phoneSelectionStart, phoneSelectionStart + 3);
+    await signature.pressSequentially("777");
+    const secondSignature = firstSignature.replace("266", "777");
+    await expect(signature).toHaveValue(secondSignature);
+
+    const bsb = preferenceInput(page, "bankBsb");
+    await selectRange(bsb, 3);
+    await bsb.pressSequentially("12");
+    await expect(bsb).toHaveValue("03312505");
+    expect(await selection(bsb)).toEqual({ active: true, start: 5, end: 5 });
+
+    const accountNumber = preferenceInput(page, "bankAccountNumber");
+    await selectRange(accountNumber, 4);
+    await accountNumber.pressSequentially("00");
+    await expect(accountNumber).toHaveValue("12340056789");
+
+    const accountName = preferenceInput(page, "bankAccountName");
+    await selectRange(accountName, 5);
+    await accountName.pressSequentially(" TEST");
+    await expect(accountName).toHaveValue("ELSET TEST Account");
+
+    const sender = preferenceInput(page, "defaultSenderEmail");
+    await selectRange(sender, 0, 5);
+    await sender.pressSequentially("office");
+    await expect(sender).toHaveValue("office@elset.com.au");
+
+    await expect(signature).toHaveValue(secondSignature);
+    const emailInsertionStart = secondSignature.indexOf("@elset.com.au");
+    await selectRange(signature, emailInsertionStart);
+    await signature.pressSequentially("+test");
+    const finalSignature = `${secondSignature.slice(0, emailInsertionStart)}+test${secondSignature.slice(emailInsertionStart)}`;
+    const finalCaret = emailInsertionStart + 5;
+    await expect(signature).toHaveValue(finalSignature);
+    expect(await selection(signature)).toEqual({ active: true, start: finalCaret, end: finalCaret });
+
+    await page.waitForTimeout(2_100);
+    expect(delayed.requests).toHaveLength(1);
+    expect(delayed.maximum()).toBe(1);
+    await expect(signature).toHaveValue(finalSignature);
+    expect(await selection(signature)).toEqual({ active: true, start: finalCaret, end: finalCaret });
+
+    delayed.requests[0].release();
+    await expect.poll(() => delayed.requests.length).toBe(2);
+    await expect(signature).toHaveValue(finalSignature);
+    expect(await signature.evaluate((element) => element === window.__elsetPreferenceTextarea)).toBe(true);
+    expect(await selection(signature)).toEqual({ active: true, start: finalCaret, end: finalCaret });
+    expect(delayed.requests[1].patch).toMatchObject({
+      bankAccountName: "ELSET TEST Account",
+      bankAccountNumber: "12340056789",
+      bankBsb: "03312505",
+      defaultSenderEmail: "office@elset.com.au",
+      emailSignature: finalSignature,
+    });
+    delayed.requests[1].release();
+    await expect(preferenceStatus(page)).toHaveText("Saved");
+    expect(delayed.maximum()).toBe(1);
+    expect(writes).toHaveLength(2);
+    expect(writes.every((write) => write.path === "/api/settings" && write.method === "PATCH")).toBe(true);
+    expect(writes.some((write) => write.path === "/api/app-state")).toBe(false);
+    expect(dialogs).toEqual([]);
+
+    await page.reload();
+    await navigate(page, "Settings", 1440);
+    await page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
+    await expect(preferenceInput(page, "emailSignature")).toHaveValue(finalSignature);
+    await expect(preferenceInput(page, "bankBsb")).toHaveValue("03312505");
+    await expect(preferenceInput(page, "bankAccountNumber")).toHaveValue("12340056789");
+    await expect(preferenceInput(page, "bankAccountName")).toHaveValue("ELSET TEST Account");
+    await expect(preferenceInput(page, "defaultSenderEmail")).toHaveValue("office@elset.com.au");
+  } finally {
+    for (const request of delayed.requests) request.release();
+    await context.close();
+    restoreOriginalPreferences();
+  }
+});
+
+test("twenty rapid preference characters update immediately and produce one targeted request", async ({ browser }) => {
+  writeWorkspaceSettings({ bankAccountName: "ELSET" });
+  const { context, page, writes, dialogs } = await openSettings(browser, 1440, 900, "Preferences");
+  try {
+    const accountName = preferenceInput(page, "bankAccountName");
+    const typed = "abcdefghijklmnopqrst";
+    await selectRange(accountName, 5);
+    await accountName.pressSequentially(typed);
+    await expect(accountName).toHaveValue(`ELSET${typed}`);
+    expect(await selection(accountName)).toEqual({ active: true, start: 25, end: 25 });
+    expect(writes).toHaveLength(0);
+    await expect(preferenceStatus(page)).toHaveText("Saved");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({
+      path: "/api/settings",
+      method: "PATCH",
+      body: { settings: { bankAccountName: `ELSET${typed}` } },
+    });
+    expect(dialogs).toEqual([]);
+  } finally {
+    await context.close();
+    restoreOriginalPreferences();
+  }
+});
+
+for (const latency of [500, 1_000, 2_000]) {
+  test(`preference typing and caret stay responsive through ${latency}ms settings latency`, async ({ browser }) => {
+    writeWorkspaceSettings({ bankBsb: "033505" });
+    const { context, page, writes } = await openSettings(browser, 1440, 900, "Preferences");
+    let activeRequests = 0;
+    let maximumRequests = 0;
+    await page.route("**/api/settings", async (route) => {
+      activeRequests++;
+      maximumRequests = Math.max(maximumRequests, activeRequests);
+      await new Promise((resolve) => setTimeout(resolve, latency));
+      const response = await route.fetch();
+      await route.fulfill({ response });
+      activeRequests--;
+    });
+    try {
+      const bsb = preferenceInput(page, "bankBsb");
+      await bsb.evaluate((element) => { window.__elsetPreferenceBsb = element; });
+      await selectRange(bsb, 3);
+      await bsb.pressSequentially("1");
+      await expect(bsb).toHaveValue("0331505");
+      expect(await selection(bsb)).toEqual({ active: true, start: 4, end: 4 });
+      await expect.poll(() => writes.length).toBe(1);
+      await bsb.pressSequentially("2");
+      await expect(bsb).toHaveValue("03312505");
+      expect(await selection(bsb)).toEqual({ active: true, start: 5, end: 5 });
+      await expect(preferenceStatus(page)).toHaveText("Saved", { timeout: latency * 2 + 5_000 });
+      await expect(bsb).toHaveValue("03312505");
+      expect(await bsb.evaluate((element) => element === window.__elsetPreferenceBsb)).toBe(true);
+      expect(maximumRequests).toBe(1);
+      expect(writes).toHaveLength(2);
+    } finally {
+      await context.close();
+      restoreOriginalPreferences();
+    }
+  });
+}
+
+test("a failed preference save keeps the draft, focus, and selection until retry succeeds", async ({ browser }) => {
+  writeWorkspaceSettings({ bankBsb: "033505" });
+  const { context, page, writes, dialogs } = await openSettings(browser, 1440, 900, "Preferences");
+  let attempts = 0;
+  await page.route("**/api/settings", async (route) => {
+    if (++attempts === 1) {
+      await route.fulfill({ status: 503, contentType: "text/plain", body: "No healthy instances found" });
+    } else {
+      await route.continue();
+    }
+  });
+  try {
+    const bsb = preferenceInput(page, "bankBsb");
+    await bsb.evaluate((element) => { window.__elsetPreferenceBsb = element; });
+    await selectRange(bsb, 3);
+    await bsb.pressSequentially("12");
+    await expect(bsb).toHaveValue("03312505");
+    await expect(preferenceStatus(page)).toContainText("Preference changes could not be saved.");
+    await expect(bsb).toHaveValue("03312505");
+    expect(await bsb.evaluate((element) => element === window.__elsetPreferenceBsb)).toBe(true);
+    expect(await selection(bsb)).toEqual({ active: true, start: 5, end: 5 });
+    expect(attempts).toBe(1);
+    expect(dialogs).toEqual([]);
+    await preferenceStatus(page).getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(preferenceStatus(page)).toHaveText("Saved");
+    expect(attempts).toBe(2);
+    expect(writes).toHaveLength(2);
+    expect(readWorkspaceState().settings.bankBsb).toBe("03312505");
+  } finally {
+    await context.close();
+    restoreOriginalPreferences();
+  }
+});
 
 test("ten rapid selections update immediately, coalesce, and stay latest through delayed acknowledgements", async ({ browser }) => {
   const { context, page, writes, dialogs } = await openSettings(browser);

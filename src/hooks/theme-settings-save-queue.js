@@ -1,4 +1,5 @@
 export const THEME_SAVE_DEBOUNCE_MS = 400;
+export const PREFERENCE_SAVE_DEBOUNCE_MS = 600;
 
 // Owned by App, so leaving the Settings page does not cancel a pending save.
 export function createThemeSettingsSaveQueue({
@@ -65,7 +66,7 @@ export function createThemeSettingsSaveQueue({
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    change(patch) {
+    change(patch, changeDebounceMs = debounceMs) {
       if (!active || !Object.keys(patch).length) return false;
       if (snapshot.status !== "error"
         && Object.entries(patch).every(([key, value]) => snapshot.overrides[key] === value)) return true;
@@ -79,7 +80,7 @@ export function createThemeSettingsSaveQueue({
         timer = null;
         ready = true;
         void drain();
-      }, debounceMs);
+      }, changeDebounceMs);
       return true;
     },
     retry() {
