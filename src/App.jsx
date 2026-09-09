@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import WorkspaceDialogs from "@/components/app/WorkspaceDialogs";
+import CustomerPages from "@/components/customers/CustomerPages";
 import WorkspaceShell from "@/components/app/WorkspaceShell";
 import { AuthLoadingScreen } from "@/components/auth/AuthLoadingScreen";
 import { LoginScreen } from "@/components/auth/LoginScreen";
@@ -11,19 +11,14 @@ import { useAppSession } from "@/hooks/useAppSession";
 import { useThemePalette } from "@/hooks/useThemePalette";
 import { useThemeSettingsSave } from "@/hooks/useThemeSettingsSave";
 import { useWorkspaceActions } from "@/hooks/useWorkspaceActions";
-import { useWorkspaceNavigation } from "@/hooks/useWorkspaceNavigation";
+import { parseWorkspacePath, useWorkspaceNavigation } from "@/hooks/useWorkspaceNavigation";
 import { useWorkspaceViewModel } from "@/hooks/useWorkspaceViewModel";
 import { LOGO_SRC, getInitialState, readFileAsDataUrl, sectionMeta, sideNavItems } from "@/lib/app-support";
 import { statuses } from "@/lib/job-status";
 
 export default function App() {
   const [data, setData] = useState(getInitialState);
-  const [customerCreateOpen, setCustomerCreateOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-  const [selectedSiteContext, setSelectedSiteContext] = useState(null);
-  const [customerProfileOpen, setCustomerProfileOpen] = useState(false);
-  const [siteProfileOpen, setSiteProfileOpen] = useState(false);
   const [isSendingDocument, setIsSendingDocument] = useState(false);
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
   const [activeSection, setActiveSection] = useState("service-board");
@@ -49,12 +44,7 @@ export default function App() {
     setData,
   });
   const resetWorkspaceChrome = useCallback(() => {
-    setCustomerCreateOpen(false);
     setSelectedJob(null);
-    setSelectedCustomerId(null);
-    setSelectedSiteContext(null);
-    setCustomerProfileOpen(false);
-    setSiteProfileOpen(false);
     setIsSendingDocument(false);
     setActiveTemplateType("quote");
     setActiveSection("service-board");
@@ -102,9 +92,7 @@ export default function App() {
     data,
     isTechnician: session.isTechnician,
     officeSearch,
-    selectedCustomerId,
     selectedJob: selectedJobForView,
-    selectedSiteContext,
     serviceBoardFullScreen,
     showHighUrgencyOnly,
   });
@@ -114,19 +102,15 @@ export default function App() {
     data,
     docType: workspaceNavigation.route.documentType || "quote",
     fetchWithAuth: session.fetchWithAuth,
-    onCloseJobWorkspace: workspaceNavigation.closeWorkspace,
     selectedFreshJob: workspaceViewModel.selectedFreshJob,
     selectedJob: selectedJobForView,
-    selectedSiteContext,
-    setCustomerProfileOpen,
     setData,
     onNavigateToDocument: workspaceNavigation.navigateToDocument,
     setIsSendingDocument,
     onNavigateToJob: workspaceNavigation.navigateToJob,
-    setSelectedCustomerId,
+    onNavigateToCustomer: workspaceNavigation.navigateToCustomer,
+    onNavigateToSite: workspaceNavigation.navigateToSite,
     setSelectedJob,
-    setSelectedSiteContext,
-    setSiteProfileOpen,
     themeSettings,
     themeSettingsSave,
     workspaceStorageMode: session.workspaceStorageMode,
@@ -153,7 +137,14 @@ export default function App() {
   const workspacePageOpen = workspaceRoute.type !== "section";
   const sourceMeta = sectionMeta[workspaceRoute.sourceSection] || sectionMeta["service-board"];
   const sourceNavigationItem = sideNavItems.find((item) => item.id === workspaceRoute.sourceSection);
-  const backLabel = sourceNavigationItem?.label || sourceMeta?.title || "Service Board";
+  const returnRoute = workspaceRoute.returnPath ? parseWorkspacePath(workspaceRoute.returnPath) : null;
+  const customerPageOpen = ["customer-details", "create-customer", "edit-customer", "site-details", "create-site", "edit-site"].includes(workspaceRoute.type);
+  const backLabel = returnRoute?.type === "customer-details" || (!returnRoute && ["site-details", "create-site", "edit-customer"].includes(workspaceRoute.type)) ? "Customer Profile"
+    : returnRoute?.type === "site-details" ? "Site Profile"
+    : returnRoute?.type === "edit-customer" ? "Edit Customer"
+    : returnRoute?.type === "job-details" ? "Job #" + (data.jobs.find((job) => job.id === returnRoute.jobId)?.jobNumber || "Details")
+    : customerPageOpen && !workspaceRoute.returnPath ? "Customers"
+    : sourceNavigationItem?.label || sourceMeta?.title || "Service Board";
 
   const handleJobPhotoUpload = async (files) => {
     if (!workspaceViewModel.selectedFreshJob) return false;
@@ -173,7 +164,9 @@ export default function App() {
     }
   };
 
-  const workspacePage = workspaceRoute.type === "create-job"
+  const workspacePage = customerPageOpen
+    ? <CustomerPages route={workspaceRoute} navigation={workspaceNavigation} actions={workspaceActions} data={data} canManageBusiness={session.canManageBusiness} backLabel={backLabel} />
+    : workspaceRoute.type === "create-job"
     ? session.canManageBusiness
       ? (
           <CreateJobPage
@@ -275,7 +268,7 @@ export default function App() {
           setActiveSection: handleActiveSectionChange,
           setActiveSettingsTab,
           setActiveTemplateType,
-          setCustomerCreateOpen,
+          openCreateCustomer: workspaceNavigation.navigateToCreateCustomer,
           openCreateJob: workspaceNavigation.navigateToCreateJob,
           setOfficeSearch,
           setServiceBoardColumnSorts,
@@ -298,22 +291,6 @@ export default function App() {
           handleSaveStaffLoginAccount: session.handleSaveStaffLoginAccount,
         }}
         workspacePage={workspacePageOpen ? workspacePage : null}
-      />
-
-      <WorkspaceDialogs
-        auth={session}
-        chrome={{
-          customerCreateOpen,
-          customerProfileOpen,
-          setCustomerCreateOpen,
-          setCustomerProfileOpen,
-          setSelectedCustomerId,
-          setSelectedSiteContext,
-          setSiteProfileOpen,
-          siteProfileOpen,
-        }}
-        selection={workspaceViewModel}
-        actions={workspaceActions}
       />
 
       <UnsavedChangesDialog

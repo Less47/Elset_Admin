@@ -125,6 +125,7 @@ test("POST /api/customers creates a customer with contacts, site, asset, and acc
               email: "morgan@example-facilities.test",
             },
           ],
+          billingContactId: "contact-facilities-manager",
           sites: [
             {
               id: "site-example-yard",
@@ -132,6 +133,7 @@ test("POST /api/customers creates a customer with contacts, site, asset, and acc
               siteType: "commercial",
               accessNotes: "Synthetic access note.",
               contactName: "Morgan Example",
+              contactId: "contact-facilities-manager",
               contactEmail: "morgan@example-facilities.test",
               assets: [
                 {
@@ -148,6 +150,11 @@ test("POST /api/customers creates a customer with contacts, site, asset, and acc
       assert.equal(response.status, 200, payload.error);
       assert.equal(payload.result.name, "Example Facilities");
       assert.ok(payload.state.customers.some((customer) => customer.id === payload.result.id));
+      const returnedCustomer = payload.state.customers.find((customer) => customer.id === payload.result.id);
+      assert.equal(returnedCustomer.contacts.find((contact) => contact.id === "contact-facilities-manager").email, "morgan@example-facilities.test");
+      assert.equal(returnedCustomer.billingContactId, "contact-facilities-manager");
+      assert.equal(returnedCustomer.sites[0].contactId, "contact-facilities-manager");
+      assert.equal(returnedCustomer.sites[0].contactEmail, "morgan@example-facilities.test");
 
       const state = getDbState(dbPath);
       const customer = state.customers.find((entry) => entry.id === payload.result.id);

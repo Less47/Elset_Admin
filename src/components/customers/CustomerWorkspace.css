@@ -1,0 +1,65 @@
+@layer components {
+  .customer-section-panel {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--data-view-border);
+    border-radius: 8px;
+    background: var(--card);
+  }
+
+  .customer-section-header {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--data-view-border);
+  }
+
+  .customer-section-count {
+    display: inline-flex;
+    min-width: 20px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 1px 5px;
+    border: 1px solid var(--data-view-border);
+    border-radius: 4px;
+    background: var(--data-view-surface);
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .customer-section-body {
+    min-width: 0;
+    padding: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .customer-section-panel [data-mobile-record-list] {
+    gap: 0;
+  }
+
+  /* Existing record content becomes separated rows inside the desktop panel. */
+  .customer-section-panel .data-record-card {
+    padding: 10px 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .customer-section-panel .data-record-card + .data-record-card {
+    border-top: 1px solid var(--data-view-border) !important;
+  }
+
+  .customer-section-panel .data-record-card:first-child {
+    padding-top: 0 !important;
+  }
+
+  .customer-section-panel .data-record-card:last-child {
+    padding-bottom: 0 !important;
+  }
+}

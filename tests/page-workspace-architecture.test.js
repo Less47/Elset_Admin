@@ -13,19 +13,19 @@ function readSource(relativePath) {
 
 test("substantial job workflows use URL-backed pages instead of job dialogs", () => {
   const appSource = readSource("src/App.jsx");
-  const dialogsSource = readSource("src/components/app/WorkspaceDialogs.jsx");
+  const customerPagesSource = readSource("src/components/customers/CustomerPages.jsx");
   const navigationSource = readSource("src/hooks/useWorkspaceNavigation.js");
 
   assert.match(appSource, /<CreateJobPage/);
   assert.match(appSource, /<JobDetailsPage/);
   assert.match(navigationSource, /\/jobs\/new/);
   assert.match(navigationSource, /\/jobs\/\$\{encodeURIComponent\(job\.id\)\}/);
-  assert.doesNotMatch(dialogsSource, /JobFormDialog|JobDetailsDialog|JobEditDialog/);
+  assert.doesNotMatch(customerPagesSource, /JobFormDialog|JobDetailsDialog|JobEditDialog/);
 });
 
 test("all existing job-opening surfaces retain the centralized page navigator", () => {
   const shellSource = readSource("src/components/app/WorkspaceShell.jsx");
-  const dialogsSource = readSource("src/components/app/WorkspaceDialogs.jsx");
+  const customerPagesSource = readSource("src/components/customers/CustomerPages.jsx");
   const actionsSource = readSource("src/hooks/useWorkspaceActions.js");
 
   for (const component of [
@@ -40,8 +40,8 @@ test("all existing job-opening surfaces retain the centralized page navigator", 
     assert.match(shellSource, new RegExp(`<${component}[\\s\\S]*?onOpenJob=\\{handleOpenJob\\}`));
   }
 
-  assert.match(dialogsSource, /<CustomerProfileDialog[\s\S]*?onOpenJob=\{handleOpenJob\}/);
-  assert.match(dialogsSource, /<SiteProfileDialog[\s\S]*?onOpenJob=\{handleOpenJob\}/);
+  assert.match(customerPagesSource, /<CustomerWorkspace[\s\S]*?onOpenJob=\{actions.handleOpenJob\}/);
+  assert.match(customerPagesSource, /<SiteWorkspace[\s\S]*?onOpenJob=\{actions.handleOpenJob\}/);
   assert.match(actionsSource, /function handleOpenJob\(job\)[\s\S]*?onNavigateToJob\?\.\(job\)/);
 });
 
@@ -75,9 +75,8 @@ test("site OC numbers and job client references stay separate in record workflow
 
 test("site forms consistently describe OC number as a property reference", () => {
   for (const relativePath of [
-    "src/components/customers/CustomerCreateDialog.jsx",
-    "src/components/customers/CustomerProfileDialog.jsx",
-    "src/components/sites/SiteProfileDialog.jsx",
+    "src/components/customers/CustomerFormPage.jsx",
+    "src/components/sites/SiteWorkspace.jsx",
   ]) {
     const source = readSource(relativePath);
     assert.match(source, /label="OC number"/);

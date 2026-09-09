@@ -1183,6 +1183,8 @@ export function normalizeContactRecord(contact, fallback = {}) {
   if (!contact && !fallback) return null;
 
   const normalized = {
+    ...(contact?.kind !== undefined ? { kind: contact.kind } : {}),
+    ...(contact?.siteId !== undefined ? { siteId: contact.siteId } : {}),
     id: String(contact?.id || fallback.id || "").trim() || crypto.randomUUID(),
     name: String(contact?.name || fallback.name || "").trim(),
     role: String(contact?.role || fallback.role || "").trim(),

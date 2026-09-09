@@ -411,7 +411,7 @@ test("Invoices create and edit actions keep their origin through refresh and his
       if (width < 1024) await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
       else await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Customers", exact: true }).click();
       await page.getByRole("dialog", { name: "Discard unsaved changes?" }).getByRole("button", { name: "Discard", exact: true }).click();
-      await expect(page).toHaveURL(baseUrl + "/");
+      await expect(page).toHaveURL(baseUrl + (width < 1024 ? "/" : "/customers"));
       if (width < 1024) await expect(row).toBeVisible();
       else {
         await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();

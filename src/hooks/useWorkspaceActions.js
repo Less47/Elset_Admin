@@ -56,19 +56,15 @@ export function useWorkspaceActions({
   data,
   docType,
   fetchWithAuth,
-  onCloseJobWorkspace,
   onNavigateToJob,
   selectedFreshJob,
   selectedJob,
-  selectedSiteContext,
-  setCustomerProfileOpen,
+  onNavigateToCustomer,
+  onNavigateToSite,
   setData,
   onNavigateToDocument,
   setIsSendingDocument,
-  setSelectedCustomerId,
   setSelectedJob,
-  setSelectedSiteContext,
-  setSiteProfileOpen,
   themeSettings,
   themeSettingsSave,
   workspaceStorageMode = "json",
@@ -654,8 +650,6 @@ export function useWorkspaceActions({
 
   function handleOpenJob(job) {
     if (!job) return;
-    setCustomerProfileOpen(false);
-    setSiteProfileOpen(false);
     setSelectedJob(job);
     onNavigateToJob?.(job);
   }
@@ -1396,22 +1390,22 @@ export function useWorkspaceActions({
 
   function handleOpenCustomerProfile(customerId) {
     if (!canManageBusiness) return;
-    setSelectedCustomerId(customerId);
-    setCustomerProfileOpen(true);
+    return onNavigateToCustomer?.(customerId);
   }
 
   function handleOpenSiteProfile(customerId, siteKey) {
     if (!canManageBusiness) return;
     const normalizedSiteKey = String(siteKey || "").trim();
     if (!customerId || !normalizedSiteKey) return;
-    setSelectedSiteContext({ customerId, siteKey: normalizedSiteKey });
-    setSiteProfileOpen(true);
+    const customer = data.customers.find((entry) => entry.id === customerId);
+    const savedSite = customer?.sites?.find((site) => site.id === normalizedSiteKey
+      || normalizeSiteAddress(site.address).toLowerCase() === normalizedSiteKey.toLowerCase());
+    return onNavigateToSite?.(customerId, savedSite?.id || normalizedSiteKey);
   }
 
   function handleCreateSiteProfile(customerId) {
     if (!canManageBusiness || !customerId) return;
-    setSelectedSiteContext({ customerId, siteKey: "__new__" });
-    setSiteProfileOpen(true);
+    return onNavigateToSite?.(customerId, "__new__");
   }
 
   async function handleCreateCustomer(customerInput) {
@@ -1450,8 +1444,6 @@ export function useWorkspaceActions({
       if (!saved.ok) return null;
 
       const savedCustomer = saved.result || createdCustomer;
-      setSelectedCustomerId(savedCustomer.id);
-      setCustomerProfileOpen(true);
       return savedCustomer;
     }
 
@@ -1459,8 +1451,6 @@ export function useWorkspaceActions({
       ...prev,
       customers: [createdCustomer, ...prev.customers.filter((entry) => entry.id !== createdCustomer.id)],
     }));
-    setSelectedCustomerId(createdCustomer.id);
-    setCustomerProfileOpen(true);
     return createdCustomer;
   }
 
@@ -1501,8 +1491,7 @@ export function useWorkspaceActions({
       if (!saved.ok) return false;
 
       const savedSite = saved.result || siteForSave;
-      setSelectedSiteContext({ customerId, siteKey: savedSite.id || savedSite.address.toLowerCase() });
-      return true;
+      return savedSite;
     }
 
     setData((prev) => {
@@ -1571,8 +1560,7 @@ export function useWorkspaceActions({
       };
     });
 
-    setSelectedSiteContext({ customerId, siteKey: normalizedSite.address.toLowerCase() });
-    return true;
+    return normalizedSite;
   }
 
   async function handleDeleteSiteProfile(customerId, site) {
@@ -1599,7 +1587,6 @@ export function useWorkspaceActions({
       });
       if (!saved.ok) return false;
 
-      setSelectedSiteContext({ customerId, siteKey: normalizeSiteAddress(site.address).toLowerCase() });
       return true;
     }
 
@@ -1625,7 +1612,6 @@ export function useWorkspaceActions({
       };
     });
 
-    setSelectedSiteContext({ customerId, siteKey: normalizeSiteAddress(site.address).toLowerCase() });
     return true;
   }
 
@@ -1947,16 +1933,7 @@ export function useWorkspaceActions({
 
       if (selectedJob?.customerId === customerId) {
         setSelectedJob(null);
-        onCloseJobWorkspace?.({ force: true });
       }
-
-      if (selectedSiteContext?.customerId === customerId) {
-        setSelectedSiteContext(null);
-        setSiteProfileOpen(false);
-      }
-
-      setSelectedCustomerId(null);
-      setCustomerProfileOpen(false);
       return true;
     }
 
@@ -1982,16 +1959,7 @@ export function useWorkspaceActions({
 
     if (selectedJob?.customerId === customerId) {
       setSelectedJob(null);
-      onCloseJobWorkspace?.({ force: true });
     }
-
-    if (selectedSiteContext?.customerId === customerId) {
-      setSelectedSiteContext(null);
-      setSiteProfileOpen(false);
-    }
-
-    setSelectedCustomerId(null);
-    setCustomerProfileOpen(false);
     return true;
   }
 

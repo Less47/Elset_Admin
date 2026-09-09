@@ -8,7 +8,26 @@ export function parseWorkspacePath(pathname, state = null) {
     sourceScrollY: Number(state?.sourceScrollY || 0),
     returnPath: state?.returnPath || null,
     historyIndex: Number(state?.historyIndex || 0),
+    tab: state?.tab || "overview",
   };
+  if (pathname === "/customers" || pathname === "/customers/") {
+    return { ...context, type: "section", path: "/customers", section: "customers" };
+  }
+  const customerMatch = pathname.match(/^\/customers\/([^/]+)(?:\/(edit|sites)(?:\/([^/]+)(?:\/(edit))?)?)?\/?$/);
+  if (customerMatch) {
+    const [, customerKey, action, siteKey, siteEdit] = customerMatch;
+    let customerId, siteId;
+    try {
+      customerId = decodeURIComponent(customerKey);
+      siteId = siteKey ? decodeURIComponent(siteKey) : undefined;
+    } catch {
+      return { ...context, type: "customer-details", path: pathname, customerId: "", sourceSection: state?.sourceSection || "customers" };
+    }
+    const type = customerKey === "new" && !action ? "create-customer"
+      : action === "sites" && siteKey ? siteKey === "new" ? "create-site" : siteEdit ? "edit-site" : "site-details"
+      : action === "edit" ? "edit-customer" : "customer-details";
+    return { ...context, type, path: pathname, customerId, siteKey: siteId, sourceSection: state?.sourceSection || "customers" };
+  }
   const documentMatch = pathname.match(/^\/jobs\/([^/]+)\/(quote|invoice)\/?$/);
   if (documentMatch) {
     return {
@@ -64,6 +83,11 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, [route]);
 
   useEffect(() => {
+    const initialSection = routeRef.current.type === "section" ? routeRef.current.section : routeRef.current.sourceSection;
+    if (initialSection) onSectionChange?.(initialSection);
+  }, [onSectionChange]);
+
+  useEffect(() => {
     const current = getWorkspaceState();
     window.history.replaceState({ ...window.history.state, [WORKSPACE_HISTORY_KEY]: {
       ...current,
@@ -116,12 +140,13 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
       }
       const state = {
         [WORKSPACE_HISTORY_KEY]: {
-          owned: true,
+          owned: replace ? Boolean(getWorkspaceState()?.owned) : true,
           sourceSection,
           sourceScrollY,
-          returnPath: nextRoute.type === "document"
-            ? (currentRoute.type === "document" ? currentRoute.returnPath : currentRoute.path)
+          returnPath: nextRoute.type !== "section"
+            ? (replace || (nextRoute.type === "document" && currentRoute.type === "document") ? currentRoute.returnPath : currentRoute.path)
             : null,
+          tab: nextRoute.tab || "overview",
           historyIndex: currentRoute.historyIndex + (replace ? 0 : 1),
           ...(nextRoute.type === "section" ? { section: nextRoute.section } : {}),
         },
@@ -151,8 +176,32 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, [navigateTo]);
 
   const navigateToSection = useCallback((section, onNavigated) => {
-    return navigateTo({ type: "section", path: "/", section }, { onNavigated });
+    return navigateTo({ type: "section", path: section === "customers" ? "/customers" : "/", section }, { onNavigated });
   }, [navigateTo]);
+
+  const navigateToCustomer = useCallback((customerId, options = {}) => {
+    if (!customerId) return false;
+    return navigateTo({ type: options.edit ? "edit-customer" : "customer-details", customerId,
+      path: `/customers/${encodeURIComponent(customerId)}${options.edit ? "/edit" : ""}`, tab: options.tab }, options);
+  }, [navigateTo]);
+
+  const navigateToCreateCustomer = useCallback(() => (
+    navigateTo({ type: "create-customer", path: "/customers/new" })
+  ), [navigateTo]);
+
+  const navigateToSite = useCallback((customerId, siteKey, options = {}) => {
+    if (!customerId || !siteKey) return false;
+    const isNew = siteKey === "__new__";
+    return navigateTo({ type: isNew ? "create-site" : options.edit ? "edit-site" : "site-details", customerId, siteKey,
+      path: `/customers/${encodeURIComponent(customerId)}/sites/${isNew ? "new" : encodeURIComponent(siteKey)}${options.edit ? "/edit" : ""}` }, options);
+  }, [navigateTo]);
+
+  const setWorkspaceTab = useCallback((tab) => {
+    const nextRoute = { ...routeRef.current, tab };
+    window.history.replaceState({ ...window.history.state, [WORKSPACE_HISTORY_KEY]: { ...getWorkspaceState(), tab } }, "", window.location.href);
+    routeRef.current = nextRoute;
+    setRoute(nextRoute);
+  }, []);
 
   const navigateToCreateJob = useCallback((options = {}) => (
     navigateTo({ type: "create-job", path: "/jobs/new" }, options)
@@ -186,15 +235,20 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
         return;
       }
 
-      const path = currentRoute.type === "document" ? `/jobs/${encodeURIComponent(currentRoute.jobId)}` : "/";
+      const customerPath = `/customers/${encodeURIComponent(currentRoute.customerId || "")}`;
+      const path = currentRoute.type === "document" ? `/jobs/${encodeURIComponent(currentRoute.jobId)}`
+        : currentRoute.type === "edit-customer" || ["site-details", "create-site"].includes(currentRoute.type) ? customerPath
+        : currentRoute.type === "edit-site" ? `${customerPath}/sites/${encodeURIComponent(currentRoute.siteKey)}`
+        : ["customer-details", "create-customer"].includes(currentRoute.type) ? "/customers" : "/";
       const state = { sourceSection: currentRoute.sourceSection, historyIndex: currentRoute.historyIndex };
       window.history.replaceState({ [WORKSPACE_HISTORY_KEY]: state }, "", path);
       const nextRoute = parseWorkspacePath(path, state);
       routeRef.current = nextRoute;
       setRoute(nextRoute);
+      if (nextRoute.type === "section") onSectionChange?.(nextRoute.section || currentRoute.sourceSection);
       restoreSourceScroll(currentRoute.sourceScrollY);
     }, { force });
-  }, [restoreSourceScroll, runOrBlock]);
+  }, [restoreSourceScroll, runOrBlock, onSectionChange]);
 
   const resetToRoot = useCallback(() => {
     blockerRef.current = null;
@@ -278,6 +332,10 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     navigateToJob,
     navigateToDocument,
     navigateToSection,
+    navigateToCustomer,
+    navigateToCreateCustomer,
+    navigateToSite,
+    setWorkspaceTab,
     registerBlocker,
     requestNavigation: runOrBlock,
     resetToRoot,

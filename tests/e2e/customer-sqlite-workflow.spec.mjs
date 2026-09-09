@@ -267,7 +267,8 @@ async function openCustomerProfile(page, customerName) {
   const row = page.locator(".data-grid-row", { hasText: customerName }).first();
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: /Open/ }).click();
-  await expect(page.getByRole("dialog")).toContainText(customerName);
+  await expect(page.locator(".record-workspace h1")).toHaveText(customerName);
+  await expect(page).toHaveURL(/\/customers\/[^/]+$/);
 }
 
 function customerRows(page, customerName) {
@@ -277,38 +278,34 @@ function customerRows(page, customerName) {
 async function createCustomer(page) {
   await openCustomers(page);
   await page.getByRole("button", { name: "New Customer" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Create Customer");
-  await dialog.locator("input").nth(0).fill(createdCustomerName);
-  await dialog.locator("input").nth(1).fill("e2e.customer@example.test");
-  await dialog.locator("input").nth(2).fill("0400 111 222");
-  await dialog.getByPlaceholder("Search the customer's main address").fill("1 E2E Customer Street, Flowtown VIC 3999");
-  await dialog.getByPlaceholder("e.g. PS123456").fill("OC-E2E-CUSTOMER");
-  await dialog.getByRole("button", { name: "Create Customer" }).click();
-  await expect(page.getByRole("dialog")).toContainText(createdCustomerName);
-  await page.getByRole("button", { name: "Close" }).click();
-  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page).toHaveURL(baseUrl + "/customers/new");
+  await page.getByLabel("Customer / company name").fill(createdCustomerName);
+  await page.getByLabel("Account email").fill("e2e.customer@example.test");
+  await page.getByLabel("Account phone").fill("0400 111 222");
+  await page.getByLabel("Address", { exact: true }).fill("1 E2E Customer Street, Flowtown VIC 3999");
+  await page.getByLabel("OC number", { exact: true }).fill("OC-E2E-CUSTOMER");
+  await page.getByRole("button", { name: "Create Customer", exact: true }).click();
+  await expect(page.locator(".record-workspace h1")).toHaveText(createdCustomerName);
+  await page.getByRole("button", { name: "Back to Customers", exact: true }).click();
 }
 
 async function editCustomer(page) {
   await openCustomerProfile(page, createdCustomerName);
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit Customer" }).click();
-  await dialog.locator("input").nth(0).fill(editedCustomerName);
-  await dialog.locator("input").nth(1).fill("e2e.updated@example.test");
-  await dialog.locator("input").nth(2).fill("0400 333 444");
-  await dialog.getByRole("button", { name: "Save Changes" }).click();
-  await expect(dialog).toContainText(editedCustomerName);
-  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
+  await expect(page).toHaveURL(/\/customers\/[^/]+\/edit$/);
+  await page.getByLabel("Customer / company name").fill(editedCustomerName);
+  await page.getByLabel("Account email").fill("e2e.updated@example.test");
+  await page.getByLabel("Account phone").fill("0400 333 444");
+  await page.getByRole("button", { name: "Save Customer", exact: true }).click();
+  await expect(page.locator(".record-workspace h1")).toHaveText(editedCustomerName);
+  await page.getByRole("button", { name: "Back to Customers", exact: true }).click();
 }
 
 async function deleteCustomer(page) {
   await openCustomerProfile(page, editedCustomerName);
-  page.once("dialog", async (dialog) => {
-    await dialog.accept();
-  });
-  await page.getByRole("dialog").getByRole("button", { name: "Delete Customer" }).click();
-  await expect(page.getByRole("dialog")).toBeHidden();
+  page.once("dialog", async (dialog) => { await dialog.accept(); });
+  await page.getByRole("button", { name: "Delete Customer", exact: true }).click();
+  await expect(page).toHaveURL(baseUrl + "/customers");
 }
 
 async function restoreCustomer(page) {
@@ -329,7 +326,7 @@ async function createSite(page) {
   await customerButton.click();
   await dialog.getByRole("button", { name: "Continue" }).click();
 
-  const siteDialog = page.getByRole("dialog");
+  const siteDialog = page.locator(".record-workspace");
   await expect(siteDialog).toContainText("New Site");
   await siteDialog.getByPlaceholder("Search this site address").fill(createdSiteAddress);
   await siteDialog.getByPlaceholder("e.g. PS123456").fill("OC-E2E-SITE");
@@ -337,7 +334,8 @@ async function createSite(page) {
   await siteDialog.getByPlaceholder("General context, layout, project details, recurring issues...").fill("Synthetic site notes.");
   await siteDialog.getByRole("button", { name: "Save Site Profile" }).click();
   await expect(siteDialog).toContainText(createdSiteAddress);
-  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to Sites", exact: true }).click();
 }
 
 async function openSiteProfile(page, address) {
@@ -346,7 +344,7 @@ async function openSiteProfile(page, address) {
   const row = page.locator(".data-grid-row", { hasText: address }).first();
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: /Open/ }).click();
-  await expect(page.getByRole("dialog")).toContainText(address);
+  await expect(page.locator(".record-workspace")).toContainText(address);
 }
 
 function siteRows(page, address) {
@@ -355,13 +353,14 @@ function siteRows(page, address) {
 
 async function editSite(page) {
   await openSiteProfile(page, createdSiteAddress);
-  const dialog = page.getByRole("dialog");
+  const dialog = page.locator(".record-workspace");
   await dialog.getByRole("button", { name: "Edit Site Profile" }).click();
   await dialog.getByPlaceholder("Search this site address").fill(editedSiteAddress);
   await dialog.getByPlaceholder("Gate code, parking, access windows, call-on-arrival details...").fill("Updated synthetic keypad 5678.");
   await dialog.getByRole("button", { name: "Save Site Profile" }).click();
   await expect(dialog).toContainText(editedSiteAddress);
-  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to Sites", exact: true }).click();
 }
 
 async function deleteSite(page) {
@@ -369,9 +368,8 @@ async function deleteSite(page) {
   page.once("dialog", async (dialog) => {
     await dialog.accept();
   });
-  await page.getByRole("dialog").getByRole("button", { name: "Remove Saved Profile" }).click();
-  await expect(page.getByRole("dialog")).toContainText("New Site");
-  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Remove Saved Profile" }).click();
+  await expect(page.getByRole("button", { name: "New Site", exact: true })).toBeVisible();
 }
 
 async function openServiceBoard(page) {

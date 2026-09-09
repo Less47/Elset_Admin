@@ -1,140 +1,65 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
+import { CustomerJobHistory } from "@/components/customers/CustomerWorkspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  buildSiteProfileDraft,
-  formatDate,
-  formatSiteType,
-  getCustomerContacts,
-  getSiteDisplayName,
-  normalizeSiteAddress,
-  normalizeSiteAssetRecord,
-  siteTypeOptions,
-  toTimestamp,
-} from "@/lib/app-support";
-
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RECORD_WORKSPACE_WIDE_MAX_WIDTH, RecordWorkspace, WorkspaceSection, WorkspaceActionBar, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
+import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts, getSiteDisplayName, normalizeSiteAddress, normalizeSiteAssetRecord, siteTypeOptions, toTimestamp } from "@/lib/app-support";
 const NOT_SET_VALUE = "not-set";
+const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
-export default function SiteProfileDialog({ open, onOpenChange, customer, site, jobs, onOpenJob, onSaveSite, onDeleteSiteProfile }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draftSite, setDraftSite] = useState(buildSiteProfileDraft(site));
-  const [newAssetDraft, setNewAssetDraft] = useState({ name: "", type: "", location: "", model: "", notes: "" });
-
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!open || !customer) return;
-    setDraftSite(buildSiteProfileDraft(site));
-    setNewAssetDraft({ name: "", type: "", location: "", model: "", notes: "" });
-    setIsEditing(!site || !site.siteProfileId);
-  }, [customer, open, site]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  if (!customer) return null;
-
-  const isEditingSite = isEditing || !site;
+export default function SiteWorkspace({ customer, site, jobs, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, registerNavigationBlocker }) {
+  const isEditingSite = editing || !site;
+  const [initial] = useState(() => buildSiteProfileDraft(site));
+  const [draftSite, setDraftSite] = useState(initial);
+  const [newAssetDraft, setNewAssetDraft] = useState(EMPTY_ASSET);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const submitting = useRef(false);
+  const dirty = isEditingSite && (JSON.stringify(draftSite) !== JSON.stringify(initial) || JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET));
+  useEffect(() => registerNavigationBlocker?.(() => dirty || saving), [dirty, saving, registerNavigationBlocker]);
   const activeSite = isEditingSite ? draftSite : site;
   const activeAddress = normalizeSiteAddress(activeSite?.address || "");
   const customerContacts = getCustomerContacts(customer);
-  const siteJobs = [...jobs]
-    .filter((job) => normalizeSiteAddress(job.jobAddress).toLowerCase() === activeAddress.toLowerCase())
-    .sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt));
-  const completedJobs = siteJobs.filter((job) => job.status === "Completed").length;
-  const openJobs = siteJobs.length - completedJobs;
+  const siteJobs = [...jobs].filter((job) => normalizeSiteAddress(job.jobAddress).toLowerCase() === activeAddress.toLowerCase()).sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt));
+  const openJobs = siteJobs.filter((job) => job.status !== "Completed").length;
   const hasSavedProfile = Boolean(site?.siteProfileId);
-  const canSave = Boolean(activeAddress);
+  const canSave = Boolean(activeAddress) && !saving;
   const canAddAsset = Boolean(newAssetDraft.name.trim());
-
-  const updateDraftAsset = (assetId, key, value) => {
-    setDraftSite((prev) => ({
-      ...prev,
-      assets: prev.assets.map((asset) => (asset.id === assetId ? { ...asset, [key]: value } : asset)),
-    }));
+  const updateDraftAsset = (assetId, key, value) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.map((asset) => asset.id === assetId ? { ...asset, [key]: value } : asset) }));
+  const removeDraftAsset = (assetId) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.filter((asset) => asset.id !== assetId) }));
+  const save = async () => {
+    if (!canSave || submitting.current) return;
+    if (JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET)) { setError("Add the gate or project before saving the site, or clear its unfinished fields."); return; }
+    submitting.current = true; setSaving(true); setError("");
+    try {
+      const saved = await onSaveSite(customer.id, draftSite, site?.address || "");
+      if (!saved) { setError("The site could not be saved. Your changes are still here."); return; }
+      onSaved(saved);
+    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
+    finally { submitting.current = false; setSaving(false); }
   };
+  const currentTab = ["overview", "assets", "jobs"].includes(tab) ? tab : "overview";
+  return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={!site ? "New Site" : isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
+    subtitle={site?.address || "Site details and gates / projects"} maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} onBack={() => onBack()}
+    headerActions={!isEditingSite ? <Button type="button" className="h-11" onClick={onEdit}>Edit Site Profile</Button> : null}>
+    <div className="min-w-0 [&_p]:[overflow-wrap:anywhere] [&_input]:min-w-0 [&_textarea]:min-w-0">
+      <Tabs value={currentTab} onValueChange={onTabChange} className="min-w-0 gap-3">
+        <div className="record-tab-strip min-w-0 overflow-x-auto pb-1"><TabsList aria-label="Site sections" className="h-auto min-h-11 w-max gap-1 bg-transparent">
+          <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="overview">Overview</TabsTrigger>
+          <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="assets">Gates / Projects <span className="text-xs">{(activeSite?.assets || []).length}</span></TabsTrigger>
+          <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="jobs">Job History <span className="text-xs">{siteJobs.length}</span></TabsTrigger>
+        </TabsList></div>
+        <TabsContent value="overview" className="min-w-0"><WorkspaceSection title="Site details" panel>
+          <fieldset disabled={saving} className={isEditingSite ? "grid min-w-0 items-start gap-3 sm:grid-cols-2" : "grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
 
-  const removeDraftAsset = (assetId) => {
-    setDraftSite((prev) => ({
-      ...prev,
-      assets: prev.assets.filter((asset) => asset.id !== assetId),
-    }));
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] rounded-3xl sm:max-w-[96vw] lg:max-h-[88vh] lg:max-w-[1500px] 2xl:max-w-[1640px]">
-        <DialogHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <DialogTitle className="text-xl">{site ? getSiteDisplayName(isEditingSite ? draftSite : site) : "New Site"}</DialogTitle>
-              <p className="text-sm text-muted-foreground">
-                Site profile for {customer.name}. Keep one address together even when it has multiple gates or project areas.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              {isEditingSite ? (
-                <>
-                  <Button
-                    variant="outline"
-                    className="rounded-xl"
-                    onClick={() => {
-                      if (!site) {
-                        onOpenChange(false);
-                        return;
-                      }
-                      setDraftSite(buildSiteProfileDraft(site));
-                      setNewAssetDraft({ name: "", type: "", location: "", model: "", notes: "" });
-                      setIsEditing(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="rounded-xl"
-                    disabled={!canSave}
-                    onClick={async () => {
-                      const saved = await onSaveSite(customer.id, draftSite, site?.address || "");
-                      if (saved) setIsEditing(false);
-                    }}
-                  >
-                    Save Site Profile
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {hasSavedProfile ? (
-                    <Button
-                      variant="outline"
-                      className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                      onClick={() => onDeleteSiteProfile(customer.id, site)}
-                    >
-                      Remove Saved Profile
-                    </Button>
-                  ) : null}
-                  <Button variant="outline" className="rounded-xl" onClick={() => setIsEditing(true)}>
-                    Edit Site Profile
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </DialogHeader>
-
-        <DialogBody className="overflow-y-auto">
-        <div className="grid gap-4 lg:grid-cols-[340px_minmax(360px,0.95fr)_minmax(620px,1.35fr)]">
-          <div className="grid gap-4 lg:self-start">
-            <Card className="rounded-3xl border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-base">Site Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 text-sm">
                 {isEditingSite ? (
                   <>
                     <FormField label="Address">
@@ -245,64 +170,31 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                     </div>
                   </>
                 )}
-              </CardContent>
-            </Card>
+              
+          </fieldset>
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-3 text-sm"><span>{siteJobs.length} jobs · {openJobs} open · {siteJobs.length - openJobs} completed</span><Button type="button" variant="outline" onClick={onOpenCustomer}>Open Customer Profile</Button></div>
+        </WorkspaceSection>
+        {!isEditingSite && hasSavedProfile ? <div className="mt-4 flex justify-end"><Button type="button" variant="outline" className="border-rose-200 text-rose-700" onClick={() => onDeleteSiteProfile(customer.id, site)}>Remove Saved Profile</Button></div> : null}
+        </TabsContent>
+        <TabsContent value="assets" className="min-w-0"><WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site."><fieldset disabled={saving} className="min-w-0">
 
-            <Card className="rounded-3xl border-slate-200 bg-slate-50">
-              <CardHeader>
-                <CardTitle className="text-base">Site Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span>Total jobs</span>
-                  <span className="font-semibold text-slate-900">{siteJobs.length}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Open jobs</span>
-                  <span className="font-semibold text-slate-900">{openJobs}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Completed jobs</span>
-                  <span className="font-semibold text-slate-900">{completedJobs}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Gates / projects</span>
-                  <span className="font-semibold text-slate-900">{(isEditingSite ? draftSite.assets : site.assets || []).length}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="rounded-3xl border-slate-200 bg-slate-50/70 lg:self-start">
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Gates / Projects</CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Keep each gate, entry point, or project area attached to this site.
-                  </p>
-                </div>
-                <Badge variant="secondary">{(isEditingSite ? draftSite.assets : site.assets || []).length}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
               <div className="grid gap-3">
                 {!isEditingSite && site.accessNotes ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{site.accessNotes}</p>
                   </div>
                 ) : null}
 
                 {!isEditingSite && site.profileNotes ? (
-                  <div className="rounded-2xl border bg-white p-3">
+                  <div className="rounded-lg border bg-white p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{site.profileNotes}</p>
                   </div>
                 ) : null}
 
                 {isEditingSite ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-3">
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Add gate or project</p>
                     <div className="mt-3 grid gap-3">
                       <div className="grid gap-3 sm:grid-cols-2">
@@ -366,7 +258,7 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                   <EmptyState title="No gate or project records yet" text="Add each gate, operator, or project area here so the site history stays grouped together." />
                 ) : (
                   (isEditingSite ? draftSite.assets : site.assets || []).map((asset) => (
-                    <div key={asset.id} className="rounded-2xl border bg-white p-3 shadow-sm">
+                    <div key={asset.id} className="rounded-lg border bg-white p-3 shadow-sm">
                       {isEditingSite ? (
                         <div className="grid gap-3">
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -402,49 +294,15 @@ export default function SiteProfileDialog({ open, onOpenChange, customer, site, 
                   ))
                 )}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border-slate-200">
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Job History</CardTitle>
-                  <p className="mt-1 text-sm text-muted-foreground">Jobs at this site, newest activity first.</p>
-                </div>
-                <Badge variant="secondary">{siteJobs.length}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3">
-                {siteJobs.length === 0 ? (
-                  <EmptyState title="No jobs linked to this site yet" text="Jobs for this address will appear here automatically." />
-                ) : (
-                  siteJobs.map((job) => (
-                    <button
-                      key={job.id}
-                      type="button"
-                      className="w-full rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-                      onClick={() => {
-                        onOpenChange(false);
-                        onOpenJob(job);
-                      }}
-                    >
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">{job.title}</p>
-                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{job.description}</p>
-                      <p className="mt-2 text-xs text-slate-500">
-                        Site: <span className="font-medium text-slate-700">{job.jobAddress || activeAddress || "Not set"}</span>
-                      </p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
-  );
+            
+        </fieldset></WorkspaceSection></TabsContent>
+        <TabsContent value="jobs" className="min-w-0"><WorkspaceSection title="Job History"><CustomerJobHistory jobs={siteJobs} onOpenJob={onOpenJob} /></WorkspaceSection></TabsContent>
+      </Tabs>
+      {error ? <div role="alert" className="mt-3"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
+      {isEditingSite ? <WorkspaceActionBar maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} status={saving ? "Saving…" : dirty ? "Unsaved changes" : ""}>
+        <Button type="button" variant="outline" className="h-11" disabled={saving} onClick={() => onBack()}>Cancel</Button>
+        <Button type="button" className="h-11" disabled={!canSave} onClick={save}>Save Site Profile</Button>
+      </WorkspaceActionBar> : null}
+    </div>
+  </RecordWorkspace>;
 }

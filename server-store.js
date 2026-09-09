@@ -384,8 +384,10 @@ function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAccessNote
     ocNumber: String(site?.ocNumber || "").trim(),
     accessNotes: String(site?.accessNotes ?? legacyAccessNote?.notes ?? "").trim(),
     notes: String(site?.notes || "").trim(),
+    contactId: String(site?.contactId || "").trim(),
     contactName: String(site?.contactName || "").trim(),
     contactPhone: String(site?.contactPhone || "").trim(),
+    contactEmail: String(site?.contactEmail || "").trim(),
     assets: normalizeSiteAssets(site?.assets),
     createdAt: site?.createdAt || legacyAccessNote?.updatedAt || new Date().toISOString(),
     updatedAt: site?.updatedAt || legacyAccessNote?.updatedAt || site?.createdAt || new Date().toISOString(),
@@ -407,8 +409,10 @@ function mergeSiteProfileRecords(existing, incoming) {
     ocNumber: hasExplicitField("ocNumber") ? incoming.ocNumber : existing.ocNumber,
     accessNotes: hasExplicitField("accessNotes") ? incoming.accessNotes : existing.accessNotes,
     notes: hasExplicitField("notes") ? incoming.notes : existing.notes,
+    contactId: hasExplicitField("contactId") ? incoming.contactId : existing.contactId,
     contactName: hasExplicitField("contactName") ? incoming.contactName : existing.contactName,
     contactPhone: hasExplicitField("contactPhone") ? incoming.contactPhone : existing.contactPhone,
+    contactEmail: hasExplicitField("contactEmail") ? incoming.contactEmail : existing.contactEmail,
     assets: hasExplicitField("assets") ? incoming.assets : existing.assets,
     createdAt: existing.createdAt || incoming.createdAt,
     updatedAt:
@@ -437,8 +441,10 @@ function normalizeCustomerSiteProfiles(sites, primaryAddress = "", legacySiteAcc
             ocNumber: hasOwn(site, "ocNumber"),
             accessNotes: hasOwn(site, "accessNotes"),
             notes: hasOwn(site, "notes"),
+            contactId: hasOwn(site, "contactId"),
             contactName: hasOwn(site, "contactName"),
             contactPhone: hasOwn(site, "contactPhone"),
+            contactEmail: hasOwn(site, "contactEmail"),
             assets: hasOwn(site, "assets"),
             updatedAt: hasOwn(site, "updatedAt") || hasOwn(site, "createdAt") || hasOwn(legacyAccessNote, "updatedAt"),
           })
@@ -556,6 +562,11 @@ function normalizeCustomerRecord(customer) {
     email: String(customer.email || "").trim(),
     phone: String(customer.phone || "").trim(),
     customerType: normalizeEnumValue(customer.customerType, customerTypeValues, ""),
+    // Keep persisted contact records in both mutation responses and refreshes.
+    contacts: Array.isArray(customer.contacts)
+      ? customer.contacts.filter((contact) => contact && typeof contact === "object" && !Array.isArray(contact)).map((contact) => ({ ...contact }))
+      : [],
+    billingContactId: String(customer.billingContactId || "").trim(),
     address,
     sites,
     siteAccessNotes,

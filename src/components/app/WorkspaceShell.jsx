@@ -62,7 +62,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     setActiveSection,
     setActiveSettingsTab,
     setActiveTemplateType,
-    setCustomerCreateOpen,
+    openCreateCustomer,
     openCreateJob,
     setOfficeSearch,
     setServiceBoardColumnSorts,
@@ -540,7 +540,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             customers={data.customers}
             jobs={data.jobs}
             onOpenProfile={handleOpenCustomerProfile}
-            onCreateCustomer={() => setCustomerCreateOpen(true)}
+            onCreateCustomer={openCreateCustomer}
             formatDate={formatDate}
             toTimestamp={toTimestamp}
           />

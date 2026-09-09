@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import {
   addDaysToDateInput,
-  buildCustomerSites,
   getInventoryStockStatus,
   getInvoicePaymentSummary,
   getInvoiceStatus,
@@ -21,9 +20,7 @@ export function useWorkspaceViewModel({
   data,
   isTechnician,
   officeSearch,
-  selectedCustomerId,
   selectedJob,
-  selectedSiteContext,
   serviceBoardFullScreen,
   showHighUrgencyOnly,
 }) {
@@ -124,35 +121,12 @@ export function useWorkspaceViewModel({
     const selectedFreshCustomerJobs = selectedFreshCustomer
       ? data.jobs.filter((job) => job.customerId === selectedFreshCustomer.id)
       : [];
-    const selectedCustomer = selectedCustomerId
-      ? data.customers.find((customer) => customer.id === selectedCustomerId) || null
-      : null;
-    const selectedCustomerJobs = selectedCustomerId
-      ? data.jobs.filter((job) => job.customerId === selectedCustomerId)
-      : [];
-    const selectedSiteCustomer = selectedSiteContext
-      ? data.customers.find((customer) => customer.id === selectedSiteContext.customerId) || null
-      : null;
-    const selectedSiteJobs = selectedSiteCustomer
-      ? data.jobs.filter((job) => job.customerId === selectedSiteCustomer.id)
-      : [];
-    const selectedSite = selectedSiteCustomer && selectedSiteContext
-      ? buildCustomerSites(selectedSiteCustomer, selectedSiteJobs).find(
-          (site) => site.id === selectedSiteContext.siteKey || site.siteProfileId === selectedSiteContext.siteKey
-        ) || null
-      : null;
-
     return {
       selectedFreshJob,
       selectedFreshCustomer,
       selectedFreshCustomerJobs,
-      selectedCustomer,
-      selectedCustomerJobs,
-      selectedSiteCustomer,
-      selectedSiteJobs,
-      selectedSite,
     };
-  }, [data.customers, data.jobs, selectedCustomerId, selectedJob, selectedSiteContext]);
+  }, [data.customers, data.jobs, selectedJob]);
 
   const isServiceBoardFullScreen = activeSection === "service-board" && serviceBoardFullScreen;
 

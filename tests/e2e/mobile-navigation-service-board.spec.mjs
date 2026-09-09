@@ -1916,9 +1916,10 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
           await expect(listButton).toHaveAttribute("aria-pressed", "true");
 
           await desktopControls.getByRole("button", { name: "New Customer" }).click();
-          await expect(page.getByRole("dialog", { name: "Create Customer" })).toBeVisible();
-          await page.keyboard.press("Escape");
-          await expect(page.getByRole("dialog", { name: "Create Customer" })).toHaveCount(0);
+          await expect(page).toHaveURL(baseUrl + "/customers/new");
+          await expect(page.getByRole("heading", { name: "New Customer", exact: true })).toBeVisible();
+          await page.getByRole("button", { name: "Cancel", exact: true }).click();
+          await expect(page.locator(".record-workspace")).toHaveCount(0);
         }
       }
 
@@ -2632,7 +2633,7 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
     await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
     await page.getByRole("button", { name: "Customers", exact: true }).click();
-    await expect(page).toHaveURL(baseUrl + "/");
+    await expect(page).toHaveURL(baseUrl + "/customers");
     await expect(page.locator(".record-workspace")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveAttribute("aria-current", "page");
 
@@ -2652,20 +2653,22 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await page.getByRole("button", { name: "Customers", exact: true }).click();
     const customerRow = page.locator('[title="Double-click to open customer profile"]', { hasText: "Arcadia Example Apartments" });
     await customerRow.getByRole("button", { name: "Open", exact: true }).click();
-    const customerDialog = page.getByRole("dialog", { name: "Arcadia Example Apartments" });
-    await customerDialog.getByRole("button", { name: /Job #1001/ }).click();
+    await expect(page).toHaveURL(baseUrl + "/customers/demo-customer-arcadia");
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await page.getByRole("button", { name: "Open Job #1001", exact: true }).click();
     await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
-    await expect(customerDialog).toHaveCount(0);
-    await page.getByRole("button", { name: "Back to Customers" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Customer Profile" }).click();
 
     await page.getByRole("button", { name: "Sites", exact: true }).click();
     const siteRow = page.locator('[title="Double-click to open site profile"]', { hasText: "10 Example Lane, Sampleton VIC 3000" });
     await siteRow.getByRole("button", { name: "Open", exact: true }).click();
-    const siteDialog = page.getByRole("dialog", { name: "10 Example Lane, Sampleton VIC 3000" });
-    await siteDialog.getByRole("button", { name: /Job #1001/ }).click();
+    await expect(page).toHaveURL(/\/customers\/demo-customer-arcadia\/sites\//);
+    await page.getByRole("tab", { name: /Job History/ }).click();
+    await page.getByRole("button", { name: "Open Job #1001", exact: true }).click();
     await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
-    await expect(siteDialog).toHaveCount(0);
-    await page.getByRole("button", { name: "Back to Sites" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByRole("button", { name: "Back to Site Profile" }).click();
 
     await page.goto(baseUrl + "/jobs/demo-job-1001");
     await expect(page.getByRole("heading", { name: "Synthetic gate service", level: 1 })).toBeVisible();
@@ -2696,7 +2699,7 @@ test("desktop sidebar navigation closes Job Details and preserves its unsaved-ch
 
     await page.getByRole("button", { name: "Customers", exact: true }).click();
     await discardDialog.getByRole("button", { name: "Discard" }).click();
-    await expect(page).toHaveURL(baseUrl + "/");
+    await expect(page).toHaveURL(baseUrl + "/customers");
     await expect(page.locator(".record-workspace")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveAttribute("aria-current", "page");
   } finally {

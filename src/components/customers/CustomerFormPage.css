@@ -1,0 +1,19 @@
+.customer-create-form {
+  border: 1px solid var(--data-view-border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.customer-create-form .record-workspace-section {
+  margin: 0;
+  padding: 12px;
+}
+
+.customer-create-form .record-workspace-section h2 {
+  font-size: 16px;
+}
+
+.customer-create-form .record-workspace-section + .record-workspace-section {
+  margin-top: 0;
+  padding-top: 12px;
+}
