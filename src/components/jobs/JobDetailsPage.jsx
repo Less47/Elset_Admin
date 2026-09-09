@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { RecordWorkspace, WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
+import { RECORD_WORKSPACE_WIDE_MAX_WIDTH, RecordWorkspace, WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
 import {
   buildCustomerSites,
   formatDate,
@@ -237,7 +237,7 @@ export default function JobDetailsPage({
         subtitle={`${job.customerName} · ${job.jobAddress}`}
         status={<Badge className={urgencyClassName(job.urgency)}>{job.urgency} priority</Badge>}
         onBack={() => onBack()}
-        maxWidth="max-w-[90rem]"
+        maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH}
         headerActions={(
           <Select value={job.status} onValueChange={updateStatus} disabled={Boolean(pendingStatus)}>
             <SelectTrigger className={`record-workspace-status h-11 w-[8.5rem] rounded-lg font-semibold ${statusTheme.badge}`} aria-label="Update job status">

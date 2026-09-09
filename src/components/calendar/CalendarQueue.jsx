@@ -12,7 +12,7 @@ export default function CalendarQueue({ jobs, search, onSearch, filters, onFilte
   const filterTrigger = useRef(null);
   const activeCount = Number(filters.urgency !== "all") + Number(filters.schedule !== "all");
   return (
-    <section className={`calendar-queue flex min-h-0 min-w-0 flex-col ${inSheet ? "" : "overflow-hidden rounded-xl border bg-white/95"}`} aria-label="Job scheduling queue" data-calendar-queue>
+    <section className={`calendar-queue flex min-h-0 min-w-0 flex-col ${inSheet ? "" : "overflow-hidden bg-white"}`} aria-label="Job scheduling queue" data-calendar-queue>
       <header className="shrink-0 space-y-2 border-b p-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-950">Job queue <span className="ml-1 text-xs font-normal text-slate-500">{jobs.length}</span></h2>

@@ -2,9 +2,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const WORKSPACE_HISTORY_KEY = "elsetWorkspace";
 
-function parseWorkspacePath(pathname, state = null) {
+export function parseWorkspacePath(pathname, state = null) {
+  const context = {
+    sourceSection: state?.sourceSection || "service-board",
+    sourceScrollY: Number(state?.sourceScrollY || 0),
+    returnPath: state?.returnPath || null,
+    historyIndex: Number(state?.historyIndex || 0),
+  };
+  const documentMatch = pathname.match(/^\/jobs\/([^/]+)\/(quote|invoice)\/?$/);
+  if (documentMatch) {
+    return {
+      ...context,
+      type: "document",
+      path: pathname,
+      jobId: decodeURIComponent(documentMatch[1]),
+      documentType: documentMatch[2],
+    };
+  }
   if (pathname === "/jobs/new") {
     return {
+      ...context,
       type: "create-job",
       path: "/jobs/new",
       sourceSection: state?.sourceSection || "service-board",
@@ -15,6 +32,7 @@ function parseWorkspacePath(pathname, state = null) {
   const jobMatch = pathname.match(/^\/jobs\/([^/]+)\/?$/);
   if (jobMatch) {
     return {
+      ...context,
       type: "job-details",
       path: pathname,
       jobId: decodeURIComponent(jobMatch[1]),
@@ -23,26 +41,36 @@ function parseWorkspacePath(pathname, state = null) {
     };
   }
 
-  return { type: "section", path: pathname || "/" };
+  return { ...context, type: "section", path: pathname || "/", section: state?.section };
 }
 
 function getWorkspaceState() {
   return window.history.state?.[WORKSPACE_HISTORY_KEY] || null;
 }
 
-export function useWorkspaceNavigation({ activeSection }) {
+export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   const [route, setRoute] = useState(() => parseWorkspacePath(window.location.pathname, getWorkspaceState()));
   const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
   const routeRef = useRef(route);
   const blockerRef = useRef(null);
   const pendingNavigationRef = useRef(null);
   const bypassNextPopRef = useRef(false);
+  const restoringBlockedPopRef = useRef(false);
   const pendingScrollRestoreRef = useRef(null);
   const returnFocusRef = useRef(null);
 
   useEffect(() => {
     routeRef.current = route;
   }, [route]);
+
+  useEffect(() => {
+    const current = getWorkspaceState();
+    window.history.replaceState({ ...window.history.state, [WORKSPACE_HISTORY_KEY]: {
+      ...current,
+      historyIndex: routeRef.current.historyIndex || 0,
+      ...(routeRef.current.type === "section" ? { section: activeSection } : {}),
+    } }, "", window.location.href);
+  }, [activeSection]);
 
   const restoreSourceScroll = useCallback((scrollY) => {
     pendingScrollRestoreRef.current = Number(scrollY || 0);
@@ -74,7 +102,7 @@ export function useWorkspaceNavigation({ activeSection }) {
     };
   }, []);
 
-  const navigateTo = useCallback((nextRoute, { replace = false, force = false } = {}) => {
+  const navigateTo = useCallback((nextRoute, { replace = false, force = false, onNavigated } = {}) => {
     return runOrBlock(() => {
       const currentRoute = routeRef.current;
       const sourceSection = currentRoute.type === "section"
@@ -91,6 +119,11 @@ export function useWorkspaceNavigation({ activeSection }) {
           owned: true,
           sourceSection,
           sourceScrollY,
+          returnPath: nextRoute.type === "document"
+            ? (currentRoute.type === "document" ? currentRoute.returnPath : currentRoute.path)
+            : null,
+          historyIndex: currentRoute.historyIndex + (replace ? 0 : 1),
+          ...(nextRoute.type === "section" ? { section: nextRoute.section } : {}),
         },
       };
 
@@ -102,14 +135,24 @@ export function useWorkspaceNavigation({ activeSection }) {
 
       const resolvedRoute = {
         ...nextRoute,
-        sourceSection,
-        sourceScrollY,
+        ...state[WORKSPACE_HISTORY_KEY],
       };
       routeRef.current = resolvedRoute;
       setRoute(resolvedRoute);
+      if (nextRoute.type === "section") onSectionChange?.(nextRoute.section);
+      onNavigated?.();
       window.scrollTo({ top: 0, behavior: "auto" });
     }, { force });
-  }, [activeSection, runOrBlock]);
+  }, [activeSection, runOrBlock, onSectionChange]);
+
+  const navigateToDocument = useCallback((job, type) => {
+    if (!job?.id || !["quote", "invoice"].includes(type)) return false;
+    return navigateTo({ type: "document", jobId: job.id, documentType: type, path: `/jobs/${encodeURIComponent(job.id)}/${type}` });
+  }, [navigateTo]);
+
+  const navigateToSection = useCallback((section, onNavigated) => {
+    return navigateTo({ type: "section", path: "/", section }, { onNavigated });
+  }, [navigateTo]);
 
   const navigateToCreateJob = useCallback((options = {}) => (
     navigateTo({ type: "create-job", path: "/jobs/new" }, options)
@@ -143,8 +186,10 @@ export function useWorkspaceNavigation({ activeSection }) {
         return;
       }
 
-      window.history.replaceState(null, "", "/");
-      const nextRoute = { type: "section", path: "/" };
+      const path = currentRoute.type === "document" ? `/jobs/${encodeURIComponent(currentRoute.jobId)}` : "/";
+      const state = { sourceSection: currentRoute.sourceSection, historyIndex: currentRoute.historyIndex };
+      window.history.replaceState({ [WORKSPACE_HISTORY_KEY]: state }, "", path);
+      const nextRoute = parseWorkspacePath(path, state);
       routeRef.current = nextRoute;
       setRoute(nextRoute);
       restoreSourceScroll(currentRoute.sourceScrollY);
@@ -156,7 +201,7 @@ export function useWorkspaceNavigation({ activeSection }) {
     pendingNavigationRef.current = null;
     setDiscardPromptOpen(false);
     window.history.replaceState(null, "", "/");
-    const nextRoute = { type: "section", path: "/" };
+    const nextRoute = parseWorkspacePath("/");
     routeRef.current = nextRoute;
     setRoute(nextRoute);
   }, []);
@@ -167,19 +212,21 @@ export function useWorkspaceNavigation({ activeSection }) {
       const nextHistoryState = event.state?.[WORKSPACE_HISTORY_KEY] || null;
       const nextRoute = parseWorkspacePath(window.location.pathname, nextHistoryState);
 
+      if (restoringBlockedPopRef.current) {
+        restoringBlockedPopRef.current = false;
+        return;
+      }
+
       if (bypassNextPopRef.current) {
         bypassNextPopRef.current = false;
       } else if (currentRoute.type !== "section" && blockerRef.current?.()) {
-        window.history.pushState({
-          [WORKSPACE_HISTORY_KEY]: {
-            owned: true,
-            sourceSection: currentRoute.sourceSection,
-            sourceScrollY: currentRoute.sourceScrollY,
-          },
-        }, "", currentRoute.path);
+        // Restore the original entry without pushing over the Forward stack.
+        const distance = currentRoute.historyIndex - nextRoute.historyIndex || 1;
+        restoringBlockedPopRef.current = true;
+        window.history.go(distance);
         pendingNavigationRef.current = () => {
           bypassNextPopRef.current = true;
-          window.history.back();
+          window.history.go(-distance);
         };
         setDiscardPromptOpen(true);
         return;
@@ -188,6 +235,7 @@ export function useWorkspaceNavigation({ activeSection }) {
       routeRef.current = nextRoute;
       setRoute(nextRoute);
       if (nextRoute.type === "section") {
+        onSectionChange?.(nextRoute.section || currentRoute.sourceSection);
         restoreSourceScroll(currentRoute.sourceScrollY);
       } else {
         window.scrollTo({ top: 0, behavior: "auto" });
@@ -196,7 +244,7 @@ export function useWorkspaceNavigation({ activeSection }) {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [restoreSourceScroll]);
+  }, [restoreSourceScroll, onSectionChange]);
 
   useEffect(() => {
     const handleBeforeUnload = (event) => {
@@ -228,7 +276,10 @@ export function useWorkspaceNavigation({ activeSection }) {
     keepEditing,
     navigateToCreateJob,
     navigateToJob,
+    navigateToDocument,
+    navigateToSection,
     registerBlocker,
+    requestNavigation: runOrBlock,
     resetToRoot,
     route,
   };

@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+export const RECORD_WORKSPACE_WIDE_MAX_WIDTH = "max-w-[90rem]";
+
 export function RecordWorkspace({
   backLabel = "Back",
   children,

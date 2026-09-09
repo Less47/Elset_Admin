@@ -5,6 +5,7 @@ import { AuthLoadingScreen } from "@/components/auth/AuthLoadingScreen";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import CreateJobPage from "@/components/jobs/CreateJobPage";
 import JobDetailsPage from "@/components/jobs/JobDetailsPage";
+import DocumentEditor from "@/components/documents/DocumentEditor";
 import { RecordWorkspace, UnsavedChangesDialog, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
 import { useAppSession } from "@/hooks/useAppSession";
 import { useThemePalette } from "@/hooks/useThemePalette";
@@ -23,9 +24,7 @@ export default function App() {
   const [selectedSiteContext, setSelectedSiteContext] = useState(null);
   const [customerProfileOpen, setCustomerProfileOpen] = useState(false);
   const [siteProfileOpen, setSiteProfileOpen] = useState(false);
-  const [docEditorOpen, setDocEditorOpen] = useState(false);
   const [isSendingDocument, setIsSendingDocument] = useState(false);
-  const [docType, setDocType] = useState("quote");
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
   const [activeSection, setActiveSection] = useState("service-board");
   const [activeSettingsTab, setActiveSettingsTab] = useState("preferences");
@@ -41,8 +40,8 @@ export default function App() {
     Object.fromEntries(statuses.map((status) => [status, "recent"]))
   );
   const resetWorkspaceChromeRef = useRef(() => {});
-  const workspaceNavigation = useWorkspaceNavigation({ activeSection });
-  const { closeWorkspace, resetToRoot } = workspaceNavigation;
+  const workspaceNavigation = useWorkspaceNavigation({ activeSection, onSectionChange: setActiveSection });
+  const { navigateToSection, resetToRoot } = workspaceNavigation;
 
   const session = useAppSession({
     data,
@@ -56,9 +55,7 @@ export default function App() {
     setSelectedSiteContext(null);
     setCustomerProfileOpen(false);
     setSiteProfileOpen(false);
-    setDocEditorOpen(false);
     setIsSendingDocument(false);
-    setDocType("quote");
     setActiveTemplateType("quote");
     setActiveSection("service-board");
     setActiveSettingsTab("preferences");
@@ -75,23 +72,21 @@ export default function App() {
   }, [resetWorkspaceChrome]);
 
   const handleActiveSectionChange = useCallback((nextSection) => {
-    return closeWorkspace({
-      onClosed: () => {
-        setActiveSection(nextSection);
+    return navigateToSection(nextSection, () => {
         if (nextSection !== "service-board") {
           setServiceBoardFullScreen(false);
           setServiceBoardTomorrowPanelOpen(false);
         }
-      },
     });
-  }, [closeWorkspace]);
+  }, [navigateToSection]);
 
   const effectiveActiveSection = session.isTechnician ? "service-board" : activeSection;
   const effectiveActiveSettingsTab = session.isTechnician ? "preferences" : activeSettingsTab;
-  const routeSelectedJob = workspaceNavigation.route.type === "job-details"
+  const recordRoute = ["job-details", "document"].includes(workspaceNavigation.route.type);
+  const routeSelectedJob = recordRoute
     ? data.jobs.find((job) => job.id === workspaceNavigation.route.jobId) || null
     : null;
-  const selectedJobForView = routeSelectedJob || selectedJob;
+  const selectedJobForView = recordRoute ? routeSelectedJob : selectedJob;
 
   const themeSettingsSave = useThemeSettingsSave({
     settings: data.settings,
@@ -117,7 +112,7 @@ export default function App() {
     applyServerWorkspaceState: session.applyServerWorkspaceState,
     canManageBusiness: session.canManageBusiness,
     data,
-    docType,
+    docType: workspaceNavigation.route.documentType || "quote",
     fetchWithAuth: session.fetchWithAuth,
     onCloseJobWorkspace: workspaceNavigation.closeWorkspace,
     selectedFreshJob: workspaceViewModel.selectedFreshJob,
@@ -125,8 +120,7 @@ export default function App() {
     selectedSiteContext,
     setCustomerProfileOpen,
     setData,
-    setDocEditorOpen,
-    setDocType,
+    onNavigateToDocument: workspaceNavigation.navigateToDocument,
     setIsSendingDocument,
     onNavigateToJob: workspaceNavigation.navigateToJob,
     setSelectedCustomerId,
@@ -245,12 +239,30 @@ export default function App() {
             registerNavigationBlocker={workspaceNavigation.registerBlocker}
           />
         )
-      : null;
+      : workspaceRoute.type === "document"
+        ? session.canManageBusiness && routeSelectedJob
+          ? <DocumentEditor
+              key={`${workspaceRoute.jobId}-${workspaceRoute.documentType}`}
+              job={routeSelectedJob}
+              type={workspaceRoute.documentType}
+              backLabel={!workspaceRoute.returnPath || workspaceRoute.returnPath.startsWith("/jobs/") ? `Job #${routeSelectedJob.jobNumber}` : backLabel}
+              onBack={workspaceNavigation.closeWorkspace}
+              registerNavigationBlocker={workspaceNavigation.registerBlocker}
+              onSave={(doc) => workspaceActions.handleSaveDocument(routeSelectedJob.id, workspaceRoute.documentType, doc)}
+              onPreviewDocument={workspaceActions.handlePreviewDocument}
+              onSendDocument={workspaceActions.handleSendDocument}
+              onOpenSentDocument={() => workspaceActions.handleOpenSentDocumentCopy(routeSelectedJob, workspaceRoute.documentType)}
+              isSendingDocument={isSendingDocument}
+            />
+          : <RecordWorkspace title={workspaceRoute.documentType === "quote" ? "Quote" : "Invoice"} backLabel={backLabel} onBack={() => workspaceNavigation.closeWorkspace({ force: true })}>
+              <WorkspaceMessage tone="error">{session.canManageBusiness ? "This job could not be found." : "You do not have permission to edit this document."}</WorkspaceMessage>
+            </RecordWorkspace>
+        : null;
 
   return (
     <div className="min-h-[100dvh]" style={themePalette.rootStyle}>
       <WorkspaceShell
-        auth={session}
+        auth={{ ...session, handleLogout: () => workspaceNavigation.requestNavigation(session.handleLogout) }}
         chrome={{
           activeSection: effectiveActiveSection,
           activeSettingsTab: effectiveActiveSettingsTab,
@@ -293,12 +305,8 @@ export default function App() {
         chrome={{
           customerCreateOpen,
           customerProfileOpen,
-          docEditorOpen,
-          docType,
-          isSendingDocument,
           setCustomerCreateOpen,
           setCustomerProfileOpen,
-          setDocEditorOpen,
           setSelectedCustomerId,
           setSelectedSiteContext,
           setSiteProfileOpen,

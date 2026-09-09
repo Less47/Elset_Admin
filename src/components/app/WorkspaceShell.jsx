@@ -49,6 +49,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useState([]);
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
+  const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
     activeSection,
@@ -127,8 +128,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       ? "Manage the full workspace, staff login access, templates, and shared operational data."
       : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
-  const desktopServiceBoardFullScreen = isDesktopLayout && isServiceBoardFullScreen;
+  const desktopServiceBoardFullScreen = isThreeColumnBoard && isServiceBoardFullScreen;
   const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
+  const calendarWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "calendar";
 
   const handleMobileNavigate = (sectionId) => {
     const navigationStarted = setActiveSection(sectionId);
@@ -208,7 +210,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   };
 
   return (
-    <div className={mapWorkspaceOpen ? "map-workspace-app fixed inset-0 flex min-h-0 flex-col overflow-hidden lg:block" : "contents"}>
+    <div className={mapWorkspaceOpen || calendarWorkspaceOpen ? `${mapWorkspaceOpen ? "map" : "calendar"}-workspace-app fixed inset-0 flex min-h-0 flex-col overflow-hidden lg:block` : "contents"}>
       {!isDesktopLayout && !workspacePage ? (
         <MobileWorkspaceNavigation
           activeSection={activeSection}
@@ -219,11 +221,11 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           onLogout={handleLogout}
           onNavigate={handleMobileNavigate}
           onNewJob={() => openCreateJob()}
-          onOpenTomorrow={() => setMobileServiceBoardView(TOMORROW_VIEW)}
+          onOpenTomorrow={() => isThreeColumnBoard ? setServiceBoardTomorrowPanelOpen((open) => !open) : setMobileServiceBoardView(TOMORROW_VIEW)}
           roleLabel={roleMenuLabel}
           themePalette={themePalette}
           tomorrowCount={derived.tomorrowJobs.length}
-          tomorrowSelected={mobileServiceBoardView === TOMORROW_VIEW}
+          tomorrowSelected={isThreeColumnBoard ? serviceBoardTomorrowPanelOpen : mobileServiceBoardView === TOMORROW_VIEW}
         />
       ) : null}
 
@@ -405,6 +407,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             ? "min-w-0 space-y-4 px-3 py-3 sm:px-4 sm:py-4"
             : mapWorkspaceOpen
             ? "map-workspace-shell min-h-0 min-w-0 flex-1 overflow-hidden lg:h-full lg:pl-[var(--sidebar-width)]"
+            : calendarWorkspaceOpen
+            ? "calendar-workspace-shell min-h-0 min-w-0 flex-1 overflow-hidden lg:h-full lg:pl-[var(--sidebar-width)]"
             : activeSection === "service-board"
             ? "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] pb-[var(--content-padding-y-mobile)] pt-0 sm:px-[var(--content-padding-x-sm)] sm:pb-[var(--content-padding-y-sm)] sm:pt-0 lg:px-[var(--content-padding-x-lg)] lg:pb-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)] lg:pt-[var(--content-padding-y-lg)]"
             : "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] py-[var(--content-padding-y-mobile)] sm:px-[var(--content-padding-x-sm)] sm:py-[var(--content-padding-y-sm)] lg:px-[var(--content-padding-x-lg)] lg:py-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)]"
@@ -413,7 +417,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         {workspacePage}
 
         <div
-          className={workspacePage ? undefined : mapWorkspaceOpen ? "relative h-full min-h-0" : "contents"}
+          className={workspacePage ? undefined : mapWorkspaceOpen || calendarWorkspaceOpen ? "relative h-full min-h-0" : "contents"}
           hidden={Boolean(workspacePage)}
           aria-hidden={workspacePage ? true : undefined}
         >
@@ -430,7 +434,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {activeSection === "service-board" ? (
           <div className="min-w-0">
-            {isDesktopLayout ? (
+            {isThreeColumnBoard ? (
               <>
                 <ServiceBoardTomorrowPanel
                   jobs={derived.tomorrowJobs}

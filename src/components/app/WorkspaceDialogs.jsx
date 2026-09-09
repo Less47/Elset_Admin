@@ -1,6 +1,5 @@
 import CustomerCreateDialog from "@/components/customers/CustomerCreateDialog";
 import CustomerProfileDialog from "@/components/customers/CustomerProfileDialog";
-import DocumentEditor from "@/components/documents/DocumentEditor";
 import SiteProfileDialog from "@/components/sites/SiteProfileDialog";
 
 export default function WorkspaceDialogs({ auth, chrome, selection, actions }) {
@@ -8,12 +7,8 @@ export default function WorkspaceDialogs({ auth, chrome, selection, actions }) {
   const {
     customerCreateOpen,
     customerProfileOpen,
-    docEditorOpen,
-    docType,
-    isSendingDocument,
     setCustomerCreateOpen,
     setCustomerProfileOpen,
-    setDocEditorOpen,
     setSelectedCustomerId,
     setSelectedSiteContext,
     setSiteProfileOpen,
@@ -22,7 +17,6 @@ export default function WorkspaceDialogs({ auth, chrome, selection, actions }) {
   const {
     selectedCustomer,
     selectedCustomerJobs,
-    selectedFreshJob,
     selectedSite,
     selectedSiteCustomer,
     selectedSiteJobs,
@@ -32,12 +26,8 @@ export default function WorkspaceDialogs({ auth, chrome, selection, actions }) {
     handleDeleteCustomer,
     handleDeleteSiteProfile,
     handleOpenJob,
-    handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
-    handlePreviewDocument,
-    handleSaveDocument,
     handleSaveSiteProfile,
-    handleSendDocument,
     handleUpdateCustomer,
   } = actions;
 
@@ -85,21 +75,6 @@ export default function WorkspaceDialogs({ auth, chrome, selection, actions }) {
         </>
       ) : null}
 
-      {canManageBusiness ? (
-        <>
-          <DocumentEditor
-            open={docEditorOpen}
-            onOpenChange={setDocEditorOpen}
-            job={selectedFreshJob}
-            type={docType}
-            isSendingDocument={isSendingDocument}
-            onPreviewDocument={handlePreviewDocument}
-            onSendDocument={handleSendDocument}
-            onOpenSentDocument={() => selectedFreshJob && handleOpenSentDocumentCopy(selectedFreshJob, docType)}
-            onSave={(doc) => (selectedFreshJob ? handleSaveDocument(selectedFreshJob.id, docType, doc) : false)}
-          />
-        </>
-      ) : null}
     </>
   );
 }

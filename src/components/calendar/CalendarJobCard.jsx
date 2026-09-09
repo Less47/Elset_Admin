@@ -58,7 +58,7 @@ export function CalendarJobChip({ job, onOpenJob, dragApi }) {
     <button
       type="button"
       data-calendar-job={job.id}
-      className={`calendar-job-chip block w-full min-w-0 truncate rounded border px-1.5 text-left text-[11px] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${(statusThemes[job.status] || statusThemes["To Do"]).card} ${dragApi.drag?.job.id === job.id ? "opacity-50" : ""}`}
+      className={`calendar-job-chip block w-full min-w-0 truncate border-l-2 text-left font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 ${(statusThemes[job.status] || statusThemes["To Do"]).card} ${dragApi.drag?.job.id === job.id ? "opacity-50" : ""}`}
       {...dragApi.getDragProps(job)}
       onClick={(event) => { if (dragApi.allowClick(event)) onOpenJob(job); }}
       aria-label={`Open Job #${job.jobNumber}: ${job.customerName}, ${job.title}, ${job.status}`}

@@ -9,6 +9,7 @@ import { MainCalendar, MiniCalendar } from "./CalendarMonth";
 import CalendarQueue from "./CalendarQueue";
 import CalendarSheet from "./CalendarSheet";
 import CalendarBulkReschedule from "./CalendarBulkReschedule";
+import CalendarDayInspector from "./CalendarDayInspector";
 import { filterQueueJobs, formatCalendarDate, groupCalendarJobs, isCalendarDate, queueStatuses } from "./calendar-utils";
 import { useCalendarDrag } from "./useCalendarDrag";
 import "./Calendar.css";
@@ -26,16 +27,27 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const [announcement, setAnnouncement] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkNotice, setBulkNotice] = useState(null);
+  const [hasMiniColumn, setHasMiniColumn] = useState(false);
   const bulkPreviewRef = useRef(null);
   const savingRef = useRef(false);
   const returnFocusRef = useRef(null);
   const suppressSheetRestoreRef = useRef(false);
   const workspaceRef = useRef(null);
+  const miniPaneRef = useRef(null);
+  const inspectorHeadingRef = useRef(null);
+  const dayReturnFocusRef = useRef(null);
   const jobsTrigger = useRef(null);
   const todayTrigger = useRef(null);
-  const coarsePointer = useMediaQuery("(pointer: coarse)");
   const workspaceDayPanel = useMediaQuery("(min-width: 768px)");
   const persistentQueue = useMediaQuery("(min-width: 1024px) and (orientation: landscape)");
+
+  useEffect(() => {
+    const pane = miniPaneRef.current;
+    // CSS owns the column breakpoints, including the workspace container width.
+    const observer = new ResizeObserver(() => setHasMiniColumn(pane.getClientRects().length > 0));
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, []);
 
   const selectedDateObject = useMemo(() => parseDateInputValue(selectedDate), [parseDateInputValue, selectedDate]);
   const days = useMemo(() => getCalendarDays(selectedDateObject), [getCalendarDays, selectedDateObject]);
@@ -57,7 +69,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
     if (!job) return false;
     setError("");
     if (toDateInputValue(job.scheduledDate) === date) {
-      setPanel((current) => current?.type === "schedule" ? null : current);
+      setPanel((current) => current?.type === "schedule" ? (current.fromDay ? { type: "day" } : null) : current);
       return true;
     }
     savingRef.current = true;
@@ -75,7 +87,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
         return false;
       }
       setAnnouncement(date ? `Job #${job.jobNumber} scheduled for ${formatCalendarDate(date)}.` : `Scheduled date removed from Job #${job.jobNumber}.`);
-      setPanel((current) => current?.type === "schedule" && current.jobId === jobId ? null : current);
+      setPanel((current) => current?.type === "schedule" && current.jobId === jobId ? (current.fromDay ? { type: "day" } : null) : current);
       return true;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : failureMessage);
@@ -129,7 +141,14 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   function changePanelOpen(open) {
     if (open || bulkBusy) return;
     bulkPreviewRef.current = null;
+    setPanel((current) => current?.type === "schedule" && current.fromDay ? { type: "day" } : null);
+  }
+
+  function closeInspector() {
     setPanel(null);
+    const trigger = dayReturnFocusRef.current;
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    else workspaceRef.current?.querySelector(`[data-calendar-date="${selectedDate}"] .calendar-day-open`)?.focus({ preventScroll: true });
   }
 
   async function moveDayJobs(entries, destination) {
@@ -182,16 +201,18 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
 
   function openSchedule(job, trigger) {
     bulkPreviewRef.current = null;
-    returnFocusRef.current = trigger?.closest(".calendar-sheet") ? (persistentQueue ? todayTrigger.current : jobsTrigger.current) : trigger;
+    const fromDay = Boolean(trigger?.closest("[data-calendar-day-inspector]"));
+    returnFocusRef.current = fromDay ? inspectorHeadingRef.current : trigger?.closest(".calendar-sheet") ? (persistentQueue ? todayTrigger.current : jobsTrigger.current) : trigger;
     setScheduleDraft(toDateInputValue(job.scheduledDate) || selectedDate);
     setError("");
-    setPanel({ type: "schedule", jobId: job.id, action: job.scheduledDate ? "Reschedule" : "Schedule" });
+    setPanel({ type: "schedule", jobId: job.id, action: job.scheduledDate ? "Reschedule" : "Schedule", fromDay });
   }
 
   function openDay(date, trigger) {
     bulkPreviewRef.current = null;
     setSelectedDate(date);
     returnFocusRef.current = trigger;
+    dayReturnFocusRef.current = trigger;
     setPanel({ type: "day" });
   }
 
@@ -208,6 +229,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   };
   const panelTitle = panel?.type === "bulk" ? "Reschedule jobs" : panel?.type === "schedule" ? `${panel.action} Job #${scheduleJob?.jobNumber || ""}` : panel?.type === "day" ? formatCalendarDate(selectedDate, { weekday: "long", day: "numeric", month: "long" }) : "Scheduling jobs";
   const dayPanelOpen = panel?.type === "day";
+  const inspectorOpen = hasMiniColumn && (dayPanelOpen || panel?.fromDay || panel?.type === "bulk");
   const dayPanelContent = (
     <div className="grid gap-3" data-calendar-day-detail>
       {eligibleJobs.length ? <Button type="button" variant="outline" className="h-11 text-xs text-sky-900" disabled={Boolean(pending) || bulkBusy} onClick={() => openBulk()}>Reschedule day</Button> : <p className="text-xs text-slate-600">No active jobs available to reschedule.</p>}
@@ -222,9 +244,11 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   return (
     <div ref={workspaceRef} className="calendar-workspace min-w-0" data-calendar-workspace>
       <div className="calendar-layout">
-        <div className="calendar-mini-pane"><MiniCalendar {...miniProps} /></div>
-        <div className="calendar-center space-y-3">
-          <header className="floating-page-toolbar calendar-toolbar min-w-0 p-2.5" data-calendar-toolbar>
+        <div ref={miniPaneRef} className="calendar-mini-pane">
+          {inspectorOpen ? <CalendarDayInspector date={selectedDate} jobs={selectedJobs} eligibleCount={eligibleJobs.length} dragApi={dragApi} busy={Boolean(pending) || bulkBusy} active={dayPanelOpen} headingRef={inspectorHeadingRef} notice={dayPanelOpen ? notice : null} onClose={closeInspector} onOpenJob={openJob} onSchedule={openSchedule} onRescheduleDay={() => openBulk()} /> : <MiniCalendar {...miniProps} />}
+        </div>
+        <div className="calendar-center">
+          <header className="calendar-toolbar min-w-0" data-calendar-toolbar>
             <h1 className="calendar-toolbar-title text-base font-semibold text-white sm:text-lg" data-calendar-month>{monthLabel}</h1>
             <div className="calendar-month-navigation flex items-center gap-1">
               <Button type="button" variant="outline" className="calendar-nav-arrow h-11 w-11 bg-white/95 p-0" aria-label="Previous month" title="Previous month" onClick={() => miniProps.onMonthChange(-1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -239,19 +263,19 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
           {workspaceDayPanel && navigatorOpen ? <div className="calendar-mini-expanded" id="calendar-expanded-navigator"><MiniCalendar {...miniProps} /></div> : null}
           {error ? <div className="flex items-start justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900" role="alert"><span>{error}</span><Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Dismiss scheduling error" onClick={() => setError("")}><X className="h-4 w-4" /></Button></div> : null}
           {!panel ? notice : null}
-          <MainCalendar days={days} monthLabel={monthLabel} selectedDate={selectedDate} jobsByDate={jobsByDate} dragApi={dragApi} onOpenJob={openJob} onOpenDay={openDay} coarsePointer={coarsePointer} />
-          <p className="text-xs text-slate-700" role="status" aria-live="polite">{dragApi.drag?.target != null ? `Move Job #${dragApi.drag.job.jobNumber} to ${dragApi.drag.target ? formatCalendarDate(dragApi.drag.target) : "Unscheduled"}` : announcement}</p>
+          <MainCalendar days={days} monthLabel={monthLabel} selectedDate={selectedDate} jobsByDate={jobsByDate} dragApi={dragApi} onOpenJob={openJob} onOpenDay={openDay} inlineDayDetails={hasMiniColumn} />
+          <p className="calendar-announcement text-xs text-slate-700" role="status" aria-live="polite">{dragApi.drag?.target != null ? `Move Job #${dragApi.drag.job.jobNumber} to ${dragApi.drag.target ? formatCalendarDate(dragApi.drag.target) : "Unscheduled"}` : announcement}</p>
         </div>
         <div className="calendar-queue-pane">{persistentQueue ? <CalendarQueue {...queueProps} /> : null}</div>
       </div>
 
-      {workspaceDayPanel ? (
+      {workspaceDayPanel && !hasMiniColumn ? (
         <CalendarSheet open={dayPanelOpen} modal={false} placement="workspace-left" portalContainer={workspaceRef.current} restoreFocus={!panel} focusKey="day" notice={notice} onOpenChange={changePanelOpen} title={formatCalendarDate(selectedDate, { weekday: "long", day: "numeric", month: "long" })} description={`${selectedJobs.length} scheduled ${selectedJobs.length === 1 ? "job" : "jobs"}`} error={error} returnFocusRef={returnFocusRef}>
           {dayPanelContent}
         </CalendarSheet>
       ) : null}
 
-      <CalendarSheet open={Boolean(panel) && (!dayPanelOpen || !workspaceDayPanel)} modal={panel?.type !== "day"} bulk={panel?.type === "bulk"} busy={bulkBusy} focusKey={panel?.type} notice={notice} suppressRestoreRef={suppressSheetRestoreRef} onOpenChange={changePanelOpen} title={panelTitle} description={panel?.type === "bulk" ? `${formatCalendarDate(panel.sourceDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · ${panel.entries?.length ?? "Loading"} eligible jobs` : panel?.type === "schedule" ? "Change the scheduled date for this job." : panel?.type === "day" ? `${selectedJobs.length} scheduled ${selectedJobs.length === 1 ? "job" : "jobs"}` : "To Do and In Progress jobs"} error={error} returnFocusRef={returnFocusRef}>
+      <CalendarSheet open={Boolean(panel) && (!dayPanelOpen || (!workspaceDayPanel && !hasMiniColumn))} modal={panel?.type !== "day"} bulk={panel?.type === "bulk"} busy={bulkBusy} focusKey={panel?.type} notice={notice} suppressRestoreRef={suppressSheetRestoreRef} onOpenChange={changePanelOpen} title={panelTitle} description={panel?.type === "bulk" ? `${formatCalendarDate(panel.sourceDate, { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · ${panel.entries?.length ?? "Loading"} eligible jobs` : panel?.type === "schedule" ? "Change the scheduled date for this job." : panel?.type === "day" ? `${selectedJobs.length} scheduled ${selectedJobs.length === 1 ? "job" : "jobs"}` : "To Do and In Progress jobs"} error={error} returnFocusRef={returnFocusRef}>
         {panel?.type === "jobs" ? <CalendarQueue {...queueProps} inSheet /> : null}
         {dayPanelOpen && !workspaceDayPanel ? dayPanelContent : null}
         {panel?.type === "bulk" ? panel.loading ? <p className="p-3 text-sm" role="status">Loading active jobs…</p> : panel.loadError ? <div className="space-y-3 p-3"><p role="alert">{panel.loadError}</p><Button type="button" className="h-11" onClick={() => openBulk(panel.sourceDate)}>Try again</Button><Button type="button" variant="outline" className="h-11" onClick={() => backToDay(panel.sourceDate)}>Back to day</Button></div> : <CalendarBulkReschedule sourceDate={panel.sourceDate} entries={panel.entries} jobsByDate={jobsByDate} busy={bulkBusy} result={panel.result} error={panel.moveError} onMove={moveDayJobs} onCancel={() => backToDay(panel.sourceDate)} onReview={(ids) => openBulk(panel.sourceDate, ids)} /> : null}

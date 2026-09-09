@@ -723,6 +723,7 @@ function normalizeJobRecord(job) {
     urgency: job.urgency || "Medium",
     status: job.status || "To Do",
     scheduledDate: toDateInputValue(job.scheduledDate),
+    ...(typeof job.scheduledTime === "string" && job.scheduledTime.trim() ? { scheduledTime: job.scheduledTime } : {}),
     assignedTechnicianId: job.assignedTechnicianId || "",
     assignedTechnicianName: job.assignedTechnicianName || "",
     customerId: job.customerId || "",

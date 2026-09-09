@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CalendarJobChip } from "./CalendarJobCard";
@@ -17,14 +18,14 @@ export function MiniCalendar({ days, monthLabel, selectedDate, onSelect, onMonth
     }
   }
   return (
-    <section className="calendar-mini min-w-0 rounded-xl border bg-white/95 p-2.5" aria-label="Date navigator">
+    <section className="calendar-mini min-w-0" aria-label="Date navigator">
       <div className="flex items-center justify-between gap-1">
-        <Button type="button" variant="ghost" className="h-9 min-h-9 w-7 min-w-7 p-0" onClick={() => onMonthChange(-1)} aria-label="Previous month in date navigator"><ChevronLeft className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" className="calendar-mini-arrow w-6 min-w-6 p-0" onClick={() => onMonthChange(-1)} aria-label="Previous month in date navigator"><ChevronLeft className="h-4 w-4" /></Button>
         <h2 className="min-w-0 text-center text-xs font-semibold" data-mini-month>{monthLabel}</h2>
-        <Button type="button" variant="ghost" className="h-9 min-h-9 w-7 min-w-7 p-0" onClick={() => onMonthChange(1)} aria-label="Next month in date navigator"><ChevronRight className="h-4 w-4" /></Button>
+        <Button type="button" variant="ghost" className="calendar-mini-arrow w-6 min-w-6 p-0" onClick={() => onMonthChange(1)} aria-label="Next month in date navigator"><ChevronRight className="h-4 w-4" /></Button>
       </div>
-      <div className="mt-2 grid grid-cols-7 text-center text-[10px] text-slate-500" aria-hidden="true">{weekdays.map((day) => <span key={day}>{day[0]}</span>)}</div>
-      <div className="mt-1 grid grid-cols-7 gap-y-1">
+      <div className="mt-1 grid grid-cols-7 text-center text-[10px] text-slate-500" aria-hidden="true">{weekdays.map((day) => <span key={day}>{day[0]}</span>)}</div>
+      <div className="mt-0.5 grid grid-cols-7">
         {days.map((day) => (
           <button
             type="button" key={day.key} data-mini-date={day.key}
@@ -37,40 +38,59 @@ export function MiniCalendar({ days, monthLabel, selectedDate, onSelect, onMonth
           >{day.date.getDate()}</button>
         ))}
       </div>
-      <Button type="button" variant="outline" className="mt-3 h-11 w-full text-xs" onClick={onToday} aria-label="Go to today in date navigator">Today</Button>
+      <Button type="button" variant="outline" className="calendar-mini-today mt-1 w-full text-xs" onClick={onToday} aria-label="Go to today in date navigator">Today</Button>
     </section>
   );
 }
 
-export function MainCalendar({ days, monthLabel, selectedDate, jobsByDate, dragApi, onOpenJob, onOpenDay, coarsePointer }) {
-  const visibleLimit = coarsePointer ? 1 : 2;
+export function MainCalendar({ days, monthLabel, selectedDate, jobsByDate, dragApi, onOpenJob, onOpenDay, inlineDayDetails = false }) {
+  const gridRef = useRef(null);
+  const [eventSlots, setEventSlots] = useState(6);
+  useEffect(() => {
+    const cell = gridRef.current?.firstElementChild;
+    if (!cell) return undefined;
+    // All six weeks share a row height. Reserve a slot for overflow only when
+    // needed, and remeasure on viewport, pointer-size or toolbar-height changes.
+    const observer = new ResizeObserver(() => {
+      const style = getComputedStyle(cell);
+      const label = cell.querySelector(".calendar-day-select");
+      const stack = cell.querySelector(".calendar-day-jobs");
+      const gap = parseFloat(getComputedStyle(stack).rowGap) || 0;
+      const rowHeight = parseFloat(style.getPropertyValue("--calendar-event-height"));
+      const available = cell.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - label.getBoundingClientRect().height - parseFloat(getComputedStyle(stack).marginTop);
+      setEventSlots(Math.max(1, Math.floor((available + gap) / (rowHeight + gap))));
+    });
+    observer.observe(cell);
+    return () => observer.disconnect();
+  }, [days]);
   return (
-    <section className="calendar-main min-w-0 overflow-hidden rounded-xl border bg-white/95" aria-label={`${monthLabel} calendar`} data-calendar-main>
+    <section className="calendar-main min-w-0" aria-label={`${monthLabel} calendar`} data-calendar-main>
       <div className="calendar-weekdays grid grid-cols-7 border-b bg-slate-50 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        {weekdays.map((day) => <div key={day} className="py-2">{day}</div>)}
+        {weekdays.map((day) => <div key={day}>{day}</div>)}
       </div>
-      <div className="calendar-month-grid grid grid-cols-7" data-calendar-dragging={Boolean(dragApi.drag) || undefined} {...dragApi.dropProps}>
+      <div ref={gridRef} className="calendar-month-grid grid grid-cols-7" data-calendar-dragging={Boolean(dragApi.drag) || undefined} {...dragApi.dropProps}>
         {days.map((day) => {
           const jobs = jobsByDate.get(day.key) || [];
+          const visibleLimit = jobs.length > eventSlots ? Math.max(1, eventSlots - 1) : eventSlots;
           const target = dragApi.drag?.target === day.key;
           return (
             <div
               key={day.key} data-calendar-date={day.key} data-calendar-drop-date={day.key}
               data-drop-active={target || undefined} data-selected={selectedDate === day.key || undefined}
-              className={`calendar-day min-w-0 border-b border-r p-1 ${day.inMonth ? "bg-white/70" : "bg-slate-200"} ${selectedDate === day.key ? "calendar-day-selected" : ""} ${target ? "calendar-day-target" : ""}`}
+              className={`calendar-day min-w-0 border-b border-r ${day.inMonth ? "bg-white/70" : "bg-slate-200"} ${selectedDate === day.key ? "calendar-day-selected" : ""} ${target ? "calendar-day-target" : ""}`}
             >
               <button
                 type="button" className="calendar-day-open outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50"
                 onClick={(event) => { if (dragApi.allowClick(event)) onOpenDay(day.key, event.currentTarget); }}
                 aria-pressed={selectedDate === day.key} aria-current={day.isToday ? "date" : undefined}
-                aria-haspopup="dialog"
+                aria-haspopup={inlineDayDetails ? undefined : "dialog"}
                 aria-label={`${formatCalendarDate(day.key, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, ${jobs.length} ${jobs.length === 1 ? "job" : "jobs"}`}
               />
-              <div className="calendar-day-select flex w-full min-w-0 items-start justify-between rounded-md p-0.5 text-left" aria-hidden="true">
-                <span className={`calendar-day-number flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${day.isToday ? "bg-orange-100 text-orange-900 ring-1 ring-orange-300" : day.inMonth ? "text-slate-800" : "text-slate-500"}`}>{day.date.getDate()}</span>
+              <div className="calendar-day-select flex w-full min-w-0 items-start justify-between text-left" aria-hidden="true">
+                <span className={`calendar-day-number flex shrink-0 items-center justify-center rounded-full font-semibold ${day.isToday ? "bg-orange-100 text-orange-900 ring-1 ring-orange-300" : day.inMonth ? "text-slate-800" : "text-slate-500"}`}>{day.date.getDate()}</span>
                 <span className="calendar-mobile-count mt-1 text-[10px] text-slate-500">{jobs.length || ""}</span>
               </div>
-              <div className="calendar-day-jobs grid min-w-0 gap-1">
+              <div className="calendar-day-jobs min-w-0">
                 {jobs.slice(0, visibleLimit).map((job) => <CalendarJobChip key={job.id} job={job} onOpenJob={onOpenJob} dragApi={dragApi} />)}
                 {jobs.length > visibleLimit ? <button type="button" className="calendar-more min-w-0 truncate rounded px-1 text-left text-[11px] font-medium text-sky-800 outline-none hover:bg-sky-50 focus-visible:ring-3 focus-visible:ring-ring/50" onClick={(event) => { if (dragApi.allowClick(event)) onOpenDay(day.key, event.currentTarget); }}>+ {jobs.length - visibleLimit} more</button> : null}
               </div>

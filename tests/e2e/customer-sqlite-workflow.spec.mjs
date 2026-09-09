@@ -675,7 +675,7 @@ test("quote and invoice editors preview the shared PDF workflow", async ({ page 
   await jobWorkspace.getByRole("tab", { name: "Documents" }).click();
   await jobWorkspace.getByRole("button", { name: "Open Invoice Editor" }).click();
 
-  const invoiceEditor = page.getByRole("dialog").filter({ hasText: "Invoice - Synthetic gate service" }).last();
+  const invoiceEditor = page.locator('[data-document-workspace="invoice"]');
   await expect(invoiceEditor).toBeVisible();
   await expect(invoiceEditor.getByText("Work completed", { exact: true })).toBeVisible();
   await expect(invoiceEditor.getByText("Paid so far", { exact: true }).first()).toBeVisible();
@@ -691,14 +691,15 @@ test("quote and invoice editors preview the shared PDF workflow", async ({ page 
   expect(invoiceResponse.headers()["content-type"]).toContain("application/pdf");
   expect(invoiceResponse.headers()["content-disposition"]).toContain("inline;");
 
-  const invoicePreview = page.getByRole("dialog").filter({ hasText: "Preview Part Payment Receipt" }).last();
+  const invoicePreview = invoiceEditor;
   await expect(invoicePreview).toBeVisible();
   await expect(invoicePreview.locator('iframe[title="Invoice PDF preview"]')).toBeVisible();
-  await invoicePreview.getByRole("button", { name: "Back to Edit" }).click();
-  await invoiceEditor.getByRole("button", { name: "Cancel" }).click();
+  await invoicePreview.getByRole("button", { name: "Back to Invoice editor" }).click();
+  await invoiceEditor.getByRole("button", { name: "Back to Job #1001" }).click();
 
+  await jobWorkspace.getByRole("tab", { name: "Documents" }).click();
   await jobWorkspace.getByRole("button", { name: "Open Quote Editor" }).click();
-  const quoteEditor = page.getByRole("dialog").filter({ hasText: "Quote - Synthetic gate service" }).last();
+  const quoteEditor = page.locator('[data-document-workspace="quote"]');
   await expect(quoteEditor).toBeVisible();
   await expect(quoteEditor.getByText("Scope / notes", { exact: true })).toBeVisible();
   await expect(quoteEditor.getByText("Paid so far", { exact: true })).toHaveCount(0);
@@ -714,11 +715,11 @@ test("quote and invoice editors preview the shared PDF workflow", async ({ page 
   expect(quoteResponse.headers()["content-type"]).toContain("application/pdf");
   expect(quoteResponse.headers()["content-disposition"]).toContain("inline;");
 
-  const quotePreview = page.getByRole("dialog").filter({ hasText: "Preview Quote" }).last();
+  const quotePreview = quoteEditor;
   await expect(quotePreview).toBeVisible();
   await expect(quotePreview.locator('iframe[title="Quote PDF preview"]')).toBeVisible();
-  await quotePreview.getByRole("button", { name: "Back to Edit" }).click();
-  await quoteEditor.getByRole("button", { name: "Cancel" }).click();
+  await quotePreview.getByRole("button", { name: "Back to Quote editor" }).click();
+  await quoteEditor.getByRole("button", { name: "Back to Job #1001" }).click();
   await closeOpenDialog(page);
 });
 

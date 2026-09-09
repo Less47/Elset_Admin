@@ -230,7 +230,9 @@ test("unexpected bulk database failures roll back every date write", async () =>
   }), bulkFixture());
 });
 
-test("date scheduling and removal preserve status, assignment and commercial records", async () => {
+test("date scheduling and removal preserve time, status, assignment and commercial records", async () => {
+  const fixture = readFixture();
+  fixture.jobs.find((job) => job.id === "demo-job-1001").scheduledTime = "10:30";
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
       const assigned = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "PATCH", body: JSON.stringify({ assignedTechnicianId: "demo-staff-admin", urgency: "High" }) });
@@ -240,6 +242,7 @@ test("date scheduling and removal preserve status, assignment and commercial rec
         assert.equal(statusResult.response.status, 200);
         const before = getDbState(dbPath).jobs.find((job) => job.id === "demo-job-1001");
         assert.equal(before.assignedTechnicianId, "demo-staff-admin");
+        assert.equal(before.scheduledTime, "10:30");
         assert.ok(before.quote);
         assert.ok(before.invoice);
         const { scheduledDate: previousDate, updatedAt: previousUpdate, ...unchanged } = before;
@@ -248,6 +251,7 @@ test("date scheduling and removal preserve status, assignment and commercial rec
         for (const scheduledDate of ["2026-09-15", "2026-10-04", ""]) {
           const result = await requestJson(baseUrl, "/api/jobs/demo-job-1001/schedule", { method: "PATCH", body: JSON.stringify({ scheduledDate }) });
           assert.equal(result.response.status, 200);
+          assert.equal(result.payload.state.jobs.find((job) => job.id === before.id).scheduledTime, "10:30");
           const saved = getDbState(dbPath).jobs.find((job) => job.id === before.id);
           const { scheduledDate: savedDate, updatedAt, ...remaining } = saved;
           assert.equal(savedDate, scheduledDate);
@@ -256,7 +260,7 @@ test("date scheduling and removal preserve status, assignment and commercial rec
         }
       }
     });
-  });
+  }, fixture);
 });
 
 test("job create supports existing customer/site, new customer/site, existing customer/new site, and server job numbers", async () => {

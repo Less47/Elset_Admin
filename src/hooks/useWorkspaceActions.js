@@ -63,8 +63,7 @@ export function useWorkspaceActions({
   selectedSiteContext,
   setCustomerProfileOpen,
   setData,
-  setDocEditorOpen,
-  setDocType,
+  onNavigateToDocument,
   setIsSendingDocument,
   setSelectedCustomerId,
   setSelectedJob,
@@ -1309,7 +1308,6 @@ export function useWorkspaceActions({
       if (!saved.ok) return false;
 
       setSelectedJob(null);
-      setDocEditorOpen(false);
       return true;
     }
 
@@ -1322,7 +1320,6 @@ export function useWorkspaceActions({
       ],
     }));
     setSelectedJob(null);
-    setDocEditorOpen(false);
     return true;
   }
 
@@ -1634,9 +1631,7 @@ export function useWorkspaceActions({
 
   function handleOpenDoc(job, type) {
     if (!canManageBusiness) return;
-    setSelectedJob(job);
-    setDocType(type);
-    setDocEditorOpen(true);
+    return onNavigateToDocument?.(job, type);
   }
 
   function getDocumentTemplateSnapshot(type) {
@@ -1879,10 +1874,6 @@ export function useWorkspaceActions({
           updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, documentToSave) });
           return true;
         },
-        onSuccess: () => {
-          setDocEditorOpen(false);
-          window.alert(`${docType === "invoice" ? "Invoice" : "Quote"} sent successfully with a PDF attachment.`);
-        },
         onError: (error) => {
           const message = error instanceof Error ? error.message : `Failed to send the ${docType} PDF.`;
           window.alert(message);
@@ -1956,7 +1947,6 @@ export function useWorkspaceActions({
 
       if (selectedJob?.customerId === customerId) {
         setSelectedJob(null);
-        setDocEditorOpen(false);
         onCloseJobWorkspace?.({ force: true });
       }
 
@@ -1992,7 +1982,6 @@ export function useWorkspaceActions({
 
     if (selectedJob?.customerId === customerId) {
       setSelectedJob(null);
-      setDocEditorOpen(false);
       onCloseJobWorkspace?.({ force: true });
     }
 

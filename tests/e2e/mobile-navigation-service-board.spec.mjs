@@ -978,7 +978,7 @@ test("mobile and tablet viewport matrix keeps filters, details, and overflow usa
         });
       }
       await loginAs(page, "mobileadmin");
-      await expect(page.locator("[data-service-board-status]")).toHaveCount(1);
+      await expect(page.locator("[data-service-board-status]")).toHaveCount(viewport.width < 768 ? 1 : 3);
       await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
 
       if (viewport.width === 375) {
@@ -1424,8 +1424,9 @@ test("phone database pages use contained record cards with visible identities, s
         const createInvoice = page.locator('[data-mobile-record-card][data-record-id="mobile-job-high-priority"]').locator("button", { hasText: "Create Invoice" });
         await expect(createInvoice).toHaveCount(1);
         await createInvoice.click();
-        await expect(page.getByRole("dialog", { name: "Invoice - Urgent safety edge repair" })).toHaveCount(1);
-        await page.keyboard.press("Escape");
+        await expect(page.locator('[data-document-workspace="invoice"]')).toHaveCount(1);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
 
         await navigateToWorkspaceSection(page, "Maintenance", viewport.width);
         const maintenanceCard = page.locator('[data-mobile-record-card][data-record-id="mobile-maintenance-plan"]');
@@ -2086,6 +2087,58 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
   }
 });
 
+test("tablet three-column board keeps navigation, controls, touch drag, and Tomorrow working", async ({ browser }) => {
+  for (const width of [768, 820]) {
+    const context = await browser.newContext(mobileContextOptions(width, 1180));
+    const page = await context.newPage();
+    const broadPuts = trackBroadWorkspacePuts(page);
+    try {
+      await loginAs(page, "mobileadmin");
+      await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
+      await expect(page.getByRole("button", { name: "Open navigation", exact: true })).toBeVisible();
+      await assertDesktopBoardSpacing(page);
+      const search = page.getByPlaceholder("Search jobs, customer, address...");
+      await search.fill("Mobile In Progress Job");
+      await expect(page.locator('[data-service-board-status="In Progress"] [draggable="true"]')).toHaveCount(1);
+      await expect(page.locator('[data-service-board-status="To Do"] [draggable="true"]')).toHaveCount(0);
+      await search.fill("");
+      for (const mode of ["Grid", "Compact", "List"]) {
+        await page.getByRole("button", { name: `To Do ${mode} view`, exact: true }).click();
+        await expect(page.getByRole("button", { name: `To Do ${mode} view`, exact: true })).toHaveAttribute("aria-pressed", "true");
+      }
+      await page.locator(".mobile-workspace-navigation").getByRole("button", { name: /^Tomorrow,/ }).click();
+      await expect(page.getByRole("button", { name: "Close tomorrow panel", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Close tomorrow panel", exact: true }).click({ position: { x: 16, y: 16 } });
+      await page.getByRole("button", { name: "Full Screen", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Exit Full Screen", exact: true })).toBeVisible();
+      await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
+      await page.getByRole("button", { name: "Exit Full Screen", exact: true }).click();
+
+      // Exercise the existing long-press touch handler against the real local status API.
+      const source = page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first();
+      await source.scrollIntoViewIfNeeded();
+      const start = await source.boundingBox();
+      const target = await page.locator('[data-service-board-status="To Do"]').boundingBox();
+      const devtools = await context.newCDPSession(page);
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.x + start.width / 2, y: start.y + 55, id: 1 }] });
+      await page.waitForTimeout(220);
+      const statusResponse = page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/api/jobs/${plannedJobId}/status`);
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: target.x + target.width / 2, y: start.y + 60, id: 1 }] });
+      await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      expect((await statusResponse).status()).toBe(200);
+      await waitForJobStatus(plannedJobId, "To Do");
+      await dragJobToStatus(page, page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first(), plannedJobId, "In Progress");
+      await waitForJobStatus(plannedJobId, "In Progress");
+      await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
+      await expect(page).toHaveURL(/\/jobs\/demo-job-1001$/);
+      await page.getByRole("button", { name: "Back to Service Board", exact: true }).click();
+      await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
+      await assertNoHorizontalOverflow(page);
+      expect(broadPuts.requests).toEqual([]);
+    } finally { broadPuts.stop(); await context.close(); }
+  }
+});
+
 test("Service Board cards respect column padding across tablet, desktop, and mobile widths", async ({ browser }, testInfo) => {
   const measurements = [];
   const viewports = [
@@ -2100,7 +2153,7 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
 
   async function checkContainment(page, viewport, scenario, viewMode = "List") {
     const columns = page.locator("[data-service-board-status]");
-    await expect(columns).toHaveCount(viewport.width < 1024 ? 1 : 3);
+    await expect(columns).toHaveCount(viewport.width < 768 ? 1 : 3);
     const metrics = await columns.evaluateAll((elements) => elements.map((column) => {
       const mobile = column.hasAttribute("data-mobile-board-view");
       const content = mobile ? column : column.querySelector(':scope > [data-slot="card-content"]');
@@ -2121,6 +2174,10 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
           width: cardRect.width,
           boxSizing: cardStyle.boxSizing,
           margins: [parseFloat(cardStyle.marginLeft), parseFloat(cardStyle.marginRight)],
+          outsideColumn: Array.from(wrapper.querySelectorAll("*")).filter((child) => {
+            const childRect = child.getBoundingClientRect();
+            return childRect.left < rect.left - 1 || childRect.right > rect.right + 1;
+          }).map((child) => child.getAttribute("aria-label") || child.className),
           overflowingChildren: body ? Array.from(body.querySelectorAll("*"))
             .filter((child) => child.scrollWidth > child.clientWidth + 1 && getComputedStyle(child).overflowX === "visible")
             .map((child) => ({ text: child.textContent.slice(0, 60), className: child.getAttribute("class") })) : [],
@@ -2136,6 +2193,7 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
       for (const card of column.cards) {
         expect(card.boxSizing).toBe("border-box");
         expect(card.margins).toEqual([0, 0]);
+        expect(card.outsideColumn).toEqual([]);
         expect(card.left).toBeGreaterThanOrEqual(column.left - 1);
         expect(card.right).toBeLessThanOrEqual(column.right + 1);
         expect(card.overflowingChildren, `${viewport.width} ${scenario} ${viewMode} ${column.status}`).toEqual([]);
@@ -2160,13 +2218,13 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
       : route.continue());
     try {
       await loginAs(page, "mobileadmin", viewport.width < 1024);
-      await page.locator(viewport.width < 1024 ? "[data-mobile-job-id]" : '[draggable="true"]').first().waitFor();
+      await page.locator(viewport.width < 768 ? "[data-mobile-job-id]" : '[draggable="true"]').first().waitFor();
       await page.evaluate(() => document.fonts.ready);
       await checkContainment(page, viewport, "normal");
       if (viewport.width === 820 || viewport.width === 1024) {
         await capture(page, testInfo, `service-board-containment-after-${viewport.width}x${viewport.height}.png`, "Service Board card containment");
       }
-      if (viewport.width < 1024) {
+      if (viewport.width < 768) {
         await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
         await expect(page.getByRole("button", { name: "Move Job #1002", exact: true })).toBeVisible();
         continue;
@@ -2228,13 +2286,13 @@ test("visual density preserves touch targets, focus, and card gutters at every r
     const page = await context.newPage();
     try {
       await loginAs(page, "mobileadmin", mobile);
-      const firstCard = page.locator(mobile ? "[data-mobile-job-id]" : '[draggable="true"] > [data-slot="card"]').first();
+      const firstCard = page.locator(viewport.width < 768 ? "[data-mobile-job-id]" : '[draggable="true"] > [data-slot="card"]').first();
       await expect(firstCard).toHaveCSS("border-top-width", "1px");
-      if (!mobile) {
+      if (viewport.width >= 768) {
         // Explicit column gutters must override the shared panel padding token.
-        await expect(page.locator('[data-service-board-status] > [data-slot="card-content"]').first()).toHaveCSS("padding-left", "12px");
+        await expect(page.locator('[data-service-board-status] > [data-slot="card-content"]').first()).toHaveCSS("padding-left", "6px");
         await expect(firstCard).toHaveCSS("padding-top", "0px");
-        await expect(firstCard.locator(':scope > [data-slot="card-content"]')).toHaveCSS("padding-top", "12px");
+        await expect(firstCard.locator(':scope > [data-slot="card-content"]')).toHaveCSS("padding-top", "10px");
         const wrapper = firstCard.locator("..");
         const arrow = wrapper.locator(".service-board-tomorrow-action");
         if (await arrow.count()) {
@@ -2683,7 +2741,7 @@ test("Create Job and Job Details use tablet and desktop workspace layouts", asyn
       }
       await page.getByRole("button", { name: "Back to Service Board" }).click();
 
-      if (viewport.mobile) {
+      if (viewport.width < 768) {
         await page.getByRole("button", { name: /Open Job #1001/ }).click();
       } else {
         await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
