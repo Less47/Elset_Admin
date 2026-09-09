@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
 import MobileWorkspaceNavigation from "@/components/app/MobileWorkspaceNavigation";
@@ -45,8 +46,8 @@ import {
 
 const FAVICON_SRC = "/favicon.png";
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null }) {
-  const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useState([]);
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences }) {
+  const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useUserUiPreference("boardHiddenColumns");
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -314,7 +315,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
                       {isSettingsItem && isActive && !isIconOnlySidebar ? (
                         <div className="grid gap-1 pl-14 animate-in slide-in-from-top-1 fade-in-0 duration-200">
-                          {settingsTabs.map((tab) => {
+                          {settingsTabs.filter((tab) => canManageBusiness || tab.value === "ui").map((tab) => {
                             const isSettingsTabActive = activeSettingsTab === tab.value;
 
                             return (
@@ -415,6 +416,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         }
       >
         {workspacePage}
+        {personalPreferences?.error && !(activeSection === "settings" && activeSettingsTab === "ui" && themeSaveState.scope === "theme") ? (
+          <div role="alert" className="m-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <span>Personal preferences could not be synced. {personalPreferences.error}</span>
+            <Button type="button" variant="outline" onClick={personalPreferences.retry}>Retry personal preferences</Button>
+          </div>
+        ) : null}
 
         <div
           className={workspacePage ? undefined : mapWorkspaceOpen || calendarWorkspaceOpen ? "relative h-full min-h-0" : "contents"}
@@ -651,8 +658,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           />
         ) : null}
 
-        {canManageBusiness && activeSection === "settings" ? (
+        {isAuthenticated && activeSection === "settings" ? (
           <SettingsManager
+            canManageWorkspaceSettings={canManageBusiness}
             activeSettingsTab={activeSettingsTab}
             onActiveSettingsTabChange={setActiveSettingsTab}
             settings={themeSettings}

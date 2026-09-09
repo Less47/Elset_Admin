@@ -8,6 +8,7 @@ import {
 } from "./server-workspace-settings.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
 import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { userUiPreferenceKeys } from "./src/lib/user-ui-preferences.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -73,13 +74,22 @@ export function createSettingsRouter({
   router.patch(
     "/api/settings",
     ...middleware,
-    handleSettingsRoute((db, req) => updateWorkspaceSettings(db, getRequestBody(req, "settings")), env)
+    handleSettingsRoute((db, req) => {
+      const patch = getRequestBody(req, "settings");
+      if (patch && Object.keys(patch).some((key) => userUiPreferenceKeys.includes(key))) {
+        throw new WorkspaceSettingsError("Appearance and display preferences are personal. Use /api/user-preferences.");
+      }
+      return updateWorkspaceSettings(db, patch);
+    }, env)
   );
 
   router.post(
     "/api/settings/reset",
     ...middleware,
-    handleSettingsRoute((db, req) => resetWorkspaceSettings(db, req.body?.group), env)
+    handleSettingsRoute((db, req) => {
+      if (req.body?.group === "ui") throw new WorkspaceSettingsError("Reset appearance through /api/user-preferences.");
+      return resetWorkspaceSettings(db, req.body?.group);
+    }, env)
   );
 
   router.put(

@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import { Buffer } from "buffer";
 import { fileURLToPath } from "url";
+import { appearanceSettingKeys as workspaceUiSettingKeys } from "./src/lib/user-ui-preferences.js";
 import {
   ADMIN_EMAIL,
   calculateDocTotal,
@@ -1301,6 +1302,9 @@ export function saveAuthorizedAppState(user, incomingState) {
   const merged = user.role === "technician"
     ? mergeTechnicianState(data, incomingState)
     : mergeOfficeState(data, incomingState);
+
+  // Legacy JSON workspace autosaves must not edit the appearance fallback.
+  for (const key of workspaceUiSettingKeys) merged.settings[key] = data.settings[key];
 
   return buildUserState(saveData(merged), user);
 }

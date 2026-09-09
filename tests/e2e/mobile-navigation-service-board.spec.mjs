@@ -1982,8 +1982,9 @@ test("mobile navigation and actions retain admin, office, and technician permiss
       await loginAs(page, account.username);
       await page.getByRole("button", { name: "Open navigation" }).click();
       const navigation = page.getByRole("navigation", { name: "Application" });
-      await expect(navigation.locator("button")).toHaveCount(account.canManage ? expectedBusinessItems : 1);
+      await expect(navigation.locator("button")).toHaveCount(account.canManage ? expectedBusinessItems : 2);
       await expect(navigation.getByRole("button", { name: "Service Board", exact: true })).toBeVisible();
+      await expect(navigation.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
       if (account.canManage) {
         await expect(navigation.getByRole("button", { name: "Customers", exact: true })).toBeVisible();
       } else {

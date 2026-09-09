@@ -135,9 +135,9 @@ export const settingsTabMeta = {
     description: "Edit the quote and invoice templates, preview the PDFs, and keep your branded documents consistent.",
   },
   ui: {
-    eyebrow: "Workspace Settings",
+    eyebrow: "Personal Appearance",
     title: "UI Settings",
-    description: "Adjust application colours, table styling, popup gradients, layout spacing, and workspace visibility controls for the main shell.",
+    description: "Your colours, density and display choices follow your account across devices. Company settings remain shared.",
   },
   backup: {
     eyebrow: "Backup & Recovery",

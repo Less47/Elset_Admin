@@ -1,4 +1,5 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
@@ -51,7 +52,7 @@ export default function CustomerManager({
   const [filterBy, setFilterBy] = useState("all");
   const [customerTypeFilter, setCustomerTypeFilter] = useState("all");
   const [createdRange, setCreatedRange] = useState("all-time");
-  const [viewMode, setViewMode] = useState("list");
+  const [viewMode, setViewMode] = useUserUiPreference("customerView");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterClock] = useState(() => ({ now: Date.now(), year: new Date().getFullYear() }));
   const filterTriggerRef = useRef(null);

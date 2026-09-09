@@ -3,24 +3,23 @@ import { isHexColorDraftValid, normalizeThemeSettings, pickSettings, preferenceS
 import { createThemeSettingsSaveQueue, PREFERENCE_SAVE_DEBOUNCE_MS } from "./theme-settings-save-queue";
 import { requestSettingsWorkspaceUpdate } from "./workspace-customer-api";
 
-export function useThemeSettingsSave({ settings, fetchWithAuth, setData, sessionKey }) {
+export function useThemeSettingsSave({ settings, fetchWithAuth, setData, sessionKey, personal }) {
   const [saveScope, setSaveScope] = useState("theme");
   const queue = useMemo(() => createThemeSettingsSaveQueue({
     save: (patch) => {
-      const isPreferencePatch = Object.keys(patch).some((key) => preferenceSettingKeys.includes(key));
-      if (!sessionKey) throw new Error(isPreferencePatch ? "Sign in to save preference changes." : "Sign in to save theme changes.");
+      if (!sessionKey) throw new Error("Sign in to save preference changes.");
       return requestSettingsWorkspaceUpdate({
         fetchWithAuth,
         path: "/api/settings",
         method: "PATCH",
         body: { settings: patch },
-        errorMessage: isPreferencePatch ? "Preference changes could not be saved." : "Theme change could not be saved.",
+        errorMessage: "Preference changes could not be saved.",
       });
     },
     onSaved: (patch, payload) => {
       const saved = payload.result?.settings || payload.state.settings;
-      // This endpoint returns the entire workspace. A theme acknowledgement
-      // must not replace jobs, other settings, or newer local theme selections.
+      // This shared-settings endpoint returns the entire workspace. Apply only
+      // the acknowledged company fields, preserving other records and drafts.
       const acknowledged = Object.fromEntries(Object.keys(patch).map((key) => [key, saved[key]]));
       setData((previous) => ({ ...previous, settings: { ...previous.settings, ...acknowledged } }));
     },
@@ -32,14 +31,14 @@ export function useThemeSettingsSave({ settings, fetchWithAuth, setData, session
   }, [queue]);
 
   const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
-  const visualSettings = useMemo(() => ({ ...settings, ...snapshot.overrides }), [settings, snapshot.overrides]);
+  const visualSettings = useMemo(() => ({ ...settings, ...snapshot.overrides, ...personal.preferences }), [settings, snapshot.overrides, personal.preferences]);
 
   function change(values) {
     const keys = uiSettingKeys.filter((key) => Object.hasOwn(values, key));
     const colourKeys = themeColorFields.map((field) => field.key);
     if (keys.some((key) => colourKeys.includes(key) && !isHexColorDraftValid(values[key]))) return false;
     setSaveScope("theme");
-    return queue.change(pickSettings(normalizeThemeSettings(values), keys));
+    return personal.change(pickSettings(normalizeThemeSettings(values), keys));
   }
 
   function changePreferences(values, { immediate = false } = {}) {
@@ -49,5 +48,7 @@ export function useThemeSettingsSave({ settings, fetchWithAuth, setData, session
     return queue.change(patch, immediate ? 0 : PREFERENCE_SAVE_DEBOUNCE_MS);
   }
 
-  return { settings: visualSettings, status: snapshot.status, error: snapshot.error, scope: saveScope, change, changePreferences, retry: queue.retry };
+  const activeSave = saveScope === "preferences" ? snapshot : personal;
+  return { settings: visualSettings, status: activeSave.status, error: activeSave.error, scope: saveScope, change, changePreferences,
+    retry: () => saveScope === "preferences" ? queue.retry() : personal.retry() };
 }

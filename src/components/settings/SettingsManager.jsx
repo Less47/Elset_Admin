@@ -472,6 +472,7 @@ export default function SettingsManager({
   onApplyServiceM8Import,
   backupSummary,
   workspaceStorageMode = "json",
+  canManageWorkspaceSettings = true,
 }) {
   const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
@@ -662,7 +663,7 @@ export default function SettingsManager({
           </Badge>
         </div>
         <div className="flex min-w-max flex-nowrap gap-2" data-settings-navigation>
-          {settingsTabs.map((tab) => {
+          {settingsTabs.filter((tab) => canManageWorkspaceSettings || tab.value === "ui").map((tab) => {
             const isActive = activeSettingsTab === tab.value;
 
             return (
@@ -680,14 +681,14 @@ export default function SettingsManager({
         </div>
       </div>
 
-      {activeSettingsTab === "preferences" && (
+      {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Company Details</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">These values are the single source of truth for generated quotes, invoices, outgoing emails, and workspace branding.</p>
+                  <p className="mt-1 text-sm text-slate-600">Shared workspace settings: these company values apply to everyone and to generated quotes, invoices and outgoing emails.</p>
                 </div>
                 <div className="grid justify-items-start gap-2 lg:justify-items-end">
                   <Button variant="outline" className="rounded-xl" onClick={onResetPreferences}>
@@ -821,7 +822,7 @@ export default function SettingsManager({
         </div>
       )}
 
-      {activeSettingsTab === "templates" && (
+      {canManageWorkspaceSettings && activeSettingsTab === "templates" && (
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
@@ -904,6 +905,7 @@ export default function SettingsManager({
 
       {activeSettingsTab === "ui" && (
         <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <p className="text-sm text-slate-700 xl:col-span-2">Personal appearance — saved to your account across devices. These choices do not change anyone else's view.</p>
           <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -969,7 +971,7 @@ export default function SettingsManager({
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField label="Sidebar width">
                     <Select value={normalizedSettings.sidebarWidth} onValueChange={(value) => onSettingChange("sidebarWidth", value)}>
-                      <SelectTrigger className="w-full rounded-xl">
+                      <SelectTrigger aria-label="Sidebar width" className="w-full rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -984,7 +986,7 @@ export default function SettingsManager({
 
                   <FormField label="Content density">
                     <Select value={normalizedSettings.contentDensity} onValueChange={(value) => onSettingChange("contentDensity", value)}>
-                      <SelectTrigger className="w-full rounded-xl">
+                      <SelectTrigger aria-label="Content density" className="w-full rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1005,7 +1007,7 @@ export default function SettingsManager({
         </div>
       )}
 
-      {activeSettingsTab === "backup" && (
+      {canManageWorkspaceSettings && activeSettingsTab === "backup" && (
         <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="grid gap-4">
             <Card className="rounded-3xl border-slate-200 shadow-sm">

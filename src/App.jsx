@@ -10,6 +10,8 @@ import { RecordWorkspace, UnsavedChangesDialog, WorkspaceMessage } from "@/compo
 import { useAppSession } from "@/hooks/useAppSession";
 import { useThemePalette } from "@/hooks/useThemePalette";
 import { useThemeSettingsSave } from "@/hooks/useThemeSettingsSave";
+import { UserUiPreferencesContext, useUserUiPreferences } from "@/hooks/useUserUiPreferences";
+import { boardPreferenceKeys } from "@/lib/user-ui-preferences";
 import { useWorkspaceActions } from "@/hooks/useWorkspaceActions";
 import { parseWorkspacePath, useWorkspaceNavigation } from "@/hooks/useWorkspaceNavigation";
 import { useWorkspaceViewModel } from "@/hooks/useWorkspaceViewModel";
@@ -27,13 +29,6 @@ export default function App() {
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
   const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);
   const [serviceBoardTomorrowPanelOpen, setServiceBoardTomorrowPanelOpen] = useState(false);
-  const [showServiceBoardTagLabels, setShowServiceBoardTagLabels] = useState(false);
-  const [serviceBoardColumnViews, setServiceBoardColumnViews] = useState(() =>
-    Object.fromEntries(statuses.map((status) => [status, "list"]))
-  );
-  const [serviceBoardColumnSorts, setServiceBoardColumnSorts] = useState(() =>
-    Object.fromEntries(statuses.map((status) => [status, "recent"]))
-  );
   const resetWorkspaceChromeRef = useRef(() => {});
   const workspaceNavigation = useWorkspaceNavigation({ activeSection, onSectionChange: setActiveSection });
   const { navigateToSection, resetToRoot } = workspaceNavigation;
@@ -53,7 +48,6 @@ export default function App() {
     setShowHighUrgencyOnly(false);
     setServiceBoardFullScreen(false);
     setServiceBoardTomorrowPanelOpen(false);
-    setServiceBoardColumnSorts(Object.fromEntries(statuses.map((status) => [status, "recent"])));
     resetToRoot();
   }, [resetToRoot]);
 
@@ -70,19 +64,42 @@ export default function App() {
     });
   }, [navigateToSection]);
 
-  const effectiveActiveSection = session.isTechnician ? "service-board" : activeSection;
-  const effectiveActiveSettingsTab = session.isTechnician ? "preferences" : activeSettingsTab;
+  const effectiveActiveSection = session.isTechnician && activeSection !== "settings" ? "service-board" : activeSection;
+  const effectiveActiveSettingsTab = session.isTechnician ? "ui" : activeSettingsTab;
   const recordRoute = ["job-details", "document"].includes(workspaceNavigation.route.type);
   const routeSelectedJob = recordRoute
     ? data.jobs.find((job) => job.id === workspaceNavigation.route.jobId) || null
     : null;
   const selectedJobForView = recordRoute ? routeSelectedJob : selectedJob;
 
+  const personalPreferences = useUserUiPreferences({
+    fetchWithAuth: session.fetchWithAuth,
+    sessionKey: session.isAuthenticated ? session.authUser.id : "",
+    legacySettings: data.settings,
+  });
+  const boardValues = (kind, preferences = personalPreferences.preferences) => Object.fromEntries(
+    statuses.map((status) => [status, preferences[boardPreferenceKeys[status][kind]]])
+  );
+  const changeBoardValues = (kind, update) => {
+    const previous = boardValues(kind, personalPreferences.getPreferences());
+    const next = typeof update === "function" ? update(previous) : update;
+    const patch = Object.fromEntries(statuses.filter((status) => next[status] !== previous[status])
+      .map((status) => [boardPreferenceKeys[status][kind], next[status]]));
+    if (Object.keys(patch).length) personalPreferences.change(patch);
+  };
+  const serviceBoardColumnViews = boardValues("view");
+  const serviceBoardColumnSorts = boardValues("sort");
+  const setServiceBoardColumnViews = (update) => changeBoardValues("view", update);
+  const setServiceBoardColumnSorts = (update) => changeBoardValues("sort", update);
+  const showServiceBoardTagLabels = personalPreferences.preferences.boardShowTagLabels;
+  const setShowServiceBoardTagLabels = (value) => personalPreferences.change({ boardShowTagLabels: value });
+
   const themeSettingsSave = useThemeSettingsSave({
     settings: data.settings,
     fetchWithAuth: session.fetchWithAuth,
     setData,
     sessionKey: session.authUser?.id || "",
+    personal: personalPreferences,
   });
   const { themeSettings, themePalette } = useThemePalette(themeSettingsSave.settings);
   const workspaceViewModel = useWorkspaceViewModel({
@@ -116,7 +133,7 @@ export default function App() {
     workspaceStorageMode: session.workspaceStorageMode,
   });
 
-  if (session.authStatus === "checking") {
+  if (session.authStatus === "checking" || (session.isAuthenticated && personalPreferences.loading)) {
     return <AuthLoadingScreen logoSrc={LOGO_SRC} />;
   }
 
@@ -253,6 +270,7 @@ export default function App() {
         : null;
 
   return (
+    <UserUiPreferencesContext.Provider value={personalPreferences}>
     <div className="min-h-[100dvh]" style={themePalette.rootStyle}>
       <WorkspaceShell
         auth={{ ...session, handleLogout: () => workspaceNavigation.requestNavigation(session.handleLogout) }}
@@ -291,6 +309,7 @@ export default function App() {
           handleSaveStaffLoginAccount: session.handleSaveStaffLoginAccount,
         }}
         workspacePage={workspacePageOpen ? workspacePage : null}
+        personalPreferences={personalPreferences}
       />
 
       <UnsavedChangesDialog
@@ -299,5 +318,6 @@ export default function App() {
         onDiscard={workspaceNavigation.discardAndContinue}
       />
     </div>
+    </UserUiPreferencesContext.Provider>
   );
 }

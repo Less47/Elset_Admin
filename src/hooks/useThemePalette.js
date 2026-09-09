@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
@@ -136,7 +136,7 @@ export function useThemePalette(settings) {
     };
   }, [themeSettings]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof document === "undefined") return undefined;
 
     const root = document.documentElement;

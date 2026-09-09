@@ -2138,8 +2138,8 @@ export function useWorkspaceActions({
   }
 
   async function handleThemeSettingChange(key, value) {
-    if (!canManageBusiness) return;
     if (uiSettingKeys.includes(key)) return themeSettingsSave.change({ [key]: value });
+    if (!canManageBusiness) return;
     if (preferenceSettingKeys.includes(key) && useSqliteApi) {
       return themeSettingsSave.changePreferences({ [key]: value });
     }
@@ -2165,17 +2165,14 @@ export function useWorkspaceActions({
   }
 
   async function handleApplyThemePreset(values) {
-    if (!canManageBusiness) return;
     return themeSettingsSave.change(values);
   }
 
   async function handleResetUiSettings() {
-    if (!canManageBusiness) return;
     return themeSettingsSave.change(pickSettings(defaultThemeSettings, uiSettingKeys));
   }
 
   function handleRetryThemeSave() {
-    if (!canManageBusiness) return;
     themeSettingsSave.retry();
   }
 

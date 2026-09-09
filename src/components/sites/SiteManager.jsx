@@ -1,4 +1,5 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
@@ -51,7 +52,7 @@ export default function SiteManager({
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("activity");
   const [siteTypeFilter, setSiteTypeFilter] = useState("all");
-  const [viewMode, setViewMode] = useState("list");
+  const [viewMode, setViewMode] = useUserUiPreference("siteView");
   const [createSiteDialogOpen, setCreateSiteDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [newSiteCustomerId, setNewSiteCustomerId] = useState("");

@@ -9,6 +9,7 @@ import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 
+import { openUserPreferencesDb, getUserUiPreferences } from "../../server-user-ui-preferences.js";
 import { updateWorkspaceSettings } from "../../server-workspace-settings.js";
 import {
   defaultWorkspaceSettings as defaultThemeSettings,
@@ -129,8 +130,8 @@ async function seedLoginAccounts() {
   }
 }
 
-async function startServer() {
-  const port = await getFreePort();
+async function startServer(existingPort) {
+  const port = existingPort || await getFreePort();
   baseUrl = `http://127.0.0.1:${port}`;
   const env = {
     ...process.env,
@@ -173,6 +174,7 @@ async function stopServer() {
 
 const defaultUi = Object.fromEntries(uiSettingKeys.map((key) => [key, defaultThemeSettings[key]]));
 let originalRecords;
+let migrationEvidence;
 test.beforeAll(async () => {
   tempDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "elset-theme-playwright-"));
   fs.mkdirSync(screenshotDir, { recursive: true });
@@ -180,9 +182,19 @@ test.beforeAll(async () => {
   try { importWorkspaceJsonData(db, JSON.parse(fs.readFileSync(fixturePath, "utf8"))); } finally { db.close(); }
   originalRecords = recordsOnly(readWorkspaceState());
   await seedLoginAccounts();
+  const authBefore = openUserPreferencesDb({ env: { ELSET_DATA_DIR: tempDataDir } });
+  try {
+    migrationEvidence = {
+      tables: authBefore.prepare("SELECT name, sql FROM sqlite_master WHERE type='table'").all(),
+      users: authBefore.prepare('SELECT id, username FROM "user" ORDER BY id').all(),
+    };
+    expect(migrationEvidence.tables.some((table) => table.name === "user_ui_preferences")).toBe(false);
+  } finally { authBefore.close(); }
   await startServer();
 });
 test.beforeEach(() => {
+  const preferences = openUserPreferencesDb({ env: { ELSET_DATA_DIR: tempDataDir } });
+  try { preferences.exec("DELETE FROM user_ui_preferences"); } finally { preferences.close(); }
   const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
   try { updateWorkspaceSettings(db, defaultUi); } finally { db.close(); }
 });
@@ -208,11 +220,11 @@ async function navigate(page, label, width) {
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: label, exact: true }).click();
 }
 
-async function openSettings(browser, width = 1440, height = 900, tab = "UI Settings") {
+async function openSettings(browser, width = 1440, height = 900, tab = "UI Settings", username = "mobileadmin") {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: width < 1280, isMobile: width < 768, locale: "en-AU", reducedMotion: "reduce" });
   const page = await context.newPage();
   await page.goto(baseUrl);
-  await page.getByPlaceholder("Enter your username").fill("mobileadmin");
+  await page.getByPlaceholder("Enter your username").fill(username);
   await page.getByPlaceholder("Enter your password").fill(accountPassword);
   await page.getByRole("button", { name: "Sign In", exact: true }).click();
   await navigate(page, "Settings", width);
@@ -253,26 +265,34 @@ function setColours(page, values) {
 }
 const primary = (page) => page.evaluate(() => document.documentElement.style.getPropertyValue("--primary"));
 const assertPrimary = (page, value) => expect.poll(() => primary(page)).toBe(value);
+function readPersonalSettings(username = "mobileadmin") {
+  const db = openUserPreferencesDb({ env: { ELSET_DATA_DIR: tempDataDir } });
+  try {
+    const user = db.prepare('SELECT id FROM "user" WHERE username = ?').get(username);
+    return getUserUiPreferences(db, user.id, () => readWorkspaceState().settings);
+  } finally { db.close(); }
+}
 function assertTargeted(writes, count) {
   expect(writes).toHaveLength(count);
   for (const write of writes) {
-    expect(write.path).toBe("/api/settings");
+    expect(write.path).toBe("/api/user-preferences");
     expect(write.method).toBe("PATCH");
-    expect(Object.keys(write.body)).toEqual(["settings"]);
-    expect(Object.keys(write.body.settings).every((key) => uiSettingKeys.includes(key))).toBe(true);
+    expect(Object.keys(write.body).every((key) => uiSettingKeys.includes(key))).toBe(true);
   }
 }
 
-async function delayedSettings(page, transform = (payload) => payload) {
+async function delayedSettings(page, transform = (payload) => payload, endpoint = "/api/settings") {
   const requests = [];
   let active = 0;
   let maximum = 0;
-  await page.route("**/api/settings", async (route) => {
+  await page.route("**" + endpoint, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
     active++;
     maximum = Math.max(maximum, active);
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
-    requests.push({ patch: route.request().postDataJSON().settings, release });
+    const body = route.request().postDataJSON();
+    requests.push({ patch: endpoint === "/api/settings" ? body.settings : body, release });
     await gate;
     const response = await route.fetch();
     await route.fulfill({ response, json: transform(await response.json()) });
@@ -280,6 +300,8 @@ async function delayedSettings(page, transform = (payload) => payload) {
   });
   return { requests, maximum: () => maximum };
 }
+
+const delayedPersonalSettings = (page, transform) => delayedSettings(page, transform, "/api/user-preferences");
 
 function restoreOriginalPreferences() {
   writeWorkspaceSettings(Object.fromEntries(
@@ -501,7 +523,7 @@ test("a failed preference save keeps the draft, focus, and selection until retry
 test("ten rapid selections update immediately, coalesce, and stay latest through delayed acknowledgements", async ({ browser }) => {
   const { context, page, writes, dialogs } = await openSettings(browser);
   const companyName = readWorkspaceState().settings.companyName;
-  const delayed = await delayedSettings(page, (payload) => ({ ...payload, state: { ...payload.state, jobs: [], settings: { ...payload.state.settings, companyName: "Stale response company" } } }));
+  const delayed = await delayedPersonalSettings(page, (payload) => ({ ...payload, preferences: { ...payload.preferences, actionColor: "#000000" }, state: { jobs: [], settings: { companyName: "Stale response company" } } }));
   try {
     await colourInput(page).fill("#112233");
     await assertPrimary(page, "#112233");
@@ -523,7 +545,7 @@ test("ten rapid selections update immediately, coalesce, and stay latest through
     delayed.requests[1].release();
     await expect(status(page)).toHaveText("Saved");
     expect(delayed.maximum()).toBe(1);
-    expect(readWorkspaceState().settings.actionColor).toBe("#225509");
+    expect(readPersonalSettings().actionColor).toBe("#225509");
     await page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
     await expect(page.getByPlaceholder("Elset", { exact: true })).toHaveValue(companyName);
     await page.reload();
@@ -534,13 +556,14 @@ test("ten rapid selections update immediately, coalesce, and stay latest through
 });
 
 for (const failure of [
-  { status: 503, body: "No healthy instances found", contentType: "text/plain", message: "Theme change could not be saved." },
+  { status: 503, body: "No healthy instances found", contentType: "text/plain", message: "Personal preferences could not be saved or loaded." },
   { status: 409, body: JSON.stringify({ error: "Workspace settings conflict." }), contentType: "application/json", message: "Workspace settings conflict." },
 ]) {
   test(`${failure.status} save failure keeps the theme, shows one inline error, and retries the latest patch`, async ({ browser }) => {
     const { context, page, writes, dialogs } = await openSettings(browser);
     let attempts = 0;
-    await page.route("**/api/settings", async (route) => {
+    await page.route("**/api/user-preferences", async (route) => {
+      if (route.request().method() !== "PATCH") return route.continue();
       if (++attempts === 1) await route.fulfill(failure);
       else await route.continue();
     });
@@ -552,12 +575,12 @@ for (const failure of [
       await expect(colourInput(page)).toBeEnabled();
       await page.waitForTimeout(550);
       expect(attempts).toBe(1);
-      expect(readWorkspaceState().settings.actionColor).toBe(defaultUi.actionColor);
+      expect(readPersonalSettings().actionColor).toBe(defaultUi.actionColor);
       await status(page).scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(screenshotDir, `theme-error-${failure.status}.png`) });
       await page.getByRole("button", { name: "Retry", exact: true }).click();
       await expect(status(page)).toHaveText("Saved");
-      expect(readWorkspaceState().settings.actionColor).toBe("#445509");
+      expect(readPersonalSettings().actionColor).toBe("#445509");
       await page.reload();
       await assertPrimary(page, "#445509");
       assertTargeted(writes, 2);
@@ -569,7 +592,7 @@ for (const failure of [
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1180, height: 820 }]) {
   test(`pending theme saves survive immediate navigation and reload at ${viewport.width}px`, async ({ browser }) => {
     const { context, page, writes, dialogs } = await openSettings(browser, viewport.width, viewport.height);
-    const delayed = await delayedSettings(page);
+    const delayed = await delayedPersonalSettings(page);
     try {
       await assertPrimary(page, defaultUi.actionColor);
       // Dispatch real input events without scrolling the distant controls; this
@@ -581,7 +604,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       await expect.poll(() => delayed.requests.length).toBe(1);
       await assertPrimary(page, "#778899");
       delayed.requests[0].release();
-      await expect.poll(() => readWorkspaceState().settings.actionColor).toBe("#778899");
+      await expect.poll(() => readPersonalSettings().actionColor).toBe("#778899");
       await navigate(page, "Settings", viewport.width);
       await expect(status(page)).toHaveText("Saved");
       await colourInput(page).scrollIntoViewIfNeeded();
@@ -609,7 +632,7 @@ test("hex drafts stay editable and never send invalid colours", async ({ browser
     await expect(hex).toHaveValue("#abc");
     await expect(status(page)).toHaveText("Saved");
     assertTargeted(writes, 1);
-    expect(writes[0].body.settings).toEqual({ actionColor: "#AABBCC" });
+    expect(writes[0].body).toEqual({ actionColor: "#AABBCC" });
     await hex.pressSequentially("def");
     await expect(hex).toHaveValue("#abcdef");
     await assertPrimary(page, "#ABCDEF");
@@ -617,17 +640,17 @@ test("hex drafts stay editable and never send invalid colours", async ({ browser
     await expect(hex).toHaveValue("#ABCDEF");
     await expect(status(page)).toHaveText("Saved");
     assertTargeted(writes, 2);
-    expect(writes[1].body.settings).toEqual({ actionColor: "#ABCDEF" });
+    expect(writes[1].body).toEqual({ actionColor: "#ABCDEF" });
     await hex.fill("not a colour");
     await hex.blur();
     await expect(hex).toHaveValue("#ABCDEF");
-    expect(readWorkspaceState().settings.actionColor).toBe("#ABCDEF");
+    expect(readPersonalSettings().actionColor).toBe("#ABCDEF");
   } finally { await context.close(); }
 });
 
 test("presets and reset share the colour queue and only change UI settings", async ({ browser }) => {
   const { context, page, writes } = await openSettings(browser);
-  const delayed = await delayedSettings(page);
+  const delayed = await delayedPersonalSettings(page);
   try {
     await page.getByRole("button", { name: /^Copper Dawn/ }).click();
     await assertPrimary(page, "#E6632B");
@@ -643,7 +666,188 @@ test("presets and reset share the colour queue and only change UI settings", asy
     await expect(status(page)).toHaveText("Saved");
     expect(delayed.maximum()).toBe(1);
     assertTargeted(writes, 2);
-    const final = readWorkspaceState().settings;
+    const final = readPersonalSettings();
     expect(Object.fromEntries(uiSettingKeys.map((key) => [key, final[key]]))).toEqual(defaultUi);
   } finally { await context.close(); }
+});
+
+test("existing auth accounts migrate additively without changing Better Auth tables or workspace records", async () => {
+  const db = openUserPreferencesDb({ env: { ELSET_DATA_DIR: tempDataDir } });
+  try {
+    for (const table of migrationEvidence.tables) expect(db.prepare("SELECT sql FROM sqlite_master WHERE name=?").get(table.name).sql).toBe(table.sql);
+    expect(db.prepare('SELECT id, username FROM "user" ORDER BY id').all()).toEqual(migrationEvidence.users);
+    expect(db.prepare("SELECT count(*) AS n FROM elset_account_schema_migrations WHERE version=1").get().n).toBe(1);
+    expect(db.prepare("SELECT count(*) AS n FROM user_ui_preferences").get().n).toBe(0);
+  } finally { db.close(); }
+});
+
+test("two simultaneous accounts keep separate appearance across a fresh browser, refresh and server restart", async ({ browser }) => {
+  const a = await openSettings(browser);
+  const b = await openSettings(browser, 1440, 900, "UI Settings", "mobileoffice");
+  let device;
+  const original = readWorkspaceState();
+  try {
+    await colourInput(a.page).fill("#ff8800");
+    await expect(status(a.page)).toHaveText("Saved");
+    await assertPrimary(b.page, defaultUi.actionColor);
+    await colourInput(b.page).fill("#0077ff");
+    await expect(status(b.page)).toHaveText("Saved");
+    await assertPrimary(a.page, "#FF8800");
+    await a.page.getByRole("combobox", { name: "Content density", exact: true }).click();
+    await a.page.getByRole("option", { name: "Compact", exact: true }).click();
+    await expect(status(a.page)).toHaveText("Saved");
+    device = await openSettings(browser);
+    await assertPrimary(device.page, "#FF8800");
+    await expect(device.page.getByRole("combobox", { name: "Content density", exact: true })).toHaveText("Compact");
+    await expect(b.page.getByRole("combobox", { name: "Content density", exact: true })).toHaveText("Comfortable");
+    await Promise.all([a.page.reload(), b.page.reload()]);
+    await assertPrimary(a.page, "#FF8800");
+    await assertPrimary(b.page, "#0077FF");
+    const port = Number(new URL(baseUrl).port);
+    await stopServer();
+    await startServer(port);
+    await Promise.all([a.page.reload(), b.page.reload()]);
+    await assertPrimary(a.page, "#FF8800");
+    await assertPrimary(b.page, "#0077FF");
+    expect(readWorkspaceState()).toEqual(original);
+    await a.page.screenshot({ path: path.join(screenshotDir, "personal-user-a-orange.png") });
+    await b.page.screenshot({ path: path.join(screenshotDir, "personal-user-b-blue.png") });
+
+    // Company settings still travel through the existing shared API and UI.
+    await navigate(a.page, "Settings", 1440);
+    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
+    await preferenceInput(a.page, "companyName").fill("Shared Company Regression");
+    await expect(preferenceStatus(a.page)).toHaveText("Saved");
+    await b.page.reload();
+    await navigate(b.page, "Settings", 1440);
+    await b.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
+    await expect(preferenceInput(b.page, "companyName")).toHaveValue("Shared Company Regression");
+    await assertPrimary(b.page, "#0077FF");
+  } finally {
+    await Promise.all([a.context.close(), b.context.close(), device?.context.close()]);
+    restoreOriginalPreferences();
+  }
+});
+
+test("sign out resets appearance before another account loads and pending choices never leak", async ({ browser }) => {
+  const b = await openSettings(browser, 1440, 900, "UI Settings", "mobileoffice");
+  await colourInput(b.page).fill("#0077ff");
+  await expect(status(b.page)).toHaveText("Saved");
+  await b.context.close();
+  const a = await openSettings(browser);
+  let release;
+  try {
+    await colourInput(a.page).fill("#ff8800");
+    await expect(status(a.page)).toHaveText("Saved");
+    await setColours(a.page, ["#AA5577"]);
+    await a.page.getByRole("button", { name: "Sign Out", exact: true }).click();
+    await expect(a.page.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
+    await assertPrimary(a.page, defaultUi.actionColor);
+    const gate = new Promise((resolve) => { release = resolve; });
+    let loadingB = false;
+    await a.page.route("**/api/user-preferences", async (route) => {
+      if (route.request().method() === "GET") { loadingB = true; await gate; }
+      await route.continue();
+    });
+    await a.page.getByPlaceholder("Enter your username").fill("mobileoffice");
+    await a.page.getByPlaceholder("Enter your password").fill(accountPassword);
+    await a.page.getByRole("button", { name: "Sign In", exact: true }).click();
+    await expect.poll(() => loadingB).toBe(true);
+    await assertPrimary(a.page, defaultUi.actionColor);
+    release();
+    await assertPrimary(a.page, "#0077FF");
+    await a.page.waitForTimeout(600);
+    expect(readPersonalSettings("mobileoffice").actionColor).toBe("#0077FF");
+  } finally { release?.(); await a.context.close(); }
+});
+
+test("Customer, Site and Service Board display choices follow only their account", async ({ browser }) => {
+  const a = await openSettings(browser);
+  let b;
+  try {
+    await navigate(a.page, "Customers", 1440);
+    await a.page.getByRole("group", { name: "Customer view", exact: true }).getByRole("button", { name: "Grid view", exact: true }).click();
+    await navigate(a.page, "Sites", 1440);
+    await a.page.getByRole("group", { name: "Site view", exact: true }).getByRole("button", { name: "Grid view", exact: true }).click();
+    await navigate(a.page, "Service Board", 1440);
+    await a.page.getByRole("button", { name: "To Do Grid view", exact: true }).click();
+    await a.page.getByRole("button", { name: "In Progress Compact view", exact: true }).click();
+    await a.page.getByRole("combobox", { name: "To Do sort order", exact: true }).click();
+    await a.page.getByRole("option", { name: "Oldest", exact: true }).click();
+    await a.page.getByRole("button", { name: "Hide Completed", exact: true }).click();
+    await a.page.getByText("Show tag info", { exact: true }).locator("..").getByRole("checkbox").check();
+    await expect.poll(() => readPersonalSettings()).toMatchObject({ customerView: "grid", siteView: "grid", boardToDoView: "grid", boardInProgressView: "compact", boardToDoSort: "oldest", boardHiddenColumns: ["Completed"], boardShowTagLabels: true });
+    await a.page.reload();
+    await expect(a.page.getByRole("button", { name: "To Do Grid view", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(a.page.locator('[data-service-board-status="Completed"]')).toHaveCount(0);
+    await navigate(a.page, "Customers", 1440);
+    await expect(a.page.getByRole("group", { name: "Customer view", exact: true }).getByRole("button", { name: "Grid view", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await navigate(a.page, "Sites", 1440);
+    await expect(a.page.getByRole("group", { name: "Site view", exact: true }).getByRole("button", { name: "Grid view", exact: true })).toHaveAttribute("aria-pressed", "true");
+    b = await openSettings(browser, 1440, 900, "UI Settings", "mobileoffice");
+    await navigate(b.page, "Service Board", 1440);
+    await expect(b.page.getByRole("button", { name: "To Do List view", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(b.page.locator('[data-service-board-status="Completed"]')).toBeVisible();
+    expect(readPersonalSettings("mobileoffice").customerView).toBe("list");
+  } finally { await a.context.close(); await b?.context.close(); }
+});
+
+test("twenty rapid personal selections stay responsive, use one narrow write and leave health and workspace intact", async ({ browser }) => {
+  const a = await openSettings(browser);
+  const before = readWorkspaceState();
+  try {
+    await setColours(a.page, Array.from({ length: 20 }, (_, i) => `#AA00${i.toString(16).padStart(2, "0")}`));
+    await assertPrimary(a.page, "#AA0013");
+    const started = Date.now();
+    const health = await a.page.request.get(baseUrl + "/api/health");
+    expect(health.status()).toBe(200);
+    const healthMs = Date.now() - started;
+    expect(healthMs).toBeLessThan(2000);
+    await expect(status(a.page)).toHaveText("Saved");
+    assertTargeted(a.writes, 1);
+    expect(a.writes[0].body).toEqual({ actionColor: "#AA0013" });
+    expect(readPersonalSettings().actionColor).toBe("#AA0013");
+    expect(readWorkspaceState()).toEqual(before);
+    const id = (await (await a.page.request.get(baseUrl + "/api/auth/me")).json()).user.id;
+    const db = openUserPreferencesDb({ env: { ELSET_DATA_DIR: tempDataDir } });
+    try { expect(db.prepare("SELECT count(*) AS n FROM user_ui_preferences WHERE user_id=?").get(id).n).toBe(1); } finally { db.close(); }
+    fs.writeFileSync(path.join(screenshotDir, "personal-stress-results.json"), JSON.stringify({ clicks: 20, writes: a.writes.length, healthMs, finalColour: readPersonalSettings().actionColor }, null, 2));
+  } finally { await a.context.close(); }
+});
+
+test("real sessions reject unauthenticated and spoofed preference access; technicians can change only personal UI", async ({ browser }) => {
+  const anonymous = await browser.newContext();
+  const tech = await openSettings(browser, 390, 844, "UI Settings", "mobiletech");
+  try {
+    expect((await anonymous.request.get(baseUrl + "/api/user-preferences")).status()).toBe(401);
+    expect((await anonymous.request.patch(baseUrl + "/api/user-preferences", { data: { actionColor: "#fff" } })).status()).toBe(401);
+    expect((await tech.page.request.patch(baseUrl + "/api/user-preferences", { data: { userId: "mobileadmin", actionColor: "#fff" } })).status()).toBe(400);
+    expect((await tech.page.request.get(baseUrl + "/api/user-preferences?userId=mobileadmin")).status()).toBe(400);
+    await expect(tech.page.locator("[data-settings-navigation]").getByRole("button")).toHaveCount(1);
+    await expect(tech.page.getByText("Company Details", { exact: true })).toHaveCount(0);
+    await colourInput(tech.page).fill("#336699");
+    await expect(status(tech.page)).toHaveText("Saved");
+    expect(readPersonalSettings("mobiletech").actionColor).toBe("#336699");
+    expect(readPersonalSettings().actionColor).toBe(defaultUi.actionColor);
+    expect((await tech.page.request.patch(baseUrl + "/api/settings", { data: { settings: { companyName: "Forbidden" } } })).status()).toBe(403);
+    await tech.page.screenshot({ path: path.join(screenshotDir, "personal-technician-mobile.png") });
+  } finally { await anonymous.close(); await tech.context.close(); }
+});
+
+test("a preference load failure uses the legacy fallback and can retry without losing the account", async ({ browser }) => {
+  const a = await openSettings(browser);
+  try {
+    await colourInput(a.page).fill("#cc5500");
+    await expect(status(a.page)).toHaveText("Saved");
+    let fail = true;
+    await a.page.route("**/api/user-preferences", (route) => fail && route.request().method() === "GET"
+      ? route.fulfill({ status: 503, json: { error: "Synthetic preference load failure" } }) : route.continue());
+    await a.page.reload();
+    await expect(a.page.getByRole("alert")).toContainText("Synthetic preference load failure");
+    await assertPrimary(a.page, defaultUi.actionColor);
+    fail = false;
+    await a.page.getByRole("button", { name: "Retry personal preferences", exact: true }).click();
+    await assertPrimary(a.page, "#CC5500");
+    await expect(a.page.getByRole("alert")).toHaveCount(0);
+  } finally { await a.context.close(); }
 });

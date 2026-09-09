@@ -144,7 +144,7 @@ test("SQLite loader and migration preserve safe workspace settings and omit secr
   }, fixture);
 });
 
-test("PATCH /api/settings updates business identity, contact, payment, and UI defaults", async () => {
+test("PATCH /api/settings updates shared business identity, contact and payment defaults", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
       const result = await requestJson(baseUrl, "/api/settings", {
@@ -163,9 +163,6 @@ test("PATCH /api/settings updates business identity, contact, payment, and UI de
             quoteCcEmail: "quotes@example.test",
             invoiceCcEmail: "invoices@example.test",
             emailSignature: "Regards,\nSynthetic Team",
-            actionColor: "#abc",
-            sidebarWidth: "compact",
-            contentDensity: "compact",
             workflowMode: "field-first",
             lateFeePercent: 2.5,
             portalUrl: "https://example.test/client-portal",
@@ -175,7 +172,6 @@ test("PATCH /api/settings updates business identity, contact, payment, and UI de
 
       assert.equal(result.response.status, 200, result.payload.error);
       assert.deepEqual(result.payload.result.updatedKeys.sort(), [
-        "actionColor",
         "bankAccountName",
         "bankAccountNumber",
         "bankBsb",
@@ -183,7 +179,6 @@ test("PATCH /api/settings updates business identity, contact, payment, and UI de
         "companyEmail",
         "companyName",
         "companyPhone",
-        "contentDensity",
         "defaultSenderEmail",
         "emailSignature",
         "invoiceCcEmail",
@@ -191,11 +186,9 @@ test("PATCH /api/settings updates business identity, contact, payment, and UI de
         "portalUrl",
         "quoteCcEmail",
         "replyToEmail",
-        "sidebarWidth",
         "workflowMode",
       ].sort());
       assert.equal(result.payload.state.settings.companyName, "Updated Synthetic Business");
-      assert.equal(result.payload.state.settings.actionColor, "#AABBCC");
       assert.equal(result.payload.state.settings.lateFeePercent, 2.5);
       assert.equal(result.payload.state.settings.portalUrl, "https://example.test/client-portal");
 
@@ -334,7 +327,7 @@ test("settings routes reject invalid emails, URLs, percentages, counters, and ma
   });
 });
 
-test("settings reset routes restore only the requested settings group", async () => {
+test("settings reset routes restore shared preferences and reject global appearance resets", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {
       const update = await requestJson(baseUrl, "/api/settings", {
@@ -342,7 +335,6 @@ test("settings reset routes restore only the requested settings group", async ()
         body: JSON.stringify({
           settings: {
             companyName: "Reset Test Business",
-            actionColor: "#112233",
             workflowMode: "keep-me",
           },
         }),
@@ -353,10 +345,8 @@ test("settings reset routes restore only the requested settings group", async ()
         method: "POST",
         body: JSON.stringify({ group: "ui" }),
       });
-      assert.equal(resetUi.response.status, 200, resetUi.payload.error);
-      assert.equal(resetUi.payload.state.settings.actionColor, "#F69320");
-      assert.equal(resetUi.payload.state.settings.companyName, "Reset Test Business");
-      assert.equal(resetUi.payload.state.settings.workflowMode, "keep-me");
+      assert.equal(resetUi.response.status, 400);
+      assert.match(resetUi.payload.error, /user-preferences/);
 
       const resetPreferences = await requestJson(baseUrl, "/api/settings/reset", {
         method: "POST",

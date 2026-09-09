@@ -38,6 +38,7 @@ import { registerInventoryRoutes } from "./server-inventory-routes.js";
 import { registerJobRoutes } from "./server-job-routes.js";
 import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
+import { createUserPreferencesRouter } from "./server-user-preferences-routes.js";
 import { registerStaffRoutes } from "./server-staff-routes.js";
 import { registerServiceM8ImportRoutes } from "./server-servicem8-import-routes.js";
 import { registerWorkspaceRestoreRoutes } from "./server-workspace-restore-routes.js";
@@ -506,6 +507,7 @@ export function createServerApp() {
   registerInventoryRoutes(app, { requireAuth, requireRole });
   registerStaffRoutes(app, { requireAuth, requireRole });
   registerSettingsRoutes(app, { requireAuth, requireRole });
+  app.use(createUserPreferencesRouter({ requireAuth }));
   registerServiceM8ImportRoutes(app, {
     requireAuth,
     requireRole,

@@ -109,7 +109,7 @@ export function useWorkspaceViewModel({
   }, [data.customers, data.inventoryItems, data.jobs, data.maintenancePlans]);
 
   const visibleSideNavItems = useMemo(
-    () => (isTechnician ? sideNavItems.filter((item) => item.id === "service-board") : sideNavItems),
+    () => (isTechnician ? sideNavItems.filter((item) => ["service-board", "settings"].includes(item.id)) : sideNavItems),
     [isTechnician]
   );
 
