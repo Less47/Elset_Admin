@@ -1,4 +1,5 @@
 import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
+import { WORKSPACE_LOGO_KEY, workspaceLogoUrl } from "./src/lib/workspace-logo.js";
 import { effectiveMaintenancePlan } from "./src/lib/maintenance-recurrence.js";
 import { readMaintenanceExceptions } from "./server-maintenance-occurrence-store.js";
 import { maintenancePlanIdentity } from "./src/lib/maintenance-plan.js";
@@ -167,6 +168,10 @@ export function loadWorkspaceStateFromDb(db) {
 
   const settings = settingsRows.reduce((nextSettings, row) => {
     if (isWorkspaceSecretSettingKey(row.key)) return nextSettings;
+    if (row.key === WORKSPACE_LOGO_KEY) {
+      nextSettings.workspaceLogoUrl = workspaceLogoUrl(parseJson(row.value_json, null)?.id);
+      return nextSettings;
+    }
     nextSettings[row.key] = parseJson(row.value_json, null);
     return nextSettings;
   }, {});

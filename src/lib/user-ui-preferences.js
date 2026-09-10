@@ -1,3 +1,4 @@
+import { upgradeLegacyAppearance } from './theme-presets.js';
 // Presentation only. Company/document settings never belong in this schema.
 export const defaultAppearanceSettings = {
   pageBackgroundStart: "#0F90CD", pageBackgroundEnd: "#0F90CD",
@@ -80,5 +81,5 @@ export function normalizeUserUiPreferences(...sources) {
       try { Object.assign(result, validateUserUiPreferencePatch({ [key]: source[key] })); } catch { /* Retain the safe fallback. */ }
     }
   }
-  return result;
+  return upgradeLegacyAppearance(result);
 }

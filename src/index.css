@@ -6,6 +6,39 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    --color-surface-raised: var(--surface-raised);
+    --color-surface-hover: var(--surface-hover);
+    --color-surface-selected: var(--surface-selected);
+    --color-input-surface: var(--input-surface);
+    --color-text-secondary: var(--text-secondary);
+    --color-border-strong: var(--border-strong);
+    --color-scrim: var(--scrim);
+    --color-paper: #FFFFFF;
+    --color-media-stage: #080D16;
+    --color-status-info: var(--status-info);
+    --color-status-info-surface: var(--status-info-surface);
+    --color-status-info-border: var(--status-info-border);
+    --color-status-info-hover: var(--status-info-hover);
+    --color-status-success: var(--status-success);
+    --color-status-success-surface: var(--status-success-surface);
+    --color-status-success-border: var(--status-success-border);
+    --color-status-success-hover: var(--status-success-hover);
+    --color-status-warning: var(--status-warning);
+    --color-status-warning-surface: var(--status-warning-surface);
+    --color-status-warning-border: var(--status-warning-border);
+    --color-status-warning-hover: var(--status-warning-hover);
+    --color-status-danger: var(--status-danger);
+    --color-status-danger-surface: var(--status-danger-surface);
+    --color-status-danger-border: var(--status-danger-border);
+    --color-status-danger-hover: var(--status-danger-hover);
+    --color-status-maintenance: var(--status-maintenance);
+    --color-status-maintenance-surface: var(--status-maintenance-surface);
+    --color-status-maintenance-border: var(--status-maintenance-border);
+    --color-status-maintenance-hover: var(--status-maintenance-hover);
+    --color-status-special: var(--status-special);
+    --color-status-special-surface: var(--status-special-surface);
+    --color-status-special-border: var(--status-special-border);
+    --color-status-special-hover: var(--status-special-hover);
     --spacing-panel: var(--panel-padding);
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
@@ -157,6 +190,19 @@
 }
 
 @layer base {
+  ::selection { background: var(--surface-selected); color: var(--foreground); }
+  :where(input, textarea) { caret-color: var(--foreground); }
+  :where(input, textarea)::placeholder { color: var(--muted-foreground); opacity: 1; }
+  :where(input, textarea):autofill {
+    box-shadow: 0 0 0 1000px var(--input-surface) inset !important;
+    -webkit-text-fill-color: var(--foreground) !important;
+    caret-color: var(--foreground);
+  }
+  :where(input, textarea):-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px var(--input-surface) inset !important;
+    -webkit-text-fill-color: var(--foreground) !important;
+  }
+  :where(select, option) { background: var(--input-surface); color: var(--foreground); }
   * {
     @apply border-border outline-ring/50;
     }
@@ -196,6 +242,75 @@
 }
 
 @layer components {
+  /* Shared field surfaces, including caller-supplied form/search classes. */
+  :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], select) {
+    background-color: var(--input-surface) !important;
+    color: var(--foreground);
+  }
+  :is([data-slot="input"], [data-slot="textarea"]):is(:disabled, [readonly]) {
+    background-color: var(--muted) !important;
+    color: var(--text-secondary);
+    opacity: 1;
+  }
+  [data-slot="select-trigger"][data-placeholder] { color: var(--muted-foreground); }
+  [data-slot="dialog-content"], [data-slot="select-content"], .maintenance-picker-results, .theme-preview-popup, .theme-popup {
+    color-scheme: var(--dialog-color-scheme);
+    --foreground: var(--dialog-foreground);
+    --text-secondary: var(--dialog-muted-foreground);
+    --muted-foreground: var(--dialog-muted-foreground);
+    --card: var(--dialog-surface);
+    --card-foreground: var(--dialog-foreground);
+    --input-surface: var(--dialog-input-surface);
+    --muted: var(--dialog-muted-surface);
+    --surface-raised: var(--dialog-muted-surface);
+    --surface-hover: var(--dialog-muted-surface);
+    --surface-selected: var(--dialog-muted-surface);
+    --accent-foreground: var(--dialog-foreground);
+    --status-info: var(--dialog-status-info);
+    --status-info-surface: var(--dialog-status-info-surface);
+    --status-success: var(--dialog-status-success);
+    --status-success-surface: var(--dialog-status-success-surface);
+    --status-warning: var(--dialog-status-warning);
+    --status-warning-surface: var(--dialog-status-warning-surface);
+    --status-danger: var(--dialog-status-danger);
+    --status-danger-surface: var(--dialog-status-danger-surface);
+    --status-maintenance: var(--dialog-status-maintenance);
+    --status-maintenance-surface: var(--dialog-status-maintenance-surface);
+    --status-special: var(--dialog-status-special);
+    --status-special-surface: var(--dialog-status-special-surface);
+  }
+  /* Nested forms and cards retain their own foreground when a custom popup
+     colour differs from the rest of the application's surface palette. */
+  [data-slot="dialog-content"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], .bg-card) {
+    color: var(--card-foreground);
+  }
+  [data-slot="select-item"][data-state="checked"] { background: var(--surface-selected); color: var(--card-foreground); }
+  [data-slot="select-item"][data-highlighted] { background: var(--surface-hover); color: var(--card-foreground); }
+  .theme-workspace-preview { background: var(--page-gradient); color: var(--foreground); }
+  .theme-preview-sidebar-header { background: var(--sidebar-header); color: var(--sidebar-header-foreground); }
+  .theme-preview-header { background: var(--workspace-hero-bg); color: var(--workspace-hero-text); }
+  .theme-preview-popup { background: var(--dialog-surface-gradient); color: var(--dialog-foreground); }
+  .theme-preset-card[aria-pressed="true"] { border-color: var(--ring); outline: 2px solid var(--ring); outline-offset: 2px; }
+  .theme-preset-sample { display: flex; height: 58px; gap: 7px; padding: 7px; border-radius: 8px; background: var(--page-gradient); }
+  .theme-preset-sample > span { width: 24%; border-radius: 4px; background: var(--sidebar); border-top: 9px solid var(--sidebar-header); }
+  .theme-preset-sample > div { display: grid; flex: 1; gap: 4px; padding: 5px; border-radius: 4px; background: var(--card); }
+  .theme-preset-sample i { display: block; background: var(--muted); }
+  .theme-preset-sample i:first-child { background: var(--workspace-hero-bg); }
+  .theme-preset-sample i:last-child { width: 42%; background: var(--primary); }
+  .map-workspace :is(.leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip, .leaflet-control-zoom a) {
+    /* Leaflet ships unlayered CSS. Only ELSET-owned controls override it. */
+    background: var(--popover) !important; color: var(--popover-foreground) !important; border-color: var(--border) !important;
+  }
+  .map-workspace .leaflet-control-zoom a:hover { background: var(--surface-hover) !important; color: var(--card-foreground) !important; }
+  .map-workspace .leaflet-popup-close-button { color: var(--popover-foreground) !important; }
+  .map-workspace .leaflet-tooltip-top::before { border-top-color: var(--popover) !important; }
+  .map-workspace .leaflet-tooltip-bottom::before { border-bottom-color: var(--popover) !important; }
+  .map-workspace .leaflet-tooltip-left::before { border-left-color: var(--popover) !important; }
+  .map-workspace .leaflet-tooltip-right::before { border-right-color: var(--popover) !important; }
+  nav[aria-label="Application"] button:not([aria-current="page"]):hover {
+    background-color: var(--sidebar-accent) !important;
+    color: var(--sidebar-accent-foreground) !important;
+  }
   .record-workspace {
     min-height: 100dvh;
     max-width: 100%;
@@ -211,7 +326,7 @@
 
   .record-major-panel {
     border-color: var(--ui-border-color) !important;
-    background: linear-gradient(180deg, var(--data-view-surface) 0%, color-mix(in oklab, var(--data-view-surface) 58%, white) 100%) !important;
+    background: linear-gradient(180deg, var(--data-view-surface) 0%, var(--muted) 100%) !important;
     box-shadow: 0 18px 38px -30px color-mix(in oklab, var(--data-view-accent) 46%, black) !important;
   }
 
@@ -251,28 +366,28 @@
   .record-inset-surface,
   .record-empty-state,
   .record-passive-surface {
-    background: color-mix(in oklab, var(--data-view-surface) 58%, white) !important;
+    background: var(--muted) !important;
   }
 
   .record-workspace .contact-snapshot-editor {
     border-width: 0 !important;
     border-radius: var(--radius-lg) !important;
-    background: color-mix(in oklab, var(--data-view-surface) 58%, white) !important;
+    background: var(--muted) !important;
   }
 
   .record-empty-state {
-    color: color-mix(in oklab, var(--foreground) 56%, var(--data-view-accent));
+    color: var(--muted-foreground);
   }
 
   .record-workspace-action-bar {
     border-color: var(--ui-border-color) !important;
-    background: color-mix(in oklab, var(--data-view-surface) 68%, white) !important;
+    background: var(--surface-raised) !important;
   }
 
   .record-workspace :is(input, textarea, button[role="combobox"]:not(.record-workspace-status)) {
     border-color: var(--data-view-border-strong) !important;
     border-radius: var(--radius-lg) !important;
-    background: color-mix(in oklab, var(--card) 92%, var(--data-view-surface)) !important;
+    background: var(--input-surface) !important;
     box-shadow: inset 0 1px 0 color-mix(in oklab, var(--data-view-accent) 10%, transparent) !important;
     scroll-margin-top: 7rem;
     scroll-margin-bottom: 8rem;
@@ -342,31 +457,21 @@
     box-shadow: 0 24px 48px -32px color-mix(in oklab, var(--workspace-hero-bg) 72%, black) !important;
   }
 
-  .floating-page-toolbar .text-slate-500,
-  .floating-page-toolbar .text-slate-600,
-  .floating-page-toolbar .text-slate-700,
-  .floating-page-toolbar .text-muted-foreground {
-    color: color-mix(in oklab, var(--workspace-hero-text) 76%, transparent) !important;
-  }
-
-  .floating-page-toolbar .text-slate-900,
-  .floating-page-toolbar .text-slate-950 {
-    color: var(--workspace-hero-text) !important;
+  .floating-page-toolbar :is(.text-text-secondary, .text-muted-foreground, .text-foreground) {
+    color: var(--workspace-hero-text);
   }
 
   .floating-page-toolbar .data-toolbar-field,
   .floating-page-toolbar input,
   .floating-page-toolbar button[role="combobox"] {
-    background: color-mix(in oklab, white 94%, var(--workspace-hero-bg)) !important;
-    color: #0f172a !important;
+    background: var(--input-surface) !important;
+    color: var(--foreground) !important;
   }
 
   .floating-page-toolbar .data-toggle-shell,
-  .floating-page-toolbar .bg-white,
-  .floating-page-toolbar .bg-white\/70,
   .floating-page-toolbar .data-toolbar-button {
-    background: color-mix(in oklab, white 92%, var(--workspace-hero-bg)) !important;
-    color: #0f172a !important;
+    background: var(--input-surface) !important;
+    color: var(--foreground) !important;
   }
 
   .page-controls {
@@ -402,7 +507,7 @@
 
   .page-controls__label {
     overflow: hidden;
-    color: color-mix(in oklab, var(--workspace-hero-text) 76%, transparent);
+    color: var(--workspace-hero-muted);
     font-size: 0.6875rem;
     font-weight: 600;
     line-height: 1rem;
@@ -424,12 +529,12 @@
 
   .floating-page-toolbar .page-controls__view-button {
     border-color: var(--data-view-border-strong) !important;
-    background: color-mix(in oklab, white 94%, var(--workspace-hero-bg)) !important;
-    color: #0f172a !important;
+    background: var(--input-surface) !important;
+    color: var(--foreground) !important;
   }
 
   .floating-page-toolbar .page-controls__view-button:hover {
-    background: color-mix(in oklab, white 88%, var(--workspace-hero-bg)) !important;
+    background: var(--surface-hover) !important;
   }
 
   .floating-page-toolbar .page-controls__view-button.is-active {
@@ -484,7 +589,7 @@
     backdrop-filter: blur(12px);
   }
 
-  .map-filter-surface .text-slate-600 {
+  .map-filter-surface .text-text-secondary {
     color: color-mix(in oklab, var(--workspace-hero-text) 82%, transparent) !important;
   }
 
@@ -492,8 +597,8 @@
   .map-filter-surface input,
   .map-filter-surface button[role="combobox"],
   .map-filter-surface .data-toolbar-button {
-    background: color-mix(in oklab, white 94%, var(--workspace-hero-bg)) !important;
-    color: #0f172a !important;
+    background: var(--input-surface) !important;
+    color: var(--foreground) !important;
   }
 
   .map-floating-controls {
@@ -518,7 +623,7 @@
   }
 
   .map-workspace .leaflet-control-zoom a {
-    color: #0f172a;
+    color: var(--foreground);
   }
 
   @media (min-width: 40rem) {
@@ -577,7 +682,7 @@
 
   .data-grid-header {
     background: var(--data-view-grid-line) !important;
-    color: color-mix(in oklab, var(--foreground) 58%, var(--data-view-accent)) !important;
+    color: var(--text-secondary) !important;
   }
 
   .data-grid-header > * {
@@ -609,15 +714,4 @@
       opacity: 1 !important;
     }
   }
-}
-
-@layer utilities {
-  :where(.border-slate-100, .border-slate-200, .border-slate-300, .border-slate-200\/80, .border-black\/5, .border-black\/10, .border-white\/80) {
-    border-color: var(--ui-border-color) !important;
-  }
-
-  :where(.hover\:border-slate-300:hover) {
-    border-color: var(--ui-border-color) !important;
-  }
-
 }

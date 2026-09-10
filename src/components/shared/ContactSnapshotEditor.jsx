@@ -77,10 +77,10 @@ export default function ContactSnapshotEditor({
   };
 
   return (
-    <div className="contact-snapshot-editor rounded-2xl border border-slate-200 bg-white p-3">
+    <div className="contact-snapshot-editor rounded-2xl border border-border bg-card p-3">
       <div>
-        <p className="text-sm font-semibold text-slate-900">{title}</p>
-        {description ? <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p> : null}
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        {description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}
       </div>
 
       <div className="mt-3 grid gap-3">
@@ -102,7 +102,7 @@ export default function ContactSnapshotEditor({
         </FormField>
 
         {contacts.length === 0 ? (
-          <p className="text-xs text-slate-500">No saved customer contacts yet. You can still type a one-off contact for this job.</p>
+          <p className="text-xs text-muted-foreground">No saved customer contacts yet. You can still type a one-off contact for this job.</p>
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">

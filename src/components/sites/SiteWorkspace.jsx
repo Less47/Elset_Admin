@@ -115,7 +115,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
                         onChange={(e) => setDraftSite((prev) => ({ ...prev, ocNumber: e.target.value }))}
                         placeholder="e.g. PS123456"
                       />
-                      <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
+                      <p className="text-sm text-muted-foreground">Owners Corporation / plan reference for this property.</p>
                     </FormField>
                     <FormField label="Access notes">
                       <Textarea
@@ -138,35 +138,35 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
                   <>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Customer</p>
-                      <p className="mt-1 font-medium text-slate-900">{customer.name}</p>
+                      <p className="mt-1 font-medium text-foreground">{customer.name}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Address</p>
-                      <p className="mt-1 font-medium text-slate-900">{site.address || "Not set"}</p>
+                      <p className="mt-1 font-medium text-foreground">{site.address || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Site type</p>
-                      <p className="mt-1 font-medium text-slate-900">{formatSiteType(site.siteType)}</p>
+                      <p className="mt-1 font-medium text-foreground">{formatSiteType(site.siteType)}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Site contact</p>
-                      <p className="mt-1 font-medium text-slate-900">{site.contactName || "Not set"}</p>
+                      <p className="mt-1 font-medium text-foreground">{site.contactName || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Contact phone</p>
-                      <p className="mt-1 font-medium text-slate-900">{site.contactPhone || "Not set"}</p>
+                      <p className="mt-1 font-medium text-foreground">{site.contactPhone || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Contact email</p>
-                      <p className="mt-1 font-medium text-slate-900">{site.contactEmail || "Not set"}</p>
+                      <p className="mt-1 font-medium text-foreground">{site.contactEmail || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">OC number</p>
-                      <p className="mt-1 font-medium text-slate-900">{site.ocNumber || "Not set"}</p>
+                      <p className="mt-1 font-medium text-foreground">{site.ocNumber || "Not set"}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Last activity</p>
-                      <p className="mt-1 font-medium text-slate-900">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity yet"}</p>
+                      <p className="mt-1 font-medium text-foreground">{site.latestUpdatedAt ? formatDate(site.latestUpdatedAt) : "No activity yet"}</p>
                     </div>
                   </>
                 )}
@@ -174,28 +174,28 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
           </fieldset>
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-3 text-sm"><span>{siteJobs.length} jobs · {openJobs} open · {siteJobs.length - openJobs} completed</span><Button type="button" variant="outline" onClick={onOpenCustomer}>Open Customer Profile</Button></div>
         </WorkspaceSection>
-        {!isEditingSite && hasSavedProfile ? <div className="mt-4 flex justify-end"><Button type="button" variant="outline" className="border-rose-200 text-rose-700" onClick={() => onDeleteSiteProfile(customer.id, site)}>Remove Saved Profile</Button></div> : null}
+        {!isEditingSite && hasSavedProfile ? <div className="mt-4 flex justify-end"><Button type="button" variant="outline" className="border-status-danger-border text-status-danger" onClick={() => onDeleteSiteProfile(customer.id, site)}>Remove Saved Profile</Button></div> : null}
         </TabsContent>
         <TabsContent value="assets" className="min-w-0"><WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site."><fieldset disabled={saving} className="min-w-0">
 
               <div className="grid gap-3">
                 {!isEditingSite && site.accessNotes ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Access notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-amber-950">{site.accessNotes}</p>
+                  <div className="rounded-lg border border-status-warning-border bg-status-warning-surface p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-status-warning">Access notes</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-status-warning">{site.accessNotes}</p>
                   </div>
                 ) : null}
 
                 {!isEditingSite && site.profileNotes ? (
-                  <div className="rounded-lg border bg-white p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{site.profileNotes}</p>
+                  <div className="rounded-lg border bg-card p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Site notes</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary">{site.profileNotes}</p>
                   </div>
                 ) : null}
 
                 {isEditingSite ? (
-                  <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Add gate or project</p>
+                  <div className="rounded-lg border border-dashed border-border bg-card p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Add gate or project</p>
                     <div className="mt-3 grid gap-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <Input
@@ -258,7 +258,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
                   <EmptyState title="No gate or project records yet" text="Add each gate, operator, or project area here so the site history stays grouped together." />
                 ) : (
                   (isEditingSite ? draftSite.assets : site.assets || []).map((asset) => (
-                    <div key={asset.id} className="rounded-lg border bg-white p-3 shadow-sm">
+                    <div key={asset.id} className="rounded-lg border bg-card p-3 shadow-sm">
                       {isEditingSite ? (
                         <div className="grid gap-3">
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -271,7 +271,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
                           </div>
                           <Textarea rows={3} value={asset.notes} onChange={(e) => updateDraftAsset(asset.id, "notes", e.target.value)} placeholder="Notes" />
                           <div className="flex justify-end">
-                            <Button variant="outline" className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800" onClick={() => removeDraftAsset(asset.id)}>
+                            <Button variant="outline" className="rounded-xl border-status-danger-border text-status-danger hover:bg-status-danger-surface hover:text-status-danger" onClick={() => removeDraftAsset(asset.id)}>
                               Remove
                             </Button>
                           </div>
@@ -280,14 +280,14 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
                         <div className="grid gap-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <p className="font-semibold text-slate-900">{asset.name}</p>
-                              <p className="mt-1 text-sm text-slate-600">
+                              <p className="font-semibold text-foreground">{asset.name}</p>
+                              <p className="mt-1 text-sm text-text-secondary">
                                 {[asset.type, asset.location].filter(Boolean).join(" - ") || "No type or location saved"}
                               </p>
                             </div>
                             {asset.model ? <Badge variant="secondary">{asset.model}</Badge> : null}
                           </div>
-                          {asset.notes ? <p className="text-sm leading-6 text-slate-700">{asset.notes}</p> : null}
+                          {asset.notes ? <p className="text-sm leading-6 text-text-secondary">{asset.notes}</p> : null}
                         </div>
                       )}
                     </div>

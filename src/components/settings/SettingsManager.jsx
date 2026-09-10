@@ -1,5 +1,7 @@
+import { buildSemanticTheme } from "@/lib/theme-tokens";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import ThemeColourField from "./ThemeColourField";
+import WorkspaceBranding from "./WorkspaceBranding";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,16 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  APP_TEXT_DARK,
-  APP_TEXT_LIGHT,
-  buildDataViewTheme,
   contentDensityOptions,
   createTemplatePreviewFixture,
-  getContrastTextColor,
-  hexToRgba,
-  LOGO_SRC,
-  mixHexColors,
-  normalizeHexColor,
   normalizeThemeSettings,
   settingsTabs,
   sidebarWidthOptions,
@@ -107,236 +101,35 @@ const presetPreviewKeys = [
   "dataViewAccent",
 ];
 
-const FAVICON_SRC = "/favicon.png";
-
 function WorkspacePreview({ settings }) {
-  const normalizedSettings = normalizeThemeSettings(settings);
-  const pageStart = normalizeHexColor(normalizedSettings.pageBackgroundStart, "#0F90CD");
-  const pageEnd = normalizeHexColor(normalizedSettings.pageBackgroundEnd, pageStart);
-  const sidebarSurface = normalizeHexColor(normalizedSettings.sidebarSurface, "#FFFFFF");
-  const sidebarHeader = normalizeHexColor(normalizedSettings.sidebarHeader, "#0F90CD");
-  const sidebarActive = normalizeHexColor(normalizedSettings.sidebarActive, "#F69320");
-  const heroSurface = normalizeHexColor(normalizedSettings.heroSurface, "#0F90CD");
-  const actionColor = normalizeHexColor(normalizedSettings.actionColor, "#F69320");
-  const borderColor = normalizeHexColor(normalizedSettings.borderColor, "#1E293B");
-  const dialogSurface = normalizeHexColor(normalizedSettings.dialogSurface, "#F8FAFC");
-  const dialogText = getContrastTextColor(dialogSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT });
-  const dialogSurfaceGradient = `radial-gradient(190% 160% at 50% -18%, ${mixHexColors(dialogSurface, "#FFFFFF", dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32)} 0%, ${dialogSurface} 62%, ${mixHexColors(dialogSurface, APP_TEXT_DARK, dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1)} 100%)`;
-  const isIconOnlySidebar = normalizedSettings.sidebarWidth === "icon-only";
-  const dataViewTheme = buildDataViewTheme(normalizedSettings);
-
+  const { vars } = buildSemanticTheme(normalizeThemeSettings(settings));
   return (
-    <Card className="overflow-hidden rounded-3xl border-slate-200 shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Workspace Preview</CardTitle>
-      </CardHeader>
+    <Card className="min-w-0 self-start overflow-hidden rounded-3xl border-border shadow-sm xl:sticky xl:top-5">
+      <CardHeader><CardTitle className="text-base">Workspace Preview</CardTitle></CardHeader>
       <CardContent>
-        <div
-          className="overflow-hidden rounded-3xl border border-slate-200 shadow-sm"
-          style={{
-            backgroundImage: `linear-gradient(135deg, ${pageStart} 0%, ${mixHexColors(pageStart, "#FFFFFF", 0.5)} 48%, ${pageEnd} 100%)`,
-          }}
-        >
-          <div className={isIconOnlySidebar ? "grid gap-4 p-4 lg:grid-cols-[72px_1fr]" : "grid gap-4 p-4 lg:grid-cols-[220px_1fr]"}>
-            <div
-              className="overflow-hidden rounded-2xl border shadow-sm"
-              style={{
-                backgroundColor: hexToRgba(sidebarSurface, 0.94),
-                borderColor,
-                color: getContrastTextColor(sidebarSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
-              }}
-            >
-              <div
-                className={isIconOnlySidebar ? "flex justify-center p-3" : "p-4"}
-                style={{
-                  backgroundColor: sidebarHeader,
-                  color: getContrastTextColor(sidebarHeader, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
-                }}
-              >
-                {isIconOnlySidebar ? (
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/5 bg-white p-2 shadow-sm">
-                    <img src={FAVICON_SRC} alt="Elset Admin" className="block h-full w-full object-contain" />
-                  </div>
-                ) : (
-                  <div className="mx-auto grid max-w-full grid-cols-[84px_56px] items-center justify-center gap-2.5">
-                    <div className="flex h-12 w-[84px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white px-1 shadow-sm">
-                      <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
-                    </div>
-                    <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
-                      <span className="block text-[0.65rem]">Admin</span>
-                      <span className="mt-1 block text-[0.8rem]">Menu</span>
-                    </div>
-                  </div>
-                )}
+        <div data-workspace-preview style={vars} className="theme-workspace-preview rounded-2xl border p-3 text-sm">
+          <div className="grid min-w-0 grid-cols-[76px_minmax(0,1fr)] gap-3">
+            <aside className="overflow-hidden rounded-xl border bg-sidebar text-sidebar-foreground">
+              <div className="theme-preview-sidebar-header p-2 text-xs font-semibold">ELSET</div>
+              <div className="grid gap-2 p-2 text-[10px]">
+                <div className="rounded bg-sidebar-primary px-1 py-2 text-sidebar-primary-foreground">Customers</div>
+                <div className="rounded bg-sidebar-accent px-1 py-2">Calendar</div>
+                <div className="px-1 py-2">Invoices</div>
               </div>
-              <div className={isIconOnlySidebar ? "grid justify-center gap-2 p-3" : "grid gap-2 p-3"}>
-                <div
-                  className={isIconOnlySidebar ? "flex h-10 w-10 items-center justify-center rounded-2xl border text-sm font-medium shadow-sm" : "rounded-2xl border px-3 py-2 text-sm font-medium shadow-sm"}
-                  style={{
-                    backgroundColor: sidebarActive,
-                    borderColor,
-                    color: getContrastTextColor(sidebarActive, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
-                  }}
-                >
-                  {isIconOnlySidebar ? "A" : "Active section"}
+            </aside>
+            <div className="grid min-w-0 gap-3">
+              <header className="theme-preview-header rounded-xl border p-3 font-semibold">Customer workspace</header>
+              <div className="grid min-w-0 gap-3 rounded-xl border bg-card p-3 text-card-foreground">
+                <div><p className="font-semibold">Main container</p><p className="text-xs text-text-secondary">Customer details and service work</p></div>
+                <Input aria-label="Preview search" placeholder="Search customers?" readOnly />
+                <div className="rounded-lg border bg-surface-raised p-3"><p className="font-medium">Raised card</p><p className="text-xs text-muted-foreground">Contact details and metadata</p></div>
+                <div className="overflow-hidden rounded-lg border" data-preview-table>
+                  <div className="grid grid-cols-2 gap-2 bg-muted p-2 text-xs font-semibold"><span>Customer</span><span>Status</span></div>
+                  {['Acme Gates', 'Northside Works'].map((name, i) => <div key={name} className={'grid grid-cols-2 gap-2 p-2 text-xs ' + (i ? 'bg-surface-raised' : 'bg-card')}><span>{name}</span><span className="text-status-success">Active</span></div>)}
                 </div>
-                {isIconOnlySidebar ? (
-                  <>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/70 text-sm">C</div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/70 text-sm">I</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm">Customers</div>
-                    <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-sm">Invoices</div>
-                  </>
-                )}
+                <Button type="button">Primary action</Button>
               </div>
-            </div>
-
-            <div className="grid gap-4">
-              <div
-                className="rounded-2xl border p-panel shadow-sm"
-                style={{
-                  backgroundColor: heroSurface,
-                  borderColor,
-                  color: getContrastTextColor(heroSurface, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
-                }}
-              >
-                <div className="grid gap-4 md:grid-cols-[minmax(110px,1fr)_minmax(0,2fr)_minmax(110px,1fr)] md:items-center">
-                  <div className="flex justify-center md:justify-start">
-                    <div className="rounded-2xl border border-black/5 bg-white px-3 py-2 shadow-sm">
-                      <img src={LOGO_SRC} alt="Elset logo" className="h-9 w-auto" />
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <h3 className="text-2xl font-semibold">Settings Preview</h3>
-                  </div>
-
-                  <div className="flex justify-center md:justify-end">
-                    <button
-                      type="button"
-                      className="rounded-2xl border px-4 py-2 text-sm font-medium shadow-sm"
-                      style={{
-                        backgroundColor: actionColor,
-                        borderColor,
-                        color: getContrastTextColor(actionColor, { dark: APP_TEXT_DARK, light: APP_TEXT_LIGHT }),
-                      }}
-                    >
-                      Primary action
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className="rounded-2xl border p-panel shadow-sm"
-                style={{
-                  backgroundImage: dialogSurfaceGradient,
-                  backgroundColor: dialogSurface,
-                  borderColor,
-                  color: dialogText,
-                }}
-              >
-                <p className="text-sm font-semibold">Dialog Gradient Preview</p>
-                <p className="mt-2 text-sm opacity-80">
-                  Popups, editors, and modals will use a generated gradient based on this one popup colour.
-                </p>
-              </div>
-
-              <div
-                className="rounded-2xl border p-panel shadow-sm"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, ${dataViewTheme.headerStart} 0%, ${dataViewTheme.headerEnd} 100%)`,
-                  backgroundColor: dataViewTheme.surface,
-                  borderColor: dataViewTheme.borderStrong,
-                  boxShadow: `0 20px 36px -30px ${dataViewTheme.shadow}`,
-                }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: dataViewTheme.textTint }}>
-                      Database Preview
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">Table headers, row tinting, and stat tiles follow these colours.</p>
-                  </div>
-                  <span
-                    className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
-                    style={{
-                      backgroundColor: mixHexColors(dataViewTheme.rowHover, "#FFFFFF", 0.08),
-                      borderColor: dataViewTheme.borderStrong,
-                      color: dataViewTheme.textTint,
-                    }}
-                  >
-                    Live
-                  </span>
-                </div>
-
-                <div
-                  className="mt-4 grid gap-px overflow-hidden rounded-2xl border text-sm shadow-sm"
-                  style={{
-                    borderColor: dataViewTheme.borderStrong,
-                    backgroundColor: dataViewTheme.gridLine,
-                  }}
-                >
-                  <div
-                    className="grid grid-cols-[1.4fr_120px_90px]"
-                    style={{ color: dataViewTheme.textTint }}
-                  >
-                    {["Record", "Status", "Open"].map((label) => (
-                      <div
-                        key={label}
-                        className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em]"
-                        style={{ backgroundColor: dataViewTheme.headerCell }}
-                      >
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-
-                  {[
-                    { name: "Springvale Site", status: "Commercial", open: "1" },
-                    { name: "Kew Residence", status: "Residential", open: "0" },
-                  ].map((row, index) => (
-                    <div key={row.name} className="grid grid-cols-[1.4fr_120px_90px] text-slate-700">
-                      <div
-                        className="px-3 py-2 font-medium text-slate-900"
-                        style={{ backgroundColor: index % 2 === 0 ? dataViewTheme.row : dataViewTheme.rowAlt }}
-                      >
-                        {row.name}
-                      </div>
-                      <div
-                        className="px-3 py-2"
-                        style={{ backgroundColor: index % 2 === 0 ? dataViewTheme.row : dataViewTheme.rowAlt }}
-                      >
-                        {row.status}
-                      </div>
-                      <div
-                        className="px-3 py-2 text-right font-medium text-slate-900"
-                        style={{ backgroundColor: index % 2 === 0 ? dataViewTheme.row : dataViewTheme.rowAlt }}
-                      >
-                        {row.open}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border shadow-sm md:grid-cols-3" style={{ borderColor: dataViewTheme.border }}>
-                  {[
-                    { label: "Records", value: "68" },
-                    { label: "Needs follow-up", value: "9" },
-                    { label: "Updated today", value: "4" },
-                  ].map((stat) => (
-                    <div key={stat.label} className="px-4 py-3" style={{ backgroundColor: dataViewTheme.stat }}>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: dataViewTheme.textTint }}>
-                        {stat.label}
-                      </p>
-                      <p className="mt-2 text-xl font-semibold text-slate-950">{stat.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <div className="theme-preview-popup rounded-xl border p-3"><p className="font-semibold">Popup / dialog</p><p className="mt-1 text-xs">Review customer details before continuing.</p><div className="mt-3 rounded border bg-input-surface p-2 text-foreground">Form value</div></div>
             </div>
           </div>
         </div>
@@ -408,32 +201,32 @@ function ExactDocumentPreview({ requestBody }) {
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-600">This renders the exact PDF attachment the customer receives.</p>
+        <p className="text-sm text-text-secondary">This renders the exact PDF attachment the customer receives.</p>
         {previewStatus === "loading" ? (
-          <Badge className="bg-slate-100 text-slate-700">Refreshing preview...</Badge>
+          <Badge className="bg-surface-raised text-text-secondary">Refreshing preview...</Badge>
         ) : previewStatus === "ready" ? (
-          <Badge className="bg-emerald-100 text-emerald-800">Exact PDF preview</Badge>
+          <Badge className="bg-status-success-surface text-status-success">Exact PDF preview</Badge>
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-3">
+      <div className="overflow-x-auto rounded-3xl border border-border bg-surface-raised p-3 shadow-sm sm:p-3">
         {previewUrl ? (
-          <div className="mx-auto w-full min-w-[640px] max-w-[794px] overflow-hidden rounded-sm bg-white shadow-lg">
+          <div className="mx-auto w-full min-w-[640px] max-w-[794px] overflow-hidden rounded-sm bg-paper shadow-lg">
             <iframe
               title="Exact customer document preview"
               src={previewUrl}
-              className="block h-[clamp(640px,78vh,1040px)] w-full bg-white"
+              className="block h-[clamp(640px,78vh,1040px)] w-full bg-paper"
             />
           </div>
         ) : previewStatus === "error" ? (
-          <div className="p-panel text-sm text-rose-700">{previewError}</div>
+          <div className="p-panel text-sm text-status-danger">{previewError}</div>
         ) : (
-          <div className="p-panel text-sm text-slate-600">Rendering exact preview...</div>
+          <div className="p-panel text-sm text-text-secondary">Rendering exact preview...</div>
         )}
       </div>
 
       {previewUrl && previewError ? (
-        <p className="text-sm text-rose-700">{previewError}</p>
+        <p className="text-sm text-status-danger">{previewError}</p>
       ) : null}
 
       {previewUrl ? (
@@ -459,6 +252,7 @@ export default function SettingsManager({
   onApplyPreset,
   onResetUiSettings,
   onResetPreferences,
+  onWorkspaceLogoChange,
   activeTemplateType,
   onActiveTemplateTypeChange,
   templates,
@@ -658,7 +452,7 @@ export default function SettingsManager({
     <div className="grid gap-4">
       <div className="floating-page-toolbar flex flex-col gap-2 overflow-x-auto overscroll-x-contain px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
-          <Badge className={isAuthenticated ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
+          <Badge className={isAuthenticated ? "bg-status-success-surface text-status-success" : "bg-surface-raised text-text-secondary"}>
             {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
         </div>
@@ -684,19 +478,20 @@ export default function SettingsManager({
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="grid gap-4">
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <WorkspaceBranding url={normalizedSettings.workspaceLogoUrl} onChange={onWorkspaceLogoChange} enabled={isSqliteBackupMode} />
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Company Details</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">Shared workspace settings: these company values apply to everyone and to generated quotes, invoices and outgoing emails.</p>
+                  <p className="mt-1 text-sm text-text-secondary">Shared workspace settings: these company values apply to everyone and to generated quotes, invoices and outgoing emails.</p>
                 </div>
                 <div className="grid justify-items-start gap-2 lg:justify-items-end">
                   <Button variant="outline" className="rounded-xl" onClick={onResetPreferences}>
                     Reset Preferences
                   </Button>
-                  <div role="status" aria-label="Preferences save status" aria-live="polite" aria-atomic="true" className="text-sm text-slate-600">
+                  <div role="status" aria-label="Preferences save status" aria-live="polite" aria-atomic="true" className="text-sm text-text-secondary">
                     {themeSaveState?.scope !== "preferences" ? null : themeSaveState?.status === "error" ? (
-                      <div className="flex flex-wrap items-center gap-2 text-red-700">
+                      <div className="flex flex-wrap items-center gap-2 text-status-danger">
                         <span>Preference changes could not be saved. {themeSaveState.error !== "Preference changes could not be saved." ? themeSaveState.error : ""}</span>
                         <Button type="button" variant="outline" className="min-h-11 rounded-xl" onClick={onRetryThemeSave}>Retry</Button>
                       </div>
@@ -730,10 +525,10 @@ export default function SettingsManager({
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Bank Details</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">Used by invoice templates wherever payment or bank placeholders appear.</p>
+                <p className="mt-1 text-sm text-text-secondary">Used by invoice templates wherever payment or bank placeholders appear.</p>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-3">
                 {bankFields.map((field) => (
@@ -749,10 +544,10 @@ export default function SettingsManager({
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Email Defaults</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">Set the default sender, reply-to, CC recipients, and email signature used when sending documents.</p>
+                <p className="mt-1 text-sm text-text-secondary">Set the default sender, reply-to, CC recipients, and email signature used when sending documents.</p>
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -781,40 +576,40 @@ export default function SettingsManager({
           </div>
 
           <div className="grid gap-4">
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Current Defaults</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Company Identity</p>
-                  <p className="mt-2 font-medium text-slate-900">{normalizedSettings.companyName || "Not set"}</p>
-                  <p className="mt-1 text-slate-700">
+                <div className="rounded-2xl border border-border bg-muted p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Company Identity</p>
+                  <p className="mt-2 font-medium text-foreground">{normalizedSettings.companyName || "Not set"}</p>
+                  <p className="mt-1 text-text-secondary">
                     {[normalizedSettings.companyAbn ? `ABN ${normalizedSettings.companyAbn}` : "", normalizedSettings.companyAcn ? `ACN ${normalizedSettings.companyAcn}` : ""]
                       .filter(Boolean)
                       .join("  •  ") || "ABN / ACN not set"}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Bank Account</p>
-                  <p className="mt-2 font-medium text-slate-900">{normalizedSettings.bankAccountName || "Not set"}</p>
-                  <p className="mt-1 text-slate-700">
+                <div className="rounded-2xl border border-border bg-muted p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Bank Account</p>
+                  <p className="mt-2 font-medium text-foreground">{normalizedSettings.bankAccountName || "Not set"}</p>
+                  <p className="mt-1 text-text-secondary">
                     {[normalizedSettings.bankBsb ? `BSB ${normalizedSettings.bankBsb}` : "", normalizedSettings.bankAccountNumber ? `Account ${normalizedSettings.bankAccountNumber}` : ""]
                       .filter(Boolean)
                       .join(" / ") || "Bank details not set"}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Primary Sender</p>
-                  <p className="mt-2 font-medium text-slate-900">{normalizedSettings.defaultSenderEmail || "Not set"}</p>
+                <div className="rounded-2xl border border-border bg-muted p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Primary Sender</p>
+                  <p className="mt-2 font-medium text-foreground">{normalizedSettings.defaultSenderEmail || "Not set"}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Reply To</p>
-                  <p className="mt-2 font-medium text-slate-900">{normalizedSettings.replyToEmail || "Not set"}</p>
+                <div className="rounded-2xl border border-border bg-muted p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Reply To</p>
+                  <p className="mt-2 font-medium text-foreground">{normalizedSettings.replyToEmail || "Not set"}</p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Signature</p>
-                  <p className="mt-2 whitespace-pre-wrap text-slate-700">{normalizedSettings.emailSignature || "Not set"}</p>
+                <div className="rounded-2xl border border-border bg-muted p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Signature</p>
+                  <p className="mt-2 whitespace-pre-wrap text-text-secondary">{normalizedSettings.emailSignature || "Not set"}</p>
                 </div>
               </CardContent>
             </Card>
@@ -825,11 +620,11 @@ export default function SettingsManager({
       {canManageWorkspaceSettings && activeSettingsTab === "templates" && (
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="grid gap-4">
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Template Editor</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">Adjust wording, headings, and section text for each document type. Company and bank details come from Preferences.</p>
+                  <p className="mt-1 text-sm text-text-secondary">Adjust wording, headings, and section text for each document type. Company and bank details come from Preferences.</p>
                 </div>
                 <div className="w-full max-w-[220px]">
                   <Select value={currentTemplateType} onValueChange={onActiveTemplateTypeChange}>
@@ -876,14 +671,14 @@ export default function SettingsManager({
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Supported Placeholders</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">These tokens can be used in the intro, terms, and footer text. Company and bank tokens use the values saved in Preferences.</p>
+                <p className="mt-1 text-sm text-text-secondary">These tokens can be used in the intro, terms, and footer text. Company and bank tokens use the values saved in Preferences.</p>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 {documentTemplatePlaceholders.map((placeholder) => (
-                  <Badge key={placeholder} className="rounded-full bg-slate-100 text-slate-700">
+                  <Badge key={placeholder} className="rounded-full bg-surface-raised text-text-secondary">
                     {placeholder}
                   </Badge>
                 ))}
@@ -891,10 +686,10 @@ export default function SettingsManager({
             </Card>
           </div>
 
-          <Card className="overflow-hidden rounded-3xl border-slate-200 shadow-sm">
+          <Card className="overflow-hidden rounded-3xl border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Live Preview</CardTitle>
-              <p className="mt-1 text-sm text-slate-600">See the exact generated document attachment before sending it to a customer.</p>
+              <p className="mt-1 text-sm text-text-secondary">See the exact generated document attachment before sending it to a customer.</p>
             </CardHeader>
             <CardContent className="grid gap-4">
               <ExactDocumentPreview requestBody={previewRequestBody} />
@@ -905,13 +700,13 @@ export default function SettingsManager({
 
       {activeSettingsTab === "ui" && (
         <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-          <p className="text-sm text-slate-700 xl:col-span-2">Personal appearance — saved to your account across devices. These choices do not change anyone else's view.</p>
+          <p className="text-sm text-text-secondary xl:col-span-2">Personal appearance — saved to your account across devices. These choices do not change anyone else's view.</p>
           <div className="grid gap-4">
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Theme Presets</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">Start from a preset, then fine-tune individual colours below.</p>
+                  <p className="mt-1 text-sm text-text-secondary">Start from a preset, then fine-tune individual colours below.</p>
                 </div>
                 <Button variant="outline" className="rounded-xl" onClick={onResetUiSettings}>
                   Reset UI
@@ -922,34 +717,37 @@ export default function SettingsManager({
                   <button
                     key={preset.id}
                     type="button"
-                    className="rounded-2xl border border-slate-200 p-3 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                    data-theme-preset={preset.id}
+                    aria-pressed={Object.entries(preset.values).every(([key, value]) => normalizedSettings[key] === value)}
+                    className="theme-preset-card min-w-0 rounded-2xl border border-border bg-surface-raised p-3 text-left transition hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-ring"
                     onClick={() => onApplyPreset(preset.values)}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-slate-950">{preset.label}</p>
+                    <div data-theme-sample className="theme-preset-sample mb-3" style={buildSemanticTheme(preset.values).vars}><span /><div><i /><i /><i /></div></div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-semibold text-foreground">{preset.label}</p>
                       <div className="flex gap-1.5">
                         {presetPreviewKeys.map((key) => (
                           <span
                             key={`${preset.id}-${key}`}
-                            className="h-4 w-4 rounded-full border border-black/10"
+                            className="h-4 w-4 rounded-full border border-border"
                             style={{ backgroundColor: preset.values[key] }}
                           />
                         ))}
                       </div>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{preset.description}</p>
+                    <p className="mt-2 text-sm leading-6 text-text-secondary">{preset.description}</p>
                   </button>
                 ))}
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Colour Controls</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">These values style the page background, sidebar, database tables, popup gradients, primary action buttons, and shared border colour.</p>
-                <div role="status" aria-label="Theme save status" aria-live="polite" aria-atomic="true" className="text-sm text-slate-600">
+                <p className="mt-1 text-sm text-text-secondary">Database surface coordinates panels, tables, raised cards, and inputs. Text and status colours adapt automatically. Popup surface also controls dialogs and dropdowns.</p>
+                <div role="status" aria-label="Theme save status" aria-live="polite" aria-atomic="true" className="text-sm text-text-secondary">
                   {themeSaveState?.scope === "preferences" ? null : themeSaveState?.status === "error" ? (
-                    <div className="flex flex-wrap items-center gap-2 text-red-700">
+                    <div className="flex flex-wrap items-center gap-2 text-status-danger">
                       <span>Theme change could not be saved. {themeSaveState.error !== "Theme change could not be saved." ? themeSaveState.error : ""}</span>
                       <Button type="button" variant="outline" className="min-h-11 rounded-xl" onClick={onRetryThemeSave}>Retry</Button>
                     </div>
@@ -963,7 +761,7 @@ export default function SettingsManager({
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Layout</CardTitle>
               </CardHeader>
@@ -1010,22 +808,22 @@ export default function SettingsManager({
       {canManageWorkspaceSettings && activeSettingsTab === "backup" && (
         <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="grid gap-4">
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Download Full Backup</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-text-secondary">
                     {isSqliteBackupMode
                       ? "Save a SQLite workspace backup bundle with customers, jobs, staff, templates, settings, and deleted records."
                       : "Save a JSON copy of the shared workspace, including customers, jobs, staff, templates, settings, and login accounts."}
                   </p>
                 </div>
-                <Badge className={isAdmin ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}>
+                <Badge className={isAdmin ? "bg-status-success-surface text-status-success" : "bg-status-warning-surface text-status-warning"}>
                   {isAdmin ? "Admin Access" : "Admin Only"}
                 </Badge>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <div className="rounded-2xl border border-border bg-muted p-3 text-sm text-text-secondary">
                   {isSqliteBackupMode
                     ? "Login accounts, active sessions, SMTP credentials, API keys, and environment secrets are left out of SQLite workspace backups."
                     : "Active session tokens are left out of the file for security, but the backup still includes the core workspace records and saved login accounts."}
@@ -1041,42 +839,42 @@ export default function SettingsManager({
                   </Button>
 
                   {downloadStatus === "loading" ? (
-                    <Badge className="bg-sky-100 text-sky-800">Generating file...</Badge>
+                    <Badge className="bg-status-info-surface text-status-info">Generating file...</Badge>
                   ) : downloadStatus === "success" ? (
-                    <Badge className="bg-emerald-100 text-emerald-800">Backup downloaded</Badge>
+                    <Badge className="bg-status-success-surface text-status-success">Backup downloaded</Badge>
                   ) : downloadStatus === "error" ? (
-                    <Badge className="bg-rose-100 text-rose-800">Download failed</Badge>
+                    <Badge className="bg-status-danger-surface text-status-danger">Download failed</Badge>
                   ) : null}
                 </div>
 
                 {downloadMessage ? (
-                  <p className={`text-sm ${downloadStatus === "error" ? "text-rose-700" : "text-slate-600"}`}>
+                  <p className={`text-sm ${downloadStatus === "error" ? "text-status-danger" : "text-text-secondary"}`}>
                     {downloadMessage}
                   </p>
                 ) : !isAdmin ? (
-                  <p className="text-sm text-amber-700">
+                  <p className="text-sm text-status-warning">
                     Sign in with an admin account to download a full backup file from this screen.
                   </p>
                 ) : null}
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">Restore From Backup</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-text-secondary">
                     {isSqliteBackupMode
                       ? "Upload a SQLite workspace backup JSON bundle to replace the current shared workspace snapshot."
                       : "Upload a previously downloaded backup JSON file to replace the current shared workspace snapshot."}
                   </p>
                 </div>
-                <Badge className={isAdmin ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}>
+                <Badge className={isAdmin ? "bg-status-warning-surface text-status-warning" : "bg-surface-raised text-text-secondary"}>
                   {isAdmin ? "Overwrite Mode" : "Admin Only"}
                 </Badge>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                <div className="rounded-2xl border border-status-warning-border bg-status-warning-surface p-3 text-sm text-status-warning">
                   {isSqliteBackupMode
                     ? "This will overwrite workspace records only. Login accounts, sessions, SMTP credentials, API keys, and environment settings are not restored."
                     : "This will overwrite customers, jobs, staff, settings, templates, deleted records, and saved login accounts on the shared server."}
@@ -1097,8 +895,8 @@ export default function SettingsManager({
                 </FormField>
 
                 {restoreFile ? (
-                  <p className="text-sm text-slate-600">
-                    Selected file: <span className="font-medium text-slate-900">{restoreFile.name}</span>
+                  <p className="text-sm text-text-secondary">
+                    Selected file: <span className="font-medium text-foreground">{restoreFile.name}</span>
                   </p>
                 ) : null}
 
@@ -1112,24 +910,24 @@ export default function SettingsManager({
                   </Button>
 
                   {restoreStatus === "loading" ? (
-                    <Badge className="bg-sky-100 text-sky-800">Replacing shared data...</Badge>
+                    <Badge className="bg-status-info-surface text-status-info">Replacing shared data...</Badge>
                   ) : restoreStatus === "success" ? (
-                    <Badge className="bg-emerald-100 text-emerald-800">Backup restored</Badge>
+                    <Badge className="bg-status-success-surface text-status-success">Backup restored</Badge>
                   ) : restoreStatus === "error" ? (
-                    <Badge className="bg-rose-100 text-rose-800">Restore failed</Badge>
+                    <Badge className="bg-status-danger-surface text-status-danger">Restore failed</Badge>
                   ) : null}
                 </div>
 
                 {restoreMessage ? (
-                  <p className={`text-sm ${restoreStatus === "error" ? "text-rose-700" : "text-slate-600"}`}>
+                  <p className={`text-sm ${restoreStatus === "error" ? "text-status-danger" : "text-text-secondary"}`}>
                     {restoreMessage}
                   </p>
                 ) : !isAdmin ? (
-                  <p className="text-sm text-amber-700">
+                  <p className="text-sm text-status-warning">
                     Sign in with an admin account to restore a backup file from this screen.
                   </p>
                 ) : (
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-text-secondary">
                     Use this only with backup files exported from this workspace. You will need to re-enter your admin password before the restore starts.
                   </p>
                 )}
@@ -1155,15 +953,15 @@ export default function SettingsManager({
                 </DialogHeader>
 
                 <form className="grid gap-4" onSubmit={handleBackupRestore}>
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <div className="rounded-2xl border border-status-warning-border bg-status-warning-surface p-3 text-sm text-status-warning">
                     {isSqliteBackupMode
                       ? "This replaces the SQLite workspace snapshot only. Login accounts and secrets are left untouched."
                       : "This replaces customers, jobs, staff, templates, deleted records, and saved login accounts with the uploaded backup file."}
                   </div>
 
                   {restoreFile ? (
-                    <p className="text-sm text-slate-600">
-                      Backup file: <span className="font-medium text-slate-900">{restoreFile.name}</span>
+                    <p className="text-sm text-text-secondary">
+                      Backup file: <span className="font-medium text-foreground">{restoreFile.name}</span>
                     </p>
                   ) : null}
 
@@ -1179,7 +977,7 @@ export default function SettingsManager({
                   </FormField>
 
                   {restoreStatus === "error" && restoreMessage ? (
-                    <p className="text-sm text-rose-700">{restoreMessage}</p>
+                    <p className="text-sm text-status-danger">{restoreMessage}</p>
                   ) : null}
 
                   <DialogFooter>
@@ -1207,20 +1005,20 @@ export default function SettingsManager({
               </DialogContent>
             </Dialog>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <CardTitle className="text-lg">ServiceM8 API Import</CardTitle>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-text-secondary">
                     Preview and import ServiceM8 customers, sites, jobs, notes, invoice line items, and payments using a private API key.
                   </p>
                 </div>
-                <Badge className={isAdmin ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}>
+                <Badge className={isAdmin ? "bg-status-success-surface text-status-success" : "bg-surface-raised text-text-secondary"}>
                   {isAdmin ? "Admin Import" : "Admin Only"}
                 </Badge>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm leading-6 text-sky-950">
+                <div className="rounded-2xl border border-status-info-border bg-status-info-surface p-3 text-sm leading-6 text-status-info">
                   The API key is only sent to the server for this request and is not saved in the app. The importer uses ServiceM8 UUIDs to update existing imported records instead of duplicating them.
                 </div>
 
@@ -1242,7 +1040,7 @@ export default function SettingsManager({
                   {serviceM8ImportOptionFields.map((field) => (
                     <label
                       key={field.key}
-                      className="flex cursor-pointer gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm"
+                      className="flex cursor-pointer gap-3 rounded-2xl border border-border bg-muted p-3 text-sm"
                     >
                       <Checkbox
                         checked={Boolean(serviceM8Options[field.key])}
@@ -1250,8 +1048,8 @@ export default function SettingsManager({
                         disabled={!isAdmin || serviceM8Status === "previewing" || serviceM8Status === "importing"}
                       />
                       <span>
-                        <span className="block font-semibold text-slate-950">{field.label}</span>
-                        <span className="mt-1 block leading-5 text-slate-600">{field.description}</span>
+                        <span className="block font-semibold text-foreground">{field.label}</span>
+                        <span className="mt-1 block leading-5 text-text-secondary">{field.description}</span>
                       </span>
                     </label>
                   ))}
@@ -1275,26 +1073,26 @@ export default function SettingsManager({
                   </Button>
 
                   {serviceM8Status === "previewing" ? (
-                    <Badge className="bg-sky-100 text-sky-800">Fetching API data...</Badge>
+                    <Badge className="bg-status-info-surface text-status-info">Fetching API data...</Badge>
                   ) : serviceM8Status === "preview-ready" ? (
-                    <Badge className="bg-amber-100 text-amber-800">Preview ready</Badge>
+                    <Badge className="bg-status-warning-surface text-status-warning">Preview ready</Badge>
                   ) : serviceM8Status === "success" ? (
-                    <Badge className="bg-emerald-100 text-emerald-800">Import complete</Badge>
+                    <Badge className="bg-status-success-surface text-status-success">Import complete</Badge>
                   ) : serviceM8Status === "error" ? (
-                    <Badge className="bg-rose-100 text-rose-800">Import issue</Badge>
+                    <Badge className="bg-status-danger-surface text-status-danger">Import issue</Badge>
                   ) : null}
                 </div>
 
                 {serviceM8Message ? (
-                  <p className={`text-sm ${serviceM8Status === "error" ? "text-rose-700" : "text-slate-600"}`}>
+                  <p className={`text-sm ${serviceM8Status === "error" ? "text-status-danger" : "text-text-secondary"}`}>
                     {serviceM8Message}
                   </p>
                 ) : !isAdmin ? (
-                  <p className="text-sm text-amber-700">
+                  <p className="text-sm text-status-warning">
                     Sign in with an admin account to run the ServiceM8 importer.
                   </p>
                 ) : (
-                  <p className="text-sm text-slate-600">
+                  <p className="text-sm text-text-secondary">
                     Always download a backup before importing. Preview does not change your data; import refetches ServiceM8 and then merges the results.
                   </p>
                 )}
@@ -1303,28 +1101,28 @@ export default function SettingsManager({
                   <div className="grid gap-4">
                     <div className="grid gap-3 md:grid-cols-3">
                       {serviceM8SummaryCards.map((item) => (
-                        <div key={item.key} className="rounded-2xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
-                          <p className="mt-2 text-2xl font-semibold text-slate-950">{item.value}</p>
+                        <div key={item.key} className="rounded-2xl border border-border bg-card p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{item.label}</p>
+                          <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
                         </div>
                       ))}
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                      <p className="font-semibold text-slate-950">Fetched From ServiceM8</p>
+                    <div className="rounded-2xl border border-border bg-muted p-3 text-sm text-text-secondary">
+                      <p className="font-semibold text-foreground">Fetched From ServiceM8</p>
                       <p className="mt-2 leading-6">
                         {serviceM8Summary.fetched?.clients || 0} clients, {serviceM8Summary.fetched?.jobs || 0} jobs, {serviceM8Summary.fetched?.companyContacts || 0} contacts, {serviceM8Summary.fetched?.jobMaterials || 0} line items, {serviceM8Summary.fetched?.jobPayments || 0} payments, and {serviceM8Summary.fetched?.jobNotes || 0} notes.
                       </p>
                     </div>
 
                     {serviceM8Summary.sampleCustomers?.length ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                        <p className="text-sm font-semibold text-slate-950">Customer Preview</p>
+                      <div className="rounded-2xl border border-border bg-card p-3">
+                        <p className="text-sm font-semibold text-foreground">Customer Preview</p>
                         <div className="mt-3 grid gap-2">
                           {serviceM8Summary.sampleCustomers.map((customer, index) => (
-                            <div key={`${customer.name}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                              <span className="font-medium text-slate-900">{customer.name}</span>
-                              <span className="text-slate-600">{customer.action} - {customer.siteCount} site{customer.siteCount === 1 ? "" : "s"}</span>
+                            <div key={`${customer.name}-${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted px-3 py-2 text-sm">
+                              <span className="font-medium text-foreground">{customer.name}</span>
+                              <span className="text-text-secondary">{customer.action} - {customer.siteCount} site{customer.siteCount === 1 ? "" : "s"}</span>
                             </div>
                           ))}
                         </div>
@@ -1332,16 +1130,16 @@ export default function SettingsManager({
                     ) : null}
 
                     {serviceM8Summary.sampleJobs?.length ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                        <p className="text-sm font-semibold text-slate-950">Job Preview</p>
+                      <div className="rounded-2xl border border-border bg-card p-3">
+                        <p className="text-sm font-semibold text-foreground">Job Preview</p>
                         <div className="mt-3 grid gap-2">
                           {serviceM8Summary.sampleJobs.map((job, index) => (
-                            <div key={`${job.job}-${index}`} className="rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                            <div key={`${job.job}-${index}`} className="rounded-xl bg-muted px-3 py-2 text-sm">
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="font-medium text-slate-900">{job.job}</span>
-                                <span className="text-slate-600">{job.action} - {job.status}</span>
+                                <span className="font-medium text-foreground">{job.job}</span>
+                                <span className="text-text-secondary">{job.action} - {job.status}</span>
                               </div>
-                              <p className="mt-1 text-slate-600">{job.customerName} - {job.title}</p>
+                              <p className="mt-1 text-text-secondary">{job.customerName} - {job.title}</p>
                             </div>
                           ))}
                         </div>
@@ -1349,7 +1147,7 @@ export default function SettingsManager({
                     ) : null}
 
                     {serviceM8Summary.warnings?.length ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                      <div className="rounded-2xl border border-status-warning-border bg-status-warning-surface p-3 text-sm text-status-warning">
                         <p className="font-semibold">Warnings</p>
                         <div className="mt-2 grid gap-1">
                           {serviceM8Summary.warnings.slice(0, 6).map((warning, index) => (
@@ -1363,40 +1161,40 @@ export default function SettingsManager({
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">What's Included</CardTitle>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-1 text-sm text-text-secondary">
                   This export is designed to capture the full shared workspace snapshot, not just the visible page settings.
                 </p>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-2">
                 {backupCards.map((item) => (
-                  <div key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-950">{item.value}</p>
+                  <div key={item.key} className="rounded-2xl border border-border bg-muted p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{item.label}</p>
+                    <p className="mt-2 text-2xl font-semibold text-foreground">{item.value}</p>
                   </div>
                 ))}
               </CardContent>
             </Card>
           </div>
 
-          <Card className="rounded-3xl border-slate-200 shadow-sm">
+          <Card className="rounded-3xl border-border shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Backup Notes</CardTitle>
-              <p className="mt-1 text-sm text-slate-600">A couple of guardrails so the export stays useful when you need it.</p>
+              <p className="mt-1 text-sm text-text-secondary">A couple of guardrails so the export stays useful when you need it.</p>
             </CardHeader>
-            <CardContent className="grid gap-4 text-sm text-slate-700">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <CardContent className="grid gap-4 text-sm text-text-secondary">
+              <div className="rounded-2xl border border-border bg-muted p-3">
                 Download backups regularly after major admin changes like bulk customer imports, maintenance plan updates, or template edits.
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-2xl border border-border bg-muted p-3">
                 Store the JSON file somewhere secure because it contains customer records, operational history, and login account data.
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-2xl border border-border bg-muted p-3">
                 The file is exported directly from the server-side data store, so it reflects the shared workspace rather than only your current browser state.
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-2xl border border-border bg-muted p-3">
                 Before restoring a backup, download a fresh copy of the current workspace so you can roll back if the uploaded file is older than expected.
               </div>
             </CardContent>

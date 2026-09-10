@@ -746,11 +746,12 @@ test("build indicator identifies desktop and mobile assets without obstructing n
     const page = await context.newPage();
     try {
       if (viewport.compact) {
-        const fixture = readAugmentedFixture();
-        fixture.settings.sidebarWidth = "icon-only";
-        await page.route("**/api/app-state", (route) => route.request().method() === "GET"
-          ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
-          : route.continue());
+        await page.route("**/api/user-preferences", async (route) => {
+          if (route.request().method() !== "GET") return route.continue();
+          const response = await route.fetch();
+          const payload = await response.json();
+          await route.fulfill({ response, json: { ...payload, preferences: { ...payload.preferences, sidebarWidth: "icon-only" } } });
+        });
       }
       if (viewport.width === 375) {
         const devtools = await context.newCDPSession(page);
@@ -765,8 +766,29 @@ test("build indicator identifies desktop and mobile assets without obstructing n
       await indicator.scrollIntoViewIfNeeded();
       await expect(indicator).toBeInViewport();
       await expect(indicator.getByText("ELSET Admin", { exact: true })).toBeVisible();
-      await expect(indicator.getByText(`v${metadata.version}`, { exact: true })).toBeVisible();
-      await expect(indicator.getByText(metadata.commit, { exact: true })).toBeVisible();
+      await expect(indicator).toHaveAttribute("title", new RegExp(`Package: v${metadata.version.replaceAll(".", "\\.")}`));
+      if (metadata.sha) {
+        await expect(indicator.getByText(metadata.commit, { exact: true })).toBeVisible();
+        await expect(indicator).toHaveAttribute("title", new RegExp(metadata.sha));
+      }
+      if (metadata.buildTime) {
+        const time = indicator.locator("time");
+        const instant = new Date(metadata.buildTime);
+        const expectedDate = instant.toLocaleDateString("en-AU", viewport.compact
+          ? { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "Australia/Sydney" }
+          : { day: "numeric", month: "short", year: "numeric", timeZone: "Australia/Sydney" });
+        const expectedTime = instant.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", timeZone: "Australia/Sydney" });
+        await expect(time).toHaveAttribute("datetime", metadata.buildTime);
+        await expect(time.getByText(expectedDate, { exact: true })).toBeVisible();
+        await expect(time.getByText(expectedTime, { exact: true })).toBeVisible();
+        // Changing the browser's current date must never alter the embedded build time.
+        await page.clock.setFixedTime(new Date("2040-01-01T00:00:00Z"));
+        await expect(time).toHaveAttribute("datetime", metadata.buildTime);
+        await expect(time.getByText(expectedDate, { exact: true })).toBeVisible();
+      } else {
+        await expect(indicator.getByText(viewport.compact ? "dev" : "Local development", { exact: true })).toBeVisible();
+        await expect(indicator.locator("time")).toHaveCount(0);
+      }
       expect(await indicator.locator("button, a").count()).toBe(0);
       expect(await indicator.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 
@@ -776,13 +798,15 @@ test("build indicator identifies desktop and mobile assets without obstructing n
       await expect(recycleBin).toBeInViewport();
       const recycleBox = await recycleBin.boundingBox();
       const indicatorBox = await indicator.boundingBox();
+      expect(indicatorBox.height).toBeLessThanOrEqual(viewport.compact ? 96 : 48);
       expect(recycleBox.y + recycleBox.height).toBeLessThanOrEqual(indicatorBox.y);
       await expect(surface.getByRole("button", { name: /Sign out/i })).toBeInViewport();
       if (viewport.width === 375) {
         await expect(indicator.locator("../..")).toHaveCSS("padding-bottom", "32px");
         expect(indicatorBox.y + indicatorBox.height).toBeLessThanOrEqual(viewport.height - 20);
       }
-      await capture(page, testInfo, `build-indicator-${viewport.width}x${viewport.height}.png`, "build indicator and navigation");
+      const buildLabel = metadata.buildTime ? `${metadata.commit}-${metadata.buildTime.replaceAll(":", "-")}` : "local";
+      await capture(page, testInfo, `build-indicator-${buildLabel}-${viewport.width}x${viewport.height}.png`, "build indicator and navigation");
       await recycleBin.click();
       await expect(page.getByRole("tab", { name: "Deleted Jobs" })).toBeVisible();
       if (mobile) await expect(surface).toBeHidden();

@@ -187,17 +187,17 @@ export function AddressAutocompleteInput({
         <div
           id={listboxId}
           role="listbox"
-          className="absolute inset-x-0 top-[calc(100%+0.4rem)] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+          className="theme-popup absolute inset-x-0 top-[calc(100%+0.4rem)] z-30 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl"
         >
           {isLoading ? (
-            <div className="flex items-center gap-2 px-3 py-3 text-sm text-slate-500">
+            <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
               <LoaderCircle className="h-4 w-4 animate-spin" />
               <span>Searching real addresses...</span>
             </div>
           ) : errorMessage ? (
-            <div className="px-3 py-3 text-sm text-rose-700">{errorMessage}</div>
+            <div className="px-3 py-3 text-sm text-status-danger">{errorMessage}</div>
           ) : suggestions.length === 0 ? (
-            <div className="px-3 py-3 text-sm text-slate-500">
+            <div className="px-3 py-3 text-sm text-muted-foreground">
               No matches yet. Keep typing or use the address exactly as entered.
             </div>
           ) : (
@@ -213,7 +213,7 @@ export function AddressAutocompleteInput({
                     aria-selected={isActive}
                     className={cn(
                       "flex w-full items-start gap-3 px-3 py-2.5 text-left transition",
-                      isActive ? "bg-slate-900 text-white" : "text-slate-900 hover:bg-slate-100"
+                      isActive ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-surface-raised"
                     )}
                     onMouseDown={(event) => {
                       event.preventDefault();
@@ -221,11 +221,11 @@ export function AddressAutocompleteInput({
                     }}
                     onMouseEnter={() => setHighlightedIndex(index)}
                   >
-                    <MapPin className={cn("mt-0.5 h-4 w-4 shrink-0", isActive ? "text-slate-200" : "text-slate-400")} />
+                    <MapPin className={cn("mt-0.5 h-4 w-4 shrink-0", isActive ? "text-muted-foreground" : "text-muted-foreground")} />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{suggestion.addressLine1 || suggestion.formatted}</span>
                       {suggestion.addressLine2 ? (
-                        <span className={cn("mt-0.5 block truncate text-xs", isActive ? "text-slate-300" : "text-slate-500")}>
+                        <span className={cn("mt-0.5 block truncate text-xs", isActive ? "text-muted-foreground" : "text-muted-foreground")}>
                           {suggestion.addressLine2}
                         </span>
                       ) : null}

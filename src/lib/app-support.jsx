@@ -1,3 +1,4 @@
+import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 /* eslint-disable react-refresh/only-export-components */
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
 import { maintenancePlanIdentity, structuredSiteAddress } from "./maintenance-plan.js";
@@ -191,12 +192,12 @@ export const themeColorFields = [
   {
     key: "dialogSurface",
     label: "Popup surface",
-    description: "Base color used to generate popup gradients throughout the app.",
+    description: "Surface for dialogs, sheets, popups, and dropdown menus.",
   },
   {
     key: "dataViewSurface",
     label: "Database surface",
-    description: "Base tint for the row backgrounds and database cards.",
+    description: "Base for application panels and database rows. Inputs, raised cards, and text derive from this colour.",
   },
   {
     key: "dataViewAccent",
@@ -205,116 +206,7 @@ export const themeColorFields = [
   },
 ];
 
-export const themePresets = [
-  {
-    id: "elset",
-    label: "Elset Classic",
-    description: "The original Elset brand palette with the bright blue shell and orange action colour.",
-    values: {
-      pageBackgroundStart: "#0F90CD",
-      pageBackgroundEnd: "#0F90CD",
-      sidebarSurface: "#FFFFFF",
-      sidebarHeader: "#0F90CD",
-      sidebarActive: "#F69320",
-      heroSurface: "#0F90CD",
-      actionColor: "#F69320",
-      borderColor: "#1E293B",
-      dialogSurface: "#9FE4FB",
-      dataViewSurface: "#EAF7FB",
-      dataViewAccent: "#0F90CD",
-    },
-  },
-  {
-    id: "copper-dawn",
-    label: "Copper Dawn",
-    description: "Warm terracotta, soft cream, and punchier copper action colours.",
-    values: {
-      pageBackgroundStart: "#FFF1E7",
-      pageBackgroundEnd: "#F3BA8D",
-      sidebarSurface: "#FFF8F2",
-      sidebarHeader: "#8A3C22",
-      sidebarActive: "#F58A4B",
-      heroSurface: "#A94A24",
-      actionColor: "#E6632B",
-      borderColor: "#5A2F20",
-      dialogSurface: "#FFF7F1",
-      dataViewSurface: "#FFF4EC",
-      dataViewAccent: "#C96C33",
-    },
-  },
-  {
-    id: "evergreen-ledger",
-    label: "Evergreen Ledger",
-    description: "Deep greens, pale paper surfaces, and a more grounded workshop feel.",
-    values: {
-      pageBackgroundStart: "#EEF7E8",
-      pageBackgroundEnd: "#B4D29B",
-      sidebarSurface: "#F8FAF1",
-      sidebarHeader: "#22492D",
-      sidebarActive: "#6BAE58",
-      heroSurface: "#2E603A",
-      actionColor: "#80C24D",
-      borderColor: "#23422B",
-      dialogSurface: "#F7FBF3",
-      dataViewSurface: "#F1F8EC",
-      dataViewAccent: "#5E8F51",
-    },
-  },
-  {
-    id: "midnight-signal",
-    label: "Midnight Signal",
-    description: "A deep navy shell with restrained blue accents and a focused after-hours feel.",
-    values: {
-      pageBackgroundStart: "#0B132B",
-      pageBackgroundEnd: "#155E75",
-      sidebarSurface: "#111827",
-      sidebarHeader: "#1469B8",
-      sidebarActive: "#1B436F",
-      heroSurface: "#111827",
-      actionColor: "#1469B8",
-      borderColor: "#345360",
-      dialogSurface: "#E6F7FF",
-      dataViewSurface: "#F0FBFF",
-      dataViewAccent: "#5F87A5",
-    },
-  },
-  {
-    id: "studio-rose",
-    label: "Studio Rose",
-    description: "Soft blush foundations with richer magenta accents and darker wine framing.",
-    values: {
-      pageBackgroundStart: "#FFF1F5",
-      pageBackgroundEnd: "#F4BCCB",
-      sidebarSurface: "#FFF8FB",
-      sidebarHeader: "#7A2D4F",
-      sidebarActive: "#E36D97",
-      heroSurface: "#95395E",
-      actionColor: "#D94C7F",
-      borderColor: "#61263F",
-      dialogSurface: "#FFF7FA",
-      dataViewSurface: "#FFF3F8",
-      dataViewAccent: "#D94C7F",
-    },
-  },
-  {
-    id: "desert-circuit",
-    label: "Desert Circuit",
-    description: "Sand, brass, and workshop amber for a warmer, more industrial palette.",
-    values: {
-      pageBackgroundStart: "#FFF6DB",
-      pageBackgroundEnd: "#E7C56D",
-      sidebarSurface: "#FCF8EA",
-      sidebarHeader: "#5A4718",
-      sidebarActive: "#C9901E",
-      heroSurface: "#7A5C12",
-      actionColor: "#DE7E12",
-      borderColor: "#4A3915",
-      dialogSurface: "#FFFBEF",
-      dataViewSurface: "#FFF8EB",
-      dataViewAccent: "#D4932A",
-    },
-  },
-];
+export { themePresets } from "./theme-presets.js";
 
 export const sideNavItems = [
   {
@@ -863,35 +755,14 @@ export function mixHexColors(baseHex, mixHex, weight = 0.5) {
   });
 }
 
-export function getContrastTextColor(hex, { dark = APP_TEXT_DARK, light = APP_TEXT_LIGHT } = {}) {
-  const { r, g, b } = hexToRgb(hex);
-  const luminance = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-  return luminance > 0.65 ? dark : light;
+export function getContrastTextColor(hex, options = {}) {
+  return contrastText(normalizeHexColor(hex, "#000000"), options);
 }
 
 export function buildDataViewTheme(settings) {
-  const normalizedSettings = normalizeThemeSettings(settings);
-  const surface = normalizeHexColor(normalizedSettings.dataViewSurface, defaultThemeSettings.dataViewSurface);
-  const accent = normalizeHexColor(normalizedSettings.dataViewAccent, defaultThemeSettings.dataViewAccent);
-  const liftedSurface = mixHexColors(surface, "#FFFFFF", 0.72);
-  const airySurface = mixHexColors(surface, "#FFFFFF", 0.88);
-
-  return {
-    surface,
-    accent,
-    headerStart: mixHexColors(liftedSurface, accent, 0.18),
-    headerEnd: mixHexColors(airySurface, "#FFFFFF", 0.18),
-    border: mixHexColors(liftedSurface, accent, 0.2),
-    borderStrong: mixHexColors(accent, APP_TEXT_DARK, 0.18),
-    gridLine: mixHexColors(airySurface, accent, 0.1),
-    headerCell: mixHexColors(airySurface, accent, 0.08),
-    row: mixHexColors(airySurface, "#FFFFFF", 0.18),
-    rowAlt: mixHexColors(airySurface, accent, 0.06),
-    rowHover: mixHexColors(airySurface, accent, 0.14),
-    stat: mixHexColors(airySurface, "#FFFFFF", 0.1),
-    textTint: mixHexColors(APP_TEXT_DARK, accent, 0.2),
-    shadow: hexToRgba(accent, 0.24),
-  };
+  const { vars } = buildSemanticTheme(normalizeThemeSettings(settings));
+  const keys = { surface: 'surface', accent: 'accent', headerStart: 'header-start', headerEnd: 'header-end', border: 'border', borderStrong: 'border-strong', gridLine: 'grid-line', headerCell: 'header-cell', row: 'row', rowAlt: 'row-alt', rowHover: 'row-hover', stat: 'stat' };
+  return { ...Object.fromEntries(Object.entries(keys).map(([key, token]) => [key, vars['--data-view-' + token]])), textTint: vars['--foreground'], shadow: hexToRgba(vars['--data-view-accent'], 0.18) };
 }
 
 export function normalizeThemeSettings(settings) {
@@ -1031,7 +902,7 @@ export function getInvoiceStatus(job) {
     return {
       id: "not-invoiced",
       label: "Not invoiced",
-      className: "bg-slate-100 text-slate-700",
+      className: "bg-surface-raised text-secondary-foreground",
       rank: 0,
     };
   }
@@ -1042,7 +913,7 @@ export function getInvoiceStatus(job) {
     return {
       id: "paid",
       label: "Paid",
-      className: "bg-emerald-100 text-emerald-800",
+      className: "bg-status-success-surface text-status-success",
       rank: 6,
     };
   }
@@ -1052,7 +923,7 @@ export function getInvoiceStatus(job) {
     return {
       id: "overdue",
       label: "Overdue",
-      className: "bg-rose-100 text-rose-800",
+      className: "bg-status-danger-surface text-status-danger",
       rank: 1,
     };
   }
@@ -1061,7 +932,7 @@ export function getInvoiceStatus(job) {
     return {
       id: paymentSummary.paymentCount <= 1 ? "deposit-paid" : "partially-paid",
       label: paymentSummary.paymentCount <= 1 ? "Deposit Paid" : "Partially Paid",
-      className: paymentSummary.paymentCount <= 1 ? "bg-amber-100 text-amber-800" : "bg-violet-100 text-violet-800",
+      className: paymentSummary.paymentCount <= 1 ? "bg-status-warning-surface text-status-warning" : "bg-status-special-surface text-status-special",
       rank: paymentSummary.paymentCount <= 1 ? 4 : 5,
     };
   }
@@ -1070,7 +941,7 @@ export function getInvoiceStatus(job) {
     return {
       id: "unpaid",
       label: "Unpaid",
-      className: "bg-sky-100 text-sky-800",
+      className: "bg-status-info-surface text-status-info",
       rank: 3,
     };
   }
@@ -1078,7 +949,7 @@ export function getInvoiceStatus(job) {
   return {
     id: "draft",
     label: "Draft",
-    className: "bg-amber-100 text-amber-800",
+    className: "bg-status-warning-surface text-status-warning",
     rank: 2,
   };
 }
@@ -1650,14 +1521,14 @@ export function getMaintenancePlanJobs(planId, jobs) {
 }
 
 export function getMaintenancePlanStatus(plan, jobs) {
-  if (plan.active === false) return { id: "inactive", label: "Inactive", className: "bg-slate-100 text-slate-600", rank: 5 };
+  if (plan.active === false) return { id: "inactive", label: "Inactive", className: "bg-surface-raised text-secondary-foreground", rank: 5 };
   const linkedJobs = getMaintenancePlanJobs(plan.id, jobs);
   const activeJobs = linkedJobs.filter((job) => job.status !== "Completed");
   if (activeJobs.length > 0 && !plan.nextDueDate) {
     return {
       id: "active-job",
       label: activeJobs.length === 1 ? "Active job" : `${activeJobs.length} active jobs`,
-      className: "bg-sky-100 text-sky-800",
+      className: "bg-status-info-surface text-status-info",
       rank: 0,
     };
   }
@@ -1666,7 +1537,7 @@ export function getMaintenancePlanStatus(plan, jobs) {
     return {
       id: "unscheduled",
       label: "No due date",
-      className: "bg-slate-100 text-slate-700",
+      className: "bg-surface-raised text-secondary-foreground",
       rank: 4,
     };
   }
@@ -1676,7 +1547,7 @@ export function getMaintenancePlanStatus(plan, jobs) {
     return {
       id: "overdue",
       label: "Overdue",
-      className: "bg-rose-100 text-rose-800",
+      className: "bg-status-danger-surface text-status-danger",
       rank: 1,
     };
   }
@@ -1685,7 +1556,7 @@ export function getMaintenancePlanStatus(plan, jobs) {
     return {
       id: "due-soon",
       label: plan.nextDueDate === today ? "Due today" : "Due soon",
-      className: "bg-amber-100 text-amber-800",
+      className: "bg-status-warning-surface text-status-warning",
       rank: 2,
     };
   }
@@ -1693,7 +1564,7 @@ export function getMaintenancePlanStatus(plan, jobs) {
   return {
     id: "upcoming",
     label: "Upcoming",
-    className: "bg-emerald-100 text-emerald-800",
+    className: "bg-status-success-surface text-status-success",
     rank: 3,
   };
 }
@@ -1887,14 +1758,14 @@ export function getInventoryStockStatus(item) {
   const reorderLevel = normalizeNumber(item?.reorderLevel, 0);
 
   if (quantity <= 0) {
-    return { id: "out", label: "Out of stock", className: "bg-rose-100 text-rose-800" };
+    return { id: "out", label: "Out of stock", className: "bg-status-danger-surface text-status-danger" };
   }
 
   if (reorderLevel > 0 && quantity <= reorderLevel) {
-    return { id: "low", label: "Low stock", className: "bg-amber-100 text-amber-800" };
+    return { id: "low", label: "Low stock", className: "bg-status-warning-surface text-status-warning" };
   }
 
-  return { id: "in", label: "In stock", className: "bg-emerald-100 text-emerald-800" };
+  return { id: "in", label: "In stock", className: "bg-status-success-surface text-status-success" };
 }
 
 export function normalizeStaffRecord(staffMember) {

@@ -64,8 +64,8 @@ function buildScheduleDraft(job) {
 function InfoItem({ label, children, className = "" }) {
   return (
     <div className={className}>
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd className="mt-1 text-sm font-medium leading-6 text-slate-900">{children}</dd>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 text-sm font-medium leading-6 text-foreground">{children}</dd>
     </div>
   );
 }
@@ -74,17 +74,17 @@ function ContactSummary({ contact, label }) {
   if (!contact) return null;
   return (
     <div className="py-3 first:pt-0 last:pb-0">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 font-medium text-slate-900">{getContactDisplayName(contact)}</p>
-      <p className="mt-1 text-sm text-slate-500">{[contact.phone, contact.email].filter(Boolean).join(" · ") || "No phone or email saved"}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 font-medium text-foreground">{getContactDisplayName(contact)}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{[contact.phone, contact.email].filter(Boolean).join(" · ") || "No phone or email saved"}</p>
     </div>
   );
 }
 
 function urgencyClassName(urgency) {
-  if (urgency === "High") return "bg-rose-100 text-rose-800";
-  if (urgency === "Medium") return "bg-amber-100 text-amber-800";
-  return "bg-slate-100 text-slate-700";
+  if (urgency === "High") return "bg-status-danger-surface text-status-danger";
+  if (urgency === "Medium") return "bg-status-warning-surface text-status-warning";
+  return "bg-surface-raised text-text-secondary";
 }
 
 export default function JobDetailsPage({
@@ -254,10 +254,10 @@ export default function JobDetailsPage({
         <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start">
           <aside className="record-major-panel min-w-0 rounded-xl border p-panel lg:sticky lg:top-28 lg:self-start">
             <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50 text-sky-700"><UserRound className="h-4 w-4" /></span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-status-info-surface text-status-info"><UserRound className="h-4 w-4" /></span>
               <div className="min-w-0">
-                <p className="text-xs font-medium text-slate-500">Customer</p>
-                <p className="truncate font-semibold text-slate-950">{job.customerName || "Not set"}</p>
+                <p className="text-xs font-medium text-muted-foreground">Customer</p>
+                <p className="truncate font-semibold text-foreground">{job.customerName || "Not set"}</p>
               </div>
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-1">
@@ -288,7 +288,7 @@ export default function JobDetailsPage({
                 </TabsList>
               </div>
 
-              <div className="bg-white/80 p-panel">
+              <div className="bg-card/80 p-panel">
                 <TabsContent value="overview" className="mt-0">
                   <WorkspaceSection
                     title="Job summary"
@@ -302,21 +302,21 @@ export default function JobDetailsPage({
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-title">Job title</Label>
                           <Input id="edit-job-title" className="h-11" value={overviewDraft.title} onChange={(event) => setOverviewDraft((current) => ({ ...current, title: event.target.value }))} aria-invalid={!overviewDraft.title.trim()} />
-                          {!overviewDraft.title.trim() ? <p className="text-sm text-rose-700">This field is required.</p> : null}
+                          {!overviewDraft.title.trim() ? <p className="text-sm text-status-danger">This field is required.</p> : null}
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-description">Description of work</Label>
                           <Textarea id="edit-job-description" rows={6} value={overviewDraft.description} onChange={(event) => setOverviewDraft((current) => ({ ...current, description: event.target.value }))} aria-invalid={!overviewDraft.description.trim()} />
-                          {!overviewDraft.description.trim() ? <p className="text-sm text-rose-700">This field is required.</p> : null}
+                          {!overviewDraft.description.trim() ? <p className="text-sm text-status-danger">This field is required.</p> : null}
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-address">Site address</Label>
                           <AddressAutocompleteInput id="edit-job-address" className="h-11" value={overviewDraft.jobAddress} onChange={(value) => setOverviewDraft((current) => ({ ...current, jobAddress: value }))} placeholder="Search the job site address" />
-                          {!normalizeSiteAddress(overviewDraft.jobAddress) ? <p className="text-sm text-rose-700">This field is required.</p> : null}
+                          {!normalizeSiteAddress(overviewDraft.jobAddress) ? <p className="text-sm text-status-danger">This field is required.</p> : null}
                         </div>
                         {customerSites.length > 0 ? (
                           <div>
-                            <p className="text-sm font-medium text-slate-700">Saved sites</p>
+                            <p className="text-sm font-medium text-text-secondary">Saved sites</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {customerSites.map((site) => (
                                 <Button key={site.id} type="button" variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address }))}>
@@ -327,9 +327,9 @@ export default function JobDetailsPage({
                           </div>
                         ) : null}
                         <div className="grid gap-2 sm:max-w-md">
-                          <p className="text-sm font-medium text-slate-700">OC number</p>
-                          <p className="text-sm font-medium text-slate-950">{draftJobSite?.ocNumber || "Not set"}</p>
-                          <p className="text-sm text-slate-500">This belongs to the site and is managed from the Site profile.</p>
+                          <p className="text-sm font-medium text-text-secondary">OC number</p>
+                          <p className="text-sm font-medium text-foreground">{draftJobSite?.ocNumber || "Not set"}</p>
+                          <p className="text-sm text-muted-foreground">This belongs to the site and is managed from the Site profile.</p>
                           {customer && draftJobSite && onOpenSiteProfile ? (
                             <Button type="button" variant="outline" className="h-11 justify-self-start rounded-lg" onClick={() => onOpenSiteProfile(customer.id, normalizeSiteAddress(draftJobSite.address).toLowerCase())}>
                               <MapPin className="h-4 w-4" /> Open site profile
@@ -341,7 +341,7 @@ export default function JobDetailsPage({
                           <Input id="edit-job-client-reference" className="h-11" value={overviewDraft.clientReference} onChange={(event) => setOverviewDraft((current) => ({ ...current, clientReference: event.target.value }))} placeholder="Optional purchase order or client reference" />
                         </div>
                         <details className="record-inset-surface rounded-lg p-3 sm:p-4">
-                          <summary className="cursor-pointer font-medium text-slate-950">Job contacts</summary>
+                          <summary className="cursor-pointer font-medium text-foreground">Job contacts</summary>
                           <div className="mt-4 grid gap-3">
                             <ContactSnapshotEditor title="Requester" description="Who asked for this work." contacts={customerContacts} fallbackRole="Requester" value={overviewDraft.requesterContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, requesterContact: contact }))} />
                             <ContactSnapshotEditor title="On-site contact" description="Who the team should speak with on arrival." contacts={customerContacts} fallbackRole="On-site contact" value={overviewDraft.onsiteContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, onsiteContact: contact }))} />
@@ -359,8 +359,8 @@ export default function JobDetailsPage({
                     ) : (
                       <div className="grid gap-4">
                         <div>
-                          <p className="text-sm font-medium text-slate-500">Description</p>
-                          <p className="mt-2 whitespace-pre-wrap text-base leading-7 text-slate-800">{job.description}</p>
+                          <p className="text-sm font-medium text-muted-foreground">Description</p>
+                          <p className="mt-2 whitespace-pre-wrap text-base leading-7 text-foreground">{job.description}</p>
                         </div>
                         <dl className="record-subtle-divider-y grid gap-x-4 gap-y-3 py-3 sm:grid-cols-2">
                           <InfoItem label="Customer">{job.customerName || "Not set"}</InfoItem>
@@ -373,17 +373,17 @@ export default function JobDetailsPage({
                         </dl>
 
                         <div>
-                          <h3 className="font-semibold text-slate-950">Job contacts</h3>
+                          <h3 className="font-semibold text-foreground">Job contacts</h3>
                           <div className="mt-3 divide-y divide-slate-200">
                             <ContactSummary label="Requester" contact={requesterContact} />
                             <ContactSummary label="On-site contact" contact={onsiteContact} />
                             <ContactSummary label="Billing contact" contact={billingContact} />
-                            {!requesterContact && !onsiteContact && !billingContact ? <p className="py-3 text-sm text-slate-500">No job-specific contacts saved.</p> : null}
+                            {!requesterContact && !onsiteContact && !billingContact ? <p className="py-3 text-sm text-muted-foreground">No job-specific contacts saved.</p> : null}
                           </div>
                         </div>
 
                         {siteAccessNote?.notes ? (
-                          <div className="border-l-4 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                          <div className="border-l-4 border-status-warning-border bg-status-warning-surface px-4 py-3 text-sm text-status-warning">
                             <p className="font-medium">Site access notes</p>
                             <p className="mt-1 whitespace-pre-wrap leading-6">{siteAccessNote.notes}</p>
                           </div>
@@ -429,12 +429,12 @@ export default function JobDetailsPage({
                         </Select>
                       </div>
                       <div className="record-passive-surface rounded-lg px-4 py-3 text-sm">
-                        <p className="font-medium text-slate-950">Service Board status</p>
-                        <div className="mt-2 flex items-center gap-2"><Badge className={statusTheme.badge}>{job.status}</Badge><span className="text-slate-500">Change from the page header.</span></div>
+                        <p className="font-medium text-foreground">Service Board status</p>
+                        <div className="mt-2 flex items-center gap-2"><Badge className={statusTheme.badge}>{job.status}</Badge><span className="text-muted-foreground">Change from the page header.</span></div>
                       </div>
                     </div>
                     {job.serviceBoardTomorrowDate ? (
-                      <div className="record-thin-border mt-5 rounded-lg border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                      <div className="record-thin-border mt-5 rounded-lg border-status-info-border bg-status-info-surface px-4 py-3 text-sm text-status-info">
                         Planned for Tomorrow on {formatDate(job.serviceBoardTomorrowDate)}.
                       </div>
                     ) : null}
@@ -450,34 +450,34 @@ export default function JobDetailsPage({
                   <TabsContent value="documents" className="mt-0">
                     <WorkspaceSection title="Documents" description="Existing quote and invoice actions remain connected to the current document workflow.">
                       <div className="grid gap-4 md:grid-cols-2">
-                        <article className="record-thin-border rounded-lg border-sky-200 bg-sky-50 p-3">
+                        <article className="record-thin-border rounded-lg border-status-info-border bg-status-info-surface p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <FileText className="h-5 w-5 text-sky-700" />
-                              <h3 className="mt-3 font-semibold text-slate-950">Quote</h3>
-                              <p className="mt-1 text-sm text-slate-600">{job.quote ? `Saved · ${money(calculateQuoteTotal(job.quote.items))}` : "No quote saved yet"}</p>
-                              {job.quote?.sentHistory?.length ? <p className="mt-2 text-xs text-slate-500">Sent {job.quote.sentHistory.length} {job.quote.sentHistory.length === 1 ? "time" : "times"}</p> : null}
+                              <FileText className="h-5 w-5 text-status-info" />
+                              <h3 className="mt-3 font-semibold text-foreground">Quote</h3>
+                              <p className="mt-1 text-sm text-text-secondary">{job.quote ? `Saved · ${money(calculateQuoteTotal(job.quote.items))}` : "No quote saved yet"}</p>
+                              {job.quote?.sentHistory?.length ? <p className="mt-2 text-xs text-muted-foreground">Sent {job.quote.sentHistory.length} {job.quote.sentHistory.length === 1 ? "time" : "times"}</p> : null}
                             </div>
-                            {job.quote?.sentHistory?.length && onOpenSentDocument ? <Button type="button" variant="outline" className="h-11 rounded-lg bg-white" onClick={() => onOpenSentDocument("quote")}>Open sent</Button> : null}
+                            {job.quote?.sentHistory?.length && onOpenSentDocument ? <Button type="button" variant="outline" className="h-11 rounded-lg bg-card" onClick={() => onOpenSentDocument("quote")}>Open sent</Button> : null}
                           </div>
                           {onOpenDocument ? <Button type="button" className="mt-4 h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("quote")}>Open Quote Editor</Button> : null}
                         </article>
 
-                        <article className="record-thin-border rounded-lg border-emerald-200 bg-emerald-50 p-3">
+                        <article className="record-thin-border rounded-lg border-status-success-border bg-status-success-surface p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <FileText className="h-5 w-5 text-emerald-700" />
-                              <h3 className="mt-3 font-semibold text-slate-950">Invoice</h3>
-                              <p className="mt-1 text-sm text-slate-600">{job.invoice ? `Saved · ${money(calculateInvoiceTotal(job.invoice.items))}` : "No invoice saved yet"}</p>
+                              <FileText className="h-5 w-5 text-status-success" />
+                              <h3 className="mt-3 font-semibold text-foreground">Invoice</h3>
+                              <p className="mt-1 text-sm text-text-secondary">{job.invoice ? `Saved · ${money(calculateInvoiceTotal(job.invoice.items))}` : "No invoice saved yet"}</p>
                               {job.invoice ? (
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <Badge className={invoiceStatus.className}>{invoiceStatus.label}</Badge>
                                   <Badge variant="secondary">Balance {money(invoicePayment.balanceAmount)}</Badge>
                                 </div>
                               ) : null}
-                              {job.invoice?.sentHistory?.length ? <p className="mt-2 text-xs text-slate-500">Sent {job.invoice.sentHistory.length} {job.invoice.sentHistory.length === 1 ? "time" : "times"}</p> : null}
+                              {job.invoice?.sentHistory?.length ? <p className="mt-2 text-xs text-muted-foreground">Sent {job.invoice.sentHistory.length} {job.invoice.sentHistory.length === 1 ? "time" : "times"}</p> : null}
                             </div>
-                            {job.invoice?.sentHistory?.length && onOpenSentDocument ? <Button type="button" variant="outline" className="h-11 rounded-lg bg-white" onClick={() => onOpenSentDocument("invoice")}>Open sent</Button> : null}
+                            {job.invoice?.sentHistory?.length && onOpenSentDocument ? <Button type="button" variant="outline" className="h-11 rounded-lg bg-card" onClick={() => onOpenSentDocument("invoice")}>Open sent</Button> : null}
                           </div>
                           {onOpenDocument ? <Button type="button" className="mt-4 h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("invoice")}>Open Invoice Editor</Button> : null}
                         </article>
@@ -510,10 +510,10 @@ export default function JobDetailsPage({
                       ) : job.notes.map((entry) => (
                         <article key={entry.id} className="py-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="font-medium text-slate-900">{entry.author}</p>
-                            <time className="text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString()}</time>
+                            <p className="font-medium text-foreground">{entry.author}</p>
+                            <time className="text-xs text-muted-foreground">{new Date(entry.createdAt).toLocaleString()}</time>
                           </div>
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{entry.text}</p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary">{entry.text}</p>
                         </article>
                       ))}
                     </div>
@@ -523,7 +523,7 @@ export default function JobDetailsPage({
                     title="Photos"
                     description="Upload and review images attached to this job."
                     trailing={(
-                      <Label htmlFor="job-photo-upload" className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-white px-4 text-sm font-medium hover:bg-slate-50">
+                      <Label htmlFor="job-photo-upload" className="inline-flex h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border bg-card px-4 text-sm font-medium hover:bg-muted">
                         <Camera className="h-4 w-4" /> Upload photos
                       </Label>
                     )}
@@ -538,13 +538,13 @@ export default function JobDetailsPage({
                     ) : (
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {jobPhotos.map((photo, index) => (
-                          <div key={photo.id} className="record-thin-border group relative overflow-hidden rounded-lg border-slate-200 bg-slate-50">
-                            <button type="button" className="w-full text-left outline-none focus-visible:ring-3 focus-visible:ring-sky-300" onClick={() => setSelectedPhoto(photo)}>
+                          <div key={photo.id} className="record-thin-border group relative overflow-hidden rounded-lg border-border bg-muted">
+                            <button type="button" className="w-full text-left outline-none focus-visible:ring-3 focus-visible:ring-status-info-border" onClick={() => setSelectedPhoto(photo)}>
                               <img src={photo.url} alt={photo.name || `Job photo ${index + 1}`} className="h-36 w-full object-cover" />
-                              <p className="truncate px-3 py-3 text-sm font-medium text-slate-900">{photo.name || `Photo ${index + 1}`}</p>
+                              <p className="truncate px-3 py-3 text-sm font-medium text-foreground">{photo.name || `Photo ${index + 1}`}</p>
                             </button>
                             {onDeletePhoto ? (
-                              <Button type="button" size="icon" variant="outline" className="absolute right-2 top-2 h-11 w-11 rounded-full bg-white/95 text-rose-700 opacity-100 shadow-sm sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100" onClick={(event) => {
+                              <Button type="button" size="icon" variant="outline" className="absolute right-2 top-2 h-11 w-11 rounded-full bg-card/95 text-status-danger opacity-100 shadow-sm sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100" onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
                                 onDeletePhoto(photo);
@@ -580,7 +580,7 @@ export default function JobDetailsPage({
             {activeSelectedPhoto ? (
               <div className="flex min-h-[50vh] items-center justify-center gap-2">
                 {jobPhotos.length > 1 ? <Button type="button" variant="outline" size="icon-lg" className="shrink-0 rounded-full" onClick={() => cyclePhoto(-1)} aria-label="Previous photo"><ChevronLeft className="h-5 w-5" /></Button> : null}
-                <div className="flex min-h-[50vh] min-w-0 flex-1 items-center justify-center rounded-2xl bg-slate-950 p-3">
+                <div className="flex min-h-[50vh] min-w-0 flex-1 items-center justify-center rounded-2xl bg-media-stage p-3">
                   <img src={activeSelectedPhoto.url} alt={activeSelectedPhoto.name || "Job photo"} className="max-h-[72vh] max-w-full rounded-xl object-contain" />
                 </div>
                 {jobPhotos.length > 1 ? <Button type="button" variant="outline" size="icon-lg" className="shrink-0 rounded-full" onClick={() => cyclePhoto(1)} aria-label="Next photo"><ChevronRight className="h-5 w-5" /></Button> : null}

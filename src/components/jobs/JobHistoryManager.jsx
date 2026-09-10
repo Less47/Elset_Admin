@@ -39,9 +39,9 @@ const jobHistorySortOptions = [
 ];
 
 function getUrgencyBadgeClassName(urgency) {
-  if (urgency === "High") return "bg-rose-100 text-rose-800";
-  if (urgency === "Medium") return "bg-amber-100 text-amber-800";
-  return "bg-slate-100 text-slate-700";
+  if (urgency === "High") return "bg-status-danger-surface text-status-danger";
+  if (urgency === "Medium") return "bg-status-warning-surface text-status-warning";
+  return "bg-surface-raised text-text-secondary";
 }
 
 export default function JobHistoryManager({
@@ -215,7 +215,7 @@ export default function JobHistoryManager({
           <>
           <DesktopControlField htmlFor="desktop-job-history-sort" label="Sort by" size="medium">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger id="desktop-job-history-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-history-sort" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -232,7 +232,7 @@ export default function JobHistoryManager({
 
           <DesktopControlField htmlFor="desktop-job-status-filter" label="Status" size="medium">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger id="desktop-job-status-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-status-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -248,7 +248,7 @@ export default function JobHistoryManager({
 
           <DesktopControlField htmlFor="desktop-job-urgency-filter" label="Urgency" size="medium">
             <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-              <SelectTrigger id="desktop-job-urgency-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-urgency-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -264,7 +264,7 @@ export default function JobHistoryManager({
 
           <DesktopControlField htmlFor="desktop-job-document-filter" label="Documents" size="large">
             <Select value={documentFilter} onValueChange={setDocumentFilter}>
-              <SelectTrigger id="desktop-job-document-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-document-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -281,7 +281,7 @@ export default function JobHistoryManager({
 
           <DesktopControlField htmlFor="desktop-job-created-range" label="Quick range" size="small">
             <Select value={createdRange} onValueChange={setCreatedRange}>
-              <SelectTrigger id="desktop-job-created-range" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-job-created-range" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -297,7 +297,7 @@ export default function JobHistoryManager({
             <Input
               id="desktop-job-created-from"
               type="date"
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-border bg-card"
               value={createdFrom}
               onChange={(e) => setCreatedFrom(e.target.value)}
             />
@@ -307,7 +307,7 @@ export default function JobHistoryManager({
             <Input
               id="desktop-job-created-to"
               type="date"
-              className="data-toolbar-field rounded-lg border-slate-300 bg-white"
+              className="data-toolbar-field rounded-lg border-border bg-card"
               value={createdTo}
               onChange={(e) => setCreatedTo(e.target.value)}
             />
@@ -319,10 +319,10 @@ export default function JobHistoryManager({
       <Card
         className={mobileRecordLayout
           ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
-          : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+          : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
         data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
       >
-        <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
+        <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-5">
           {[
             { label: "Jobs", value: historyStats.total },
             { label: "Open", value: historyStats.open },
@@ -330,9 +330,9 @@ export default function JobHistoryManager({
             { label: "Quoted", value: historyStats.quoted },
             { label: "Invoiced", value: historyStats.invoiced },
           ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
+            <div key={stat.label} className="data-stat-card bg-card px-panel py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{stat.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{stat.value}</p>
             </div>
           ))}
         </div>
@@ -352,17 +352,17 @@ export default function JobHistoryManager({
                   <MobileRecordCard key={job.id} labelledBy={headingId} recordId={job.id}>
                     <MobileRecordHeader>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
-                        <h3 id={headingId} className="mt-0.5 line-clamp-2 font-semibold leading-5 text-slate-950">{job.title}</h3>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{job.jobNumber}</p>
+                        <h3 id={headingId} className="mt-0.5 line-clamp-2 font-semibold leading-5 text-foreground">{job.title}</h3>
                       </div>
-                      <Badge className={`${statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"} max-w-[9rem]`}>{job.status}</Badge>
+                      <Badge className={`${statusThemes[job.status]?.badge || "bg-surface-raised text-text-secondary"} max-w-[9rem]`}>{job.status}</Badge>
                     </MobileRecordHeader>
 
                     <MobileRecordBody>
-                      <p className="line-clamp-1 font-medium text-slate-900">{job.customerName}</p>
+                      <p className="line-clamp-1 font-medium text-foreground">{job.customerName}</p>
                       <p className="line-clamp-2">{job.jobAddress || "No site address saved"}</p>
                       <p className="text-xs">
-                        <span className="font-semibold text-slate-700">Scheduled</span>{" "}
+                        <span className="font-semibold text-text-secondary">Scheduled</span>{" "}
                         {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}
                       </p>
                     </MobileRecordBody>
@@ -370,7 +370,7 @@ export default function JobHistoryManager({
                     <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                       <Badge className={getUrgencyBadgeClassName(job.urgency)}>{job.urgency || "Low"}</Badge>
                       <Badge variant="secondary">{job.hasQuote ? "Quote saved" : "No quote"}</Badge>
-                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-rose-200" : ""}`}>{job.invoiceStatus.label}</Badge>
+                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-status-danger-border" : ""}`}>{job.invoiceStatus.label}</Badge>
                     </div>
 
                     <MobileRecordActions>
@@ -396,8 +396,8 @@ export default function JobHistoryManager({
           ) : (
             <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
-              <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
+              <div className="data-grid grid min-w-[600px] gap-px bg-surface-selected md:min-w-0">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Customer</span>
                   <span>Status</span>
@@ -409,29 +409,29 @@ export default function JobHistoryManager({
                     key={job.id}
                     onDoubleClick={() => onOpenJob(job)}
                     title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-slate-200 transition [&>*]:bg-white"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-surface-selected transition [&>*]:bg-card"
                   >
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{job.jobNumber}</p>
-                      <p className="truncate font-semibold text-slate-950">{job.title}</p>
-                      <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{job.description || "No description saved."}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{job.jobNumber}</p>
+                      <p className="truncate font-semibold text-foreground">{job.title}</p>
+                      <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{job.description || "No description saved."}</p>
                     </div>
 
-                    <div className="min-w-0 text-slate-700">
-                      <p className="truncate font-medium text-slate-900">{job.customerName}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.jobAddress || "No site address saved"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+                    <div className="min-w-0 text-text-secondary">
+                      <p className="truncate font-medium text-foreground">{job.customerName}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{job.jobAddress || "No site address saved"}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
                     </div>
 
                     <div className="flex min-w-0 flex-wrap items-center gap-1">
-                      <Badge className={`${statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"} px-1.5 py-0 text-[10px]`}>{job.status}</Badge>
+                      <Badge className={`${statusThemes[job.status]?.badge || "bg-surface-raised text-text-secondary"} px-1.5 py-0 text-[10px]`}>{job.status}</Badge>
                       <Badge className={`${getUrgencyBadgeClassName(job.urgency)} px-1.5 py-0 text-[10px]`}>{job.urgency || "Low"}</Badge>
                       <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{job.hasQuote ? "Quote" : "No quote"}</Badge>
-                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-rose-200" : ""} px-1.5 py-0 text-[10px]`}>{job.invoiceStatus.label}</Badge>
+                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-status-danger-border" : ""} px-1.5 py-0 text-[10px]`}>{job.invoiceStatus.label}</Badge>
                     </div>
 
                     <div className="flex items-center justify-end">
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(job)}>
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenJob(job)}>
                         Open
                       </Button>
                     </div>
@@ -441,8 +441,8 @@ export default function JobHistoryManager({
             </div>
             <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1520px]">
-              <div className="data-grid grid gap-px bg-slate-200">
-                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
+              <div className="data-grid grid gap-px bg-surface-selected">
+                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Customer & Site</span>
                   <span>Status</span>
@@ -458,41 +458,41 @@ export default function JobHistoryManager({
                     key={job.id}
                     onDoubleClick={() => onOpenJob(job)}
                     title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                   >
                     <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{job.jobNumber}</p>
-                      <p className="truncate font-semibold text-slate-950">{job.title}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-slate-500">{job.description || "No description saved."}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
+                      <p className="truncate font-semibold text-foreground">{job.title}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{job.description || "No description saved."}</p>
                     </div>
 
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-900">{job.customerName}</p>
-                      <p className="mt-1 truncate text-xs text-slate-500">{job.jobAddress || "No site address saved"}</p>
+                      <p className="truncate font-semibold text-foreground">{job.customerName}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{job.jobAddress || "No site address saved"}</p>
                     </div>
 
                     <div>
-                      <Badge className={statusThemes[job.status]?.badge || "bg-slate-100 text-slate-700"}>{job.status}</Badge>
+                      <Badge className={statusThemes[job.status]?.badge || "bg-surface-raised text-text-secondary"}>{job.status}</Badge>
                     </div>
 
                     <div>
                       <Badge className={getUrgencyBadgeClassName(job.urgency)}>{job.urgency || "Low"}</Badge>
                     </div>
 
-                    <p className="text-slate-700">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
+                    <p className="text-text-secondary">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p>
 
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="secondary">{job.hasQuote ? "Quote saved" : "No quote"}</Badge>
-                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-rose-200" : ""}`}>{job.invoiceStatus.label}</Badge>
+                      <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-status-danger-border" : ""}`}>{job.invoiceStatus.label}</Badge>
                     </div>
 
                     <div>
-                      <p className="font-medium text-slate-900">{formatDate(job.updatedAt)}</p>
-                      <p className="mt-1 text-xs text-slate-500">Created {formatDate(job.createdAt)}</p>
+                      <p className="font-medium text-foreground">{formatDate(job.updatedAt)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Created {formatDate(job.createdAt)}</p>
                     </div>
 
                     <div className="flex items-center justify-end">
-                      <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenJob(job)}>
+                      <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenJob(job)}>
                         Open Job
                       </Button>
                     </div>
@@ -525,7 +525,7 @@ export default function JobHistoryManager({
     >
       <FilterSheetField id="mobile-job-status-filter" label="Status">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger id="mobile-job-status-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="mobile-job-status-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {statuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
@@ -534,7 +534,7 @@ export default function JobHistoryManager({
       </FilterSheetField>
       <FilterSheetField id="mobile-job-urgency-filter" label="Urgency">
         <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-          <SelectTrigger id="mobile-job-urgency-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="mobile-job-urgency-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All urgency levels</SelectItem>
             {urgencyOptions.map((urgency) => <SelectItem key={urgency} value={urgency}>{urgency}</SelectItem>)}
@@ -543,7 +543,7 @@ export default function JobHistoryManager({
       </FilterSheetField>
       <FilterSheetField id="mobile-job-document-filter" label="Documents">
         <Select value={documentFilter} onValueChange={setDocumentFilter}>
-          <SelectTrigger id="mobile-job-document-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="mobile-job-document-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All jobs</SelectItem>
             <SelectItem value="quoted">With quote</SelectItem>
@@ -557,7 +557,7 @@ export default function JobHistoryManager({
       </FilterSheetField>
       <FilterSheetField id="mobile-job-created-range" label="Quick range">
         <Select value={createdRange} onValueChange={setCreatedRange}>
-          <SelectTrigger id="mobile-job-created-range" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="mobile-job-created-range" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all-time">All time</SelectItem>
             <SelectItem value="last-30">Last 30 days</SelectItem>
@@ -568,13 +568,13 @@ export default function JobHistoryManager({
       </FilterSheetField>
       <div className="grid gap-4 sm:grid-cols-2">
         <FilterSheetField id="mobile-job-created-from" label="Created from">
-          <Input id="mobile-job-created-from" type="date" className="h-11 rounded-xl bg-white" value={createdFrom} onChange={(event) => setCreatedFrom(event.target.value)} />
+          <Input id="mobile-job-created-from" type="date" className="h-11 rounded-xl bg-card" value={createdFrom} onChange={(event) => setCreatedFrom(event.target.value)} />
         </FilterSheetField>
         <FilterSheetField id="mobile-job-created-to" label="Created to">
-          <Input id="mobile-job-created-to" type="date" className="h-11 rounded-xl bg-white" value={createdTo} onChange={(event) => setCreatedTo(event.target.value)} />
+          <Input id="mobile-job-created-to" type="date" className="h-11 rounded-xl bg-card" value={createdTo} onChange={(event) => setCreatedTo(event.target.value)} />
         </FilterSheetField>
       </div>
-      <p className="text-xs leading-5 text-slate-500">Quick range and custom dates are combined when both are selected.</p>
+      <p className="text-xs leading-5 text-muted-foreground">Quick range and custom dates are combined when both are selected.</p>
     </MobileFilterSheet>
     </>
   );

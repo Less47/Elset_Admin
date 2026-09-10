@@ -69,7 +69,7 @@ export default function CalendarSheet({ open, modal = true, onOpenChange, title,
             <Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" disabled={busy} aria-label="Close calendar panel"><X className="h-4 w-4" /></Button>
           </DialogClose>
         </header>
-        {error ? <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{error}</p> : null}
+        {error ? <p role="alert" className="shrink-0 border-b border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">{error}</p> : null}
         {notice}
         <DialogBody className="calendar-sheet-body overscroll-contain p-3">{children}</DialogBody>
       </DialogContent>

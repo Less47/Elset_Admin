@@ -98,11 +98,11 @@ export default function MobileServiceBoard({
         onSelect={onSelectedViewChange}
       />
 
-      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5 rounded-2xl border bg-white/88 p-2 shadow-sm backdrop-blur">
+      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5 rounded-2xl border bg-card/88 p-2 shadow-sm backdrop-blur">
         <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="h-11 rounded-xl bg-white pl-9 pr-11 text-base"
+            className="h-11 rounded-xl bg-card pl-9 pr-11 text-base"
             value={officeSearch}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search jobs…"
@@ -111,7 +111,7 @@ export default function MobileServiceBoard({
           {officeSearch ? (
             <button
               type="button"
-              className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 outline-none hover:text-slate-900 focus-visible:ring-3 focus-visible:ring-sky-500/35"
+              className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-xl text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-status-info-border/35"
               onClick={() => onSearchChange("")}
               aria-label="Clear job search"
             >
@@ -124,7 +124,7 @@ export default function MobileServiceBoard({
           ref={filterTriggerRef}
           type="button"
           variant="outline"
-          className="relative h-11 w-11 rounded-xl bg-white p-0 sm:w-auto sm:px-3"
+          className="relative h-11 w-11 rounded-xl bg-card p-0 sm:w-auto sm:px-3"
           onClick={() => setFiltersOpen(true)}
           aria-label={`Open board filters${activeFilterCount ? `, ${activeFilterCount} active` : ""}`}
         >
@@ -140,7 +140,7 @@ export default function MobileServiceBoard({
         {!isTomorrowView ? (
           <Select value={sortMode} onValueChange={(nextSortMode) => onColumnSortModeChange(selectedView, nextSortMode)}>
             <SelectTrigger
-              className="h-11 w-11 rounded-xl bg-white px-0 sm:w-[116px] sm:px-3"
+              className="h-11 w-11 rounded-xl bg-card px-0 sm:w-[116px] sm:px-3"
               aria-label={`Sort ${selectedView} jobs`}
               title="Sort jobs"
             >
@@ -157,7 +157,7 @@ export default function MobileServiceBoard({
       </div>
 
       {statusMessage ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900" role="status">
+        <div className="rounded-xl border border-status-success-border bg-status-success-surface px-3 py-2 text-sm font-medium text-status-success" role="status">
           {statusMessage}
         </div>
       ) : null}
@@ -168,18 +168,18 @@ export default function MobileServiceBoard({
         aria-label={`${selectedLabel} jobs`}
         data-service-board-status={isTomorrowView ? undefined : selectedView}
         data-mobile-board-view={selectedLabel}
-        className="w-full min-w-0 max-w-full rounded-2xl border bg-white/64 p-2.5 shadow-sm backdrop-blur"
+        className="w-full min-w-0 max-w-full rounded-2xl border bg-card/64 p-2.5 shadow-sm backdrop-blur"
       >
         <div className="flex min-h-11 items-center justify-between gap-3 px-1 pb-2">
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-slate-950">{selectedLabel}</h2>
-            <p className="text-xs text-slate-600">{selectedJobs.length} {selectedJobs.length === 1 ? "job" : "jobs"}</p>
+            <h2 className="truncate text-base font-semibold text-foreground">{selectedLabel}</h2>
+            <p className="text-xs text-text-secondary">{selectedJobs.length} {selectedJobs.length === 1 ? "job" : "jobs"}</p>
           </div>
           {isTomorrowView && canManageTomorrow && tomorrowJobs.length > 0 ? (
             <Button
               type="button"
               variant="ghost"
-              className="min-h-11 rounded-xl px-3 text-rose-700"
+              className="min-h-11 rounded-xl px-3 text-status-danger"
               onClick={onRemoveAllJobsFromTomorrow}
             >
               <Trash2 className="h-4 w-4" />
@@ -190,10 +190,10 @@ export default function MobileServiceBoard({
 
         {selectedJobs.length === 0 ? (
           <div className={`rounded-2xl border border-dashed px-4 py-10 text-center ${
-            isTomorrowView ? "border-sky-200 bg-sky-50/75" : statusThemes[selectedView]?.card || "bg-slate-50"
+            isTomorrowView ? "border-status-info-border bg-status-info-surface/75" : statusThemes[selectedView]?.card || "bg-muted"
           }`}>
-            <p className="font-semibold text-slate-900">No jobs in {selectedLabel}</p>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="font-semibold text-foreground">No jobs in {selectedLabel}</p>
+            <p className="mt-1 text-sm text-text-secondary">
               {isTomorrowView
                 ? canManageTomorrow
                   ? "Use the Tomorrow action on a job to build the plan."

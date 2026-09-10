@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CalendarDays, LogOut, Menu, Plus, X } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
+import WorkspaceLogo from "@/components/app/WorkspaceLogo";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LOGO_SRC } from "@/lib/app-support";
 
 export default function MobileWorkspaceNavigation({
   activeSection,
@@ -24,6 +24,7 @@ export default function MobileWorkspaceNavigation({
   onNewJob,
   onOpenTomorrow,
   roleLabel,
+  workspaceLogoUrl,
   themePalette,
   tomorrowCount,
   tomorrowSelected,
@@ -57,7 +58,7 @@ export default function MobileWorkspaceNavigation({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-11 w-11 rounded-xl border-white/20 bg-white/10 p-0 text-inherit hover:bg-white/20 hover:text-inherit"
+                className="h-11 w-11 rounded-xl border-white/20 bg-current/10 p-0 text-inherit hover:bg-current/20 hover:text-inherit"
                 aria-label="Open navigation"
               >
                 <Menu className="h-5 w-5" />
@@ -72,7 +73,7 @@ export default function MobileWorkspaceNavigation({
             {activeSection === "service-board" ? (
               <Button
                 type="button"
-                className={`relative h-11 w-11 rounded-xl p-0 ${tomorrowSelected ? "ring-3 ring-white/55" : ""}`}
+                className={`relative h-11 w-11 rounded-xl p-0 ${tomorrowSelected ? "ring-3 ring-border" : ""}`}
                 style={themePalette.primaryButton}
                 onClick={onOpenTomorrow}
                 aria-label={`Tomorrow, ${tomorrowCount} planned ${tomorrowCount === 1 ? "job" : "jobs"}`}
@@ -80,7 +81,7 @@ export default function MobileWorkspaceNavigation({
                 title="Tomorrow"
               >
                 <CalendarDays className="h-5 w-5" />
-                <span className="absolute -bottom-1 -right-1 inline-flex min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-slate-900 shadow-sm">
+                <span className="absolute -bottom-1 -right-1 inline-flex min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-bold text-foreground shadow-sm">
                   {tomorrowCount}
                 </span>
               </Button>
@@ -100,30 +101,23 @@ export default function MobileWorkspaceNavigation({
           showCloseButton={false}
         >
           <DialogHeader
-            className="gap-0 border-b p-3 pr-3"
+            className="relative gap-0 border-b p-2"
             style={{
-              ...themePalette.sidebarHeader,
               borderColor: themePalette.borderColor,
-              paddingTop: "calc(0.75rem + env(safe-area-inset-top))",
-              paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
-              paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
+              paddingTop: "calc(0.5rem + env(safe-area-inset-top))",
+              paddingRight: "calc(0.5rem + env(safe-area-inset-right))",
+              paddingLeft: "calc(0.5rem + env(safe-area-inset-left))",
             }}
           >
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/5 bg-white px-1 shadow-sm">
-                <img src={LOGO_SRC} alt="Elset" className="block h-auto w-[136%] max-w-none" />
-              </div>
-              <div className="min-w-0 flex-1 text-left">
-                <DialogTitle className="text-base font-semibold">Application navigation</DialogTitle>
-                <DialogDescription className="mt-1 truncate text-xs text-inherit opacity-70">
-                  {roleLabel} menu
-                </DialogDescription>
-              </div>
+            <div className="relative">
+              <WorkspaceLogo url={workspaceLogoUrl} dense />
+              <DialogTitle className="sr-only">Application navigation</DialogTitle>
+              <DialogDescription className="sr-only">Workspace navigation</DialogDescription>
               <DialogClose asChild>
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-11 w-11 rounded-xl border-white/20 bg-white/10 p-0 text-inherit hover:bg-white/20 hover:text-inherit"
+                  className="absolute right-1 top-1/2 h-11 w-11 -translate-y-1/2 rounded-xl p-0 text-inherit"
                   aria-label="Close navigation"
                 >
                   <X className="h-5 w-5" />

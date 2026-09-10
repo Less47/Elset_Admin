@@ -133,15 +133,15 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
       <p className="document-feedback" role="status" aria-live="polite">{busy ? isSaving ? "Saving..." : "Sending..." : dirty ? "Unsaved changes" : feedback}</p>
       {error ? <p role="alert" className="document-error">{error}</p> : null}
       {sendPreview ? <div className="document-preview-layout" data-document-preview>
-        <div className="document-pdf-panel"><iframe title={`${documentLabel} PDF preview`} src={sendPreview.previewUrl} /><a href={sendPreview.previewUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-sky-800 underline">Open PDF in a new tab</a></div>
+        <div className="document-pdf-panel"><iframe title={`${documentLabel} PDF preview`} src={sendPreview.previewUrl} /><a href={sendPreview.previewUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-status-info underline">Open PDF in a new tab</a></div>
         <section className="document-summary" aria-labelledby="send-details-title">
-          <h2 id="send-details-title">Send details</h2><p className="text-sm text-slate-600">Review the PDF before confirming the send.</p>
+          <h2 id="send-details-title">Send details</h2><p className="text-sm text-text-secondary">Review the PDF before confirming the send.</p>
           <dl><Detail label="To">{sendPreview.toName || recipientName}<br />{sendPreview.toEmail || recipientEmail || "No email saved"}</Detail><Detail label="From">{sendPreview.fromEmail || ADMIN_EMAIL}</Detail>{sendPreview.ccEmail ? <Detail label="CC">{sendPreview.ccEmail}</Detail> : null}<Detail label="Document">{sendPreview.stampText ? `${sendPreview.stampText} ${documentLabel}` : `${documentLabel} PDF`}</Detail><Detail label="Job">#{job.jobNumber}</Detail></dl>
-          {sendPreview.priorAttempts > 0 ? <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs">This customer already has {sendPreview.priorAttempts} previous {type} send {sendPreview.priorAttempts === 1 ? "attempt" : "attempts"}.</p> : null}
+          {sendPreview.priorAttempts > 0 ? <p className="rounded border border-status-warning-border bg-status-warning-surface p-2 text-xs">This customer already has {sendPreview.priorAttempts} previous {type} send {sendPreview.priorAttempts === 1 ? "attempt" : "attempts"}.</p> : null}
         </section>
       </div> : <fieldset disabled={busy || isPreviewingDocument} className="min-w-0 space-y-4" aria-label={`${documentLabel} editor`}>
         <section className="document-section" aria-labelledby="document-details-title">
-          <h2 id="document-details-title">{documentLabel} details</h2><p className="mb-3 text-sm text-slate-600 break-words">{job.customerName} · Job #{job.jobNumber} · {job.jobAddress}</p>
+          <h2 id="document-details-title">{documentLabel} details</h2><p className="mb-3 text-sm text-text-secondary break-words">{job.customerName} · Job #{job.jobNumber} · {job.jobAddress}</p>
           <div className="document-fields">
             <Field id="document-customer" label="Customer"><Input id="document-customer" value={job.customerName} disabled /></Field>
             <Field id="document-issue-date" label="Issue date"><Input id="document-issue-date" type="date" value={docState.issueDate} onChange={(e) => setDocState((p) => ({ ...p, issueDate: e.target.value }))} /></Field>
@@ -168,7 +168,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
         </div>
         {type === "invoice" ? <section className="document-section" aria-labelledby="document-payments-title">
           <div className="document-section-heading"><h2 id="document-payments-title">Payments received</h2><Button type="button" variant="outline" onClick={() => setDocState((prev) => ({ ...prev, payments: [...(prev.payments || []), { id: crypto.randomUUID(), amount: "", date: slugDate(), method: "", reference: "", notes: "" }] }))}><Plus className="h-4 w-4" /> Add Payment</Button></div>
-          {(docState.payments || []).length === 0 ? <p className="text-sm text-slate-600">No payments recorded yet.</p> : (docState.payments || []).map((payment, index) => <div className="document-payment" key={payment.id}>
+          {(docState.payments || []).length === 0 ? <p className="text-sm text-text-secondary">No payments recorded yet.</p> : (docState.payments || []).map((payment, index) => <div className="document-payment" key={payment.id}>
             <div className="document-payment-fields">
               <Field id={`payment-${payment.id}-amount`} label={`Payment ${index + 1} amount`}><Input id={`payment-${payment.id}-amount`} type="number" step="0.01" placeholder="Amount" value={payment.amount} onChange={(e) => updatePayment(payment.id, "amount", e.target.value)} /></Field>
               <Field id={`payment-${payment.id}-date`} label={`Payment ${index + 1} date`}><Input id={`payment-${payment.id}-date`} type="date" value={payment.date || ""} onChange={(e) => updatePayment(payment.id, "date", e.target.value)} /></Field>

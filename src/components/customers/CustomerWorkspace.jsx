@@ -10,13 +10,13 @@ import { buildCustomerSites, formatCustomerType, formatSiteType, formatDate, get
 import "./CustomerWorkspace.css";
 
 export function CustomerInfo({ label, children }) {
-  return <div className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-medium text-slate-950 [overflow-wrap:anywhere]">{children || "Not set"}</dd></div>;
+  return <div className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 font-medium text-foreground [overflow-wrap:anywhere]">{children || "Not set"}</dd></div>;
 }
 
 export function CustomerJobHistory({ jobs, onOpenJob }) {
   if (!jobs.length) return <EmptyState title="No jobs recorded yet" text="Jobs for this customer will appear here." />;
   return <MobileRecordList label="Job history">{[...jobs].sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt)).map((job) => <MobileRecordCard key={job.id} recordId={job.id} labelledBy={`customer-job-${job.id}`}>
-    <MobileRecordHeader><div className="min-w-0"><p className="text-xs text-slate-500">Job #{job.jobNumber}</p><h3 id={`customer-job-${job.id}`} className="font-semibold [overflow-wrap:anywhere]">{job.title}</h3></div><Badge variant="secondary" className="shrink-0">{job.status}</Badge></MobileRecordHeader>
+    <MobileRecordHeader><div className="min-w-0"><p className="text-xs text-muted-foreground">Job #{job.jobNumber}</p><h3 id={`customer-job-${job.id}`} className="font-semibold [overflow-wrap:anywhere]">{job.title}</h3></div><Badge variant="secondary" className="shrink-0">{job.status}</Badge></MobileRecordHeader>
     <MobileRecordBody><p className="line-clamp-2">{job.description}</p><p>Site: {job.jobAddress || "Not set"}</p><p className="text-xs">Latest activity: {formatDate(job.updatedAt)}</p></MobileRecordBody>
     <MobileRecordActions><Button type="button" variant="outline" onClick={() => onOpenJob(job)}>Open Job #{job.jobNumber}</Button></MobileRecordActions>
   </MobileRecordCard>)}</MobileRecordList>;
@@ -35,7 +35,7 @@ function CustomerSection({ desktop, name, title, count, action, description = ""
             {action ? <div className="shrink-0">{action}</div> : null}
           </header>
           <div className="customer-section-body">
-            {description ? <p className="mb-2 text-xs text-slate-600">{description}</p> : null}
+            {description ? <p className="mb-2 text-xs text-text-secondary">{description}</p> : null}
             {children}
           </div>
         </section>
@@ -64,21 +64,21 @@ function CustomerDetailsSection({ customer, jobs, deleting, onDelete, desktop })
           <span>{jobs.length} total jobs</span><span>{openJobs} open</span><span>{jobs.length - openJobs} completed</span>
         </div>
         {!desktop ? <div className="mt-3 flex justify-end border-t pt-3">
-          <Button type="button" variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={deleting} onClick={onDelete}>Delete Customer</Button>
+          <Button type="button" variant="outline" className="border-status-danger-border text-status-danger hover:bg-status-danger-surface" disabled={deleting} onClick={onDelete}>Delete Customer</Button>
         </div> : null}
     </CustomerSection>
   );
 }
 
 function SectionCount({ children }) {
-  return <span className="ml-1 text-xs font-normal text-slate-600">{children}</span>;
+  return <span className="ml-1 text-xs font-normal text-text-secondary">{children}</span>;
 }
 
 function CustomerSitesSection({ sites, onOpenSite, onCreateSite, desktop }) {
   return (
     <CustomerSection desktop={desktop} name="sites" title="Sites" count={sites.length}
       action={<Button type="button" className={desktop ? "h-7" : ""} size={desktop ? "sm" : "default"} onClick={onCreateSite}>Add Site</Button>}>
-        {!sites.length ? <p className="text-sm text-slate-700">No sites saved yet. Add a site for this customer.</p> : (
+        {!sites.length ? <p className="text-sm text-text-secondary">No sites saved yet. Add a site for this customer.</p> : (
           <MobileRecordList label="Customer sites">{sites.map((site) => (
             <MobileRecordCard key={site.id} recordId={site.id} labelledBy={`customer-site-${site.id}`}>
               <MobileRecordHeader>
@@ -97,7 +97,7 @@ function CustomerSitesSection({ sites, onOpenSite, onCreateSite, desktop }) {
 function CustomerContactsSection({ customer, contacts, sites, desktop }) {
   return (
     <CustomerSection desktop={desktop} name="contacts" title="Contacts" count={contacts.length}>
-        {!contacts.length ? <p className="text-sm text-slate-700">No contacts saved yet. Edit this customer to add contacts.</p> : (
+        {!contacts.length ? <p className="text-sm text-text-secondary">No contacts saved yet. Edit this customer to add contacts.</p> : (
           <MobileRecordList label="Customer contacts">{contacts.map((contact) => (
             <MobileRecordCard key={contact.id} recordId={contact.id} labelledBy={`customer-contact-${contact.id}`}>
               <MobileRecordHeader className="flex-wrap">
@@ -118,7 +118,7 @@ function CustomerContactsSection({ customer, contacts, sites, desktop }) {
 function CustomerJobsSection({ jobs, onOpenJob, desktop }) {
   return (
     <CustomerSection desktop={desktop} name="jobs" title="Job History" count={jobs.length} description={jobs.length ? "Most recent activity first." : ""}>
-        {jobs.length ? <CustomerJobHistory jobs={jobs} onOpenJob={onOpenJob} /> : <p className="text-sm text-slate-700">No jobs recorded yet.</p>}
+        {jobs.length ? <CustomerJobHistory jobs={jobs} onOpenJob={onOpenJob} /> : <p className="text-sm text-text-secondary">No jobs recorded yet.</p>}
     </CustomerSection>
   );
 }
@@ -142,7 +142,7 @@ export default function CustomerWorkspace({ customer, jobs, tab = "overview", on
 
   return (
     <RecordWorkspace backLabel={backLabel} eyebrow="Customers" title={customer.name} subtitle={[customer.email, customer.phone].filter(Boolean).join(" · ")}
-      status={<Badge className="bg-white/90 text-slate-900">{formatCustomerType(customer.customerType)}</Badge>}
+      status={<Badge className="bg-card/90 text-foreground">{formatCustomerType(customer.customerType)}</Badge>}
       onBack={() => onBack()} maxWidth={desktop ? "max-w-none" : RECORD_WORKSPACE_WIDE_MAX_WIDTH} headerActions={<Button type="button" className="h-11" onClick={onEdit}>Edit Customer</Button>}>
       <div className="min-w-0 text-sm [&_[data-mobile-record-card]]:rounded-lg [&_[data-mobile-record-card]]:p-2.5" data-customer-workspace>
         {desktop ? (
@@ -151,9 +151,9 @@ export default function CustomerWorkspace({ customer, jobs, tab = "overview", on
             <div className="grid min-w-0 gap-3" data-customer-column="left">{sections.overview}{sections.contacts}</div>
             <div className="grid min-w-0 gap-3" data-customer-column="right">{sections.sites}{sections.jobs}</div>
           </div>
-          <section className="mt-3 flex min-w-0 items-center justify-between gap-3 border-y border-slate-300/80 py-2" aria-label="Destructive customer actions" data-customer-danger-zone>
-            <span className="text-xs font-medium text-slate-700">Danger zone</span>
-            <Button type="button" variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50" disabled={deleting} onClick={deleteCustomer}>Delete Customer</Button>
+          <section className="mt-3 flex min-w-0 items-center justify-between gap-3 border-y border-border py-2" aria-label="Destructive customer actions" data-customer-danger-zone>
+            <span className="text-xs font-medium text-text-secondary">Danger zone</span>
+            <Button type="button" variant="outline" className="border-status-danger-border text-status-danger hover:bg-status-danger-surface" disabled={deleting} onClick={deleteCustomer}>Delete Customer</Button>
           </section>
           </>
         ) : (

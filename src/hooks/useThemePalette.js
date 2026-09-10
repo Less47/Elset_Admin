@@ -1,12 +1,11 @@
+import { buildSemanticTheme } from "@/lib/theme-tokens";
 import { useLayoutEffect, useMemo } from "react";
 import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
-  buildDataViewTheme,
   contentDensityStyles,
   getContrastTextColor,
   hexToRgba,
-  mixHexColors,
   normalizeThemeSettings,
   sidebarWidthStyles,
 } from "@/lib/app-support";
@@ -26,53 +25,17 @@ export function useThemePalette(settings) {
     const density = contentDensityStyles[themeSettings.contentDensity] || contentDensityStyles.comfortable;
     const borderColor = themeSettings.borderColor;
     const dialogBorder = borderColor;
-    const dialogGradientStart = mixHexColors(
-      themeSettings.dialogSurface,
-      "#FFFFFF",
-      dialogText === APP_TEXT_LIGHT ? 0.16 : 0.32
-    );
-    const dialogGradientEnd = mixHexColors(
-      themeSettings.dialogSurface,
-      APP_TEXT_DARK,
-      dialogText === APP_TEXT_LIGHT ? 0.24 : 0.1
-    );
-    const dialogSurfaceGradient = `radial-gradient(190% 160% at 50% -18%, ${dialogGradientStart} 0%, ${themeSettings.dialogSurface} 62%, ${dialogGradientEnd} 100%)`;
-    const dialogMutedSurface = mixHexColors(
-      themeSettings.dialogSurface,
-      dialogText === APP_TEXT_LIGHT ? "#FFFFFF" : APP_TEXT_DARK,
-      dialogText === APP_TEXT_LIGHT ? 0.08 : 0.04
-    );
-    const dataViewTheme = buildDataViewTheme(themeSettings);
+    const semantic = buildSemanticTheme(themeSettings);
+    const dialogSurfaceGradient = semantic.vars['--dialog-surface-gradient'];
+    const dialogMutedSurface = semantic.vars['--dialog-muted-surface'];
 
     return {
+      dark: semantic.dark,
       rootStyle: {
-        backgroundImage: `linear-gradient(135deg, ${themeSettings.pageBackgroundStart} 0%, ${mixHexColors(themeSettings.pageBackgroundStart, "#FFFFFF", 0.5)} 48%, ${themeSettings.pageBackgroundEnd} 100%)`,
-        "--primary": themeSettings.actionColor,
-        "--primary-foreground": actionText,
-        "--ring": themeSettings.actionColor,
-        "--border": borderColor,
-        "--input": borderColor,
-        "--ui-border-color": borderColor,
-        "--dialog-surface": themeSettings.dialogSurface,
-        "--dialog-surface-gradient": dialogSurfaceGradient,
-        "--dialog-foreground": dialogText,
-        "--dialog-border": dialogBorder,
-        "--dialog-muted-surface": dialogMutedSurface,
-        "--dialog-footer-surface": dialogMutedSurface,
-        "--workspace-hero-bg": themeSettings.heroSurface,
-        "--workspace-hero-text": heroText,
-        "--data-view-accent": dataViewTheme.accent,
-        "--data-view-surface": dataViewTheme.surface,
-        "--data-view-header-start": dataViewTheme.headerStart,
-        "--data-view-header-end": dataViewTheme.headerEnd,
-        "--data-view-border": dataViewTheme.border,
-        "--data-view-border-strong": dataViewTheme.borderStrong,
-        "--data-view-grid-line": dataViewTheme.gridLine,
-        "--data-view-header-cell": dataViewTheme.headerCell,
-        "--data-view-row": dataViewTheme.row,
-        "--data-view-row-alt": dataViewTheme.rowAlt,
-        "--data-view-row-hover": dataViewTheme.rowHover,
-        "--data-view-stat": dataViewTheme.stat,
+        backgroundImage: semantic.vars["--page-gradient"],
+        color: semantic.vars["--foreground"],
+        colorScheme: semantic.dark ? "dark" : "light",
+        ...semantic.vars,
         "--sidebar-width": sidebarSize.width,
         "--sidebar-offset": sidebarSize.offset,
         "--section-gap": density.sectionGap,
@@ -91,7 +54,7 @@ export function useThemePalette(settings) {
         backgroundColor: themeSettings.sidebarHeader,
         color: sidebarHeaderText,
       },
-      sidebarHeaderMuted: hexToRgba(sidebarHeaderText, sidebarHeaderText === APP_TEXT_LIGHT ? 0.72 : 0.64),
+      sidebarHeaderMuted: semantic.vars['--sidebar-header-muted'],
       sidebarInactiveButton: {
         backgroundColor: hexToRgba(sidebarSurfaceTone, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.08 : 0.04),
         borderColor,
@@ -101,7 +64,7 @@ export function useThemePalette(settings) {
         backgroundColor: hexToRgba(sidebarSurfaceTone, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.1 : 0.06),
         color: sidebarSurfaceText,
       },
-      sidebarInactiveMuted: hexToRgba(sidebarSurfaceText, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.72 : 0.6),
+      sidebarInactiveMuted: semantic.vars['--sidebar-muted'],
       sidebarActiveButton: {
         backgroundColor: themeSettings.sidebarActive,
         borderColor,
@@ -115,7 +78,7 @@ export function useThemePalette(settings) {
         ),
         color: sidebarActiveText,
       },
-      sidebarActiveMuted: hexToRgba(sidebarActiveText, 0.76),
+      sidebarActiveMuted: semantic.vars['--sidebar-primary-muted'],
       heroCard: {
         backgroundColor: themeSettings.heroSurface,
         borderColor,
@@ -126,7 +89,7 @@ export function useThemePalette(settings) {
         borderColor,
         color: actionText,
       },
-      primaryButtonHover: mixHexColors(themeSettings.actionColor, "#000000", 0.12),
+      primaryButtonHover: semantic.vars["--primary-hover"],
       borderColor,
       dialogSurface: themeSettings.dialogSurface,
       dialogSurfaceGradient,
@@ -141,51 +104,19 @@ export function useThemePalette(settings) {
 
     const root = document.documentElement;
 
-    root.style.setProperty("--primary", themeSettings.actionColor);
-    root.style.setProperty("--primary-foreground", themePalette.rootStyle["--primary-foreground"]);
-    root.style.setProperty("--ring", themeSettings.actionColor);
-    root.style.setProperty("--border", themeSettings.borderColor);
-    root.style.setProperty("--input", themeSettings.borderColor);
-    root.style.setProperty("--ui-border-color", themeSettings.borderColor);
-    root.style.setProperty("--dialog-surface", themePalette.dialogSurface);
-    root.style.setProperty("--dialog-surface-gradient", themePalette.dialogSurfaceGradient);
-    root.style.setProperty("--dialog-foreground", themePalette.dialogText);
-    root.style.setProperty("--dialog-border", themePalette.dialogBorder);
-    root.style.setProperty("--dialog-muted-surface", themePalette.dialogMutedSurface);
-    root.style.setProperty("--dialog-footer-surface", themePalette.dialogMutedSurface);
-    root.style.setProperty("--workspace-hero-bg", themeSettings.heroSurface);
-    root.style.setProperty("--workspace-hero-text", themePalette.rootStyle["--workspace-hero-text"]);
-
+    const variables = Object.entries(themePalette.rootStyle).filter(([key]) => key.startsWith('--'));
+    for (const [key, value] of variables) root.style.setProperty(key, value);
+    root.classList.toggle('dark', themePalette.dark);
+    root.dataset.themeMode = themePalette.dark ? 'dark' : 'light';
+    root.style.colorScheme = themePalette.dark ? 'dark' : 'light';
     return () => {
-      root.style.removeProperty("--primary");
-      root.style.removeProperty("--primary-foreground");
-      root.style.removeProperty("--ring");
-      root.style.removeProperty("--border");
-      root.style.removeProperty("--input");
-      root.style.removeProperty("--ui-border-color");
-      root.style.removeProperty("--dialog-surface");
-      root.style.removeProperty("--dialog-surface-gradient");
-      root.style.removeProperty("--dialog-foreground");
-      root.style.removeProperty("--dialog-border");
-      root.style.removeProperty("--dialog-muted-surface");
-      root.style.removeProperty("--dialog-footer-surface");
-      root.style.removeProperty("--workspace-hero-bg");
-      root.style.removeProperty("--workspace-hero-text");
+      for (const [key] of variables) root.style.removeProperty(key);
+      root.classList.remove('dark');
+      delete root.dataset.themeMode;
+      root.style.removeProperty('color-scheme');
     };
-  }, [
-    themePalette.dialogBorder,
-    themePalette.dialogMutedSurface,
-    themePalette.dialogSurface,
-    themePalette.dialogSurfaceGradient,
-    themePalette.dialogText,
-    themePalette.rootStyle,
-    themeSettings.actionColor,
-    themeSettings.borderColor,
-    themeSettings.heroSurface,
-  ]);
+  }, [themePalette]);
 
-  return {
-    themeSettings,
-    themePalette,
-  };
+
+  return { themeSettings, themePalette };
 }

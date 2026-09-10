@@ -39,7 +39,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-scrim duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -68,9 +68,9 @@ function DialogContent({
           className
         )}
         style={{
-          backgroundImage: "var(--dialog-surface-gradient, radial-gradient(190% 160% at 50% -18%, hsl(var(--popover)), hsl(var(--popover))))",
-          backgroundColor: "var(--dialog-surface, hsl(var(--popover)))",
-          color: "var(--dialog-foreground, hsl(var(--popover-foreground)))",
+          backgroundImage: "var(--dialog-surface-gradient, radial-gradient(190% 160% at 50% -18%, var(--popover), var(--popover)))",
+          backgroundColor: "var(--dialog-surface, var(--popover))",
+          color: "var(--dialog-foreground, var(--popover-foreground))",
           borderColor: "var(--dialog-border, rgba(15, 23, 42, 0.12))",
           ...style,
         }}
@@ -132,7 +132,7 @@ function DialogFooter({
         className
       )}
       style={{
-        backgroundColor: "var(--dialog-footer-surface, hsl(var(--muted) / 0.5))",
+        backgroundColor: "var(--dialog-footer-surface, var(--muted))",
         borderColor: "var(--dialog-border, rgba(15, 23, 42, 0.12))",
         ...style,
       }}

@@ -77,7 +77,7 @@ export function MobileBoardFilters({
           <div className="grid gap-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <SlidersHorizontal className="h-4 w-4 text-slate-500" />
+                <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-semibold">Active filters</p>
                 <Badge variant="secondary">{activeFilterCount}</Badge>
               </div>
@@ -94,11 +94,11 @@ export function MobileBoardFilters({
 
             <label
               htmlFor="mobile-high-urgency-filter"
-              className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-white/70 px-3 py-2.5"
+              className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-card/70 px-3 py-2.5"
             >
               <span>
-                <span className="block text-sm font-semibold text-slate-900">High urgency only</span>
-                <span className="mt-0.5 block text-xs text-slate-600">Show only jobs marked High priority.</span>
+                <span className="block text-sm font-semibold text-foreground">High urgency only</span>
+                <span className="mt-0.5 block text-xs text-text-secondary">Show only jobs marked High priority.</span>
               </span>
               <Checkbox
                 id="mobile-high-urgency-filter"
@@ -110,11 +110,11 @@ export function MobileBoardFilters({
 
             <label
               htmlFor="mobile-show-tag-labels"
-              className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-white/70 px-3 py-2.5"
+              className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-card/70 px-3 py-2.5"
             >
               <span>
-                <span className="block text-sm font-semibold text-slate-900">Show indicator labels</span>
-                <span className="mt-0.5 block text-xs text-slate-600">Expand card dots into short descriptions.</span>
+                <span className="block text-sm font-semibold text-foreground">Show indicator labels</span>
+                <span className="mt-0.5 block text-xs text-text-secondary">Expand card dots into short descriptions.</span>
               </span>
               <Checkbox
                 id="mobile-show-tag-labels"
@@ -124,13 +124,13 @@ export function MobileBoardFilters({
               />
             </label>
 
-            <details className="group rounded-2xl border bg-white/70">
-              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-sky-500/35 [&::-webkit-details-marker]:hidden">
+            <details className="group rounded-2xl border bg-card/70">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-status-info-border/35 [&::-webkit-details-marker]:hidden">
                 Legend
-                <span className="text-xs font-medium text-slate-500 group-open:hidden">Show</span>
-                <span className="hidden text-xs font-medium text-slate-500 group-open:inline">Hide</span>
+                <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show</span>
+                <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide</span>
               </summary>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-3 border-t p-panel text-xs text-slate-700">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3 border-t p-panel text-xs text-text-secondary">
                 {serviceBoardIndicatorLegend.map((indicator) => (
                   <div key={indicator.id} className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${indicator.dotClassName}`} />
@@ -196,7 +196,7 @@ export function MobileStatusChangeSheet({ job, onClose, onMoved, onStatusChange,
             paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Move job to</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Move job to</p>
           <div className="grid gap-2">
             {statuses.map((status) => {
               const isCurrent = status === job.status;
@@ -215,17 +215,17 @@ export function MobileStatusChangeSheet({ job, onClose, onMoved, onStatusChange,
                 >
                   <span className="font-semibold">{status}</span>
                   {isCurrent ? (
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-text-secondary">
                       <Check className="h-4 w-4" /> Current
                     </span>
                   ) : isPending ? (
-                    <span className="text-xs text-slate-600">Moving…</span>
+                    <span className="text-xs text-text-secondary">Moving…</span>
                   ) : null}
                 </Button>
               );
             })}
           </div>
-          {error ? <p className="mt-3 text-sm font-medium text-rose-700" role="alert">{error}</p> : null}
+          {error ? <p className="mt-3 text-sm font-medium text-status-danger" role="alert">{error}</p> : null}
         </DialogBody>
       </DialogContent>
     </Dialog>

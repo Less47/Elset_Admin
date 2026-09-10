@@ -2,13 +2,14 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { getBuildMetadata } from "./build-metadata.mjs";
 
-export function deployFly({ args = [], env = process.env, readGit, run = spawnSync } = {}) {
-  const { commit } = getBuildMetadata({ env, readGit });
-  if (commit === "local") {
+export function deployFly({ args = [], env = process.env, readGit, run = spawnSync, now = () => new Date() } = {}) {
+  // Capture the deployment start once. Never reuse a timestamp from a previous build.
+  const { sha, buildTime } = getBuildMetadata({ env: { ...env, ELSET_BUILD_TIME: now().toISOString() }, readGit });
+  if (!sha) {
     throw new Error("Cannot identify the source commit. Deploy from a Git checkout or set ELSET_BUILD_SHA to the source revision in CI.");
   }
 
-  const result = run("flyctl", ["deploy", ...args, "--build-arg", `ELSET_BUILD_SHA=${commit}`], {
+  const result = run("flyctl", ["deploy", ...args, "--build-arg", `ELSET_BUILD_SHA=${sha}`, "--build-arg", `ELSET_BUILD_TIME=${buildTime}`], {
     cwd: fileURLToPath(new URL("../", import.meta.url)),
     env,
     stdio: "inherit",

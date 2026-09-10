@@ -90,10 +90,10 @@ export function ResponsivePageControls({ search, controls, action, summary, tool
 export function PageSearchField({ value, onChange, placeholder, label, compact = false }) {
   return (
     <div className="relative min-w-0">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 !text-slate-500" aria-hidden="true" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 !text-muted-foreground" aria-hidden="true" />
       <Input
         className={cn(
-          "data-toolbar-field border-slate-300 bg-white pl-9 pr-11",
+          "data-toolbar-field border-border bg-card pl-9 pr-11",
           compact ? "h-10 rounded-lg text-sm" : "h-11 rounded-xl text-base"
         )}
         value={value}
@@ -105,7 +105,7 @@ export function PageSearchField({ value, onChange, placeholder, label, compact =
         <button
           type="button"
           className={cn(
-            "absolute right-0 top-0 flex items-center justify-center !text-slate-500 outline-none hover:!text-slate-900 focus-visible:ring-3 focus-visible:ring-sky-500/35",
+            "absolute right-0 top-0 flex items-center justify-center !text-muted-foreground outline-none hover:!text-foreground focus-visible:ring-3 focus-visible:ring-status-info-border/35",
             compact ? "h-10 w-10 rounded-lg" : "h-11 w-11 rounded-xl"
           )}
           onClick={() => onChange("")}
@@ -147,7 +147,7 @@ export function CompactSortControl({ value, onValueChange, options, label }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
       <SelectTrigger
-        className="data-toolbar-field h-11 min-w-0 flex-[1.2] rounded-xl border-slate-300 bg-white px-2.5"
+        className="data-toolbar-field h-11 min-w-0 flex-[1.2] rounded-xl border-border bg-card px-2.5"
         aria-label={`${label}: ${selectedLabel}`}
       >
         <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
@@ -184,11 +184,11 @@ export function ViewModeToggle({ value, onChange, label = "View mode", compact =
           size="sm"
           variant="ghost"
           className={cn(
-            "page-controls__view-button border border-slate-300",
+            "page-controls__view-button border border-border",
             compact ? "h-9 w-9 min-w-9 rounded-md p-0" : "h-11 min-w-11 rounded-lg px-2 sm:px-2.5",
             value === option.value
               ? "is-active"
-              : "!text-slate-800 hover:!text-slate-950"
+              : "!text-foreground hover:!text-foreground"
           )}
           onClick={() => onChange(option.value)}
           aria-label={`${option.label} view`}
@@ -214,7 +214,7 @@ export function PagePrimaryAction({ children, className, compact = false, ...pro
 
 export function ResultSummary({ children, className }) {
   return (
-    <p className={cn("px-1 text-sm font-medium text-slate-700", className)} role="status" aria-live="polite" data-result-summary>
+    <p className={cn("px-1 text-sm font-medium text-text-secondary", className)} role="status" aria-live="polite" data-result-summary>
       {children}
     </p>
   );
@@ -223,7 +223,7 @@ export function ResultSummary({ children, className }) {
 export function FilterSheetField({ id, label, children }) {
   return (
     <div className="grid gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+      <label htmlFor={id} className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary">
         {label}
       </label>
       {children}
@@ -283,7 +283,7 @@ export function MobileFilterSheet({
         </DialogBody>
 
         <div
-          className="flex shrink-0 items-center justify-between gap-3 border-t bg-white/90 px-panel py-2 backdrop-blur"
+          className="flex shrink-0 items-center justify-between gap-3 border-t bg-card/90 px-panel py-2 backdrop-blur"
           style={{
             paddingRight: "calc(var(--panel-padding) + env(safe-area-inset-right))",
             paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))",

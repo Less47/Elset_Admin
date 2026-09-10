@@ -95,7 +95,7 @@ function createJobPopupContent(job, onOpenJob) {
   title.textContent = job.title || `Job #${job.jobNumber || ""}`.trim() || "Job";
   title.style.margin = "0";
   title.style.fontWeight = "700";
-  title.style.color = "#0f172a";
+  title.style.color = "var(--popover-foreground)";
   title.style.lineHeight = "1.35";
 
   const meta = document.createElement("p");
@@ -105,15 +105,15 @@ function createJobPopupContent(job, onOpenJob) {
   ].filter(Boolean).join(" - ");
   meta.style.margin = "0";
   meta.style.fontSize = "12px";
-  meta.style.color = "#64748b";
+  meta.style.color = "var(--dialog-muted-foreground)";
 
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = "Job Details";
   button.style.border = "0";
   button.style.borderRadius = "10px";
-  button.style.background = "#0f172a";
-  button.style.color = "#ffffff";
+  button.style.background = "var(--primary)";
+  button.style.color = "var(--primary-foreground)";
   button.style.cursor = "pointer";
   button.style.fontSize = "12px";
   button.style.fontWeight = "700";
@@ -536,7 +536,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
 
   return (
     <>
-    <section className="map-workspace relative h-full min-h-0 w-full overflow-hidden bg-slate-100" aria-label="Jobs map workspace" data-map-workspace>
+    <section className="map-workspace relative h-full min-h-0 w-full overflow-hidden bg-surface-raised" aria-label="Jobs map workspace" data-map-workspace>
       <ResponsivePageControls
         className="map-floating-controls"
         compact
@@ -548,7 +548,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
           <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
         )}
         summary={(
-          <ResultSummary className="map-result-summary w-fit rounded-full border border-white/80 bg-white/95 px-2.5 py-1 text-xs text-slate-800 shadow-sm backdrop-blur">
+          <ResultSummary className="map-result-summary w-fit rounded-full border border-border bg-card/95 px-2.5 py-1 text-xs text-foreground shadow-sm backdrop-blur">
             {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"} · {pinnedJobs.length} mapped
           </ResultSummary>
         )}
@@ -572,9 +572,9 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             />
 
             <div className="grid gap-1">
-              <label htmlFor="desktop-map-job-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Job Filter</label>
+              <label htmlFor="desktop-map-job-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">Job Filter</label>
               <Select value={jobFilter} onValueChange={setJobFilter}>
-                <SelectTrigger id="desktop-map-job-filter" className="h-11 w-full rounded-xl bg-white" aria-label="Job filter">
+                <SelectTrigger id="desktop-map-job-filter" className="h-11 w-full rounded-xl bg-card" aria-label="Job filter">
                   <SelectValue placeholder="All jobs" />
                 </SelectTrigger>
                 <SelectContent>
@@ -588,9 +588,9 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             </div>
 
             <div className="grid gap-1">
-              <label htmlFor="desktop-map-site-type-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Site Type</label>
+              <label htmlFor="desktop-map-site-type-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">Site Type</label>
               <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
-                <SelectTrigger id="desktop-map-site-type-filter" className="h-11 w-full rounded-xl bg-white" aria-label="Site type">
+                <SelectTrigger id="desktop-map-site-type-filter" className="h-11 w-full rounded-xl bg-card" aria-label="Site type">
                   <SelectValue placeholder="All site types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -606,9 +606,9 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
             </div>
 
             <div className="grid gap-1">
-              <label htmlFor="desktop-map-customer-type-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">Customer Type</label>
+              <label htmlFor="desktop-map-customer-type-filter" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary">Customer Type</label>
               <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-                <SelectTrigger id="desktop-map-customer-type-filter" className="h-11 w-full rounded-xl bg-white" aria-label="Customer type">
+                <SelectTrigger id="desktop-map-customer-type-filter" className="h-11 w-full rounded-xl bg-card" aria-label="Customer type">
                   <SelectValue placeholder="All customer types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -626,7 +626,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
       </div>
 
       {isLoadingMapConfig ? (
-        <div className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-slate-600" data-map-loading>
+        <div className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-text-secondary" data-map-loading>
           <LoaderCircle className="h-4 w-4 animate-spin" />
           <span>Loading map tiles...</span>
         </div>
@@ -636,19 +636,19 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
 
       <div className="pointer-events-none absolute bottom-3 left-3 z-[1000] grid max-w-[min(30rem,calc(100%-5rem))] gap-2 sm:bottom-4 sm:left-4" data-map-status>
         {mapConfigError ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50/95 px-3 py-2 text-sm text-rose-800 shadow-sm backdrop-blur">
+          <div className="rounded-xl border border-status-danger-border bg-status-danger-surface/95 px-3 py-2 text-sm text-status-danger shadow-sm backdrop-blur">
             {mapConfigError}
           </div>
         ) : null}
 
         {geocodeError ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/95 px-3 py-2 text-sm text-amber-900 shadow-sm backdrop-blur">
+          <div className="rounded-xl border border-status-warning-border bg-status-warning-surface/95 px-3 py-2 text-sm text-status-warning shadow-sm backdrop-blur">
             {geocodeError}
           </div>
         ) : null}
 
         {isLoadingGeocodes ? (
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-sm text-slate-700 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-card/95 px-3 py-2 text-sm text-text-secondary shadow-sm backdrop-blur">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             <span>Geocoding saved job addresses...</span>
           </div>
@@ -669,7 +669,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
     >
       <FilterSheetField id="mobile-map-job-filter" label="Jobs">
         <Select value={jobFilter} onValueChange={setJobFilter}>
-          <SelectTrigger id="mobile-map-job-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="All jobs" /></SelectTrigger>
+          <SelectTrigger id="mobile-map-job-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue placeholder="All jobs" /></SelectTrigger>
           <SelectContent>
             {JOB_FILTERS.map((filter) => <SelectItem key={filter.value} value={filter.value}>{filter.label}</SelectItem>)}
           </SelectContent>
@@ -677,7 +677,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
       </FilterSheetField>
       <FilterSheetField id="mobile-map-site-type-filter" label="Site type">
         <Select value={siteTypeFilter} onValueChange={setSiteTypeFilter}>
-          <SelectTrigger id="mobile-map-site-type-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="All site types" /></SelectTrigger>
+          <SelectTrigger id="mobile-map-site-type-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue placeholder="All site types" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_FILTER_VALUE}>All site types</SelectItem>
             <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>
@@ -687,7 +687,7 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
       </FilterSheetField>
       <FilterSheetField id="mobile-map-customer-type-filter" label="Customer type">
         <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-          <SelectTrigger id="mobile-map-customer-type-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue placeholder="All customer types" /></SelectTrigger>
+          <SelectTrigger id="mobile-map-customer-type-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue placeholder="All customer types" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_FILTER_VALUE}>All customer types</SelectItem>
             <SelectItem value={NOT_SET_FILTER_VALUE}>Not set</SelectItem>

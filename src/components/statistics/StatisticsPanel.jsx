@@ -65,55 +65,55 @@ export default function StatisticsPanel({
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="rounded-3xl border-slate-200">
+        <Card className="rounded-3xl border-border">
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">Customer Records</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{customers.length}</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{customers.length}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-3xl border-slate-200">
+        <Card className="rounded-3xl border-border">
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">Open Jobs</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{dashboard.openJobs}</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{dashboard.openJobs}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-3xl border-slate-200">
+        <Card className="rounded-3xl border-border">
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">Completed Jobs</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{dashboard.completedJobs}</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{dashboard.completedJobs}</p>
           </CardContent>
         </Card>
-        <Card className="rounded-3xl border-slate-200">
+        <Card className="rounded-3xl border-border">
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">Documents Saved</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{dashboard.quotesCount + dashboard.invoicesCount}</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{dashboard.quotesCount + dashboard.invoicesCount}</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="rounded-3xl border-slate-200">
+      <Card className="rounded-3xl border-border">
         <CardHeader>
           <CardTitle className="text-lg">Averages</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="rounded-2xl border bg-muted p-4">
             <p className="text-sm text-muted-foreground">Monthly Average</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{money(averages.valuePerMonth)}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-2 text-2xl font-semibold text-foreground">{money(averages.valuePerMonth)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               {averages.activeSinceLabel ? `Average tracked value per month since ${averages.activeSinceLabel}.` : "No jobs recorded yet."}
             </p>
           </div>
-          <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="rounded-2xl border bg-muted p-4">
             <p className="text-sm text-muted-foreground">Weekly Average</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{money(averages.valuePerWeek)}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-2 text-2xl font-semibold text-foreground">{money(averages.valuePerWeek)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Average tracked value per week across the current job history.
             </p>
           </div>
-          <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="rounded-2xl border bg-muted p-4">
             <p className="text-sm text-muted-foreground">Average Value Per Job</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{money(averages.valuePerJob)}</p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-2 text-2xl font-semibold text-foreground">{money(averages.valuePerJob)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Uses invoice totals first, then quote totals when no invoice exists.
             </p>
           </div>
@@ -121,7 +121,7 @@ export default function StatisticsPanel({
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="rounded-3xl border-slate-200">
+        <Card className="rounded-3xl border-border">
           <CardHeader>
             <CardTitle className="text-lg">Job Status Breakdown</CardTitle>
           </CardHeader>
@@ -129,81 +129,81 @@ export default function StatisticsPanel({
             {statusSummary.map(({ status, count, share }) => (
               <div key={status} className="grid gap-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-900">{status}</span>
+                  <span className="font-medium text-foreground">{status}</span>
                   <span className="text-muted-foreground">{count} jobs - {share}%</span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-slate-900 transition-all" style={{ width: `${share}%` }} />
+                <div className="h-2 rounded-full bg-surface-raised">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${share}%` }} />
                 </div>
               </div>
             ))}
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border-slate-200">
+        <Card className="rounded-3xl border-border">
           <CardHeader>
             <CardTitle className="text-lg">Financial Snapshot</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span>Quotes prepared</span>
-              <span className="font-medium text-slate-900">{dashboard.quotesCount}</span>
+              <span className="font-medium text-foreground">{dashboard.quotesCount}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>Quote value</span>
-              <span className="font-medium text-slate-900">{money(dashboard.quotesValue)}</span>
+              <span className="font-medium text-foreground">{money(dashboard.quotesValue)}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <span>Invoices prepared</span>
-              <span className="font-medium text-slate-900">{dashboard.invoicesCount}</span>
+              <span className="font-medium text-foreground">{dashboard.invoicesCount}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>Invoice value</span>
-              <span className="font-medium text-slate-900">{money(dashboard.invoicesValue)}</span>
+              <span className="font-medium text-foreground">{money(dashboard.invoicesValue)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>Outstanding invoices</span>
-              <span className="font-medium text-slate-900">{money(dashboard.outstandingInvoiceValue)}</span>
+              <span className="font-medium text-foreground">{money(dashboard.outstandingInvoiceValue)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>Overdue invoices</span>
-              <span className="font-medium text-slate-900">{dashboard.overdueInvoices}</span>
+              <span className="font-medium text-foreground">{dashboard.overdueInvoices}</span>
             </div>
             <div className="flex items-center justify-between">
               <span>Completed not invoiced</span>
-              <span className="font-medium text-slate-900">{dashboard.notInvoicedCompleted}</span>
+              <span className="font-medium text-foreground">{dashboard.notInvoicedCompleted}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <span>High urgency jobs</span>
-              <span className="font-medium text-slate-900">{dashboard.highUrgency}</span>
+              <span className="font-medium text-foreground">{dashboard.highUrgency}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="rounded-3xl border-slate-200">
+      <Card className="rounded-3xl border-border">
         <CardHeader>
           <CardTitle className="text-lg">Inventory Snapshot</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="rounded-2xl border bg-muted p-4">
             <p className="text-sm text-muted-foreground">Parts tracked</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{dashboard.totalParts}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{dashboard.totalParts}</p>
           </div>
-          <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="rounded-2xl border bg-muted p-4">
             <p className="text-sm text-muted-foreground">Needs reorder</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{dashboard.lowStockParts}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{dashboard.lowStockParts}</p>
           </div>
-          <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="rounded-2xl border bg-muted p-4">
             <p className="text-sm text-muted-foreground">Stock value</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{money(dashboard.inventoryValue)}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{money(dashboard.inventoryValue)}</p>
           </div>
           {lowStockParts.length > 0 ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 md:col-span-3">
-              <p className="text-sm font-semibold text-amber-900">Reorder soon</p>
-              <p className="mt-2 text-sm text-amber-800">
+            <div className="rounded-2xl border border-status-warning-border bg-status-warning-surface p-4 md:col-span-3">
+              <p className="text-sm font-semibold text-status-warning">Reorder soon</p>
+              <p className="mt-2 text-sm text-status-warning">
                 {lowStockParts.slice(0, 4).map((part) => part.name).join(", ")}
                 {lowStockParts.length > 4 ? `, and ${lowStockParts.length - 4} more` : ""}
               </p>

@@ -203,6 +203,9 @@ function normalizeUnknownSetting(key, value) {
 
 function normalizeSettingValue(key, value) {
   validateSafeWorkspaceSettingKey(key);
+  if (key === "workspaceLogo" || key === "workspaceLogoUrl") {
+    throw new WorkspaceSettingsError("Use the Workspace Branding upload/remove control to change the workspace logo.");
+  }
 
   if (colorSettingKeys.has(key)) return normalizeHexColor(value, key);
   if (emailSettingKeys.has(key)) return normalizeEmail(value, key);

@@ -11,6 +11,7 @@ RUN npm ci
 
 COPY . .
 ARG ELSET_BUILD_SHA
+ARG ELSET_BUILD_TIME
 RUN ELSET_REQUIRE_BUILD_SHA=true npm run build
 
 ENV NODE_ENV=production

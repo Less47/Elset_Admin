@@ -29,14 +29,14 @@ export default function RecycleBinPanel({
     <div className="space-y-6">
       <Tabs defaultValue="jobs" className="space-y-6">
         <div className="floating-page-toolbar flex items-center px-4 py-3">
-          <TabsList className="grid w-full max-w-[360px] grid-cols-2 rounded-xl bg-white/90">
+          <TabsList className="grid w-full max-w-[360px] grid-cols-2 rounded-xl bg-card/90">
             <TabsTrigger value="jobs">Deleted Jobs</TabsTrigger>
             <TabsTrigger value="customers">Deleted Customers</TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="jobs">
-          <Card className="rounded-3xl border-slate-200">
+          <Card className="rounded-3xl border-border">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-base">Deleted Jobs</CardTitle>
@@ -44,7 +44,7 @@ export default function RecycleBinPanel({
               </div>
               <Button
                 variant="outline"
-                className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                className="rounded-xl border-status-danger-border text-status-danger hover:bg-status-danger-surface hover:text-status-danger"
                 disabled={sortedDeletedJobs.length === 0}
                 onClick={onEmptyDeletedJobs}
               >
@@ -57,34 +57,34 @@ export default function RecycleBinPanel({
                   <EmptyState title="Job recycle bin is empty" text="Deleted jobs will appear here for 7 days before automatic removal." />
                 ) : (
                   sortedDeletedJobs.map((record) => (
-                    <div key={`${record.job.id}-${record.deletedAt}`} className="rounded-2xl border bg-white p-3">
+                    <div key={`${record.job.id}-${record.deletedAt}`} className="rounded-2xl border bg-card p-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Job #{record.job.jobNumber}</p>
-                          <p className="font-semibold text-slate-900">{record.job.title}</p>
-                          <p className="mt-1 text-sm text-slate-600">{record.job.customerName}</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{record.job.jobNumber}</p>
+                          <p className="font-semibold text-foreground">{record.job.title}</p>
+                          <p className="mt-1 text-sm text-text-secondary">{record.job.customerName}</p>
                         </div>
                         <Button className="rounded-xl" onClick={() => onRestoreJob(record.job.id)}>
                           <RotateCcw className="mr-2 h-4 w-4" /> Restore Job
                         </Button>
                       </div>
 
-                      <div className="mt-4 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+                      <div className="mt-4 grid gap-2 text-sm text-text-secondary md:grid-cols-2">
                         <div className="flex items-center justify-between gap-3">
                           <span>Deleted</span>
-                          <span className="font-medium text-slate-900">{formatDate(record.deletedAt)}</span>
+                          <span className="font-medium text-foreground">{formatDate(record.deletedAt)}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span>Auto delete</span>
-                          <span className="font-medium text-slate-900">{formatDate(getRecycleBinExpiryDate(record.deletedAt))}</span>
+                          <span className="font-medium text-foreground">{formatDate(getRecycleBinExpiryDate(record.deletedAt))}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span>Status</span>
-                          <span className="font-medium text-slate-900">{record.job.status}</span>
+                          <span className="font-medium text-foreground">{record.job.status}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span>Documents</span>
-                          <span className="font-medium text-slate-900">
+                          <span className="font-medium text-foreground">
                             {record.job.quote ? "Quote saved" : "No quote"} / {record.job.invoice ? "Invoice saved" : "No invoice"}
                           </span>
                         </div>
@@ -98,7 +98,7 @@ export default function RecycleBinPanel({
         </TabsContent>
 
         <TabsContent value="customers">
-          <Card className="rounded-3xl border-slate-200">
+          <Card className="rounded-3xl border-border">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-base">Deleted Customers</CardTitle>
@@ -106,7 +106,7 @@ export default function RecycleBinPanel({
               </div>
               <Button
                 variant="outline"
-                className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                className="rounded-xl border-status-danger-border text-status-danger hover:bg-status-danger-surface hover:text-status-danger"
                 disabled={sortedDeletedCustomers.length === 0}
                 onClick={onEmptyDeletedCustomers}
               >
@@ -121,33 +121,33 @@ export default function RecycleBinPanel({
                   sortedDeletedCustomers.map((record) => {
                     const relatedDeletedJobs = deletedJobs.filter((entry) => entry.job.customerId === record.customer.id).length;
                     return (
-                      <div key={`${record.customer.id}-${record.deletedAt}`} className="rounded-2xl border bg-white p-3">
+                      <div key={`${record.customer.id}-${record.deletedAt}`} className="rounded-2xl border bg-card p-3">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
-                            <p className="font-semibold text-slate-900">{record.customer.name}</p>
-                            <p className="mt-1 text-sm text-slate-600">{record.customer.email || "No email saved"}</p>
+                            <p className="font-semibold text-foreground">{record.customer.name}</p>
+                            <p className="mt-1 text-sm text-text-secondary">{record.customer.email || "No email saved"}</p>
                           </div>
                           <Button className="rounded-xl" onClick={() => onRestoreCustomer(record.customer.id)}>
                             <RotateCcw className="mr-2 h-4 w-4" /> Restore Customer
                           </Button>
                         </div>
 
-                        <div className="mt-4 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+                        <div className="mt-4 grid gap-2 text-sm text-text-secondary md:grid-cols-2">
                           <div className="flex items-center justify-between gap-3">
                             <span>Deleted</span>
-                            <span className="font-medium text-slate-900">{formatDate(record.deletedAt)}</span>
+                            <span className="font-medium text-foreground">{formatDate(record.deletedAt)}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
                             <span>Auto delete</span>
-                            <span className="font-medium text-slate-900">{formatDate(getRecycleBinExpiryDate(record.deletedAt))}</span>
+                            <span className="font-medium text-foreground">{formatDate(getRecycleBinExpiryDate(record.deletedAt))}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
                             <span>Phone</span>
-                            <span className="font-medium text-slate-900">{record.customer.phone || "Not set"}</span>
+                            <span className="font-medium text-foreground">{record.customer.phone || "Not set"}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
                             <span>Related deleted jobs</span>
-                            <span className="font-medium text-slate-900">{relatedDeletedJobs}</span>
+                            <span className="font-medium text-foreground">{relatedDeletedJobs}</span>
                           </div>
                         </div>
                       </div>

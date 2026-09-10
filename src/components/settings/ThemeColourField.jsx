@@ -33,7 +33,7 @@ export default function ThemeColourField({ field, value, onChange }) {
           />
         </div>
       </FormField>
-      <p className="text-xs leading-5 text-slate-500">{field.description}</p>
+      <p className="text-xs leading-5 text-muted-foreground">{field.description}</p>
     </div>
   );
 }

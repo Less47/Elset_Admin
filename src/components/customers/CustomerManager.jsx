@@ -176,36 +176,36 @@ export default function CustomerManager({
           key={customer.id}
           onDoubleClick={() => onOpenProfile(customer.id)}
           title="Double-click to open customer profile"
-          className="data-record-card cursor-pointer select-none rounded-2xl border bg-white p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+          className="data-record-card cursor-pointer select-none rounded-2xl border bg-card p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-semibold text-slate-900">{customer.name}</p>
-              <p className="mt-1 text-sm text-slate-600">{customer.address || "No address saved"}</p>
+              <p className="font-semibold text-foreground">{customer.name}</p>
+              <p className="mt-1 text-sm text-text-secondary">{customer.address || "No address saved"}</p>
             </div>
-            {customer.customerType ? <Badge className="bg-slate-100 text-slate-700">{formatCustomerType(customer.customerType)}</Badge> : null}
+            {customer.customerType ? <Badge className="bg-surface-raised text-text-secondary">{formatCustomerType(customer.customerType)}</Badge> : null}
           </div>
 
-          <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 sm:grid-cols-2">
+          <div className="mt-4 grid gap-2 border-t border-border pt-3 text-sm text-text-secondary sm:grid-cols-2">
             <div className="flex items-center justify-between gap-3">
               <span>Email</span>
-              <span className="truncate font-medium text-slate-900">{customer.email || "Not set"}</span>
+              <span className="truncate font-medium text-foreground">{customer.email || "Not set"}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span>Phone</span>
-              <span className="truncate font-medium text-slate-900">{customer.phone || "Not set"}</span>
+              <span className="truncate font-medium text-foreground">{customer.phone || "Not set"}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span>Jobs</span>
-              <span className="font-medium text-slate-900">{customer.jobCount}</span>
+              <span className="font-medium text-foreground">{customer.jobCount}</span>
             </div>
             <div className="flex items-center justify-between gap-3">
               <span>Open jobs</span>
-              <span className="font-medium text-slate-900">{customer.openJobCount}</span>
+              <span className="font-medium text-foreground">{customer.openJobCount}</span>
             </div>
             <div className="flex items-center justify-between gap-3 sm:col-span-2">
               <span>Last activity</span>
-              <span className="font-medium text-slate-900">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</span>
+              <span className="font-medium text-foreground">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</span>
             </div>
           </div>
 
@@ -263,7 +263,7 @@ export default function CustomerManager({
           <>
           <DesktopControlField htmlFor="desktop-customer-sort" label="Sort by" size="small">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger id="desktop-customer-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-sort" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue placeholder="Sort customers" />
               </SelectTrigger>
               <SelectContent>
@@ -279,7 +279,7 @@ export default function CustomerManager({
 
           <DesktopControlField htmlFor="desktop-customer-record-filter" label="Record filter" size="medium">
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger id="desktop-customer-record-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-record-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue placeholder="Filter customers" />
               </SelectTrigger>
               <SelectContent>
@@ -294,7 +294,7 @@ export default function CustomerManager({
 
           <DesktopControlField htmlFor="desktop-customer-created-range" label="Created" size="small">
             <Select value={createdRange} onValueChange={setCreatedRange}>
-              <SelectTrigger id="desktop-customer-created-range" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-created-range" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue placeholder="Created range" />
               </SelectTrigger>
               <SelectContent>
@@ -308,7 +308,7 @@ export default function CustomerManager({
 
           <DesktopControlField htmlFor="desktop-customer-type-filter" label="Customer type" size="medium">
             <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-              <SelectTrigger id="desktop-customer-type-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-customer-type-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
@@ -334,7 +334,7 @@ export default function CustomerManager({
       <Card
         className={isMobileRecordLayout
           ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
-          : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+          : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
         data-mobile-record-results-shell={isMobileRecordLayout ? "" : undefined}
       >
       <CardContent className={isMobileRecordLayout ? "p-0" : viewMode !== "list" ? "p-panel" : "p-0"}>
@@ -358,30 +358,30 @@ export default function CustomerManager({
                 <MobileRecordCard key={customer.id} labelledBy={headingId} recordId={customer.id}>
                   <MobileRecordHeader>
                     <div className="min-w-0">
-                      <h3 id={headingId} className="line-clamp-2 text-[15px] font-semibold leading-5 text-slate-950 [overflow-wrap:anywhere]">
+                      <h3 id={headingId} className="line-clamp-2 text-[15px] font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
                         {customer.name}
                       </h3>
-                      <p className="mt-1 line-clamp-2 text-xs leading-4 text-slate-600 [overflow-wrap:anywhere]">
+                      <p className="mt-1 line-clamp-2 text-xs leading-4 text-text-secondary [overflow-wrap:anywhere]">
                         {customer.address || "No address saved"}
                       </p>
                     </div>
                     {customer.customerType ? (
-                      <Badge className="max-w-[44%] shrink-0 bg-slate-100 text-slate-700">
+                      <Badge className="max-w-[44%] shrink-0 bg-surface-raised text-text-secondary">
                         {formatCustomerType(customer.customerType)}
                       </Badge>
                     ) : null}
                   </MobileRecordHeader>
 
                   <MobileRecordBody>
-                    <p className="line-clamp-1 text-slate-700"><span className="sr-only">Email: </span>{customer.email || "No email"}</p>
-                    <p className="line-clamp-1 text-slate-700"><span className="sr-only">Phone: </span>{customer.phone || "No phone"}</p>
+                    <p className="line-clamp-1 text-text-secondary"><span className="sr-only">Email: </span>{customer.email || "No email"}</p>
+                    <p className="line-clamp-1 text-text-secondary"><span className="sr-only">Phone: </span>{customer.phone || "No phone"}</p>
                   </MobileRecordBody>
 
                   <MobileRecordActions>
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-slate-300 px-3"
+                      className="border-border px-3"
                       aria-label={`Open profile for ${customer.name}`}
                       onClick={() => onOpenProfile(customer.id)}
                     >
@@ -397,8 +397,8 @@ export default function CustomerManager({
             {viewMode === "list" ? (
               <>
               <div className="overflow-x-auto text-xs 2xl:hidden">
-                <div className="data-grid grid min-w-[600px] gap-px bg-slate-200 md:min-w-0">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
+                <div className="data-grid grid min-w-[600px] gap-px bg-surface-selected md:min-w-0">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Customer</span>
                     <span>Contact</span>
                     <span>Activity</span>
@@ -410,28 +410,28 @@ export default function CustomerManager({
                       key={customer.id}
                       onDoubleClick={() => onOpenProfile(customer.id)}
                       title="Double-click to open customer profile"
-                      className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-slate-200 transition [&>*]:bg-white"
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-surface-selected transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-1.5">
-                          <p className="truncate font-semibold text-slate-950">{customer.name}</p>
-                          {customer.customerType ? <Badge className="hidden bg-slate-100 px-1.5 py-0 text-[10px] text-slate-700 xl:inline-flex">{formatCustomerType(customer.customerType)}</Badge> : null}
+                          <p className="truncate font-semibold text-foreground">{customer.name}</p>
+                          {customer.customerType ? <Badge className="hidden bg-surface-raised px-1.5 py-0 text-[10px] text-text-secondary xl:inline-flex">{formatCustomerType(customer.customerType)}</Badge> : null}
                         </div>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.address || "No address saved"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{customer.address || "No address saved"}</p>
                       </div>
-                      <div className="min-w-0 text-slate-700">
+                      <div className="min-w-0 text-text-secondary">
                         <p className="truncate">{customer.email || "No email"}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{customer.phone || "No phone"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{customer.phone || "No phone"}</p>
                       </div>
-                      <div className="min-w-0 text-slate-700">
+                      <div className="min-w-0 text-text-secondary">
                         <p className="truncate">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">Created {formatDate(customer.createdAt)}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Created {formatDate(customer.createdAt)}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <p className="text-right text-[11px] text-slate-600">
-                          <span className="font-semibold text-slate-950">{customer.jobCount}</span> total / <span className="font-semibold text-slate-950">{customer.openJobCount}</span> open
+                        <p className="text-right text-[11px] text-text-secondary">
+                          <span className="font-semibold text-foreground">{customer.jobCount}</span> total / <span className="font-semibold text-foreground">{customer.openJobCount}</span> open
                         </p>
-                        <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenProfile(customer.id)}>
+                        <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenProfile(customer.id)}>
                           Open
                         </Button>
                       </div>
@@ -441,8 +441,8 @@ export default function CustomerManager({
               </div>
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1180px]">
-                <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
+                <div className="data-grid grid gap-px bg-surface-selected">
+                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Customer</span>
                     <span>Email</span>
                     <span>Phone</span>
@@ -458,30 +458,30 @@ export default function CustomerManager({
                       key={customer.id}
                       onDoubleClick={() => onOpenProfile(customer.id)}
                       title="Double-click to open customer profile"
-                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-semibold text-slate-950">{customer.name}</p>
-                          {customer.customerType ? <Badge className="bg-slate-100 text-slate-700">{formatCustomerType(customer.customerType)}</Badge> : null}
+                          <p className="truncate font-semibold text-foreground">{customer.name}</p>
+                          {customer.customerType ? <Badge className="bg-surface-raised text-text-secondary">{formatCustomerType(customer.customerType)}</Badge> : null}
                         </div>
-                        <div className="mt-1 flex gap-2 text-xs text-slate-500">
+                        <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
                           <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{customer.id.slice(0, 8)}</span>
                           <span className="truncate">{customer.address || "No address saved"}</span>
                         </div>
                       </div>
-                      <p className="truncate text-slate-700">{customer.email || "Not set"}</p>
-                      <p className="truncate text-slate-700">{customer.phone || "Not set"}</p>
-                      <p className="text-slate-700">{formatDate(customer.createdAt)}</p>
-                      <p className="text-slate-700">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
+                      <p className="truncate text-text-secondary">{customer.email || "Not set"}</p>
+                      <p className="truncate text-text-secondary">{customer.phone || "Not set"}</p>
+                      <p className="text-text-secondary">{formatDate(customer.createdAt)}</p>
+                      <p className="text-text-secondary">{customer.latestUpdatedAt ? formatDate(customer.latestUpdatedAt) : "No activity"}</p>
                       <div className="text-right">
-                        <span className="font-medium text-slate-950">{customer.jobCount}</span>
+                        <span className="font-medium text-foreground">{customer.jobCount}</span>
                       </div>
                       <div className="text-right">
-                        <span className="font-medium text-slate-950">{customer.openJobCount}</span>
+                        <span className="font-medium text-foreground">{customer.openJobCount}</span>
                       </div>
                       <div className="flex justify-end">
-                        <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenProfile(customer.id)}>
+                        <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenProfile(customer.id)}>
                           Open Profile
                         </Button>
                       </div>
@@ -513,7 +513,7 @@ export default function CustomerManager({
     >
       <FilterSheetField id="mobile-customer-record-filter" label="Record filter">
         <Select value={filterBy} onValueChange={setFilterBy}>
-          <SelectTrigger id="mobile-customer-record-filter" className="h-11 w-full rounded-xl bg-white">
+          <SelectTrigger id="mobile-customer-record-filter" className="h-11 w-full rounded-xl bg-card">
             <SelectValue placeholder="Filter customers" />
           </SelectTrigger>
           <SelectContent>
@@ -527,7 +527,7 @@ export default function CustomerManager({
       </FilterSheetField>
       <FilterSheetField id="mobile-customer-created-range" label="Created">
         <Select value={createdRange} onValueChange={setCreatedRange}>
-          <SelectTrigger id="mobile-customer-created-range" className="h-11 w-full rounded-xl bg-white">
+          <SelectTrigger id="mobile-customer-created-range" className="h-11 w-full rounded-xl bg-card">
             <SelectValue placeholder="Created range" />
           </SelectTrigger>
           <SelectContent>
@@ -540,7 +540,7 @@ export default function CustomerManager({
       </FilterSheetField>
       <FilterSheetField id="mobile-customer-type-filter" label="Customer type">
         <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
-          <SelectTrigger id="mobile-customer-type-filter" className="h-11 w-full rounded-xl bg-white">
+          <SelectTrigger id="mobile-customer-type-filter" className="h-11 w-full rounded-xl bg-card">
             <SelectValue placeholder="Filter by type" />
           </SelectTrigger>
           <SelectContent>

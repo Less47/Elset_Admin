@@ -198,7 +198,7 @@ export default function InvoiceManager({
           <>
           <DesktopControlField htmlFor="desktop-invoice-time-range" label="Time range" size="small">
             <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger id="desktop-invoice-time-range" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-invoice-time-range" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -213,7 +213,7 @@ export default function InvoiceManager({
 
           <DesktopControlField htmlFor="desktop-invoice-status-filter" label="Status filter" size="medium">
             <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger id="desktop-invoice-status-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-invoice-status-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -232,7 +232,7 @@ export default function InvoiceManager({
 
           <DesktopControlField htmlFor="desktop-invoice-sort" label="Sort by" size="medium">
             <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger id="desktop-invoice-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+              <SelectTrigger id="desktop-invoice-sort" className="data-toolbar-field rounded-lg border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -251,10 +251,10 @@ export default function InvoiceManager({
       <Card
         className={mobileRecordLayout
           ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
-          : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+          : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
         data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
       >
-      <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-6">
+      <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
           { label: "Not invoiced", value: invoiceStats.notInvoiced },
@@ -263,9 +263,9 @@ export default function InvoiceManager({
           { label: "Outstanding", value: money(invoiceStats.outstandingValue) },
           { label: "Received", value: money(invoiceStats.receivedValue) },
         ].map((stat) => (
-          <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
+          <div key={stat.label} className="data-stat-card bg-card px-panel py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{stat.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-foreground">{stat.value}</p>
           </div>
         ))}
       </div>
@@ -285,14 +285,14 @@ export default function InvoiceManager({
                   <MobileRecordCard key={row.job.id} labelledBy={headingId} recordId={row.job.id}>
                     <MobileRecordHeader>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
-                        <h3 id={headingId} className="mt-0.5 line-clamp-2 font-semibold leading-5 text-slate-950">{row.job.customerName}</h3>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{row.job.jobNumber}</p>
+                        <h3 id={headingId} className="mt-0.5 line-clamp-2 font-semibold leading-5 text-foreground">{row.job.customerName}</h3>
                       </div>
                       <Badge className={`${row.invoiceStatus.className} max-w-[9rem]`}>{row.invoiceStatus.label}</Badge>
                     </MobileRecordHeader>
 
                     <MobileRecordBody>
-                      <p className="line-clamp-2 font-medium text-slate-800">{row.job.title}</p>
+                      <p className="line-clamp-2 font-medium text-foreground">{row.job.title}</p>
                       {row.job.jobAddress ? <p className="line-clamp-2">{row.job.jobAddress}</p> : null}
                       {row.job.ocNumber ? <p className="line-clamp-1 text-xs">Client ref {row.job.ocNumber}</p> : null}
                       {row.invoice ? (
@@ -309,7 +309,7 @@ export default function InvoiceManager({
                         {row.invoice ? (
                           <>
                             <span className="block">Paid {money(row.paymentSummary.paidAmount)}</span>
-                            <span className="block text-xs font-medium text-slate-500">Balance {money(row.paymentSummary.balanceAmount)}</span>
+                            <span className="block text-xs font-medium text-muted-foreground">Balance {money(row.paymentSummary.balanceAmount)}</span>
                           </>
                         ) : "No invoice"}
                       </MobileRecordStat>
@@ -346,8 +346,8 @@ export default function InvoiceManager({
           ) : (
             <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
-              <div className="data-grid grid min-w-[560px] gap-px bg-slate-200 md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
+              <div className="data-grid grid min-w-[560px] gap-px bg-surface-selected md:min-w-0">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Invoice</span>
                   <span>Payment</span>
@@ -357,37 +357,37 @@ export default function InvoiceManager({
                 {filteredRows.map((row) => (
                   <div
                     key={row.job.id}
-                    className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-slate-200 transition [&>*]:bg-white"
+                    className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-surface-selected transition [&>*]:bg-card"
                   >
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Job #{row.job.jobNumber}</p>
-                      <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.job.title}</p>
-                      {row.job.ocNumber ? <p className="mt-0.5 truncate text-[11px] text-slate-500">Client ref {row.job.ocNumber}</p> : null}
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{row.job.jobNumber}</p>
+                      <p className="truncate font-semibold text-foreground">{row.job.customerName}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.job.title}</p>
+                      {row.job.ocNumber ? <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Client ref {row.job.ocNumber}</p> : null}
                     </div>
 
-                    <div className="min-w-0 text-slate-700">
+                    <div className="min-w-0 text-text-secondary">
                       <Badge className={`${row.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{row.invoiceStatus.label}</Badge>
                       <p className="mt-1 truncate text-[11px]">Issued {row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.invoice ? money(row.total) : money(0)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.invoice ? money(row.total) : money(0)}</p>
                     </div>
 
-                    <div className="min-w-0 text-slate-700">
-                      <p className="truncate font-medium text-slate-900">Bal {row.invoice ? money(row.paymentSummary.balanceAmount) : money(0)}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">Paid {row.invoice ? money(row.paymentSummary.paidAmount) : money(0)}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.paymentSummary.paymentCount} payments</p>
+                    <div className="min-w-0 text-text-secondary">
+                      <p className="truncate font-medium text-foreground">Bal {row.invoice ? money(row.paymentSummary.balanceAmount) : money(0)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Paid {row.invoice ? money(row.paymentSummary.paidAmount) : money(0)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.paymentSummary.paymentCount} payments</p>
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-1">
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
                         Job
                       </Button>
                       {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
-                        <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenSentInvoice(row.job)}>
+                        <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenSentInvoice(row.job)}>
                           Open
                         </Button>
                       ) : null}
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-slate-300 px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
+                      <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
                         {row.invoice ? "Editor" : "Create"}
                       </Button>
                     </div>
@@ -397,8 +397,8 @@ export default function InvoiceManager({
             </div>
             <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1540px]">
-              <div className="data-grid grid gap-px bg-slate-200">
-                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
+              <div className="data-grid grid gap-px bg-surface-selected">
+                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Customer</span>
                   <span>Work</span>
@@ -413,65 +413,65 @@ export default function InvoiceManager({
                 {filteredRows.map((row) => (
                   <div
                     key={row.job.id}
-                    className="data-grid-row grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
+                    className="data-grid-row grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                   >
-                    <p className="font-semibold text-slate-950">#{row.job.jobNumber}</p>
+                    <p className="font-semibold text-foreground">#{row.job.jobNumber}</p>
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-950">{row.job.customerName}</p>
-                      <p className="mt-1 truncate text-xs text-slate-500">{row.job.customerEmail || "No email saved"}</p>
+                      <p className="truncate font-semibold text-foreground">{row.job.customerName}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{row.job.customerEmail || "No email saved"}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-slate-800">{row.job.title}</p>
-                      <p className="mt-1 truncate text-xs text-slate-500">{row.job.jobAddress || "No address"}</p>
-                      {row.job.ocNumber ? <p className="mt-1 truncate text-xs text-slate-500">Client ref {row.job.ocNumber}</p> : null}
+                      <p className="truncate text-foreground">{row.job.title}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{row.job.jobAddress || "No address"}</p>
+                      {row.job.ocNumber ? <p className="mt-1 truncate text-xs text-muted-foreground">Client ref {row.job.ocNumber}</p> : null}
                     </div>
-                    <p className="text-slate-700">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
+                    <p className="text-text-secondary">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
                     <div>
                       {row.invoice ? (
                         <Input
                           type="date"
-                          className="data-toolbar-field h-8 rounded-md border-slate-300 bg-white"
+                          className="data-toolbar-field h-8 rounded-md border-border bg-card"
                           value={row.invoice.dueDate || ""}
                           onChange={(e) => onUpdateInvoicePayment(row.job.id, { dueDate: e.target.value })}
                         />
                       ) : (
-                        <span className="text-slate-500">Not set</span>
+                        <span className="text-muted-foreground">Not set</span>
                       )}
                     </div>
-                    <p className="text-right font-semibold text-slate-950">{row.invoice ? money(row.total) : money(0)}</p>
+                    <p className="text-right font-semibold text-foreground">{row.invoice ? money(row.total) : money(0)}</p>
                     <div>
                       <Badge className={row.invoiceStatus.className}>{row.invoiceStatus.label}</Badge>
                     </div>
                     <div>
                       {row.invoice ? (
                         <div className="space-y-1">
-                          <p className="font-medium text-slate-900">
+                          <p className="font-medium text-foreground">
                             Paid {money(row.paymentSummary.paidAmount)} of {money(row.total)}
                           </p>
-                          <p className="text-xs text-slate-500">Balance {money(row.paymentSummary.balanceAmount)}</p>
+                          <p className="text-xs text-muted-foreground">Balance {money(row.paymentSummary.balanceAmount)}</p>
                           {row.paymentSummary.paymentCount > 0 ? (
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-muted-foreground">
                               {row.paymentSummary.paymentCount} {row.paymentSummary.paymentCount === 1 ? "payment" : "payments"}
                               {row.paymentSummary.lastPaymentDate ? ` - ${formatDate(row.paymentSummary.lastPaymentDate)}` : ""}
                             </p>
                           ) : (
-                            <p className="text-xs text-slate-500">No payments logged</p>
+                            <p className="text-xs text-muted-foreground">No payments logged</p>
                           )}
                         </div>
                     ) : (
-                      <span className="text-slate-500">No invoice</span>
+                      <span className="text-muted-foreground">No invoice</span>
                     )}
                   </div>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenJob(row.job)}>
+                    <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenJob(row.job)}>
                       Job
                     </Button>
                     {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
-                      <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenSentInvoice(row.job)}>
+                      <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenSentInvoice(row.job)}>
                         Open Invoice
                       </Button>
                     ) : null}
-                    <Button variant="outline" size="sm" className="rounded-md border-slate-300" onClick={() => onOpenInvoice(row.job)}>
+                    <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenInvoice(row.job)}>
                       {row.invoice ? "Open Invoice Editor" : "Create Invoice"}
                     </Button>
                   </div>
@@ -500,7 +500,7 @@ export default function InvoiceManager({
     >
       <FilterSheetField id="mobile-invoice-time-range" label="Time range">
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger id="mobile-invoice-time-range" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="mobile-invoice-time-range" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             {invoiceTimeRangeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
           </SelectContent>
@@ -508,7 +508,7 @@ export default function InvoiceManager({
       </FilterSheetField>
       <FilterSheetField id="mobile-invoice-status-filter" label="Status filter">
         <Select value={filterBy} onValueChange={setFilterBy}>
-          <SelectTrigger id="mobile-invoice-status-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+          <SelectTrigger id="mobile-invoice-status-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All jobs</SelectItem>
             <SelectItem value="outstanding">Outstanding</SelectItem>

@@ -48,7 +48,7 @@ function createEmptySiteDraft() {
 
 function RequiredMessage({ id, show, children = "This field is required." }) {
   if (!show) return null;
-  return <p id={id} className="text-sm text-rose-700">{children}</p>;
+  return <p id={id} className="text-sm text-status-danger">{children}</p>;
 }
 
 export default function CreateJobPage({
@@ -264,7 +264,7 @@ export default function CreateJobPage({
             <Button
               type="button"
               variant="ghost"
-              className={`h-11 rounded-md ${customerMode === "existing" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "text-slate-700 hover:bg-white/70"}`}
+              className={`h-11 rounded-md ${customerMode === "existing" ? "!bg-primary !text-primary-foreground hover:!bg-primary hover:!text-primary-foreground" : "text-text-secondary hover:bg-card/70"}`}
               aria-pressed={customerMode === "existing"}
               onClick={() => {
                 if (customerMode === "existing") return;
@@ -279,7 +279,7 @@ export default function CreateJobPage({
             <Button
               type="button"
               variant="ghost"
-              className={`h-11 rounded-md ${customerMode === "new" ? "!bg-slate-950 !text-white hover:!bg-slate-950 hover:!text-white" : "text-slate-700 hover:bg-white/70"}`}
+              className={`h-11 rounded-md ${customerMode === "new" ? "!bg-primary !text-primary-foreground hover:!bg-primary hover:!text-primary-foreground" : "text-text-secondary hover:bg-card/70"}`}
               aria-pressed={customerMode === "new"}
               onClick={() => {
                 if (customerMode === "new") return;
@@ -307,13 +307,13 @@ export default function CreateJobPage({
               <div className="record-selection-panel flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <UserRound className="h-4 w-4 text-sky-700" aria-hidden="true" />
-                    <p className="font-semibold text-slate-950">{selectedCustomer.name}</p>
+                    <UserRound className="h-4 w-4 text-status-info" aria-hidden="true" />
+                    <p className="font-semibold text-foreground">{selectedCustomer.name}</p>
                     {selectedCustomer.customerType ? <Badge variant="secondary">{formatCustomerType(selectedCustomer.customerType)}</Badge> : null}
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><Check className="h-3.5 w-3.5" /> Selected</span>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-status-success"><Check className="h-3.5 w-3.5" /> Selected</span>
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">{selectedCustomer.address || "No address saved"}</p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-2 text-sm text-text-secondary">{selectedCustomer.address || "No address saved"}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {[selectedCustomer.email, selectedCustomer.phone].filter(Boolean).join(" · ") || "No email or phone saved"}
                   </p>
                 </div>
@@ -326,7 +326,7 @@ export default function CreateJobPage({
                 <div className="grid gap-1.5">
                   <Label htmlFor="customer-search">Search customers</Label>
                   <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                     <Input
                       id="customer-search"
                       className="h-11 pl-10"
@@ -336,7 +336,7 @@ export default function CreateJobPage({
                       autoComplete="off"
                     />
                   </div>
-                  <p className="text-xs text-slate-500" aria-live="polite">
+                  <p className="text-xs text-muted-foreground" aria-live="polite">
                     {!canSearchCustomers
                       ? "Enter at least 2 characters to search."
                       : filteredCustomers.length > MAX_CUSTOMER_SEARCH_RESULTS
@@ -346,9 +346,9 @@ export default function CreateJobPage({
                 </div>
 
                 {canSearchCustomers ? (
-                  <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-white/70" aria-label="Customer search results">
+                  <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-card/70" aria-label="Customer search results">
                     {filteredCustomers.length === 0 ? (
-                      <p className="px-3 py-6 text-sm text-slate-500">No customers match that search.</p>
+                      <p className="px-3 py-6 text-sm text-muted-foreground">No customers match that search.</p>
                     ) : visibleCustomers.map((entry) => (
                       <button
                         key={entry.id}
@@ -358,13 +358,13 @@ export default function CreateJobPage({
                       >
                         <span className="min-w-0">
                           <span className="flex flex-wrap items-center gap-2">
-                            <span className="font-semibold text-slate-950">{entry.name}</span>
+                            <span className="font-semibold text-foreground">{entry.name}</span>
                             {entry.customerType ? <Badge variant="secondary">{formatCustomerType(entry.customerType)}</Badge> : null}
                           </span>
-                          <span className="mt-1 block text-sm text-slate-600">{entry.address || "No address saved"}</span>
-                          <span className="mt-1 block text-sm text-slate-500">{[entry.email, entry.phone].filter(Boolean).join(" · ") || "No email or phone saved"}</span>
+                          <span className="mt-1 block text-sm text-text-secondary">{entry.address || "No address saved"}</span>
+                          <span className="mt-1 block text-sm text-muted-foreground">{[entry.email, entry.phone].filter(Boolean).join(" · ") || "No email or phone saved"}</span>
                         </span>
-                        <span className="mt-0.5 shrink-0 rounded-md border bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-900">Select</span>
+                        <span className="mt-0.5 shrink-0 rounded-md border bg-card px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-foreground">Select</span>
                       </button>
                     ))}
                   </div>
@@ -436,16 +436,16 @@ export default function CreateJobPage({
               <div className="record-selection-panel flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <MapPin className="h-4 w-4 text-sky-700" aria-hidden="true" />
-                    <p className="font-semibold text-slate-950">{getSiteDisplayName(selectedSite)}</p>
+                    <MapPin className="h-4 w-4 text-status-info" aria-hidden="true" />
+                    <p className="font-semibold text-foreground">{getSiteDisplayName(selectedSite)}</p>
                     {selectedSite.siteType ? <Badge variant="secondary">{formatSiteType(selectedSite.siteType)}</Badge> : null}
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700"><Check className="h-3.5 w-3.5" /> Selected</span>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-status-success"><Check className="h-3.5 w-3.5" /> Selected</span>
                   </div>
                   {selectedSite.contactName ? (
-                    <p className="mt-2 text-sm text-slate-500">{[selectedSite.contactName, selectedSite.contactPhone, selectedSite.contactEmail].filter(Boolean).join(" · ")}</p>
+                    <p className="mt-2 text-sm text-muted-foreground">{[selectedSite.contactName, selectedSite.contactPhone, selectedSite.contactEmail].filter(Boolean).join(" · ")}</p>
                   ) : null}
-                  <p className="mt-2 text-sm text-slate-600">
-                    <span className="font-medium text-slate-700">OC number:</span> {selectedSite.ocNumber || "Not set"}
+                  <p className="mt-2 text-sm text-text-secondary">
+                    <span className="font-medium text-text-secondary">OC number:</span> {selectedSite.ocNumber || "Not set"}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -459,7 +459,7 @@ export default function CreateJobPage({
               </div>
             ) : (
               <div className="grid gap-4">
-                <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-white/70" aria-label="Saved sites">
+                <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-card/70" aria-label="Saved sites">
                   {selectedCustomerSites.map((site) => (
                     <button
                       key={site.id}
@@ -469,12 +469,12 @@ export default function CreateJobPage({
                     >
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-950">{getSiteDisplayName(site)}</span>
+                          <span className="font-semibold text-foreground">{getSiteDisplayName(site)}</span>
                           {site.siteType ? <Badge variant="secondary">{formatSiteType(site.siteType)}</Badge> : null}
                         </span>
-                        {site.contactName ? <span className="mt-1 block text-sm text-slate-500">{[site.contactName, site.contactPhone].filter(Boolean).join(" · ")}</span> : null}
+                        {site.contactName ? <span className="mt-1 block text-sm text-muted-foreground">{[site.contactName, site.contactPhone].filter(Boolean).join(" · ")}</span> : null}
                       </span>
-                      <span className="mt-0.5 shrink-0 rounded-md border bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-900">Select</span>
+                      <span className="mt-0.5 shrink-0 rounded-md border bg-card px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-foreground">Select</span>
                     </button>
                   ))}
                 </div>
@@ -528,7 +528,7 @@ export default function CreateJobPage({
                     markDirty();
                     setSiteDraft((current) => ({ ...current, ocNumber: event.target.value }));
                   }} placeholder="e.g. PS123456" />
-                  <p className="text-sm text-slate-500">Owners Corporation / plan reference for this property.</p>
+                  <p className="text-sm text-muted-foreground">Owners Corporation / plan reference for this property.</p>
                 </div>
               </div>
               <ContactSnapshotEditor
@@ -565,7 +565,7 @@ export default function CreateJobPage({
           )}
 
           {selectedSiteAccessNote?.notes ? (
-            <div className="mt-5 border-l-4 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <div className="mt-5 border-l-4 border-status-warning-border bg-status-warning-surface px-4 py-3 text-sm text-status-warning">
               <p className="font-medium">Site access notes</p>
               <p className="mt-1 whitespace-pre-wrap leading-6">{selectedSiteAccessNote.notes}</p>
             </div>
@@ -665,14 +665,14 @@ export default function CreateJobPage({
               </Select>
             </div>
             <div className="record-passive-surface rounded-lg px-4 py-3 text-sm">
-              <p className="font-medium text-slate-950">Initial status</p>
-              <p className="mt-1 text-slate-600">To Do</p>
+              <p className="font-medium text-foreground">Initial status</p>
+              <p className="mt-1 text-text-secondary">To Do</p>
             </div>
           </div>
 
           <details className="record-inset-surface mt-5 rounded-lg p-3 sm:p-4">
-            <summary className="cursor-pointer font-medium text-slate-950">Job contacts (optional)</summary>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Leave these blank to use the saved site and customer billing contacts.</p>
+            <summary className="cursor-pointer font-medium text-foreground">Job contacts (optional)</summary>
+            <p className="mt-2 text-sm leading-6 text-text-secondary">Leave these blank to use the saved site and customer billing contacts.</p>
             <div className="mt-4 grid gap-3">
               <ContactSnapshotEditor title="Requester" description="Who asked for the work or booked the visit." contacts={availableContacts} fallbackRole="Requester" value={job.requesterContact} onChange={(contact) => {
                 markDirty();

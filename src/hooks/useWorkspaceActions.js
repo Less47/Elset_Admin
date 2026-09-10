@@ -2202,6 +2202,16 @@ export function useWorkspaceActions({
     return true;
   }
 
+  async function handleWorkspaceLogoChange(file) {
+    if (!canManageBusiness || !useSqliteApi) throw new Error("Workspace branding is not available for this account or storage mode.");
+    const response = await fetchWithAuth("/api/settings/workspace-logo", file
+      ? { method: "PUT", headers: { "Content-Type": file.type }, body: file }
+      : { method: "DELETE" });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "Unable to save the workspace logo.");
+    setData((previous) => ({ ...previous, settings: { ...previous.settings, workspaceLogoUrl: payload.workspaceLogoUrl } }));
+  }
+
   async function handleApplyThemePreset(values) {
     return themeSettingsSave.change(values);
   }
@@ -2237,6 +2247,7 @@ export function useWorkspaceActions({
   return {
     themeSaveState: { status: themeSettingsSave.status, error: themeSettingsSave.error, scope: themeSettingsSave.scope },
     handleRetryThemeSave,
+    handleWorkspaceLogoChange,
     createJob,
     handleAddInvoicePayment,
     handleAddJobNote,

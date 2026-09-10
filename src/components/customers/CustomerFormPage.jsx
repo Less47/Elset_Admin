@@ -86,12 +86,12 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
         </WorkspaceSection>
         <WorkspaceSection title="Primary site" panel={editing}>
           {editing ? <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 text-sm [overflow-wrap:anywhere]"><p>{customer.address || "No primary site saved"}</p><p className="mt-1 text-xs text-slate-600">Address, site type, OC number and access information are managed in the Site profile.</p></div>
+            <div className="min-w-0 text-sm [overflow-wrap:anywhere]"><p>{customer.address || "No primary site saved"}</p><p className="mt-1 text-xs text-text-secondary">Address, site type, OC number and access information are managed in the Site profile.</p></div>
             {primarySite ? <Button type="button" variant="outline" onClick={() => onOpenSite(primarySite)}>Open Site Profile</Button> : null}
           </div> : <div className="grid min-w-0 items-start gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2"><CustomerField id="primary-site-address" label="Address"><AddressAutocompleteInput id="primary-site-address" value={draft.address} onChange={(value) => update("address", value)} placeholder="Search the customer's main address" /></CustomerField></div>
             <CustomerTypeField id="primary-site-type" label="Primary site type" options={siteTypeOptions} value={draft.primarySiteType} onChange={(value) => update("primarySiteType", value)} />
-            <CustomerField id="primary-site-oc" label="OC number"><Input id="primary-site-oc" value={draft.primaryOcNumber} onChange={(event) => update("primaryOcNumber", event.target.value)} placeholder="e.g. PS123456" /><p className="text-xs text-slate-600">Owners Corporation / plan reference for this property.</p></CustomerField>
+            <CustomerField id="primary-site-oc" label="OC number"><Input id="primary-site-oc" value={draft.primaryOcNumber} onChange={(event) => update("primaryOcNumber", event.target.value)} placeholder="e.g. PS123456" /><p className="text-xs text-text-secondary">Owners Corporation / plan reference for this property.</p></CustomerField>
           </div>}
         </WorkspaceSection>
         {editing ? <WorkspaceSection title="Contact details" panel description="Account email and phone remain the customer fallback. Named contacts can be used for access, requests or billing.">
@@ -115,7 +115,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
       {error ? <div role="alert" className={editing ? "" : "px-3 pb-3"}><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
       {editing ? <WorkspaceActionBar maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} status={saveStatus}>{formActions}</WorkspaceActionBar> : (
         <footer className="flex min-w-0 items-center justify-between gap-2 border-t border-[var(--data-view-border)] p-3">
-          <div className="min-w-0 flex-1 text-xs font-medium text-slate-600" aria-live="polite">{saveStatus}</div>
+          <div className="min-w-0 flex-1 text-xs font-medium text-text-secondary" aria-live="polite">{saveStatus}</div>
           <div className="flex shrink-0 items-center gap-2">{formActions}</div>
         </footer>
       )}

@@ -305,7 +305,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             <>
             <DesktopControlField htmlFor="desktop-inventory-stock-filter" label="Stock filter" size="medium">
               <Select value={filterBy} onValueChange={setFilterBy}>
-                <SelectTrigger id="desktop-inventory-stock-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectTrigger id="desktop-inventory-stock-filter" className="data-toolbar-field rounded-lg border-border bg-card">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -319,7 +319,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
             <DesktopControlField htmlFor="desktop-inventory-sort" label="Sort by" size="medium">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger id="desktop-inventory-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectTrigger id="desktop-inventory-sort" className="data-toolbar-field rounded-lg border-border bg-card">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -347,17 +347,17 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
           )}
         />
 
-        <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-        <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">
+        <Card className="data-card gap-0 overflow-hidden rounded-xl border-border shadow-none">
+        <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-4">
           {[
             { label: "Parts", value: inventoryStats.totalParts },
             { label: "Units on hand", value: inventoryStats.totalUnits },
             { label: "Needs reorder", value: inventoryStats.lowStock + inventoryStats.outOfStock },
             { label: "Stock value", value: money(inventoryStats.inventoryValue) },
           ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
+            <div key={stat.label} className="data-stat-card bg-card px-panel py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{stat.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{stat.value}</p>
             </div>
           ))}
         </div>
@@ -392,10 +392,10 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   <MobileRecordCard key={part.id} labelledBy={headingId} recordId={part.id}>
                     <MobileRecordHeader>
                       <div className="min-w-0">
-                        <h3 id={headingId} className="line-clamp-2 font-semibold text-slate-950 [overflow-wrap:anywhere]">
+                        <h3 id={headingId} className="line-clamp-2 font-semibold text-foreground [overflow-wrap:anywhere]">
                           {part.name}
                         </h3>
-                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-500 [overflow-wrap:anywhere]">
+                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                           {part.sku || "No SKU"} - {part.category}
                         </p>
                       </div>
@@ -404,12 +404,12 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
                     <MobileRecordBody>
                       <p className="line-clamp-1">
-                        <span className="font-medium text-slate-500">Supplier: </span>
-                        <span className="text-slate-800">{part.supplier || "Not set"}</span>
+                        <span className="font-medium text-muted-foreground">Supplier: </span>
+                        <span className="text-foreground">{part.supplier || "Not set"}</span>
                       </p>
                       <p className="line-clamp-1">
-                        <span className="font-medium text-slate-500">Location: </span>
-                        <span className="text-slate-800">{part.location || "Not set"}</span>
+                        <span className="font-medium text-muted-foreground">Location: </span>
+                        <span className="text-foreground">{part.location || "Not set"}</span>
                       </p>
                     </MobileRecordBody>
 
@@ -422,7 +422,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                     <MobileRecordActions>
                       <Button
                         variant="outline"
-                        className="border-slate-300 px-3"
+                        className="border-border px-3"
                         aria-label={`Edit part ${part.name}`}
                         onClick={() => {
                           setEditingPart(part);
@@ -433,7 +433,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                       </Button>
                       <Button
                         variant="outline"
-                        className="border-rose-200 px-3 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                        className="border-status-danger-border px-3 text-status-danger hover:bg-status-danger-surface hover:text-status-danger"
                         aria-label={`Delete part ${part.name}`}
                         onClick={() => onDeletePart(part.id)}
                       >
@@ -447,8 +447,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
           ) : (
             <div data-desktop-record-results>
               <div className="overflow-x-auto text-xs 2xl:hidden">
-                <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
+                <div className="data-grid grid min-w-[520px] gap-px bg-surface-selected md:min-w-0">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Part</span>
                     <span className="text-right">Stock</span>
                     <span className="text-right">Value</span>
@@ -462,27 +462,27 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   return (
                     <div
                       key={part.id}
-                      className="data-grid-row grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-slate-200 transition [&>*]:bg-white"
+                      className="data-grid-row grid grid-cols-[minmax(0,1.35fr)_108px_110px_112px] gap-px bg-surface-selected transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">{part.name}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{part.sku || "No SKU"} - {part.category}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{part.supplier || "No supplier"} / {part.location || "No location"}</p>
+                        <p className="truncate font-semibold text-foreground">{part.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{part.sku || "No SKU"} - {part.category}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{part.supplier || "No supplier"} / {part.location || "No location"}</p>
                       </div>
-                      <div className="min-w-0 text-right text-slate-700">
-                        <p className="font-semibold text-slate-950">{part.quantity}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">Reorder {part.reorderLevel}</p>
+                      <div className="min-w-0 text-right text-text-secondary">
+                        <p className="font-semibold text-foreground">{part.quantity}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Reorder {part.reorderLevel}</p>
                         <Badge className={`${status.className} mt-1 px-1.5 py-0 text-[10px]`}>{status.label}</Badge>
                       </div>
-                      <div className="min-w-0 text-right text-slate-700">
-                        <p className="font-semibold text-slate-950">{money(stockValue)}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{money(part.unitCost)} ea</p>
+                      <div className="min-w-0 text-right text-text-secondary">
+                        <p className="font-semibold text-foreground">{money(stockValue)}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{money(part.unitCost)} ea</p>
                       </div>
                       <div className="flex flex-wrap justify-end gap-1">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 rounded-md border-slate-300 px-2 text-[11px]"
+                          className="h-7 rounded-md border-border px-2 text-[11px]"
                           onClick={() => {
                             setEditingPart(part);
                             setPartDialogOpen(true);
@@ -493,7 +493,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 rounded-md border-rose-200 px-2 text-[11px] text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                          className="h-7 rounded-md border-status-danger-border px-2 text-[11px] text-status-danger hover:bg-status-danger-surface hover:text-status-danger"
                           onClick={() => onDeletePart(part.id)}
                         >
                           Delete
@@ -506,8 +506,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
               </div>
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1320px]">
-                <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
+                <div className="data-grid grid gap-px bg-surface-selected">
+                  <div className="data-grid-header grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Part</span>
                     <span>SKU</span>
                     <span>Category</span>
@@ -528,20 +528,20 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                   return (
                     <div
                       key={part.id}
-                      className="data-grid-row grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
+                      className="data-grid-row grid grid-cols-[1.7fr_130px_150px_95px_110px_110px_120px_1fr_1fr_130px_150px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">{part.name}</p>
-                        <p className="mt-1 truncate text-xs text-slate-500">{part.notes || "No notes saved"}</p>
+                        <p className="truncate font-semibold text-foreground">{part.name}</p>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{part.notes || "No notes saved"}</p>
                       </div>
-                      <p className="truncate text-slate-700">{part.sku || "Not set"}</p>
-                      <p className="truncate text-slate-700">{part.category}</p>
-                      <p className="text-right font-medium text-slate-950">{part.quantity}</p>
-                      <p className="text-right text-slate-700">{part.reorderLevel}</p>
-                      <p className="text-right text-slate-700">{money(part.unitCost)}</p>
-                      <p className="text-right font-medium text-slate-950">{money(stockValue)}</p>
-                      <p className="truncate text-slate-700">{part.supplier || "Not set"}</p>
-                      <p className="truncate text-slate-700">{part.location || "Not set"}</p>
+                      <p className="truncate text-text-secondary">{part.sku || "Not set"}</p>
+                      <p className="truncate text-text-secondary">{part.category}</p>
+                      <p className="text-right font-medium text-foreground">{part.quantity}</p>
+                      <p className="text-right text-text-secondary">{part.reorderLevel}</p>
+                      <p className="text-right text-text-secondary">{money(part.unitCost)}</p>
+                      <p className="text-right font-medium text-foreground">{money(stockValue)}</p>
+                      <p className="truncate text-text-secondary">{part.supplier || "Not set"}</p>
+                      <p className="truncate text-text-secondary">{part.location || "Not set"}</p>
                       <div>
                         <Badge className={status.className}>{status.label}</Badge>
                       </div>
@@ -549,7 +549,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                         <Button
                           variant="outline"
                           size="sm"
-                          className="rounded-md border-slate-300"
+                          className="rounded-md border-border"
                           onClick={() => {
                             setEditingPart(part);
                             setPartDialogOpen(true);
@@ -560,7 +560,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
                         <Button
                           variant="outline"
                           size="sm"
-                          className="rounded-md border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                          className="rounded-md border-status-danger-border text-status-danger hover:bg-status-danger-surface hover:text-status-danger"
                           onClick={() => onDeletePart(part.id)}
                         >
                           Delete
@@ -588,7 +588,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
       >
         <FilterSheetField id="mobile-inventory-stock-filter" label="Stock filter">
           <Select value={filterBy} onValueChange={setFilterBy}>
-            <SelectTrigger id="mobile-inventory-stock-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="mobile-inventory-stock-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All parts</SelectItem>
               <SelectItem value="low-stock">Needs reorder</SelectItem>

@@ -16,11 +16,11 @@ export function CalendarMaintenanceChip({ occurrence, onOpen, dragApi }) {
 
 export default function CalendarMaintenanceItem({ occurrence, actions, dragApi, busy }) {
   return <article data-calendar-inspector-maintenance={occurrence.key} className="calendar-maintenance-detail rounded-lg border p-2" {...dragApi.getDragProps(occurrence, !occurrence.locked && occurrence.active)}>
-    <div className="flex items-center gap-1 text-[10px] font-semibold text-teal-800"><Wrench className="h-3 w-3" /> Maintenance · {getMaintenanceFrequencyMeta(occurrence.frequency).label}</div>
-    <p className="mt-1 truncate text-xs font-semibold">{occurrence.planName}</p><p className="truncate text-[10px] text-slate-600">{occurrence.customerName}</p>
-    <p className="mt-1 text-[10px] text-slate-600">{formatCalendarDate(occurrence.date)}{occurrence.completedAt ? " · Completed" : ""}</p>
-    {occurrence.jobNumber ? <p className="mt-1 text-[10px] text-teal-900">Job #{occurrence.jobNumber} · {occurrence.jobStatus}{occurrence.jobScheduledDate !== occurrence.date ? ` · Scheduled ${formatCalendarDate(occurrence.jobScheduledDate)}` : ""}</p> : null}
-    {occurrence.generated && !occurrence.jobId ? <p className="mt-1 text-[10px] text-slate-600">Generated job archived</p> : null}
+    <div className="flex items-center gap-1 text-[10px] font-semibold text-status-maintenance"><Wrench className="h-3 w-3" /> Maintenance · {getMaintenanceFrequencyMeta(occurrence.frequency).label}</div>
+    <p className="mt-1 truncate text-xs font-semibold">{occurrence.planName}</p><p className="truncate text-[10px] text-text-secondary">{occurrence.customerName}</p>
+    <p className="mt-1 text-[10px] text-text-secondary">{formatCalendarDate(occurrence.date)}{occurrence.completedAt ? " · Completed" : ""}</p>
+    {occurrence.jobNumber ? <p className="mt-1 text-[10px] text-status-maintenance">Job #{occurrence.jobNumber} · {occurrence.jobStatus}{occurrence.jobScheduledDate !== occurrence.date ? ` · Scheduled ${formatCalendarDate(occurrence.jobScheduledDate)}` : ""}</p> : null}
+    {occurrence.generated && !occurrence.jobId ? <p className="mt-1 text-[10px] text-text-secondary">Generated job archived</p> : null}
     <div className="mt-2 flex flex-wrap gap-1" data-calendar-action>
       <Button size="sm" variant="outline" className="calendar-maintenance-action" onClick={() => actions.openPlan(occurrence)}>Open Plan</Button>
       {occurrence.jobId ? <Button size="sm" variant="outline" className="calendar-maintenance-action" onClick={() => actions.openJob(occurrence)}>Open Job</Button> : !occurrence.completedAt && !occurrence.generated ? <Button size="sm" className="calendar-maintenance-action" disabled={busy || !occurrence.active} onClick={() => actions.generate(occurrence)}>Generate Job</Button> : null}

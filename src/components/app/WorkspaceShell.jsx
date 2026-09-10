@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
+import WorkspaceLogo from "@/components/app/WorkspaceLogo";
 import MobileWorkspaceNavigation from "@/components/app/MobileWorkspaceNavigation";
 import CalendarManager from "@/components/calendar/CalendarManager";
 import CustomerManager from "@/components/customers/CustomerManager";
@@ -24,7 +25,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
-  LOGO_SRC,
   addMonths,
   buildCustomerSites,
   formatDate,
@@ -43,8 +43,6 @@ import {
   toDateInputValue,
   toTimestamp,
 } from "@/lib/app-support";
-
-const FAVICON_SRC = "/favicon.png";
 
 export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences }) {
   const [serviceBoardHiddenColumns, setServiceBoardHiddenColumns] = useUserUiPreference("boardHiddenColumns");
@@ -123,11 +121,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleUpdateStaff,
   } = actions;
   const roleMenuLabel = isTechnician ? "Technician" : isAdmin ? "Admin" : "Office";
-  const roleDescription = isTechnician
-    ? "Access field jobs, open job details, and keep progress updated."
-    : isAdmin
-      ? "Manage the full workspace, staff login access, templates, and shared operational data."
-      : "Coordinate day-to-day jobs, customers, invoicing, and scheduling across the business.";
   const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
   const desktopServiceBoardFullScreen = isThreeColumnBoard && isServiceBoardFullScreen;
   const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
@@ -152,14 +145,14 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const renderServiceBoardControls = (tone = "panel") => {
     const isHeroTone = tone === "hero";
     const searchInputClassName = isHeroTone
-      ? "min-w-0 flex-1 border-white/70 bg-white/95 text-slate-900 placeholder:text-slate-500 shadow-sm"
+      ? "min-w-0 flex-1 border-border bg-card/95 text-foreground placeholder:text-muted-foreground shadow-sm"
       : "min-w-0 flex-1";
     const urgencyContainerClassName = isHeroTone
-      ? "flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-3 py-2 text-white"
-      : "flex items-center gap-2 rounded-2xl border bg-white px-3 py-2";
+      ? "flex items-center gap-2 rounded-2xl border border-white/20 bg-current/10 px-3 py-2 text-inherit"
+      : "flex items-center gap-2 rounded-2xl border bg-card px-3 py-2";
     const fullScreenButtonClassName = isHeroTone
-      ? "rounded-2xl border-white/30 bg-white/95 text-slate-900 hover:bg-white"
-      : "rounded-2xl bg-white";
+      ? "rounded-2xl border-white/30 bg-card/95 text-foreground hover:bg-card"
+      : "rounded-2xl bg-card";
 
     return (
       <div className="grid gap-3">
@@ -224,6 +217,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           onNewJob={() => openCreateJob()}
           onOpenTomorrow={() => isThreeColumnBoard ? setServiceBoardTomorrowPanelOpen((open) => !open) : setMobileServiceBoardView(TOMORROW_VIEW)}
           roleLabel={roleMenuLabel}
+          workspaceLogoUrl={themeSettings.workspaceLogoUrl}
           themePalette={themePalette}
           tomorrowCount={derived.tomorrowJobs.length}
           tomorrowSelected={isThreeColumnBoard ? serviceBoardTomorrowPanelOpen : mobileServiceBoardView === TOMORROW_VIEW}
@@ -237,34 +231,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             style={themePalette.sidebarShell}
           >
             <div className={isIconOnlySidebar ? "flex items-center gap-2 overflow-x-auto p-2 lg:block lg:flex-1 lg:overflow-y-auto" : "p-3 lg:flex-1 lg:overflow-y-auto lg:p-4"}>
-              <div
-                className={isIconOnlySidebar ? "flex h-12 w-12 shrink-0 justify-center overflow-hidden rounded-2xl border p-0 shadow-sm lg:mx-auto" : "overflow-hidden rounded-3xl border p-3 shadow-sm"}
-                style={{
-                  ...themePalette.sidebarHeader,
-                  borderColor: themePalette.borderColor,
-                }}
-              >
-                {isIconOnlySidebar ? (
-                  <div className="flex h-full w-full shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white p-2 shadow-sm" title="Elset Admin">
-                    <img src={FAVICON_SRC} alt="Elset Admin" className="block h-full w-full object-contain" />
-                  </div>
-                ) : (
-                  <>
-                    <div className="mx-auto grid max-w-full grid-cols-[104px_72px] items-center justify-center gap-2.5">
-                      <div className="flex h-14 w-[104px] shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-black/5 bg-white px-1 shadow-sm">
-                        <img src={LOGO_SRC} alt="Elset logo" className="block h-auto w-[138%] max-w-none" />
-                      </div>
-                      <div className="min-w-0 self-center text-left font-semibold uppercase leading-none tracking-[0.04em]">
-                        <span className="block text-[0.7rem]">{roleMenuLabel}</span>
-                        <span className="mt-1 block text-sm">Menu</span>
-                      </div>
-                    </div>
-                    <p className="mt-4 text-sm leading-6" style={{ color: themePalette.sidebarHeaderMuted }}>
-                      {roleDescription}
-                    </p>
-                  </>
-                )}
-              </div>
+              <WorkspaceLogo url={themeSettings.workspaceLogoUrl} compact={isIconOnlySidebar} className={isIconOnlySidebar ? "lg:mx-auto" : ""} />
 
               <nav
                 aria-label="Application"
@@ -359,7 +326,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-full w-full rounded-xl bg-white/80 p-0"
+                        className="h-full w-full rounded-xl bg-card/80 p-0"
                         onClick={handleLogout}
                         title="Sign Out"
                         aria-label="Sign Out"
@@ -382,7 +349,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                         <Button
                           type="button"
                           variant="outline"
-                          className="mt-4 w-full rounded-xl bg-white/80"
+                          className="mt-4 w-full rounded-xl bg-card/80"
                           onClick={handleLogout}
                         >
                           <LogOut className="mr-2 h-4 w-4" /> Sign Out
@@ -417,7 +384,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       >
         {workspacePage}
         {personalPreferences?.error && !(activeSection === "settings" && activeSettingsTab === "ui" && themeSaveState.scope === "theme") ? (
-          <div role="alert" className="m-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div role="alert" className="m-3 flex flex-wrap items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">
             <span>Personal preferences could not be synced. {personalPreferences.error}</span>
             <Button type="button" variant="outline" onClick={personalPreferences.retry}>Retry personal preferences</Button>
           </div>
@@ -430,10 +397,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         >
         {authError ? (
           <Card className={mapWorkspaceOpen
-            ? "absolute bottom-4 left-4 z-[1100] max-w-[min(30rem,calc(100%-2rem))] rounded-xl border-amber-200 bg-amber-50 shadow-lg"
-            : "rounded-3xl border-amber-200 bg-amber-50"}
+            ? "absolute bottom-4 left-4 z-[1100] max-w-[min(30rem,calc(100%-2rem))] rounded-xl border-status-warning-border bg-status-warning-surface shadow-lg"
+            : "rounded-3xl border-status-warning-border bg-status-warning-surface"}
           >
-            <CardContent className="p-4 text-sm text-amber-950">
+            <CardContent className="p-4 text-sm text-status-warning">
               {authError}
             </CardContent>
           </Card>
@@ -456,7 +423,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
                 <div className="grid gap-4" data-desktop-service-board-layout>
                   {desktopServiceBoardFullScreen ? (
-                    <Card data-service-board-toolbar className="py-0 sticky top-3 z-20 rounded-xl border-slate-200 bg-white/80 shadow-sm backdrop-blur">
+                    <Card data-service-board-toolbar className="py-0 sticky top-3 z-20 rounded-xl border-border bg-card/80 shadow-sm backdrop-blur">
                       <CardContent className="grid gap-2 p-panel">
                         {renderServiceBoardControls("panel")}
                       </CardContent>
@@ -675,6 +642,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             onApplyPreset={handleApplyThemePreset}
             onResetUiSettings={handleResetUiSettings}
             onResetPreferences={handleResetPreferences}
+            onWorkspaceLogoChange={actions.handleWorkspaceLogoChange}
             activeTemplateType={activeTemplateType}
             onActiveTemplateTypeChange={setActiveTemplateType}
             templates={{

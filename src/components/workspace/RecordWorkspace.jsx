@@ -23,7 +23,7 @@ export function RecordWorkspace({
   title,
 }) {
   return (
-    <main className="record-workspace min-h-[100dvh] min-w-0 text-slate-950">
+    <main className="record-workspace min-h-[100dvh] min-w-0 text-foreground">
       <header className="record-workspace-header sticky top-0 z-40 border-b backdrop-blur-xl lg:mx-[var(--content-padding-x-lg)] lg:rounded-xl lg:border lg:shadow-xl">
         <div
           className={`mx-auto flex min-h-16 w-full ${maxWidth} items-center gap-2 px-panel py-2 sm:gap-3`}
@@ -37,7 +37,7 @@ export function RecordWorkspace({
             type="button"
             variant="ghost"
             size="icon"
-            className="record-workspace-back h-11 w-11 shrink-0 rounded-lg border-white/35 bg-white/12 text-inherit hover:bg-white/22 hover:text-inherit"
+            className="record-workspace-back h-11 w-11 shrink-0 rounded-lg border-white/35 bg-current/12 text-inherit hover:bg-current/22 hover:text-inherit"
             onClick={onBack}
             aria-label={`Back to ${backLabel}`}
             title={`Back to ${backLabel}`}
@@ -75,8 +75,8 @@ export function WorkspaceSection({ children, description = "", id, panel = false
     >
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold leading-5 text-slate-950 sm:text-lg">{title}</h2>
-          {description ? <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{description}</p> : null}
+          <h2 className="text-base font-semibold leading-5 text-foreground sm:text-lg">{title}</h2>
+          {description ? <p className="mt-1 max-w-3xl text-sm leading-5 text-text-secondary">{description}</p> : null}
         </div>
         {trailing ? <div className="shrink-0">{trailing}</div> : null}
       </div>
@@ -92,7 +92,7 @@ export function WorkspaceActionBar({ children, maxWidth = "max-w-6xl", status = 
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <div className={`mx-auto flex min-h-15 w-full ${maxWidth} items-center justify-between gap-2 px-panel py-2`}>
-        <div className="min-w-0 flex-1 text-xs font-medium text-slate-600 sm:text-sm" aria-live="polite">{status}</div>
+        <div className="min-w-0 flex-1 text-xs font-medium text-text-secondary sm:text-sm" aria-live="polite">{status}</div>
         <div className="flex shrink-0 items-center gap-2">{children}</div>
       </div>
     </div>
@@ -122,9 +122,9 @@ export function UnsavedChangesDialog({ open, onDiscard, onKeepEditing }) {
 
 export function WorkspaceMessage({ children, tone = "neutral" }) {
   const toneClass = tone === "error"
-    ? "border-rose-200 bg-rose-50 text-rose-900"
+    ? "border-status-danger-border bg-status-danger-surface text-status-danger"
     : tone === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      ? "border-status-success-border bg-status-success-surface text-status-success"
       : "record-empty-state";
 
   return <div className={`rounded-lg px-4 py-3 text-sm ${tone === "neutral" ? "" : "border"} ${toneClass}`}>{children}</div>;

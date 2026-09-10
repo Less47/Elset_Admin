@@ -7,9 +7,9 @@ import { formatCalendarDate } from "./calendar-utils";
 import { CalendarMaintenanceChip } from "./CalendarMaintenanceItem";
 
 const urgencyTone = {
-  Low: "bg-slate-100 text-slate-700",
-  Medium: "bg-amber-100 text-amber-800",
-  High: "bg-rose-100 text-rose-800",
+  Low: "bg-surface-raised text-text-secondary",
+  Medium: "bg-status-warning-surface text-status-warning",
+  High: "bg-status-danger-surface text-status-danger",
 };
 
 export default function CalendarJobCard({ job, onOpenJob, onSchedule, onUnschedule, dragApi, draggable = true, busy = false }) {
@@ -28,25 +28,25 @@ export default function CalendarJobCard({ job, onOpenJob, onSchedule, onUnschedu
         aria-label={`Open Job #${job.jobNumber}: ${job.customerName}`}
       >
         <span className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Job #{job.jobNumber}</span>
-          {draggable ? <GripVertical className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" /> : null}
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary">Job #{job.jobNumber}</span>
+          {draggable ? <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
         </span>
-        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-950">{job.customerName}</span>
-        <span className="block truncate text-xs text-slate-700">{job.title || job.description || "Untitled job"}</span>
-        {job.maintenancePlanId ? <span className="mt-1 block truncate text-[10px] text-teal-800"><Wrench className="mr-1 inline h-3 w-3" />Maintenance · {job.maintenancePlanName}</span> : null}
-        <span className="mt-1 block truncate text-[11px] text-slate-600">{formatStreetAndSuburb(job.jobAddress) || "Site not set"}</span>
-        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-700">
+        <span className="mt-0.5 block truncate text-xs font-semibold text-foreground">{job.customerName}</span>
+        <span className="block truncate text-xs text-text-secondary">{job.title || job.description || "Untitled job"}</span>
+        {job.maintenancePlanId ? <span className="mt-1 block truncate text-[10px] text-status-maintenance"><Wrench className="mr-1 inline h-3 w-3" />Maintenance · {job.maintenancePlanName}</span> : null}
+        <span className="mt-1 block truncate text-[11px] text-text-secondary">{formatStreetAndSuburb(job.jobAddress) || "Site not set"}</span>
+        <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-secondary">
           <span>{formatCalendarDate(job.scheduledDate)}</span>
           {job.urgency ? <Badge className={`h-auto px-1.5 py-0 text-[10px] ${urgencyTone[job.urgency] || urgencyTone.Low}`}>{job.urgency}</Badge> : null}
         </span>
-        {job.assignedTechnicianName ? <span className="mt-1 block truncate text-[11px] text-slate-600">{job.assignedTechnicianName}</span> : null}
+        {job.assignedTechnicianName ? <span className="mt-1 block truncate text-[11px] text-text-secondary">{job.assignedTechnicianName}</span> : null}
       </button>
-      <div className="flex gap-1 border-t border-black/10 px-2 py-1.5" data-calendar-action>
-        <Button type="button" size="sm" variant="outline" className="h-11 min-w-0 flex-1 bg-white/75 px-2 text-xs" disabled={busy} onClick={(event) => onSchedule(job, event.currentTarget)}>
+      <div className="flex gap-1 border-t border-border px-2 py-1.5" data-calendar-action>
+        <Button type="button" size="sm" variant="outline" className="h-11 min-w-0 flex-1 bg-card/75 px-2 text-xs" disabled={busy} onClick={(event) => onSchedule(job, event.currentTarget)}>
           <CalendarDays className="h-3.5 w-3.5" /> {job.scheduledDate ? "Reschedule" : "Schedule"}
         </Button>
         {job.scheduledDate ? (
-          <Button type="button" variant="outline" className="h-11 w-11 shrink-0 bg-white/75 p-0" disabled={busy} onClick={() => onUnschedule(job)} aria-label={`Remove scheduled date for Job #${job.jobNumber}`} title="Remove scheduled date">
+          <Button type="button" variant="outline" className="h-11 w-11 shrink-0 bg-card/75 p-0" disabled={busy} onClick={() => onUnschedule(job)} aria-label={`Remove scheduled date for Job #${job.jobNumber}`} title="Remove scheduled date">
             <CalendarX2 className="h-4 w-4" />
           </Button>
         ) : null}

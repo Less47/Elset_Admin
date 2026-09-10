@@ -117,7 +117,7 @@ function StaffFormDialog({
           </div>
 
           {showLoginAccessSection ? (
-            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="grid gap-4 rounded-2xl border border-border bg-muted p-3">
               <button
                 type="button"
                 className="flex w-full items-start justify-between gap-3 text-left"
@@ -125,14 +125,14 @@ function StaffFormDialog({
                 aria-expanded={isLoginAccessExpanded}
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-900">Login Access</p>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="text-sm font-semibold text-foreground">Login Access</p>
+                  <p className="mt-1 text-sm text-text-secondary">
                     {linkedLoginAccount
                       ? `${linkedLoginAccount.username} - ${formatLoginAccessRole(linkedLoginAccount.role)} access`
                       : "Not set"}
                   </p>
                 </div>
-                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-card text-text-secondary shadow-sm">
                   <ChevronRight className={`h-4 w-4 transition-transform ${isLoginAccessExpanded ? "rotate-90" : ""}`} />
                 </span>
               </button>
@@ -183,23 +183,23 @@ function StaffFormDialog({
                   </div>
 
                   {linkedLoginAccount ? (
-                    <p className="text-xs text-slate-500">
-                      Current access: <span className="font-medium text-slate-700">{linkedLoginAccount.username}</span> - {formatLoginAccessRole(linkedLoginAccount.role)}
+                    <p className="text-xs text-muted-foreground">
+                      Current access: <span className="font-medium text-text-secondary">{linkedLoginAccount.username}</span> - {formatLoginAccessRole(linkedLoginAccount.role)}
                     </p>
                   ) : (
-                    <p className="text-xs text-slate-500">No login access has been created for this staff member yet.</p>
+                    <p className="text-xs text-muted-foreground">No login access has been created for this staff member yet.</p>
                   )}
-                  <p className="text-xs text-slate-500">Passwords are stored securely and can only be reset, not viewed.</p>
+                  <p className="text-xs text-muted-foreground">Passwords are stored securely and can only be reset, not viewed.</p>
 
-                  {loginUsernameMissing ? <p className="text-sm text-rose-600">Enter a username to save login access.</p> : null}
-                  {loginPasswordTooShort ? <p className="text-sm text-rose-600">Passwords must be at least 6 characters.</p> : null}
-                  {loginPasswordsDoNotMatch ? <p className="text-sm text-rose-600">Passwords do not match.</p> : null}
+                  {loginUsernameMissing ? <p className="text-sm text-status-danger">Enter a username to save login access.</p> : null}
+                  {loginPasswordTooShort ? <p className="text-sm text-status-danger">Passwords must be at least 6 characters.</p> : null}
+                  {loginPasswordsDoNotMatch ? <p className="text-sm text-status-danger">Passwords do not match.</p> : null}
                 </>
               ) : null}
             </div>
           ) : null}
 
-          {saveError ? <p className="text-sm text-rose-600">{saveError}</p> : null}
+          {saveError ? <p className="text-sm text-status-danger">{saveError}</p> : null}
         </div>
 
         <DialogFooter>
@@ -340,7 +340,7 @@ export default function StaffManager({
           filters={(
             <DesktopControlField htmlFor="desktop-staff-sort" label="Sort by" size="medium">
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger id="desktop-staff-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
+                <SelectTrigger id="desktop-staff-sort" className="data-toolbar-field rounded-lg border-border bg-card">
                   <SelectValue placeholder="Sort staff" />
                 </SelectTrigger>
                 <SelectContent>
@@ -368,26 +368,26 @@ export default function StaffManager({
         <Card
           className={isMobileRecordLayout
             ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
-            : "data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none"}
+            : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
           data-mobile-record-results-shell={isMobileRecordLayout ? "" : undefined}
         >
-        <div className="data-stat-grid hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-4">
+        <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-4">
           {[
             { label: "Total staff", value: staffStats.totalStaff },
             { label: "Missing email", value: staffStats.missingEmail },
             { label: "Missing phone", value: staffStats.missingPhone },
             { label: canManageLogins ? "With login access" : "Complete profiles", value: canManageLogins ? staffStats.withLoginAccess : staffStats.completeProfiles },
           ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-white px-panel py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
+            <div key={stat.label} className="data-stat-card bg-card px-panel py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{stat.label}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground">{stat.value}</p>
             </div>
           ))}
         </div>
 
         <CardContent className="p-0">
           {canManageLogins && loginAccountsError ? (
-            <div className="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-700">
+            <div className="border-b border-status-danger-border bg-status-danger-surface px-5 py-3 text-sm text-status-danger">
               Unable to load login access details right now: {loginAccountsError}
             </div>
           ) : null}
@@ -419,10 +419,10 @@ export default function StaffManager({
                   <MobileRecordCard key={staffMember.id} labelledBy={headingId} recordId={staffMember.id}>
                     <MobileRecordHeader>
                       <div className="min-w-0">
-                        <h3 id={headingId} className="line-clamp-2 font-semibold text-slate-950 [overflow-wrap:anywhere]">
+                        <h3 id={headingId} className="line-clamp-2 font-semibold text-foreground [overflow-wrap:anywhere]">
                           {staffMember.name}
                         </h3>
-                        <p className="mt-0.5 line-clamp-1 text-xs text-slate-500 [overflow-wrap:anywhere]">
+                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                           {staffMember.role || "Role not set"}
                         </p>
                       </div>
@@ -430,23 +430,23 @@ export default function StaffManager({
 
                     <MobileRecordBody>
                       <p className="line-clamp-1">
-                        <span className="font-medium text-slate-500">Email: </span>
-                        <span className="text-slate-800">{staffMember.email || "Not set"}</span>
+                        <span className="font-medium text-muted-foreground">Email: </span>
+                        <span className="text-foreground">{staffMember.email || "Not set"}</span>
                       </p>
                       <p>
-                        <span className="font-medium text-slate-500">Phone: </span>
-                        <span className="text-slate-800">{staffMember.phone || "Not set"}</span>
+                        <span className="font-medium text-muted-foreground">Phone: </span>
+                        <span className="text-foreground">{staffMember.phone || "Not set"}</span>
                       </p>
                       <p className="text-xs">
-                        <span className="font-medium text-slate-500">Created: </span>
-                        <span className="text-slate-700">{formatDate(staffMember.createdAt)}</span>
+                        <span className="font-medium text-muted-foreground">Created: </span>
+                        <span className="text-text-secondary">{formatDate(staffMember.createdAt)}</span>
                       </p>
                     </MobileRecordBody>
 
                     <MobileRecordActions>
                       <Button
                         variant="outline"
-                        className="border-slate-300 px-3"
+                        className="border-border px-3"
                         aria-label={`Edit staff member ${staffMember.name}`}
                         onClick={() => {
                           setEditingStaff(staffMember);
@@ -463,8 +463,8 @@ export default function StaffManager({
           ) : (
             <div data-desktop-record-results>
               <div className="overflow-x-auto text-xs 2xl:hidden">
-                <div className="data-grid grid min-w-[520px] gap-px bg-slate-200 md:min-w-0">
-                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 font-semibold uppercase tracking-[0.12em] text-slate-500 [&>*]:bg-slate-100">
+                <div className="data-grid grid min-w-[520px] gap-px bg-surface-selected md:min-w-0">
+                  <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Staff</span>
                     <span>Contact</span>
                     <span className="text-right">Action</span>
@@ -473,21 +473,21 @@ export default function StaffManager({
                   {filteredStaff.map((staffMember) => (
                     <div
                       key={staffMember.id}
-                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-slate-200 transition [&>*]:bg-white"
+                      className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-surface-selected transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.role || "Role not set"}</p>
+                        <p className="truncate font-semibold text-foreground">{staffMember.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{staffMember.role || "Role not set"}</p>
                       </div>
-                      <div className="min-w-0 text-slate-700">
+                      <div className="min-w-0 text-text-secondary">
                         <p className="truncate">{staffMember.email || "No email"}</p>
-                        <p className="mt-0.5 truncate text-[11px] text-slate-500">{staffMember.phone || "No phone"}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{staffMember.phone || "No phone"}</p>
                       </div>
                       <div className="flex justify-end">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 rounded-md border-slate-300 px-2 text-[11px]"
+                          className="h-7 rounded-md border-border px-2 text-[11px]"
                           onClick={() => {
                             setEditingStaff(staffMember);
                             setStaffDialogOpen(true);
@@ -502,8 +502,8 @@ export default function StaffManager({
               </div>
               <div className="hidden overflow-x-auto 2xl:block">
               <div className="min-w-[1120px]">
-                <div className="data-grid grid gap-px bg-slate-200">
-                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 [&>*]:bg-slate-100">
+                <div className="data-grid grid gap-px bg-surface-selected">
+                  <div className="data-grid-header grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Staff Member</span>
                     <span>Role</span>
                     <span>Email</span>
@@ -515,23 +515,23 @@ export default function StaffManager({
                   {filteredStaff.map((staffMember) => (
                     <div
                       key={staffMember.id}
-                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-slate-200 text-sm transition [&>*]:bg-white"
+                      className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">{staffMember.name}</p>
-                        <div className="mt-1 flex gap-2 text-xs text-slate-500">
+                        <p className="truncate font-semibold text-foreground">{staffMember.name}</p>
+                        <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
                           <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{staffMember.id.slice(0, 8)}</span>
                         </div>
                       </div>
-                      <p className="truncate text-slate-700">{staffMember.role || "Not set"}</p>
-                      <p className="truncate text-slate-700">{staffMember.email || "Not set"}</p>
-                      <p className="truncate text-slate-700">{staffMember.phone || "Not set"}</p>
-                      <p className="text-slate-700">{formatDate(staffMember.createdAt)}</p>
+                      <p className="truncate text-text-secondary">{staffMember.role || "Not set"}</p>
+                      <p className="truncate text-text-secondary">{staffMember.email || "Not set"}</p>
+                      <p className="truncate text-text-secondary">{staffMember.phone || "Not set"}</p>
+                      <p className="text-text-secondary">{formatDate(staffMember.createdAt)}</p>
                       <div className="flex justify-end">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="rounded-md border-slate-300"
+                          className="rounded-md border-border"
                           onClick={() => {
                             setEditingStaff(staffMember);
                             setStaffDialogOpen(true);
