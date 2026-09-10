@@ -327,10 +327,20 @@ function runForeignKeyCheck(db) {
 
 function buildInsertStatements(db) {
   return {
+    // Fresh schema bootstrap now creates the singleton before JSON import.
+    // The import's existing non-empty-workspace guard still runs before this upsert.
     workspaceInfo: db.prepare(`
       INSERT INTO workspace_info (
         id, schema_version, created_at, updated_at, imported_at, source_json_sha256, importer_version, meta_json
       ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        schema_version = excluded.schema_version,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        imported_at = excluded.imported_at,
+        source_json_sha256 = excluded.source_json_sha256,
+        importer_version = excluded.importer_version,
+        meta_json = excluded.meta_json
     `),
     setting: db.prepare(`
       INSERT INTO settings (key, value_json, updated_at)

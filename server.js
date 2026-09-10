@@ -1,11 +1,11 @@
 import { ensureAuthReady } from "./server-auth.js";
 import { createServerApp } from "./server-app.js";
-import { assertProductionWorkspaceStorageReady } from "./server-workspace-storage.js";
+import { initializeWorkspaceStorage } from "./server-workspace-storage.js";
 
 const port = Number(process.env.ELSET_API_PORT || process.env.PORT || 3101);
 const frontendUrl = String(process.env.ELSET_FRONTEND_URL || "").trim();
+initializeWorkspaceStorage();
 await ensureAuthReady();
-assertProductionWorkspaceStorageReady();
 const app = createServerApp();
 
 app.listen(port, () => {

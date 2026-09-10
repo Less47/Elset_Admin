@@ -489,33 +489,95 @@ export function configureWorkspacePragmas(db, { readonly = false } = {}) {
   }
 }
 
-export function migrateWorkspaceSchema(db) {
+export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
+  const objects = db.prepare("SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
+  const userVersion = Number(db.pragma("user_version", { simple: true }));
+  if (allowFresh && objects.length === 0 && userVersion === 0) return 0;
+  const names = new Set(objects.map((row) => row.name));
+  if (!names.has("workspace_info") || !names.has("workspace_schema_migrations")) {
+    throw new Error("SQLite workspace schema metadata is missing; refusing to initialize an unknown database.");
+  }
+  const info = db.prepare("SELECT schema_version FROM workspace_info WHERE id = 1").get();
+  const version = Number(info?.schema_version || 0);
+  const applied = db.prepare("SELECT version FROM workspace_schema_migrations ORDER BY version").all().map((row) => Number(row.version));
+  const latest = applied.at(-1) || 0;
+  if (Math.max(version, userVersion, latest) > WORKSPACE_SCHEMA_VERSION) {
+    throw new Error(`SQLite workspace schema version ${Math.max(version, userVersion, latest)} is newer than required version ${WORKSPACE_SCHEMA_VERSION}; refusing to downgrade.`);
+  }
+  if (!Number.isInteger(version) || version < 1 || version !== userVersion || version !== latest
+    || applied.length !== version || applied.some((entry, index) => entry !== index + 1 || migrations[index]?.version !== entry)) {
+    throw new Error(`SQLite workspace schema metadata is inconsistent (workspace_info=${version}, user_version=${userVersion}, migrations=${applied.join(",") || "none"}).`);
+  }
+  return version;
+}
+
+function assertWorkspaceSchemaObjects(db, version) {
+  const objects = new Set(db.prepare("SELECT type || ':' || name AS object FROM sqlite_schema").all().map((row) => row.object));
+  for (const migration of migrations.filter((entry) => entry.version <= version)) {
+    // The migration definitions remain the source of truth for required objects.
+    for (const match of migration.sql.matchAll(/CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(?:IF NOT EXISTS\s+)?(\w+)/gi)) {
+      if (!objects.has(`${match[1].toLowerCase()}:${match[2]}`)) {
+        throw new Error(`SQLite workspace schema ${version} is missing required ${match[1].toLowerCase()} ${match[2]}.`);
+      }
+    }
+  }
+  if (version >= 5) {
+    db.prepare(`SELECT occurrence_key, plan_id, series_id, original_date, override_date, job_id,
+      generated_job_id, completed_at, snapshot_json, created_at, updated_at
+      FROM maintenance_occurrence_exceptions LIMIT 0`).all();
+  }
+}
+
+export function assertWorkspaceSchema(db) {
+  const schemaVersion = readWorkspaceSchemaVersion(db);
+  if (schemaVersion !== WORKSPACE_SCHEMA_VERSION) {
+    throw new Error(`SQLite workspace schema version ${schemaVersion} is not compatible with required version ${WORKSPACE_SCHEMA_VERSION}.`);
+  }
+  assertWorkspaceSchemaObjects(db, schemaVersion);
+  return { schemaVersion };
+}
+
+export function assertWorkspaceIntegrity(db) {
+  const failures = db.pragma("integrity_check").map((row) => String(Object.values(row)[0] || ""))
+    .filter((value) => value.toLowerCase() !== "ok");
+  if (failures.length) throw new Error(`SQLite workspace integrity check failed: ${failures.join("; ")}`);
+  const foreignKeyFailures = db.pragma("foreign_key_check");
+  if (foreignKeyFailures.length) throw new Error(`SQLite workspace foreign-key check failed with ${foreignKeyFailures.length} issue(s).`);
+}
+
+export function migrateWorkspaceSchema(db, { onMigration } = {}) {
   configureWorkspacePragmas(db);
   const applyMigrations = db.transaction(() => {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS workspace_schema_migrations (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      );
-    `);
-
-    const applied = new Set(
-      db.prepare("SELECT version FROM workspace_schema_migrations").all().map((row) => Number(row.version))
-    );
-
-    for (const migration of migrations) {
-      if (applied.has(migration.version)) continue;
-      db.exec(migration.sql);
-      db.prepare(`
-        INSERT INTO workspace_schema_migrations (version, name, applied_at)
-        VALUES (?, ?, ?)
-      `).run(migration.version, migration.name, new Date().toISOString());
-      db.pragma(`user_version = ${migration.version}`);
+    let version = readWorkspaceSchemaVersion(db, { allowFresh: true });
+    assertWorkspaceSchemaObjects(db, version);
+    const pending = migrations.filter((entry) => entry.version > version);
+    if (pending.length) assertWorkspaceIntegrity(db);
+    for (const migration of pending) {
+      if (migration.version !== version + 1) throw new Error(`No supported workspace schema migration from version ${version}.`);
+      onMigration?.({ fromVersion: version, toVersion: migration.version });
+      try {
+        db.exec(migration.sql);
+        const now = new Date().toISOString();
+        if (version === 0) {
+          db.prepare("INSERT INTO workspace_info (id, schema_version, created_at, updated_at) VALUES (1, 1, ?, ?)").run(now, now);
+        }
+        db.prepare(`
+          INSERT INTO workspace_schema_migrations (version, name, applied_at)
+          VALUES (?, ?, ?)
+        `).run(migration.version, migration.name, now);
+        db.pragma(`user_version = ${migration.version}`);
+        version = migration.version;
+      } catch (error) {
+        throw new Error(`Workspace schema migration ${version} -> ${migration.version} failed: ${error.message}`, { cause: error });
+      }
     }
+    assertWorkspaceSchema(db);
+    if (pending.length) assertWorkspaceIntegrity(db);
   });
 
-  applyMigrations();
+  // Acquire the write lock before inspecting versions so concurrent starts
+  // cannot both decide to apply the same migration. DDL and metadata roll back together.
+  applyMigrations.immediate();
   db.pragma("foreign_keys = ON");
   return db;
 }
@@ -525,21 +587,23 @@ export function openWorkspaceDb({
   readonly = false,
   migrate = true,
   allowDuringRestore = false,
+  fileMustExist = false,
 } = {}) {
   if (!readonly && !allowDuringRestore) {
     assertWorkspaceWritable();
   }
 
-  if (!readonly && dbPath !== ":memory:") {
+  if (!readonly && !fileMustExist && dbPath !== ":memory:") {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   }
 
-  const db = new Database(dbPath, { readonly });
-  configureWorkspacePragmas(db, { readonly });
-
-  if (migrate && !readonly) {
-    migrateWorkspaceSchema(db);
+  const db = new Database(dbPath, { readonly, fileMustExist });
+  try {
+    configureWorkspacePragmas(db, { readonly });
+    if (migrate && !readonly) migrateWorkspaceSchema(db);
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
   }
-
-  return db;
 }

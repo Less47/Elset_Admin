@@ -9,10 +9,12 @@ import {
   saveData,
 } from "./server-store.js";
 import {
-  WORKSPACE_SCHEMA_VERSION,
+  assertWorkspaceIntegrity,
+  assertWorkspaceSchema,
   getWorkspaceDataDir,
   getWorkspaceDbPath,
   openWorkspaceDb,
+  migrateWorkspaceSchema,
 } from "./server-workspace-db.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 
@@ -75,39 +77,20 @@ function assertExistingWritableDirectory(directoryPath, label) {
   fs.accessSync(directoryPath, fs.constants.R_OK | fs.constants.W_OK);
 }
 
-function assertSqliteWorkspaceReady(dbPath) {
+function assertExistingWorkspaceDatabase(dbPath) {
   if (!fs.existsSync(dbPath)) {
     throw new Error(
       `SQLite workspace database does not exist at ${dbPath}. Run npm run migrate:workspace during the planned maintenance window.`
     );
   }
+}
 
+export function assertSqliteWorkspaceReady(dbPath) {
+  assertExistingWorkspaceDatabase(dbPath);
   const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false });
   try {
-    const integrityRows = db.pragma("integrity_check");
-    const integrityFailures = integrityRows
-      .map((row) => String(Object.values(row)[0] || ""))
-      .filter((value) => value.toLowerCase() !== "ok");
-
-    if (integrityFailures.length) {
-      throw new Error(`SQLite workspace integrity check failed: ${integrityFailures.join("; ")}`);
-    }
-
-    const foreignKeyFailures = db.pragma("foreign_key_check");
-    if (foreignKeyFailures.length) {
-      throw new Error(`SQLite workspace foreign-key check failed with ${foreignKeyFailures.length} issue(s).`);
-    }
-
-    const info = db.prepare("SELECT schema_version FROM workspace_info WHERE id = 1").get();
-    const schemaVersion = Number(info?.schema_version || 0);
-    if (schemaVersion !== WORKSPACE_SCHEMA_VERSION) {
-      throw new Error(
-        `SQLite workspace schema version ${schemaVersion || "unknown"} is not compatible with required version `
-        + `${WORKSPACE_SCHEMA_VERSION}.`
-      );
-    }
-
-    return { schemaVersion };
+    assertWorkspaceIntegrity(db);
+    return assertWorkspaceSchema(db);
   } finally {
     db.close();
   }
@@ -136,7 +119,7 @@ export function getWorkspaceStorageMode(env = globalThis.process?.env || {}) {
   return "json";
 }
 
-export function assertProductionWorkspaceStorageReady(env = globalThis.process?.env || {}) {
+function getValidatedWorkspaceStorageStatus(env) {
   const dataDir = getWorkspaceDataDir(env);
   const dbPath = getWorkspaceDbPath(env);
   const jsonPath = getJsonDataPath(env);
@@ -159,7 +142,7 @@ export function assertProductionWorkspaceStorageReady(env = globalThis.process?.
   }
 
   if (explicitMode === "sqlite") {
-    assertSqliteWorkspaceReady(dbPath);
+    assertExistingWorkspaceDatabase(dbPath);
     return getWorkspaceStorageStatus(env);
   }
 
@@ -170,7 +153,34 @@ export function assertProductionWorkspaceStorageReady(env = globalThis.process?.
     );
   }
 
-  assertSqliteWorkspaceReady(dbPath);
+  assertExistingWorkspaceDatabase(dbPath);
+  return getWorkspaceStorageStatus(env);
+}
+
+export function assertProductionWorkspaceStorageReady(env = globalThis.process?.env || {}) {
+  const storage = getValidatedWorkspaceStorageStatus(env);
+  if (isProductionRuntime(env) && storage.mode === "sqlite") assertSqliteWorkspaceReady(storage.dbPath);
+  return storage;
+}
+
+// Called once by the normal application machine, where the persistent volume is mounted.
+// Health/readiness checks continue to use the read-only assertion above.
+export function initializeWorkspaceStorage(env = globalThis.process?.env || {}, { log = console.info } = {}) {
+  const storage = getValidatedWorkspaceStorageStatus(env);
+  if (storage.mode !== "sqlite") return storage;
+  const db = openWorkspaceDb({ dbPath: storage.dbPath, migrate: false, fileMustExist: isProductionRuntime(env) });
+  let migrated = false;
+  try {
+    migrateWorkspaceSchema(db, { onMigration: ({ fromVersion, toVersion }) => {
+      if (!migrated) log(`Workspace database schema: ${fromVersion}`);
+      log(`Migrating workspace schema ${fromVersion} -> ${toVersion}`);
+      migrated = true;
+    } });
+  } finally {
+    db.close();
+  }
+  const { schemaVersion } = assertSqliteWorkspaceReady(storage.dbPath);
+  if (migrated) log(`Workspace schema migration complete: ${schemaVersion}`);
   return getWorkspaceStorageStatus(env);
 }
 

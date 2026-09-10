@@ -205,7 +205,7 @@ test("a failed date transaction rolls back the exception, anchor, revision and n
 test("migration from v4 is additive and idempotent with existing plans and jobs", () => withDb((db) => {
   const plansBefore = db.prepare("SELECT * FROM maintenance_plans").all();
   const jobsBefore = db.prepare("SELECT * FROM jobs").all();
-  db.exec("DROP TABLE maintenance_occurrence_exceptions; DELETE FROM workspace_schema_migrations WHERE version = 5; PRAGMA user_version = 4;");
+  db.exec("DROP TABLE maintenance_occurrence_exceptions; DELETE FROM workspace_schema_migrations WHERE version = 5; UPDATE workspace_info SET schema_version = 4; PRAGMA user_version = 4;");
   migrateWorkspaceSchema(db); migrateWorkspaceSchema(db);
   assert.deepEqual(db.prepare("SELECT * FROM maintenance_plans").all(), plansBefore);
   assert.deepEqual(db.prepare("SELECT * FROM jobs").all(), jobsBefore);
