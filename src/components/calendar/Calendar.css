@@ -156,3 +156,10 @@
 @media (prefers-reduced-motion: reduce) {
   .calendar-workspace *, .calendar-sheet, .calendar-sheet * { scroll-behavior: auto; transition-duration: 0s; animation-duration: 0s; }
 }
+.calendar-maintenance-chip { background: #e5f4f1; border-color: #3d8d80; color: #21594f; }
+.calendar-maintenance-chip:hover { background: #cde8e2; }
+.calendar-maintenance-detail { background: #f0f9f6; border-color: #b1d9ce; }
+.calendar-mobile-maintenance { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 28px; margin-top: 4px; border-radius: 4px; background: #e5f4f1; color: #21594f; font-size: 10px; }
+@media (min-width: 640px) { .calendar-mobile-maintenance { display: none; } }
+.calendar-maintenance-action { font-size: 10px; height: 28px; padding-inline: 6px; }
+@media (max-width: 767px), (pointer: coarse) { .calendar-maintenance-action { min-height: 44px; padding-inline: 10px; } }

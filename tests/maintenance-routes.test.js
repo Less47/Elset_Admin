@@ -31,6 +31,7 @@ function maintenancePlan(overrides = {}) {
     id: "demo-maintenance-plan",
     planName: "Synthetic quarterly gate service",
     customerId: "demo-customer-arcadia",
+    siteId: "demo-site-front-entry",
     siteAddress: "10 Example Lane, Sampleton VIC 3000",
     frequency: "quarterly",
     nextDueDate: "2026-02-01",
@@ -202,6 +203,8 @@ test("POST /api/maintenance-plans creates a maintenance plan", async () => {
       assert.equal(result.response.status, 200, result.payload.error);
       assert.equal(result.payload.result.id, "created-maintenance-plan");
       assert.equal(result.payload.result.contractPrice, 220);
+      assert.equal(result.payload.result.siteId, "demo-site-front-entry");
+      assert.equal(result.payload.result.planName, "10 Example Lane SAMPLETON");
       assert.deepEqual(result.payload.result.checklist, ["Created checklist item"]);
       assert.equal(result.payload.state.maintenancePlans.some((plan) => plan.id === "created-maintenance-plan"), true);
 
@@ -209,6 +212,52 @@ test("POST /api/maintenance-plans creates a maintenance plan", async () => {
       assert.equal(state.maintenancePlans.some((plan) => plan.id === "created-maintenance-plan"), true);
     });
   }, readFixture());
+});
+
+test("maintenance API requires site IDs and canonicalizes names and frequency aliases", async () => {
+  await withTempWorkspace(async ({ env }) => withServer(env, async (baseUrl) => {
+    const missingSite = await requestJson(baseUrl, "/api/maintenance-plans", { method: "POST", body: JSON.stringify(maintenancePlan({ id: "new-no-site", siteId: "" })) });
+    assert.equal(missingSite.response.status, 400);
+    const created = await requestJson(baseUrl, "/api/maintenance-plans", { method: "POST", body: JSON.stringify(maintenancePlan({ id: "canonical-plan", planName: "Fake name", siteAddress: "Fake address", frequency: "6 Monthly" })) });
+    assert.equal(created.response.status, 200, created.payload.error);
+    assert.equal(created.payload.result.planName, "10 Example Lane SAMPLETON");
+    assert.equal(created.payload.result.siteAddress, "10 Example Lane, Sampleton VIC 3000");
+    assert.equal(created.payload.result.siteId, "demo-site-front-entry");
+    assert.equal(created.payload.result.frequency, "six-monthly");
+    const invalidFrequency = await requestJson(baseUrl, "/api/maintenance-plans/canonical-plan", { method: "PATCH", body: JSON.stringify({ frequency: "biennial" }) });
+    assert.equal(invalidFrequency.response.status, 400);
+  }));
+});
+
+test("range API and concurrent occurrence writes keep one revision and one linked job", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      const rangePath = "/api/maintenance-occurrences?from=2027-01-01&to=2028-12-31";
+      const initial = await requestJson(baseUrl, rangePath);
+      assert.equal(initial.response.status, 200);
+      assert.deepEqual(initial.payload.occurrences.map((entry) => entry.date), ["2027-03-09", "2027-09-09", "2028-03-09", "2028-09-09"]);
+      const occurrence = initial.payload.occurrences[0];
+      const responses = await Promise.all(["2027-03-16", "2027-03-20"].map((nextDueDate) => requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan/occurrences", {
+        method: "PATCH", body: JSON.stringify({ occurrenceKey: occurrence.key, revision: occurrence.revision, nextDueDate }),
+      })));
+      assert.deepEqual(responses.map((entry) => entry.response.status).sort(), [200, 409]);
+      const refreshed = (await requestJson(baseUrl, rangePath)).payload.occurrences[0];
+      const generated = await Promise.all([1, 2].map(() => requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan/generate-job", {
+        method: "POST", body: JSON.stringify({ occurrenceKey: refreshed.key, revision: refreshed.revision }),
+      })));
+      assert.deepEqual(generated.map((entry) => entry.response.status), [200, 200]);
+      assert.equal(generated[0].payload.result.job.id, generated[1].payload.result.job.id);
+      assert.equal(generated.filter((entry) => entry.payload.result.duplicate).length, 1);
+      const db = openWorkspaceDb({ dbPath });
+      try { assert.equal(db.prepare("SELECT count(*) n FROM maintenance_occurrence_exceptions").get().n, 1); } finally { db.close(); }
+      const invalidRange = await requestJson(baseUrl, "/api/maintenance-occurrences?from=2027-01-01&to=2037-01-01");
+      assert.equal(invalidRange.response.status, 400);
+      const noChoice = await requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan", {
+        method: "PATCH", body: JSON.stringify({ nextDueDate: "2027-09-22", revision: generated[0].payload.result.plan.maintenanceRevision }),
+      });
+      assert.equal(noChoice.response.status, 400);
+    });
+  }, fixtureWithMaintenance({ planOverrides: { frequency: "six-monthly", nextDueDate: "2027-03-09" } }));
 });
 
 test("maintenance plan edit, schedule, and complete-cycle routes persist details", async () => {
@@ -219,6 +268,8 @@ test("maintenance plan edit, schedule, and complete-cycle routes persist details
         body: JSON.stringify({
           plan: {
             planName: "Synthetic edited maintenance plan",
+            revision: 0,
+            dateChange: { scope: "schedule", occurrenceKey: "demo-maintenance-plan:initial:2026-02-01" },
             customerId: "demo-customer-arcadia",
             siteAddress: "10 Example Lane, Sampleton VIC 3000",
             frequency: "monthly",
@@ -231,13 +282,13 @@ test("maintenance plan edit, schedule, and complete-cycle routes persist details
         }),
       });
       assert.equal(edited.response.status, 200, edited.payload.error);
-      assert.equal(edited.payload.result.planName, "Synthetic edited maintenance plan");
+      assert.equal(edited.payload.result.planName, "10 Example Lane SAMPLETON");
       assert.equal(edited.payload.result.frequency, "monthly");
       assert.equal(edited.payload.result.contractPrice, 330.5);
 
       const scheduled = await requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan/schedule", {
         method: "PATCH",
-        body: JSON.stringify({ nextDueDate: "2026-04-15" }),
+        body: JSON.stringify({ nextDueDate: "2026-04-15", scope: "schedule", revision: edited.payload.result.maintenanceRevision, occurrenceKey: edited.payload.result.nextOccurrence.key }),
       });
       assert.equal(scheduled.response.status, 200, scheduled.payload.error);
       assert.equal(scheduled.payload.result.nextDueDate, "2026-04-15");
@@ -247,6 +298,8 @@ test("maintenance plan edit, schedule, and complete-cycle routes persist details
         body: JSON.stringify({
           completedAt: "2026-04-16T00:00:00.000Z",
           advanceRecurrence: true,
+          occurrenceKey: scheduled.payload.result.nextOccurrence.key,
+          revision: scheduled.payload.result.maintenanceRevision,
         }),
       });
       assert.equal(completed.response.status, 200, completed.payload.error);
@@ -266,7 +319,7 @@ test("maintenance job generation advances recurrence and job completion updates 
     await withServer(env, async (baseUrl) => {
       const generated = await requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan/generate-job", {
         method: "POST",
-        body: JSON.stringify({ jobId: "generated-maintenance-job" }),
+        body: JSON.stringify({ jobId: "generated-maintenance-job", occurrenceKey: "demo-maintenance-plan:initial:2026-02-01", revision: 0 }),
       });
       assert.equal(generated.response.status, 200, generated.payload.error);
       assert.equal(generated.payload.result.job.id, "generated-maintenance-job");

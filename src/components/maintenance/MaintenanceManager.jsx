@@ -1,787 +1,111 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Plus } from "lucide-react";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { FormField } from "@/components/shared/FormField";
-import {
-  MobileRecordActions,
-  MobileRecordBody,
-  MobileRecordCard,
-  MobileRecordHeader,
-  MobileRecordList,
-  MobileRecordStat,
-  MobileRecordStats,
-} from "@/components/shared/MobileRecordList";
-import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
-import {
-  CompactSortControl,
-  DesktopControlField,
-  DesktopPageControls,
-  FilterButton,
-  FilterSheetField,
-  MobileFilterSheet,
-  PagePrimaryAction,
-  PageSearchField,
-  ResponsivePageControls,
-  ResultSummary,
-} from "@/components/shared/ResponsivePageControls";
-import { Badge } from "@/components/ui/badge";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { Plus, Wrench, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { MobileRecordCard, MobileRecordList } from "@/components/shared/MobileRecordList";
+import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
+import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
+import { CompactSortControl, DesktopControlField, DesktopPageControls, FilterButton, FilterSheetField, MobileFilterSheet, PagePrimaryAction, PageSearchField, ResponsivePageControls, ResultSummary } from "@/components/shared/ResponsivePageControls";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  buildCustomerSites,
-  formatDate,
-  getMaintenanceFrequencyMeta,
-  getMaintenancePlanJobs,
-  getMaintenancePlanStatus,
-  getSuggestedMaintenanceSite,
-  maintenanceFrequencyOptions,
-  normalizeChecklistItems,
-  normalizeMaintenancePlanRecord,
-  normalizeNumber,
-  normalizeSiteAddress,
-  slugDate,
-  toDateInputValue,
-  toTimestamp,
-} from "@/lib/app-support";
-import { statusThemes } from "@/lib/job-status";
+import { APP_TEXT_DARK, APP_TEXT_LIGHT, getMaintenanceFrequencyMeta, getMaintenancePlanStatus, hexToRgb } from "@/lib/app-support";
+import { effectiveMaintenancePlan, formatMaintenanceDate as formatDate } from "@/lib/maintenance-recurrence";
 import { money } from "@/lib/quote-template";
+import "./Maintenance.css";
 
-const maintenanceSortOptions = [
-  { value: "due-date", label: "Due date" },
-  { value: "customer", label: "Customer" },
-  { value: "created-recent", label: "Newest plan" },
-];
+const sorts = [{ value: "due-date", label: "Due date" }, { value: "customer", label: "Customer" }, { value: "created-recent", label: "Newest plan" }];
+const filters = [["all", "All plans"], ["needs-attention", "Needs attention"], ["overdue", "Overdue"], ["due-soon", "Due soon"], ["active-job", "Active job"], ["upcoming", "Upcoming"], ["inactive", "Inactive"]];
 
-function MaintenancePlanDialog({ open, onOpenChange, initialPlan, customers, jobs, onSave }) {
-  const orderedCustomers = useMemo(
-    () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
-    [customers]
-  );
-  const defaultCustomer = orderedCustomers[0] || null;
-  const [draft, setDraft] = useState({
-    planName: "",
-    customerId: "",
-    siteAddress: "",
-    frequency: maintenanceFrequencyOptions[1].value,
-    nextDueDate: slugDate(),
-    estimatedDurationHours: "1",
-    contractPrice: "0",
-    checklistText: "",
-    notes: "",
+function maintenanceToolbarStyle(surface) {
+  // Pick from the existing app foreground colours using relative luminance.
+  // The shared brightness threshold can leave white text on mid-tone themes.
+  const luminance = (color) => {
+    const { r, g, b } = hexToRgb(color);
+    return [r, g, b].map((channel) => channel / 255)
+      .map((channel) => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
+      .reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index], 0);
+  };
+  const background = luminance(surface);
+  const candidates = [APP_TEXT_DARK, APP_TEXT_LIGHT].map((color) => {
+    const foreground = luminance(color);
+    return { color, contrast: (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05) };
   });
-
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (!open) return;
-
-    const normalizedPlan = initialPlan ? normalizeMaintenancePlanRecord(initialPlan) : null;
-    const selectedCustomer = orderedCustomers.find((customer) => customer.id === normalizedPlan?.customerId) || defaultCustomer;
-    const selectedCustomerJobs = selectedCustomer ? jobs.filter((job) => job.customerId === selectedCustomer.id) : [];
-
-    setDraft({
-      planName: normalizedPlan?.planName || "",
-      customerId: normalizedPlan?.customerId || selectedCustomer?.id || "",
-      siteAddress: normalizedPlan?.siteAddress || getSuggestedMaintenanceSite(selectedCustomer, selectedCustomerJobs),
-      frequency: normalizedPlan?.frequency || maintenanceFrequencyOptions[1].value,
-      nextDueDate: normalizedPlan?.nextDueDate || slugDate(),
-      estimatedDurationHours: String(normalizedPlan?.estimatedDurationHours ?? 1),
-      contractPrice: String(normalizedPlan?.contractPrice ?? 0),
-      checklistText: Array.isArray(normalizedPlan?.checklist) ? normalizedPlan.checklist.join("\n") : "",
-      notes: normalizedPlan?.notes || "",
-    });
-  }, [defaultCustomer, initialPlan, jobs, open, orderedCustomers]);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const selectedCustomer = useMemo(
-    () => orderedCustomers.find((customer) => customer.id === draft.customerId) || null,
-    [draft.customerId, orderedCustomers]
-  );
-  const selectedCustomerJobs = useMemo(
-    () => jobs.filter((job) => job.customerId === draft.customerId),
-    [draft.customerId, jobs]
-  );
-  const siteSuggestions = useMemo(
-    () => (selectedCustomer ? buildCustomerSites(selectedCustomer, selectedCustomerJobs) : []),
-    [selectedCustomer, selectedCustomerJobs]
-  );
-  const canSave = Boolean(
-    draft.customerId
-      && draft.planName.trim()
-      && normalizeSiteAddress(draft.siteAddress)
-      && draft.nextDueDate
-  );
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] rounded-3xl sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="text-xl">{initialPlan ? "Edit Maintenance Plan" : "Create Maintenance Plan"}</DialogTitle>
-        </DialogHeader>
-
-        <DialogBody>
-          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base">Plan Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <FormField label="Plan name">
-                  <Input
-                    value={draft.planName}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, planName: e.target.value }))}
-                    placeholder="e.g. Quarterly boom gate service"
-                  />
-                </FormField>
-
-                <FormField label="Customer">
-                  <Select
-                    value={draft.customerId}
-                    onValueChange={(value) => {
-                      const nextCustomer = orderedCustomers.find((customer) => customer.id === value) || null;
-                      const nextCustomerJobs = jobs.filter((job) => job.customerId === value);
-                      setDraft((prev) => ({
-                        ...prev,
-                        customerId: value,
-                        siteAddress: getSuggestedMaintenanceSite(nextCustomer, nextCustomerJobs),
-                      }));
-                    }}
-                    disabled={orderedCustomers.length === 0}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={orderedCustomers.length === 0 ? "Add a customer first" : "Select customer"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {orderedCustomers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-
-                <FormField label="Site address">
-                  <Textarea
-                    rows={3}
-                    value={draft.siteAddress}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, siteAddress: e.target.value }))}
-                    placeholder="Enter the site or property address for this maintenance plan"
-                  />
-                </FormField>
-
-                {siteSuggestions.length > 0 ? (
-                  <div className="grid gap-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Saved sites</p>
-                    <div className="flex flex-wrap gap-2">
-                      {siteSuggestions.map((site) => (
-                        <Button
-                          key={site.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-lg"
-                          onClick={() => setDraft((prev) => ({ ...prev, siteAddress: site.address }))}
-                        >
-                          {site.address}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField label="Frequency">
-                    <Select value={draft.frequency} onValueChange={(value) => setDraft((prev) => ({ ...prev, frequency: value }))}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {maintenanceFrequencyOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-
-                  <FormField label="Next due date">
-                    <Input
-                      type="date"
-                      value={draft.nextDueDate}
-                      onChange={(e) => setDraft((prev) => ({ ...prev, nextDueDate: e.target.value }))}
-                    />
-                  </FormField>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-2xl border-slate-200 bg-slate-50">
-              <CardHeader>
-                <CardTitle className="text-base">Visit Defaults</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField label="Estimated hours">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={draft.estimatedDurationHours}
-                      onChange={(e) => setDraft((prev) => ({ ...prev, estimatedDurationHours: e.target.value }))}
-                    />
-                  </FormField>
-                </div>
-
-                <FormField label="Contract price">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={draft.contractPrice}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, contractPrice: e.target.value }))}
-                  />
-                </FormField>
-
-                <FormField label="Checklist">
-                  <Textarea
-                    rows={7}
-                    value={draft.checklistText}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, checklistText: e.target.value }))}
-                    placeholder={"One task per line\nTest safety devices\nInspect hardware\nCheck battery backup"}
-                  />
-                </FormField>
-
-                <FormField label="Notes">
-                  <Textarea
-                    rows={4}
-                    value={draft.notes}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Access instructions, preferred visit window, contract notes..."
-                  />
-                </FormField>
-              </CardContent>
-            </Card>
-          </div>
-        </DialogBody>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!canSave}
-            onClick={async () => {
-              const didSave = onSave({
-                planName: draft.planName,
-                customerId: draft.customerId,
-                siteAddress: normalizeSiteAddress(draft.siteAddress),
-                frequency: draft.frequency,
-                nextDueDate: toDateInputValue(draft.nextDueDate),
-                defaultTechnicianId: "",
-                estimatedDurationHours: normalizeNumber(draft.estimatedDurationHours, 0),
-                contractPrice: normalizeNumber(draft.contractPrice, 0),
-                checklist: normalizeChecklistItems(draft.checklistText),
-                notes: draft.notes,
-              });
-              if (didSave instanceof Promise && (await didSave) === false) return;
-              if (didSave !== false) onOpenChange(false);
-            }}
-          >
-            {initialPlan ? "Save Plan" : "Create Plan"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+  const best = candidates.sort((a, b) => b.contrast - a.contrast)[0];
+  return { "--maintenance-toolbar-text": best.color, "--maintenance-toolbar-label-strength": best.contrast >= 6 ? "92%" : "100%" };
 }
 
-export default function MaintenanceManager({
-  maintenancePlans,
-  customers,
-  jobs,
-  onCreatePlan,
-  onUpdatePlan,
-  onDeletePlan,
-  onGenerateJob,
-  onOpenJob,
-}) {
+function PlanList({ mobile, children }) {
+  return mobile ? <MobileRecordList label="Maintenance plan records">{children}</MobileRecordList> : <div className="grid gap-2.5" data-desktop-record-results>{children}</div>;
+}
+function PlanCard({ mobile, plan, onOpen, children }) {
+  function handleDoubleClick(event) {
+    if (event.target.closest("button, a, input, select, textarea, [role='button']")) return;
+    onOpen(plan.id);
+  }
+  return mobile ? <MobileRecordCard className="maintenance-plan-card cursor-pointer" recordId={plan.id} labelledBy={`maintenance-title-${plan.id}`}><div data-maintenance-plan={plan.id} onDoubleClick={handleDoubleClick}>{children}</div></MobileRecordCard>
+    : <article className="maintenance-plan-card cursor-pointer" data-maintenance-plan={plan.id} onDoubleClick={handleDoubleClick}>{children}</article>;
+}
+
+export function MaintenanceMetrics({ plan }) {
+  const priceSet = plan.contractPriceSet ?? Number(plan.contractPrice) > 0;
+  return <dl className="maintenance-metrics">
+    <div><dt>Next due</dt><dd>{plan.nextDueDate ? formatDate(plan.nextDueDate) : "Not set"}</dd></div>
+    <div><dt>Estimated time</dt><dd>{plan.estimatedDurationHours > 0 ? `${plan.estimatedDurationHours} hrs` : "Not set"}</dd></div>
+    <div className={priceSet ? "" : "maintenance-price-missing"} data-contract-price={priceSet ? "set" : "missing"}><dt>Contract price</dt><dd>{priceSet ? money(plan.contractPrice) : "Not set"}</dd></div>
+  </dl>;
+}
+
+export default function MaintenanceManager({ maintenancePlans, customers, jobs, onGenerateJob, onOpenPlan }) {
   const [search, setSearch] = useState("");
-  const [filterBy, setFilterBy] = useState("all");
-  const [sortBy, setSortBy] = useState("due-date");
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("due-date");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [editingPlan, setEditingPlan] = useState(null);
-  const filterTriggerRef = useRef(null);
-  const deferredSearch = useDeferredValue(search);
-  const mobileRecordLayout = useMobileRecordLayout();
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState("");
+  const savingRef = useRef(false);
+  const filterTrigger = useRef(null);
+  const query = useDeferredValue(search).trim().toLowerCase();
+  const mobile = useMobileRecordLayout();
+  const [toolbarSurface] = useUserUiPreference("heroSurface");
+  const rows = useMemo(() => maintenancePlans.map((source) => {
+    const plan = effectiveMaintenancePlan(source, jobs);
+    return { plan, customer: customers.find((entry) => entry.id === plan.customerId), status: getMaintenancePlanStatus(plan, jobs),
+      activeJobs: jobs.filter((job) => job.maintenancePlanId === plan.id && job.status !== "Completed").length };
+  }), [maintenancePlans, jobs, customers]);
+  const due = rows.filter((row) => ["overdue", "due-soon"].includes(row.status.id)).sort((a, b) => a.plan.nextDueDate.localeCompare(b.plan.nextDueDate));
+  const visible = rows.filter((row) => {
+    const matches = [row.plan.planName, row.customer?.name, row.plan.siteAddress, getMaintenanceFrequencyMeta(row.plan.frequency).label].join(" ").toLowerCase().includes(query);
+    return matches && (filter === "all" || (filter === "active-job" ? row.activeJobs > 0 : filter === "needs-attention" ? ["overdue", "due-soon"].includes(row.status.id) || !(row.plan.contractPriceSet ?? row.plan.contractPrice > 0) : row.status.id === filter));
+  }).sort((a, b) => sort === "customer" ? (a.customer?.name || "").localeCompare(b.customer?.name || "") : sort === "created-recent" ? String(b.plan.createdAt).localeCompare(String(a.plan.createdAt)) : a.plan.nextDueDate.localeCompare(b.plan.nextDueDate));
+  const stats = [["Plans", rows.length], ["Overdue", rows.filter((row) => row.status.id === "overdue").length], ["Due soon", rows.filter((row) => row.status.id === "due-soon").length], ["Active", rows.reduce((sum, row) => sum + row.activeJobs, 0)], ["Contract", money(rows.filter((row) => row.plan.active).reduce((sum, row) => sum + Number(row.plan.contractPrice || 0), 0))]];
 
-  const customersById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
-
-  const planRows = useMemo(() => {
-    return (maintenancePlans || [])
-      .map(normalizeMaintenancePlanRecord)
-      .filter(Boolean)
-      .map((plan) => {
-        const customer = customersById.get(plan.customerId) || null;
-        const linkedJobs = getMaintenancePlanJobs(plan.id, jobs);
-        const activeJobs = linkedJobs.filter((job) => job.status !== "Completed");
-        const activeJob = activeJobs[0] || null;
-        const status = getMaintenancePlanStatus(plan, jobs);
-
-        return {
-          plan,
-          customer,
-          linkedJobs,
-          activeJob,
-          activeJobCount: activeJobs.length,
-          status,
-          frequencyLabel: getMaintenanceFrequencyMeta(plan.frequency).label,
-        };
-      });
-  }, [customersById, jobs, maintenancePlans]);
-
-  const maintenanceStats = useMemo(() => {
-    return planRows.reduce((stats, row) => ({
-      totalPlans: stats.totalPlans + 1,
-      overdue: stats.overdue + (row.status.id === "overdue" ? 1 : 0),
-      dueSoon: stats.dueSoon + (row.status.id === "due-soon" ? 1 : 0),
-      activeJobs: stats.activeJobs + (row.activeJob ? 1 : 0),
-      contractValue: stats.contractValue + row.plan.contractPrice,
-    }), {
-      totalPlans: 0,
-      overdue: 0,
-      dueSoon: 0,
-      activeJobs: 0,
-      contractValue: 0,
-    });
-  }, [planRows]);
-
-  const filteredRows = useMemo(() => {
-    const query = deferredSearch.toLowerCase().trim();
-    const rows = planRows.filter((row) => {
-      const matchesSearch = query
-        ? [
-            row.plan.planName,
-            row.customer?.name,
-            row.plan.siteAddress,
-            row.frequencyLabel,
-            row.plan.notes,
-            row.plan.checklist.join(" "),
-          ].join(" ").toLowerCase().includes(query)
-        : true;
-
-      const matchesFilter =
-        filterBy === "all"
-          ? true
-          : filterBy === "needs-attention"
-            ? row.status.id === "overdue" || row.status.id === "due-soon" || row.status.id === "active-job"
-            : row.status.id === filterBy;
-
-      return matchesSearch && matchesFilter;
-    });
-
-    rows.sort((a, b) => {
-      if (sortBy === "customer") {
-        return (a.customer?.name || "").localeCompare(b.customer?.name || "") || a.plan.planName.localeCompare(b.plan.planName);
-      }
-      if (sortBy === "created-recent") {
-        return toTimestamp(b.plan.createdAt) - toTimestamp(a.plan.createdAt);
-      }
-      return a.status.rank - b.status.rank || toTimestamp(a.plan.nextDueDate) - toTimestamp(b.plan.nextDueDate);
-    });
-
-    return rows;
-  }, [deferredSearch, filterBy, planRows, sortBy]);
-  const activeFilterCount = filterBy === "all" ? 0 : 1;
-
-  const dueQueue = useMemo(
-    () => planRows
-      .filter((row) => row.status.id === "overdue" || row.status.id === "due-soon")
-      .sort((a, b) => toTimestamp(a.plan.nextDueDate) - toTimestamp(b.plan.nextDueDate))
-      .slice(0, 8),
-    [planRows]
-  );
-
-  const activeRows = useMemo(
-    () => planRows
-      .filter((row) => row.activeJob)
-      .sort((a, b) => toTimestamp(b.activeJob?.updatedAt) - toTimestamp(a.activeJob?.updatedAt))
-      .slice(0, 8),
-    [planRows]
-  );
-
-  return (
-    <>
-      <ResponsivePageControls
-        className="mb-4"
-        search={(
-          <PageSearchField value={search} onChange={setSearch} placeholder="Search maintenance..." label="Search maintenance plans" />
-        )}
-        controls={(
-          <>
-            <FilterButton ref={filterTriggerRef} activeCount={activeFilterCount} open={filtersOpen} onClick={() => setFiltersOpen(true)} />
-            <CompactSortControl value={sortBy} onValueChange={setSortBy} options={maintenanceSortOptions} label="Sort maintenance plans" />
-          </>
-        )}
-        action={(
-          <PagePrimaryAction onClick={() => { setEditingPlan(null); setPlanDialogOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add Maintenance Plan
-          </PagePrimaryAction>
-        )}
-        summary={<ResultSummary>{filteredRows.length} maintenance {filteredRows.length === 1 ? "plan" : "plans"}</ResultSummary>}
-      />
-
-      <DesktopPageControls
-        className="mb-4"
-        search={(
-          <DesktopControlField label="Search" size="search">
-            <PageSearchField
-              compact
-              value={search}
-              onChange={setSearch}
-              placeholder="Search plan, customer, site, or checklist..."
-              label="Search maintenance plans"
-            />
-          </DesktopControlField>
-        )}
-        filters={(
-          <>
-          <DesktopControlField htmlFor="desktop-maintenance-filter" label="Filter" size="medium">
-            <Select value={filterBy} onValueChange={setFilterBy}>
-              <SelectTrigger id="desktop-maintenance-filter" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All plans</SelectItem>
-                <SelectItem value="needs-attention">Needs attention</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-                <SelectItem value="due-soon">Due soon</SelectItem>
-                <SelectItem value="active-job">Active job</SelectItem>
-                <SelectItem value="upcoming">Upcoming</SelectItem>
-              </SelectContent>
-            </Select>
-          </DesktopControlField>
-
-          <DesktopControlField htmlFor="desktop-maintenance-sort" label="Sort by" size="medium">
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger id="desktop-maintenance-sort" className="data-toolbar-field rounded-lg border-slate-300 bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="due-date">Due date</SelectItem>
-                <SelectItem value="customer">Customer</SelectItem>
-                <SelectItem value="created-recent">Newest plan</SelectItem>
-              </SelectContent>
-            </Select>
-          </DesktopControlField>
-          </>
-        )}
-        actions={(
-          <PagePrimaryAction
-            compact
-            onClick={() => {
-              setEditingPlan(null);
-              setPlanDialogOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4" /> Add Maintenance Plan
-          </PagePrimaryAction>
-        )}
-      />
-
-      {mobileRecordLayout ? (
-        filteredRows.length === 0 ? (
-          <Card className="data-card gap-0 overflow-hidden rounded-xl border-slate-300 shadow-none">
-            <CardContent className="p-panel">
-              <EmptyState title="No maintenance plans found" text="Try adjusting the search or filters, or add your first plan." />
-            </CardContent>
-          </Card>
-        ) : (
-          <MobileRecordList label="Maintenance plan records">
-            {filteredRows.map((row) => {
-              const headingId = `mobile-maintenance-${encodeURIComponent(row.plan.id)}-title`;
-
-              return (
-                <MobileRecordCard key={row.plan.id} labelledBy={headingId} recordId={row.plan.id}>
-                  <MobileRecordHeader>
-                    <div className="min-w-0">
-                      <h3 id={headingId} className="line-clamp-2 font-semibold leading-5 text-slate-950">{row.plan.planName}</h3>
-                      <Badge variant="secondary" className="mt-1.5">{row.frequencyLabel}</Badge>
-                    </div>
-                    <Badge className={`${row.status.className} max-w-[9rem]`}>{row.status.label}</Badge>
-                  </MobileRecordHeader>
-
-                  <MobileRecordBody>
-                    <p className="line-clamp-1 font-medium text-slate-900">{row.customer?.name || "Unknown customer"}</p>
-                    <p className="line-clamp-2">{row.plan.siteAddress || "No site address"}</p>
-                    {row.activeJob ? <p className="text-xs font-semibold text-sky-800">Job #{row.activeJob.jobNumber} open</p> : null}
-                  </MobileRecordBody>
-
-                  <MobileRecordStats>
-                    <MobileRecordStat label="Next due">{row.plan.nextDueDate ? formatDate(row.plan.nextDueDate) : "Not set"}</MobileRecordStat>
-                    {row.plan.estimatedDurationHours > 0 ? (
-                      <MobileRecordStat label="Estimated time">{row.plan.estimatedDurationHours} hrs</MobileRecordStat>
-                    ) : null}
-                    {row.plan.contractPrice > 0 ? (
-                      <MobileRecordStat label="Contract price">{money(row.plan.contractPrice)}</MobileRecordStat>
-                    ) : null}
-                  </MobileRecordStats>
-
-                  <MobileRecordActions>
-                    {row.activeJob ? (
-                      <Button aria-label={`View active job for ${row.plan.planName}`} onClick={() => onOpenJob(row.activeJob)}>
-                        View Active Job
-                      </Button>
-                    ) : (
-                      <Button aria-label={`Generate job for ${row.plan.planName}`} onClick={() => onGenerateJob(row.plan.id)}>
-                        Generate Job
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      aria-label={`Edit plan ${row.plan.planName}`}
-                      onClick={() => {
-                        setEditingPlan(row.plan);
-                        setPlanDialogOpen(true);
-                      }}
-                    >
-                      Edit Plan
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                      aria-label={`Delete plan ${row.plan.planName}`}
-                      onClick={() => onDeletePlan(row.plan.id)}
-                    >
-                      Delete
-                    </Button>
-                  </MobileRecordActions>
-                </MobileRecordCard>
-              );
-            })}
-          </MobileRecordList>
-        )
-      ) : (
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]" data-desktop-record-results>
-        <Card className="overflow-hidden rounded-3xl border-slate-200">
-            <div className="hidden gap-px border-b border-slate-200 bg-slate-200 xl:grid xl:grid-cols-5">
-            {[
-              { label: "Plans", value: maintenanceStats.totalPlans },
-              { label: "Overdue", value: maintenanceStats.overdue },
-              { label: "Due soon", value: maintenanceStats.dueSoon },
-              { label: "Active jobs", value: maintenanceStats.activeJobs },
-              { label: "Contract value", value: money(maintenanceStats.contractValue) },
-            ].map((stat) => (
-              <div key={stat.label} className="bg-white px-panel py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{stat.label}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{stat.value}</p>
-              </div>
-            ))}
-          </div>
-
-          <CardContent className="grid gap-4 p-panel">
-            {filteredRows.length === 0 ? (
-              <EmptyState title="No maintenance plans found" text="Try adjusting the search or filters, or add your first plan." />
-            ) : (
-              filteredRows.map((row) => (
-                <div key={row.plan.id} className="rounded-3xl border border-slate-200 bg-white p-panel shadow-sm">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap gap-2">
-                        <Badge className={row.status.className}>{row.status.label}</Badge>
-                        <Badge variant="secondary">{row.frequencyLabel}</Badge>
-                        {row.activeJob ? <Badge className="bg-sky-100 text-sky-800">Job #{row.activeJob.jobNumber} open</Badge> : null}
-                      </div>
-                      <p className="mt-3 text-lg font-semibold text-slate-950">{row.plan.planName}</p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {(row.customer?.name || "Unknown customer")} - {row.plan.siteAddress || "No site address"}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 xl:justify-end">
-                      {row.activeJob ? (
-                        <Button className="rounded-lg" onClick={() => onOpenJob(row.activeJob)}>
-                          View Active Job
-                        </Button>
-                      ) : (
-                        <Button className="rounded-lg" onClick={() => onGenerateJob(row.plan.id)}>
-                          Generate Job
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        className="rounded-lg"
-                        onClick={() => {
-                          setEditingPlan(row.plan);
-                          setPlanDialogOpen(true);
-                        }}
-                      >
-                        Edit Plan
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="rounded-lg border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                        onClick={() => onDeletePlan(row.plan.id)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-                    <div className="rounded-2xl border bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Next due</p>
-                      <p className="mt-2 font-semibold text-slate-950">{row.plan.nextDueDate ? formatDate(row.plan.nextDueDate) : "Not set"}</p>
-                    </div>
-                    <div className="rounded-2xl border bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Estimated time</p>
-                      <p className="mt-2 font-semibold text-slate-950">{row.plan.estimatedDurationHours > 0 ? `${row.plan.estimatedDurationHours} hrs` : "Not set"}</p>
-                    </div>
-                    <div className="rounded-2xl border bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Contract price</p>
-                      <p className="mt-2 font-semibold text-slate-950">{row.plan.contractPrice > 0 ? money(row.plan.contractPrice) : "Not set"}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.95fr]">
-                    <div className="rounded-2xl border bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Checklist</p>
-                      {row.plan.checklist.length === 0 ? (
-                        <p className="mt-2 text-sm text-slate-500">No checklist saved yet.</p>
-                      ) : (
-                        <div className="mt-2 grid gap-2 text-sm text-slate-700">
-                          {row.plan.checklist.slice(0, 4).map((item, index) => (
-                            <p key={`${row.plan.id}-checklist-${index}`}>{index + 1}. {item}</p>
-                          ))}
-                          {row.plan.checklist.length > 4 ? <p className="text-slate-500">+{row.plan.checklist.length - 4} more</p> : null}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="rounded-2xl border bg-slate-50 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recent activity</p>
-                      <div className="mt-2 grid gap-2 text-sm text-slate-700">
-                        <p>Last generated: <span className="font-medium text-slate-950">{row.plan.lastGeneratedAt ? formatDate(row.plan.lastGeneratedAt) : "Not yet"}</span></p>
-                        <p>Last completed: <span className="font-medium text-slate-950">{row.plan.lastCompletedAt ? formatDate(row.plan.lastCompletedAt) : "Not yet"}</span></p>
-                        <p>Linked jobs: <span className="font-medium text-slate-950">{row.linkedJobs.length}</span></p>
-                        {row.plan.notes ? <p className="pt-1 text-slate-600">{row.plan.notes}</p> : <p className="pt-1 text-slate-500">No extra notes saved for this plan.</p>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4">
-          <Card className="rounded-3xl border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Due Queue</CardTitle>
-              <p className="text-sm text-muted-foreground">Plans that need attention first.</p>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {dueQueue.length === 0 ? (
-                <EmptyState title="Nothing urgent" text="Overdue plans and visits due soon will appear here." />
-              ) : (
-                dueQueue.map((row) => (
-                  <div key={`due-${row.plan.id}`} className="rounded-2xl border bg-slate-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-950">{row.plan.planName}</p>
-                        <p className="mt-1 text-sm text-slate-600">{row.customer?.name || "Unknown customer"}</p>
-                      </div>
-                      <Badge className={row.status.className}>{row.status.label}</Badge>
-                    </div>
-                    <p className="mt-3 text-sm text-slate-600">{row.plan.siteAddress || "No site address"}</p>
-                    <div className="mt-4 flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-500">Due {formatDate(row.plan.nextDueDate)}</span>
-                      <Button size="sm" className="rounded-lg" onClick={() => onGenerateJob(row.plan.id)}>
-                        Generate Job
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-lg">Active Maintenance Jobs</CardTitle>
-              <p className="text-sm text-muted-foreground">Generated jobs already moving through the board.</p>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {activeRows.length === 0 ? (
-                <EmptyState title="No active maintenance jobs" text="Generated maintenance jobs will appear here until they are completed." />
-              ) : (
-                activeRows.map((row) => (
-                  <div key={`active-${row.plan.id}`} className="rounded-2xl border bg-slate-50 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-950">{row.plan.planName}</p>
-                        <p className="mt-1 text-sm text-slate-600">Job #{row.activeJob?.jobNumber} - {row.activeJob?.status}</p>
-                      </div>
-                      <Badge className={(statusThemes[row.activeJob?.status] || statusThemes["To Do"]).badge}>{row.activeJob?.status}</Badge>
-                    </div>
-                    <p className="mt-3 text-sm text-slate-600">{row.activeJob?.title}</p>
-                    <div className="mt-4 flex items-center justify-between gap-3 text-sm">
-                      <span className="text-slate-500">{row.activeJob?.updatedAt ? `Updated ${formatDate(row.activeJob.updatedAt)}` : "Open now"}</span>
-                      <Button variant="outline" size="sm" className="rounded-lg" onClick={() => row.activeJob && onOpenJob(row.activeJob)}>
-                        View Job
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-      )}
-
-      <MobileFilterSheet
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
-        returnFocusRef={filterTriggerRef}
-        activeCount={activeFilterCount}
-        description="Filter maintenance plans by their current service state."
-        onReset={() => setFilterBy("all")}
-      >
-        <FilterSheetField id="mobile-maintenance-status-filter" label="Status">
-          <Select value={filterBy} onValueChange={setFilterBy}>
-            <SelectTrigger id="mobile-maintenance-status-filter" className="h-11 w-full rounded-xl bg-white"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All plans</SelectItem>
-              <SelectItem value="needs-attention">Needs attention</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-              <SelectItem value="due-soon">Due soon</SelectItem>
-              <SelectItem value="active-job">Active job</SelectItem>
-              <SelectItem value="upcoming">Upcoming</SelectItem>
-            </SelectContent>
-          </Select>
-        </FilterSheetField>
-      </MobileFilterSheet>
-
-      <MaintenancePlanDialog
-        open={planDialogOpen}
-        onOpenChange={setPlanDialogOpen}
-        initialPlan={editingPlan}
-        customers={customers}
-        jobs={jobs}
-        onSave={(planInput) => {
-          if (editingPlan) {
-            return onUpdatePlan(editingPlan.id, planInput);
-          }
-
-          return onCreatePlan(planInput);
-        }}
-      />
-    </>
-  );
+  async function generate(plan) {
+    if (savingRef.current) return;
+    savingRef.current = true; setBusy(plan.id); setError("");
+    try { await onGenerateJob(plan.id, plan.nextOccurrence); }
+    catch (failure) { setError(failure.message || "Unable to generate the maintenance job."); }
+    finally { savingRef.current = false; setBusy(null); }
+  }
+  const filterSelect = (id) => <Select value={filter} onValueChange={setFilter}><SelectTrigger id={id} className="data-toolbar-field bg-white"><SelectValue /></SelectTrigger><SelectContent>{filters.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>;
+  const addAction = <PagePrimaryAction onClick={() => onOpenPlan("new")}><Plus className="h-4 w-4" /> Add Maintenance Plan</PagePrimaryAction>;
+  const summary = <dl className="maintenance-summary" aria-label="Maintenance summary">{stats.map(([label, value]) => <div key={label}><dt>{label}{label === "Active" ? <span className="sr-only"> jobs</span> : label === "Contract" ? <span className="sr-only"> value</span> : null}</dt><dd>{value}</dd></div>)}</dl>;
+  return <div className="maintenance-dashboard" data-maintenance-dashboard style={maintenanceToolbarStyle(toolbarSurface)}>
+    <ResponsivePageControls className="maintenance-responsive-controls" surfaceClassName="maintenance-toolbar" search={<PageSearchField value={search} onChange={setSearch} placeholder="Search maintenance..." label="Search maintenance plans" />} controls={<><FilterButton ref={filterTrigger} activeCount={filter === "all" ? 0 : 1} open={filtersOpen} onClick={() => setFiltersOpen(true)} /><CompactSortControl value={sort} onValueChange={setSort} options={sorts} label="Sort maintenance plans" /></>} action={addAction} toolbarSummary={summary} summary={<ResultSummary className="sr-only">{visible.length} maintenance plans</ResultSummary>} />
+    <DesktopPageControls className="maintenance-toolbar" search={<DesktopControlField label="Search" size="search"><PageSearchField compact value={search} onChange={setSearch} placeholder="Search plan, customer or site..." label="Search maintenance plans" /></DesktopControlField>} filters={<><DesktopControlField htmlFor="maintenance-filter" label="Filter" size="medium">{filterSelect("maintenance-filter")}</DesktopControlField><DesktopControlField htmlFor="maintenance-sort" label="Sort by" size="medium"><Select value={sort} onValueChange={setSort}><SelectTrigger id="maintenance-sort" className="data-toolbar-field bg-white"><SelectValue /></SelectTrigger><SelectContent>{sorts.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></DesktopControlField></>} summary={summary} actions={addAction} />
+    {error ? <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{error}</p> : null}
+    <div className="maintenance-dashboard-body">
+      <section className="maintenance-plan-list" aria-label="Maintenance plans">
+        <h2 className="sr-only">Maintenance plans</h2>
+        <PlanList mobile={mobile}>{visible.length ? visible.map(({ plan, customer, status, activeJobs }) => <PlanCard mobile={mobile} plan={plan} onOpen={onOpenPlan} key={plan.id}>
+          <div className="maintenance-card-heading"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge className={status.className}>{status.label}</Badge><span className="text-xs font-medium text-slate-500">{getMaintenanceFrequencyMeta(plan.frequency).label}</span>{activeJobs ? <span className="text-xs text-sky-700">{activeJobs} active {activeJobs === 1 ? "job" : "jobs"}</span> : null}</div><h3 id={`maintenance-title-${plan.id}`} className="mt-2 truncate font-semibold text-slate-950">{plan.planName}</h3><p className="mt-0.5 truncate text-xs text-slate-600">{customer?.name || "Unknown customer"} · {plan.siteAddress}</p></div>
+            <div className="maintenance-card-actions"><Button variant="outline" size="sm" onClick={() => onOpenPlan(plan.id)}>Open Plan <ArrowUpRight className="h-3 w-3" /></Button><Button size="sm" disabled={!plan.active || Boolean(busy)} onClick={() => generate(plan)}>{busy === plan.id ? "Generating…" : "Generate Job"}</Button><Button variant="ghost" size="sm" onClick={() => onOpenPlan(plan.id, { edit: true })}>Edit</Button></div>
+          </div><MaintenanceMetrics plan={plan} />
+        </PlanCard>) : null}</PlanList>{!visible.length ? <EmptyState title="No maintenance plans found" text="Adjust your search or add a maintenance plan." /> : null}
+      </section>
+      <aside className="maintenance-due-queue" aria-label="Due Queue"><div className="flex items-center gap-2"><Wrench className="h-4 w-4" /><h2 className="font-semibold">Due Queue</h2><span className="maintenance-due-count ml-auto rounded-full px-2 text-xs">{due.length}</span></div><p className="maintenance-due-muted mt-1 text-xs">Overdue and due in the next 7 days.</p>
+        {due.length ? due.slice(0, 8).map(({ plan, customer, status }) => <div className="maintenance-due-row" key={plan.id}><div className="flex items-start justify-between gap-2"><button type="button" className="min-w-0 text-left text-sm font-semibold hover:underline" onClick={() => onOpenPlan(plan.id)}>{plan.planName}</button><Badge className={status.className}>{status.label}</Badge></div><p className="maintenance-due-muted mt-1 truncate text-xs">{customer?.name}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="maintenance-due-muted text-xs">Due {formatDate(plan.nextDueDate)}</span><Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => generate(plan)}>Generate Job</Button></div></div>) : <p className="maintenance-due-muted py-8 text-sm">Nothing urgent. Your next visits are on the Calendar.</p>}
+      </aside>
+    </div>
+    <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} returnFocusRef={filterTrigger} activeCount={filter === "all" ? 0 : 1} onReset={() => setFilter("all")} description="Filter maintenance plans by service state."><FilterSheetField id="mobile-maintenance-filter" label="Status">{filterSelect("mobile-maintenance-filter")}</FilterSheetField></MobileFilterSheet>
+  </div>;
 }

@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 4;
+export const WORKSPACE_SCHEMA_VERSION = 5;
 
 const migrations = [
   {
@@ -443,6 +443,30 @@ const migrations = [
          SET schema_version = 4
        WHERE id = 1
          AND schema_version < 4;
+    `,
+  },
+  {
+    version: 5,
+    name: "maintenance-recurrence-exceptions",
+    sql: `
+      CREATE TABLE maintenance_occurrence_exceptions (
+        occurrence_key TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES maintenance_plans(id) ON DELETE CASCADE,
+        series_id TEXT NOT NULL,
+        original_date TEXT NOT NULL,
+        override_date TEXT NOT NULL DEFAULT '',
+        job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+        generated_job_id TEXT NOT NULL DEFAULT '',
+        completed_at TEXT NOT NULL DEFAULT '',
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(plan_id, series_id, original_date)
+      );
+      CREATE INDEX idx_maintenance_exception_plan ON maintenance_occurrence_exceptions(plan_id);
+      CREATE INDEX idx_maintenance_exception_date ON maintenance_occurrence_exceptions(override_date);
+      CREATE UNIQUE INDEX idx_maintenance_exception_job ON maintenance_occurrence_exceptions(job_id) WHERE job_id IS NOT NULL;
+      UPDATE workspace_info SET schema_version = 5 WHERE id = 1;
     `,
   },
 ];

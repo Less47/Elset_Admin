@@ -1,4 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
+import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
+import { maintenancePlanIdentity, structuredSiteAddress } from "./maintenance-plan.js";
 
 import {
   BarChart3,
@@ -35,7 +37,6 @@ import {
   defaultThemeSettings,
   inventoryCategories,
   loginAccessRoleOptions,
-  maintenanceFrequencyOptions,
   preferenceSettingKeys,
   sidebarWidthOptions,
   siteTypeOptions,
@@ -1109,6 +1110,7 @@ export function normalizeJobRecord(job) {
     maintenancePlanId: String(job?.maintenancePlanId || "").trim(),
     maintenancePlanName: String(job?.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job?.maintenanceDueDate),
+    maintenanceOccurrenceKey: job?.maintenanceOccurrenceKey || "",
     serviceBoardTomorrowDate: toDateInputValue(job?.serviceBoardTomorrowDate),
     serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
     ocNumber: String(job?.ocNumber || "").trim(),
@@ -1448,6 +1450,8 @@ export function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAcc
   if (!address) return null;
 
   return {
+    ...structuredSiteAddress(site),
+    ...(site?._inferredProfile ? { _inferredProfile: true } : {}),
     id: site?.id || crypto.randomUUID(),
     label: String(site?.label || "").trim(),
     address,
@@ -1473,7 +1477,10 @@ export function mergeSiteProfileRecords(existing, incoming) {
   const hasExplicitField = (key) => Boolean(mergeOptions[key]);
 
   return normalizeSiteProfileRecord({
-    id: existing.id || incoming.id,
+    ...structuredSiteAddress(existing),
+    ...structuredSiteAddress(incoming),
+    ...(existing._inferredProfile && incoming._inferredProfile ? { _inferredProfile: true } : {}),
+    id: existing._inferredProfile && !incoming._inferredProfile ? incoming.id : existing.id || incoming.id,
     label: hasExplicitField("label") ? incoming.label : existing.label,
     address: incoming.address || existing.address,
     siteType: hasExplicitField("siteType") ? incoming.siteType : existing.siteType,
@@ -1529,13 +1536,14 @@ export function normalizeCustomerSiteProfiles(sites, primaryAddress = "", legacy
 
   const normalizedPrimaryAddress = normalizeSiteAddress(primaryAddress);
   if (normalizedPrimaryAddress) {
-    addSiteProfile({ address: normalizedPrimaryAddress }, normalizedPrimaryAddress);
+    addSiteProfile({ address: normalizedPrimaryAddress, _inferredProfile: true }, normalizedPrimaryAddress);
   }
 
   normalizeSiteAccessNotes(legacySiteAccessNotes).forEach((siteAccessNote) => {
     addSiteProfile(
       {
         address: siteAccessNote.address,
+        _inferredProfile: true,
         accessNotes: siteAccessNote.notes,
         updatedAt: siteAccessNote.updatedAt,
       },
@@ -1595,26 +1603,29 @@ export function addMonthsToDateInput(value, months) {
   return toDateInputValue(date);
 }
 
-export function getMaintenanceFrequencyMeta(frequency) {
-  return maintenanceFrequencyOptions.find((option) => option.value === frequency) || maintenanceFrequencyOptions[1];
-}
+export { getMaintenanceFrequencyMeta } from "./maintenance-frequency.js";
 
-export function getNextMaintenanceDueDate(currentDueDate, frequency) {
-  const intervalMonths = getMaintenanceFrequencyMeta(frequency).intervalMonths;
-  return addMonthsToDateInput(currentDueDate, intervalMonths);
-}
+export { advanceMaintenanceDate as getNextMaintenanceDueDate } from "./maintenance-recurrence.js";
 
 export function normalizeMaintenancePlanRecord(plan) {
   if (!plan) return null;
 
   return {
     id: plan.id || crypto.randomUUID(),
+    recurrence: plan.recurrence,
+    maintenanceRevision: plan.maintenanceRevision || 0,
+    occurrenceExceptions: plan.occurrenceExceptions || [],
+    nextOccurrence: plan.nextOccurrence,
+    active: plan.active !== false,
+    siteId: plan.siteId || "",
+    assetId: plan.assetId || "",
+    contractPriceSet: plan.contractPriceSet ?? Number(plan.contractPrice) > 0,
     planName: String(plan.planName || "").trim() || "Untitled maintenance plan",
     customerId: String(plan.customerId || "").trim(),
     siteAddress: normalizeSiteAddress(plan.siteAddress),
-    frequency: normalizeOptionValue(plan.frequency, maintenanceFrequencyOptions, maintenanceFrequencyOptions[1].value),
+    frequency: normalizeMaintenanceFrequency(plan.frequency),
     nextDueDate: toDateInputValue(plan.nextDueDate),
-    defaultTechnicianId: "",
+    defaultTechnicianId: plan.defaultTechnicianId || "",
     estimatedDurationHours: Math.max(0, normalizeNumber(plan.estimatedDurationHours, 0)),
     contractPrice: Math.max(0, normalizeNumber(plan.contractPrice, 0)),
     checklist: normalizeChecklistItems(plan.checklist),
@@ -1639,9 +1650,10 @@ export function getMaintenancePlanJobs(planId, jobs) {
 }
 
 export function getMaintenancePlanStatus(plan, jobs) {
+  if (plan.active === false) return { id: "inactive", label: "Inactive", className: "bg-slate-100 text-slate-600", rank: 5 };
   const linkedJobs = getMaintenancePlanJobs(plan.id, jobs);
   const activeJobs = linkedJobs.filter((job) => job.status !== "Completed");
-  if (activeJobs.length > 0) {
+  if (activeJobs.length > 0 && !plan.nextDueDate) {
     return {
       id: "active-job",
       label: activeJobs.length === 1 ? "Active job" : `${activeJobs.length} active jobs`,
@@ -1970,7 +1982,7 @@ export function normalizeAppState(savedState) {
       ? savedState.parts.map(normalizeInventoryRecord).filter(Boolean)
       : (seedData.inventoryItems || []).map(normalizeInventoryRecord).filter(Boolean);
   const maintenancePlans = Array.isArray(savedState?.maintenancePlans)
-    ? savedState.maintenancePlans.map(normalizeMaintenancePlanRecord).filter(Boolean)
+    ? savedState.maintenancePlans.map(normalizeMaintenancePlanRecord).filter(Boolean).map((plan) => maintenancePlanIdentity(plan, customers))
     : savedState
       ? []
       : (seedData.maintenancePlans || []).map(normalizeMaintenancePlanRecord).filter(Boolean);

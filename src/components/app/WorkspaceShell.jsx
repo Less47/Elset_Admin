@@ -587,6 +587,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         {canManageBusiness && activeSection === "calendar" ? (
           <CalendarManager
             jobs={data.jobs}
+            onLoadMaintenanceOccurrences={actions.handleLoadMaintenanceOccurrences}
+            onRescheduleMaintenance={actions.handleRescheduleMaintenance}
+            onGenerateMaintenanceJob={handleGenerateMaintenanceJob}
+            onOpenPlan={actions.handleOpenMaintenancePlan}
             onOpenJob={handleOpenJob}
             onScheduleJob={handleScheduleJob}
             onPreviewDayReschedule={handlePreviewDayReschedule}
@@ -615,6 +619,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {canManageBusiness && activeSection === "maintenance" ? (
           <MaintenanceManager
+            onOpenPlan={actions.handleOpenMaintenancePlan}
             maintenancePlans={data.maintenancePlans || []}
             customers={data.customers}
             jobs={data.jobs}

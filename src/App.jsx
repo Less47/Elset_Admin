@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CustomerPages from "@/components/customers/CustomerPages";
+import MaintenancePlanPage from "@/components/maintenance/MaintenancePlanPage";
 import WorkspaceShell from "@/components/app/WorkspaceShell";
 import { AuthLoadingScreen } from "@/components/auth/AuthLoadingScreen";
 import { LoginScreen } from "@/components/auth/LoginScreen";
@@ -127,6 +128,7 @@ export default function App() {
     onNavigateToJob: workspaceNavigation.navigateToJob,
     onNavigateToCustomer: workspaceNavigation.navigateToCustomer,
     onNavigateToSite: workspaceNavigation.navigateToSite,
+    onNavigateToMaintenance: workspaceNavigation.navigateToMaintenance,
     setSelectedJob,
     themeSettings,
     themeSettingsSave,
@@ -181,7 +183,9 @@ export default function App() {
     }
   };
 
-  const workspacePage = customerPageOpen
+  const workspacePage = ["maintenance-details", "edit-maintenance", "create-maintenance"].includes(workspaceRoute.type)
+    ? session.canManageBusiness ? <MaintenancePlanPage key={workspaceRoute.path} route={workspaceRoute} navigation={workspaceNavigation} actions={workspaceActions} data={data} backLabel={backLabel} /> : null
+    : customerPageOpen
     ? <CustomerPages route={workspaceRoute} navigation={workspaceNavigation} actions={workspaceActions} data={data} canManageBusiness={session.canManageBusiness} backLabel={backLabel} />
     : workspaceRoute.type === "create-job"
     ? session.canManageBusiness

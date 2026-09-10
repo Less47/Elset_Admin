@@ -4,6 +4,7 @@ import {
   createMaintenancePlan,
   deleteMaintenancePlan,
   generateMaintenanceJob,
+  getMaintenanceOccurrences,
   restoreDeletedMaintenancePlan,
   scheduleMaintenancePlan,
   updateMaintenancePlan,
@@ -73,6 +74,16 @@ export function createMaintenanceRouter({
   const manageRoleMiddleware = requireRole ? requireRole(["admin", "office"]) : ((_req, _res, next) => next());
   const middleware = [authMiddleware, manageRoleMiddleware];
 
+  router.get("/api/maintenance-occurrences", ...middleware, (req, res) => {
+    let db;
+    try {
+      db = openSqliteWorkspaceDb(env);
+      return res.json({ occurrences: getMaintenanceOccurrences(db, req.query.from, req.query.to) });
+    } catch (error) {
+      return res.status(getStatusCode(error)).json({ error: getErrorMessage(error, "Unable to load maintenance dates.") });
+    } finally { db?.close(); }
+  });
+
   router.post(
     "/api/maintenance-plans",
     ...middleware,
@@ -88,8 +99,11 @@ export function createMaintenanceRouter({
   router.patch(
     "/api/maintenance-plans/:id/schedule",
     ...middleware,
-    handleMaintenanceRoute((db, req) => scheduleMaintenancePlan(db, req.params.id, req.body?.nextDueDate), env)
+    handleMaintenanceRoute((db, req) => scheduleMaintenancePlan(db, req.params.id, req.body || {}), env)
   );
+
+  router.patch("/api/maintenance-plans/:id/occurrences", ...middleware,
+    handleMaintenanceRoute((db, req) => scheduleMaintenancePlan(db, req.params.id, { ...req.body, scope: "occurrence" }), env));
 
   router.post(
     "/api/maintenance-plans/:id/complete-cycle",

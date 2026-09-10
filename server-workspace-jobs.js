@@ -1088,6 +1088,8 @@ function recordMaintenanceJobCompletion(db, job, updatedAt) {
            updated_at = ?
      WHERE id = ?
   `).run(updatedAt, updatedAt, maintenancePlanId);
+  db.prepare("UPDATE maintenance_occurrence_exceptions SET completed_at = CASE WHEN completed_at = '' THEN ? ELSE completed_at END WHERE job_id = ? OR generated_job_id = ?").run(updatedAt, job.id, job.id);
+  db.prepare("UPDATE maintenance_plans SET extra_json = json_set(extra_json, '$.maintenanceRevision', coalesce(json_extract(extra_json, '$.maintenanceRevision'), 0) + 1) WHERE id = ?").run(maintenancePlanId);
 }
 
 export function changeJobStatus(db, jobIdInput, statusInput) {

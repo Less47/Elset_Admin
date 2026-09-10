@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CalendarJobChip } from "./CalendarJobCard";
 import { formatCalendarDate, weekdays } from "./calendar-utils";
@@ -71,6 +71,7 @@ export function MainCalendar({ days, monthLabel, selectedDate, jobsByDate, dragA
       <div ref={gridRef} className="calendar-month-grid grid grid-cols-7" data-calendar-dragging={Boolean(dragApi.drag) || undefined} {...dragApi.dropProps}>
         {days.map((day) => {
           const jobs = jobsByDate.get(day.key) || [];
+          const maintenance = jobs.filter((entry) => entry.kind === "maintenance");
           const visibleLimit = jobs.length > eventSlots ? Math.max(1, eventSlots - 1) : eventSlots;
           const target = dragApi.drag?.target === day.key;
           return (
@@ -94,6 +95,12 @@ export function MainCalendar({ days, monthLabel, selectedDate, jobsByDate, dragA
                 {jobs.slice(0, visibleLimit).map((job) => <CalendarJobChip key={job.id} job={job} onOpenJob={onOpenJob} dragApi={dragApi} />)}
                 {jobs.length > visibleLimit ? <button type="button" className="calendar-more min-w-0 truncate rounded px-1 text-left text-[11px] font-medium text-sky-800 outline-none hover:bg-sky-50 focus-visible:ring-3 focus-visible:ring-ring/50" onClick={(event) => { if (dragApi.allowClick(event)) onOpenDay(day.key, event.currentTarget); }}>+ {jobs.length - visibleLimit} more</button> : null}
               </div>
+              {maintenance.length ? <button type="button" className="calendar-mobile-maintenance" data-calendar-maintenance={maintenance[0].key}
+                {...dragApi.getDragProps(maintenance[0], maintenance.length === 1 && !maintenance[0].locked && maintenance[0].active)}
+                aria-label={maintenance.length === 1 ? `${maintenance[0].planName} · Maintenance` : `${maintenance.length} maintenance visits`}
+                onClick={(event) => { if (dragApi.allowClick(event)) { if (maintenance.length === 1) onOpenJob(maintenance[0]); else onOpenDay(day.key, event.currentTarget); } }}>
+                <Wrench className="h-3 w-3" aria-hidden="true" /><span>{maintenance.length}</span>
+              </button> : null}
               {jobs.length ? <div className="calendar-mobile-dots mt-1 flex justify-center gap-1" aria-hidden="true">{jobs.slice(0, 3).map((job) => <span key={job.id} className={`h-1.5 w-1.5 rounded-full ${job.status === "To Do" ? "bg-amber-400" : job.status === "In Progress" ? "bg-sky-500" : "bg-emerald-500"}`} />)}</div> : null}
             </div>
           );

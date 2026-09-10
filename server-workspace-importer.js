@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { writeMaintenanceException } from "./server-maintenance-occurrence-store.js";
 import { normalizeStoredData } from "./server-store.js";
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -447,7 +448,7 @@ const templateKeys = new Set([
 ]);
 const staffKeys = new Set(["id", "name", "role", "email", "phone", "createdAt", "updatedAt"]);
 const customerKeys = new Set(["id", "name", "email", "phone", "customerType", "address", "sites", "siteAccessNotes", "externalRefs", "createdAt", "updatedAt"]);
-const siteKeys = new Set(["id", "label", "address", "siteType", "accessNotes", "notes", "contactName", "contactPhone", "assets", "createdAt", "updatedAt", "ocNumber"]);
+const siteKeys = new Set(["id", "label", "address", "siteType", "accessNotes", "notes", "contactName", "contactPhone", "assets", "createdAt", "updatedAt", "ocNumber", "_inferredProfile"]);
 const assetKeys = new Set(["id", "name", "type", "location", "model", "notes", "createdAt", "updatedAt"]);
 const accessNoteKeys = new Set(["id", "address", "notes", "updatedAt"]);
 const maintenanceKeys = new Set([
@@ -884,6 +885,9 @@ export function importWorkspaceJsonData(db, rawData, {
 
   const importTransaction = db.transaction(() => {
     insertWorkspaceData(db, data, { sourceJsonSha256 });
+    for (const plan of data.maintenancePlans || []) {
+      for (const entry of plan.occurrenceExceptions || []) writeMaintenanceException(db, plan.id, entry);
+    }
   });
   importTransaction();
 

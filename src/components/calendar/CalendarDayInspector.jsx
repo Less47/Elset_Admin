@@ -3,8 +3,9 @@ import { CalendarDays, GripVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { statusThemes } from "@/lib/job-status";
 import { formatCalendarDate } from "./calendar-utils";
+import CalendarMaintenanceItem from "./CalendarMaintenanceItem";
 
-export default function CalendarDayInspector({ date, jobs, eligibleCount, dragApi, busy, active, headingRef, notice, onClose, onOpenJob, onSchedule, onRescheduleDay }) {
+export default function CalendarDayInspector({ date, jobs, eligibleCount, dragApi, busy, active, headingRef, notice, onClose, onOpenJob, onSchedule, onRescheduleDay, maintenanceActions }) {
   const fullDate = formatCalendarDate(date, { weekday: "long", day: "numeric", month: "long" });
   useLayoutEffect(() => {
     if (active) headingRef.current?.focus({ preventScroll: true });
@@ -26,12 +27,13 @@ export default function CalendarDayInspector({ date, jobs, eligibleCount, dragAp
       <header className="calendar-inspector-header">
         <div className="min-w-0">
           <h2 ref={headingRef} tabIndex={-1} aria-label={fullDate} className="truncate font-semibold outline-none">{formatCalendarDate(date, { weekday: "short", day: "numeric", month: "short" })}</h2>
-          <p className="text-[10px] text-slate-600" role="status">{jobs.length} {jobs.length === 1 ? "job" : "jobs"}</p>
+          <p className="text-[10px] text-slate-600" role="status">{jobs.length} {jobs.some((entry) => entry.kind === "maintenance") ? "scheduled entries" : jobs.length === 1 ? "job" : "jobs"}</p>
         </div>
         <Button type="button" variant="ghost" className="calendar-inspector-action shrink-0" aria-label="Close calendar panel" title="Back to mini calendar" onClick={onClose}><X className="h-3.5 w-3.5" /></Button>
       </header>
       <div className="calendar-inspector-jobs" data-calendar-day-detail>
         {jobs.length ? jobs.map((job) => {
+          if (job.kind === "maintenance") return <CalendarMaintenanceItem key={job.id} occurrence={job} actions={maintenanceActions} dragApi={dragApi} busy={busy} />;
           const theme = statusThemes[job.status] || statusThemes["To Do"];
           const time = typeof job.scheduledTime === "string" ? job.scheduledTime.trim() : "";
           return (

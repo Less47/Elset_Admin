@@ -1,3 +1,6 @@
+import { useCallback } from "react";
+import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
+import { canonicalMaintenancePlanInput, maintenancePlanIdentity, updatedStructuredSiteAddress } from "@/lib/maintenance-plan";
 import {
   addDaysToDateInput,
   buildContactSnapshot,
@@ -61,6 +64,7 @@ export function useWorkspaceActions({
   selectedJob,
   onNavigateToCustomer,
   onNavigateToSite,
+  onNavigateToMaintenance,
   setData,
   onNavigateToDocument,
   setIsSendingDocument,
@@ -178,6 +182,7 @@ export function useWorkspaceActions({
     method = "POST",
     body,
     errorMessage = "Unable to update the maintenance records.",
+    throwOnError = false,
   }) {
     try {
       const payload = await requestMaintenanceWorkspaceUpdate({
@@ -190,6 +195,7 @@ export function useWorkspaceActions({
       const state = applyServerState(payload.state);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
+      if (throwOnError) throw error;
       window.alert(error instanceof Error ? error.message : errorMessage);
       return { ok: false, result: null, state: null };
     }
@@ -555,7 +561,7 @@ export function useWorkspaceActions({
     const now = new Date().toISOString();
     const createdPlan = normalizeMaintenancePlanRecord({
       id: crypto.randomUUID(),
-      ...planInput,
+      ...canonicalMaintenancePlanInput(planInput, null, data.customers),
       createdAt: now,
       updatedAt: now,
     });
@@ -566,6 +572,7 @@ export function useWorkspaceActions({
         method: "POST",
         body: { plan: createdPlan },
         errorMessage: "Unable to create the maintenance plan.",
+        throwOnError: true,
       });
       return saved.ok ? (saved.result || true) : false;
     }
@@ -575,7 +582,7 @@ export function useWorkspaceActions({
       maintenancePlans: [createdPlan, ...(prev.maintenancePlans || []).filter((entry) => entry.id !== createdPlan.id)],
     }));
 
-    return true;
+    return createdPlan;
   }
 
   async function handleUpdateMaintenancePlan(planId, updates) {
@@ -583,6 +590,7 @@ export function useWorkspaceActions({
 
     const existingPlan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
     if (!existingPlan) return false;
+    if (!useSqliteApi && updates.dateChange) throw new Error("Recurring date changes require SQLite workspace mode.");
 
     const customer = data.customers.find((entry) => entry.id === updates.customerId);
     if (!customer) {
@@ -594,8 +602,9 @@ export function useWorkspaceActions({
       const saved = await saveMaintenanceApiRequest({
         path: maintenancePath(planId),
         method: "PATCH",
-        body: { plan: updates },
+        body: { plan: { ...updates, revision: updates.revision ?? existingPlan.maintenanceRevision ?? 0 } },
         errorMessage: "Unable to save the maintenance plan.",
+        throwOnError: true,
       });
       return saved.ok ? (saved.result || true) : false;
     }
@@ -606,7 +615,7 @@ export function useWorkspaceActions({
         plan.id === planId
           ? normalizeMaintenancePlanRecord({
               ...plan,
-              ...updates,
+              ...canonicalMaintenancePlanInput(updates, plan, prev.customers),
               updatedAt: new Date().toISOString(),
             })
           : plan
@@ -654,7 +663,7 @@ export function useWorkspaceActions({
     onNavigateToJob?.(job);
   }
 
-  async function handleGenerateMaintenanceJob(planId) {
+  async function handleGenerateMaintenanceJob(planId, selectedOccurrence = null, { openJob = true } = {}) {
     if (!canManageBusiness) return false;
 
     const plan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
@@ -666,26 +675,29 @@ export function useWorkspaceActions({
       return false;
     }
 
-    const dueDate = plan.nextDueDate || slugDate();
+    const occurrence = selectedOccurrence || effectiveMaintenancePlan(plan, data.jobs).nextOccurrence;
+    const dueDate = occurrence?.date || plan.nextDueDate || slugDate();
     const existingOpenJob = data.jobs.find((job) =>
       job.maintenancePlanId === plan.id &&
       job.maintenanceDueDate === dueDate &&
-      job.status !== "Completed"
+      (!selectedOccurrence || job.id === selectedOccurrence.jobId)
     );
 
     if (existingOpenJob) {
-      handleOpenJob(existingOpenJob);
-      return true;
+      if (openJob) handleOpenJob(existingOpenJob);
+      return { job: existingOpenJob, duplicate: true };
     }
 
     if (useSqliteApi) {
       const saved = await saveMaintenanceApiRequest({
         path: maintenancePath(planId, "/generate-job"),
         method: "POST",
+        body: { occurrenceKey: occurrence?.key, revision: occurrence?.revision ?? plan.maintenanceRevision ?? 0 },
         errorMessage: "Unable to generate the maintenance job.",
+        throwOnError: true,
       });
       if (!saved.ok) return false;
-      if (saved.result?.job) {
+      if (openJob && saved.result?.job) {
         handleOpenJob(saved.result.job);
       }
       return saved.result || true;
@@ -716,6 +728,7 @@ export function useWorkspaceActions({
       maintenancePlanId: plan.id,
       maintenancePlanName: plan.planName,
       maintenanceDueDate: dueDate,
+      maintenanceOccurrenceKey: occurrence?.key || "",
       createdAt: now,
       updatedAt: now,
       notes: [],
@@ -733,6 +746,7 @@ export function useWorkspaceActions({
               ...entry,
               lastGeneratedAt: now,
               lastGeneratedJobId: newJob.id,
+              recurrence: maintenanceSchedule(entry),
               nextDueDate: getNextMaintenanceDueDate(dueDate, entry.frequency),
               updatedAt: now,
             })
@@ -740,9 +754,30 @@ export function useWorkspaceActions({
       ),
     }));
 
-    handleOpenJob(newJob);
+    if (openJob) handleOpenJob(newJob);
     return true;
   }
+
+  const handleLoadMaintenanceOccurrences = useCallback(async (from, to, signal) => {
+    if (!useSqliteApi) return (data.maintenancePlans || []).flatMap((plan) => expandMaintenanceOccurrences(plan, from, to, data.jobs)
+      .map((entry) => ({ ...entry, customerName: data.customers.find((customer) => customer.id === plan.customerId)?.name || "Unknown customer" })));
+    const response = await fetchWithAuth(`/api/maintenance-occurrences?from=${from}&to=${to}`, { signal });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Unable to load maintenance dates.");
+    return payload.occurrences;
+  }, [fetchWithAuth, useSqliteApi, data.maintenancePlans, data.jobs, data.customers]);
+
+  async function handleRescheduleMaintenance(occurrence, date, scope) {
+    if (!useSqliteApi) throw new Error("Recurring date changes require SQLite workspace mode.");
+    const saved = await saveMaintenanceApiRequest({
+      path: maintenancePath(occurrence.planId, scope === "occurrence" ? "/occurrences" : "/schedule"),
+      method: "PATCH", throwOnError: true,
+      body: { occurrenceKey: occurrence.key, nextDueDate: date, scope, revision: occurrence.revision },
+    });
+    return saved.ok;
+  }
+
+  function handleOpenMaintenancePlan(planId, options) { return onNavigateToMaintenance?.(planId, options); }
 
   async function handleScheduleJob(jobId, scheduledDate, { onError, recordOnly = false } = {}) {
     if (!canManageBusiness) return false;
@@ -1458,7 +1493,7 @@ export function useWorkspaceActions({
     if (!canManageBusiness) return false;
 
     const normalizedPreviousAddress = normalizeSiteAddress(previousAddress);
-    const normalizedSite = normalizeSiteProfileRecord(siteInput);
+    const normalizedSite = normalizeSiteProfileRecord({ ...siteInput, _inferredProfile: false });
     if (!normalizedSite) return false;
 
     if (useCustomerSqliteApi) {
@@ -1475,6 +1510,7 @@ export function useWorkspaceActions({
       );
       const siteForSave = {
         ...normalizedSite,
+        ...updatedStructuredSiteAddress(existingSite, normalizedSite),
         id: existingSite?.id || normalizedSite.id,
       };
       const saved = await saveCustomerApiRequest({
@@ -1508,6 +1544,8 @@ export function useWorkspaceActions({
       const nextSite = normalizeSiteProfileRecord({
         ...(existingSite || {}),
         ...normalizedSite,
+        _inferredProfile: false,
+        ...updatedStructuredSiteAddress(existingSite, normalizedSite),
         id: normalizedSite.id,
         createdAt:
           existingSite?.createdAt || normalizedSite.createdAt || new Date().toISOString(),
@@ -1547,7 +1585,7 @@ export function useWorkspaceActions({
       const maintenancePlans = shouldSyncAddress
         ? (prev.maintenancePlans || []).map((plan) =>
             plan.customerId === customerId && normalizeSiteAddress(plan.siteAddress).toLowerCase() === normalizedPreviousAddress.toLowerCase()
-              ? { ...plan, siteAddress: nextSite.address, updatedAt: new Date().toISOString() }
+              ? { ...maintenancePlanIdentity({ ...plan, siteAddress: nextSite.address }, [nextCustomer]), updatedAt: new Date().toISOString() }
               : plan
           )
         : prev.maintenancePlans;
@@ -2221,6 +2259,9 @@ export function useWorkspaceActions({
     handleEmptyDeletedJobs,
     handleEditInvoicePayment,
     handleGenerateMaintenanceJob,
+    handleLoadMaintenanceOccurrences,
+    handleRescheduleMaintenance,
+    handleOpenMaintenancePlan,
     handleOpenCustomerProfile,
     handleOpenDoc,
     handlePreviewDocument,

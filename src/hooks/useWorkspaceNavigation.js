@@ -10,6 +10,14 @@ export function parseWorkspacePath(pathname, state = null) {
     historyIndex: Number(state?.historyIndex || 0),
     tab: state?.tab || "overview",
   };
+  if (/^\/maintenance\/?$/.test(pathname)) return { ...context, type: "section", path: "/maintenance", section: "maintenance" };
+  const maintenanceMatch = pathname.match(/^\/maintenance\/([^/]+)(\/edit)?\/?$/);
+  if (maintenanceMatch) {
+    let planId = "";
+    try { planId = decodeURIComponent(maintenanceMatch[1]); } catch { /* invalid route shows missing plan */ }
+    return { ...context, type: planId === "new" ? "create-maintenance" : maintenanceMatch[2] ? "edit-maintenance" : "maintenance-details",
+      path: pathname, planId, sourceSection: state?.sourceSection || "maintenance" };
+  }
   if (pathname === "/customers" || pathname === "/customers/") {
     return { ...context, type: "section", path: "/customers", section: "customers" };
   }
@@ -176,13 +184,18 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, [navigateTo]);
 
   const navigateToSection = useCallback((section, onNavigated) => {
-    return navigateTo({ type: "section", path: section === "customers" ? "/customers" : "/", section }, { onNavigated });
+    return navigateTo({ type: "section", path: ["customers", "maintenance"].includes(section) ? `/${section}` : "/", section }, { onNavigated });
   }, [navigateTo]);
 
   const navigateToCustomer = useCallback((customerId, options = {}) => {
     if (!customerId) return false;
     return navigateTo({ type: options.edit ? "edit-customer" : "customer-details", customerId,
       path: `/customers/${encodeURIComponent(customerId)}${options.edit ? "/edit" : ""}`, tab: options.tab }, options);
+  }, [navigateTo]);
+
+  const navigateToMaintenance = useCallback((planId, options = {}) => {
+    return navigateTo({ type: planId === "new" ? "create-maintenance" : options.edit ? "edit-maintenance" : "maintenance-details", planId,
+      path: `/maintenance/${encodeURIComponent(planId)}${options.edit ? "/edit" : ""}` }, options);
   }, [navigateTo]);
 
   const navigateToCreateCustomer = useCallback(() => (
@@ -237,6 +250,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
 
       const customerPath = `/customers/${encodeURIComponent(currentRoute.customerId || "")}`;
       const path = currentRoute.type === "document" ? `/jobs/${encodeURIComponent(currentRoute.jobId)}`
+        : currentRoute.type === "edit-maintenance" ? `/maintenance/${encodeURIComponent(currentRoute.planId)}`
+        : ["maintenance-details", "create-maintenance"].includes(currentRoute.type) ? "/maintenance"
         : currentRoute.type === "edit-customer" || ["site-details", "create-site"].includes(currentRoute.type) ? customerPath
         : currentRoute.type === "edit-site" ? `${customerPath}/sites/${encodeURIComponent(currentRoute.siteKey)}`
         : ["customer-details", "create-customer"].includes(currentRoute.type) ? "/customers" : "/";
@@ -333,6 +348,7 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     navigateToDocument,
     navigateToSection,
     navigateToCustomer,
+    navigateToMaintenance,
     navigateToCreateCustomer,
     navigateToSite,
     setWorkspaceTab,

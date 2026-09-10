@@ -25,7 +25,7 @@ const desktopFieldSizeClassNames = {
   date: "page-controls__filter page-controls__filter--date",
 };
 
-export function DesktopPageControls({ search, viewToggle, filters, actions, className }) {
+export function DesktopPageControls({ search, viewToggle, filters, summary, actions, className }) {
   return (
     <div className={cn("page-controls floating-page-toolbar hidden px-4 py-3 xl:flex", className)} data-desktop-page-controls>
       <div className="page-controls__left">
@@ -33,6 +33,7 @@ export function DesktopPageControls({ search, viewToggle, filters, actions, clas
         {viewToggle}
         {filters}
       </div>
+      {summary}
       {actions ? <div className="page-controls__right">{actions}</div> : null}
     </div>
   );
@@ -54,7 +55,7 @@ export function DesktopControlField({ children, className, htmlFor, label, size 
   );
 }
 
-export function ResponsivePageControls({ search, controls, action, summary, className, compact = false, surfaceClassName }) {
+export function ResponsivePageControls({ search, controls, action, summary, toolbarSummary, className, compact = false, surfaceClassName }) {
   return (
     <div className={cn("grid gap-2 xl:hidden", className)} data-responsive-page-controls>
       <div className={cn("floating-page-toolbar p-2.5 sm:p-3", surfaceClassName)}>
@@ -79,6 +80,7 @@ export function ResponsivePageControls({ search, controls, action, summary, clas
             </div>
           ) : null}
         </div>
+        {toolbarSummary}
       </div>
       {summary}
     </div>

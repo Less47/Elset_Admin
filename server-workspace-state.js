@@ -1,4 +1,7 @@
 import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
+import { effectiveMaintenancePlan } from "./src/lib/maintenance-recurrence.js";
+import { readMaintenanceExceptions } from "./server-maintenance-occurrence-store.js";
+import { maintenancePlanIdentity } from "./src/lib/maintenance-plan.js";
 
 function parseJson(value, fallback = null) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -318,6 +321,12 @@ export function loadWorkspaceStateFromDb(db) {
     }, row.extra_json);
   });
 
+  const exceptions = readMaintenanceExceptions(db);
+  const exceptionByJob = new Map(exceptions.filter((entry) => entry.jobId).map((entry) => [entry.jobId, entry]));
+  for (const job of jobs) {
+    const occurrence = exceptionByJob.get(job.id);
+    if (occurrence) job.maintenanceOccurrenceKey = occurrence.key;
+  }
   return {
     meta: parseJson(info?.meta_json, {
       initializedAt: info?.created_at || new Date().toISOString(),
@@ -336,7 +345,8 @@ export function loadWorkspaceStateFromDb(db) {
     invoiceTemplate: mapDocumentTemplate(templatesByType.get("invoice")) || {},
     settings,
     inventoryItems,
-    maintenancePlans,
+    maintenancePlans: maintenancePlans.map((plan) => effectiveMaintenancePlan({ ...maintenancePlanIdentity(plan, customers),
+      occurrenceExceptions: exceptions.filter((entry) => entry.planId === plan.id) }, jobs)),
     users: [],
     sessions: [],
   };

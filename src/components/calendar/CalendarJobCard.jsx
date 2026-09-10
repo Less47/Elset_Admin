@@ -1,9 +1,10 @@
-import { CalendarDays, CalendarX2, GripVertical } from "lucide-react";
+import { CalendarDays, CalendarX2, GripVertical, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { statusThemes } from "@/lib/job-status";
 import { formatStreetAndSuburb } from "@/components/service-board/service-board-utils";
 import { formatCalendarDate } from "./calendar-utils";
+import { CalendarMaintenanceChip } from "./CalendarMaintenanceItem";
 
 const urgencyTone = {
   Low: "bg-slate-100 text-slate-700",
@@ -32,6 +33,7 @@ export default function CalendarJobCard({ job, onOpenJob, onSchedule, onUnschedu
         </span>
         <span className="mt-0.5 block truncate text-xs font-semibold text-slate-950">{job.customerName}</span>
         <span className="block truncate text-xs text-slate-700">{job.title || job.description || "Untitled job"}</span>
+        {job.maintenancePlanId ? <span className="mt-1 block truncate text-[10px] text-teal-800"><Wrench className="mr-1 inline h-3 w-3" />Maintenance · {job.maintenancePlanName}</span> : null}
         <span className="mt-1 block truncate text-[11px] text-slate-600">{formatStreetAndSuburb(job.jobAddress) || "Site not set"}</span>
         <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-700">
           <span>{formatCalendarDate(job.scheduledDate)}</span>
@@ -54,6 +56,7 @@ export default function CalendarJobCard({ job, onOpenJob, onSchedule, onUnschedu
 }
 
 export function CalendarJobChip({ job, onOpenJob, dragApi }) {
+  if (job.kind === "maintenance") return <CalendarMaintenanceChip occurrence={job} onOpen={onOpenJob} dragApi={dragApi} />;
   return (
     <button
       type="button"
@@ -64,7 +67,7 @@ export function CalendarJobChip({ job, onOpenJob, dragApi }) {
       aria-label={`Open Job #${job.jobNumber}: ${job.customerName}, ${job.title}, ${job.status}`}
       title={`Job #${job.jobNumber} · ${job.customerName}\n${job.title}\n${job.status}\nDrag to another date to reschedule.`}
     >
-      <span className="calendar-chip-number font-semibold">#{job.jobNumber}</span><span className="calendar-chip-separator"> · </span><span className="calendar-chip-customer">{job.customerName}</span>
+      {job.maintenancePlanId ? <Wrench className="mr-1 inline h-2.5 w-2.5" aria-label="Maintenance job" /> : null}<span className="calendar-chip-number font-semibold">#{job.jobNumber}</span><span className="calendar-chip-separator"> · </span><span className="calendar-chip-customer">{job.customerName}</span>
     </button>
   );
 }

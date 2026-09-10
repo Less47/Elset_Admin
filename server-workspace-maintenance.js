@@ -3,14 +3,10 @@ import { moneyToCents } from "./server-workspace-importer.js";
 import { createJob } from "./server-workspace-jobs.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
-
-const maintenanceFrequencyValues = new Set(["monthly", "quarterly", "six-monthly", "annual"]);
-const maintenanceFrequencyMonths = {
-  monthly: 1,
-  quarterly: 3,
-  "six-monthly": 6,
-  annual: 12,
-};
+import { advanceMaintenanceDate, changeMaintenanceSchedule, expandMaintenanceOccurrences, isMaintenanceDate, maintenanceSchedule, nextMaintenanceOccurrence } from "./src/lib/maintenance-recurrence.js";
+import { writeMaintenanceException } from "./server-maintenance-occurrence-store.js";
+import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./src/lib/maintenance-frequency.js";
+import { canonicalMaintenancePlanInput } from "./src/lib/maintenance-plan.js";
 
 const maintenanceKnownKeys = new Set([
   "id",
@@ -31,6 +27,7 @@ const maintenanceKnownKeys = new Set([
   "lastCompletedAt",
   "createdAt",
   "updatedAt",
+  "nextOccurrence", "occurrenceExceptions", "revision", "dateChange", "occurrenceKey", "occurrenceDate", "scope",
 ]);
 
 const checklistKnownKeys = new Set(["id", "text", "label", "notes"]);
@@ -133,17 +130,10 @@ function normalizeDateInput(value, label, { allowEmpty = true } = {}) {
   return normalized;
 }
 
-function addMonthsToDateInput(value, months) {
-  const normalized = toDateInputValue(value);
-  if (!normalized) return "";
-  const date = new Date(`${normalized}T00:00:00`);
-  date.setMonth(date.getMonth() + months);
-  return toDateInputValue(date);
-}
-
 function normalizeFrequency(value) {
-  const frequency = trimText(value);
-  return maintenanceFrequencyValues.has(frequency) ? frequency : "quarterly";
+  const frequency = normalizeMaintenanceFrequency(value, null);
+  if (!frequency) throw new WorkspaceMaintenanceError("Select a supported maintenance frequency.");
+  return frequency;
 }
 
 function normalizeNumber(value, label, fallback = 0) {
@@ -259,6 +249,7 @@ function normalizeMaintenancePlanInput(input, existing = null) {
   const customerId = normalizeId(source.customerId, "Customer ID");
   const siteAddress = normalizeSiteAddress(source.siteAddress);
   if (!siteAddress) throw new WorkspaceMaintenanceError("Site address is required.");
+  if (source.active !== undefined && typeof source.active !== "boolean") throw new WorkspaceMaintenanceError("Plan status is invalid.");
 
   return {
     id,
@@ -277,7 +268,16 @@ function normalizeMaintenancePlanInput(input, existing = null) {
     createdAt: trimText(existing?.createdAt || source.createdAt) || now,
     updatedAt: now,
     checklist: normalizeChecklistItems(source.checklist || [], id),
-    extra: pickExtra(source, maintenanceKnownKeys),
+    extra: { ...pickExtra(source, maintenanceKnownKeys),
+      siteId: normalizeOptionalId(source.siteId, "Site ID"),
+      assetId: normalizeOptionalId(source.assetId, "Asset ID"),
+      recurrence: maintenanceSchedule(existing || { nextDueDate: source.nextDueDate, frequency: normalizeFrequency(source.frequency) }),
+      maintenanceRevision: (existing?.maintenanceRevision || 0) + 1,
+      active: source.active !== false,
+      contractPriceSet: input.contractPriceSet ?? (Object.hasOwn(input, "contractPrice")
+        ? input.contractPrice !== "" && input.contractPrice != null
+        : existing?.contractPriceSet ?? Number(source.contractPrice) > 0),
+    },
   };
 }
 
@@ -349,6 +349,8 @@ function insertOrReplaceMaintenancePlan(db, plan) {
 
   db.prepare("DELETE FROM maintenance_checklist_items WHERE maintenance_plan_id = ?").run(plan.id);
   insertChecklistItems(db, plan);
+  const effective = getPlanState(db, plan.id);
+  if (effective?.nextDueDate) db.prepare("UPDATE maintenance_plans SET next_due_date = ? WHERE id = ?").run(effective.nextDueDate, plan.id);
 }
 
 function linkedJobIdsForPlan(db, planId) {
@@ -381,8 +383,13 @@ function restoreMaintenancePlanFromArchiveRow(db, row) {
     throw new WorkspaceMaintenanceError("Maintenance plan already exists.", 409);
   }
   ensureCustomerExists(db, payload.customerId);
-  const plan = normalizeMaintenancePlanInput({ ...payload, id: row.plan_id });
+  const plan = normalizeMaintenancePlanInput({ ...payload, id: row.plan_id }, payload);
   insertOrReplaceMaintenancePlan(db, plan);
+
+  for (const entry of payload.occurrenceExceptions || []) {
+    const jobExists = entry.jobId && db.prepare("SELECT id FROM jobs WHERE id = ?").get(entry.jobId);
+    writeMaintenanceException(db, plan.id, { ...entry, jobId: jobExists ? entry.jobId : "" });
+  }
 
   const linkedJobIds = parseJson(row.linked_job_ids_json, []);
   if (Array.isArray(linkedJobIds) && linkedJobIds.length > 0) {
@@ -398,19 +405,21 @@ function restoreMaintenancePlanFromArchiveRow(db, row) {
   }
 
   db.prepare("DELETE FROM deleted_maintenance_plans WHERE id = ?").run(row.id);
+  const effective = getPlanState(db, plan.id);
+  db.prepare("UPDATE maintenance_plans SET next_due_date = ? WHERE id = ?").run(effective.nextDueDate, plan.id);
   return plan;
 }
 
 export function createMaintenancePlan(db, input) {
-  const plan = normalizeMaintenancePlanInput(input);
-
   return db.transaction(() => {
+    const canonical = canonicalMaintenancePlanInput(input, null, loadWorkspaceStateFromDb(db).customers);
+    const plan = normalizeMaintenancePlanInput(canonical);
     if (db.prepare("SELECT id FROM maintenance_plans WHERE id = ?").get(plan.id)) {
       throw new WorkspaceMaintenanceError("A maintenance plan with that ID already exists.", 409);
     }
     ensureCustomerExists(db, plan.customerId);
     ensureStaffExists(db, plan.defaultTechnicianId);
-    validateOptionalSiteAndAsset(db, input, plan.customerId);
+    validateOptionalSiteAndAsset(db, canonical, plan.customerId);
     ensureJobReference(db, plan.lastGeneratedJobId, plan.id);
     insertOrReplaceMaintenancePlan(db, plan);
     touchWorkspaceInfo(db, plan.updatedAt);
@@ -427,11 +436,22 @@ export function updateMaintenancePlan(db, planIdInput, input) {
     const existing = getPlanState(db, planId);
     if (!existing) throw new WorkspaceMaintenanceError("Maintenance plan not found.", 404);
 
-    const plan = normalizeMaintenancePlanInput({ ...input, id: planId }, existing);
+    const canonical = canonicalMaintenancePlanInput(input, existing, loadWorkspaceStateFromDb(db).customers);
+    let plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, existing);
     ensureCustomerExists(db, plan.customerId);
     ensureStaffExists(db, plan.defaultTechnicianId);
-    validateOptionalSiteAndAsset(db, input, plan.customerId);
+    validateOptionalSiteAndAsset(db, canonical, plan.customerId);
     ensureJobReference(db, plan.lastGeneratedJobId, plan.id);
+    if (input.revision !== undefined) assertMaintenanceRevision(existing, input.revision);
+    const changesDate = plan.nextDueDate !== existing.nextDueDate;
+    const changesFrequency = plan.frequency !== existing.frequency;
+    if (changesDate || changesFrequency) {
+      const operation = { ...input.dateChange, nextDueDate: plan.nextDueDate, revision: input.revision };
+      if (changesFrequency && operation.scope !== "schedule") throw new WorkspaceMaintenanceError("Choose Change maintenance schedule to update the frequency.");
+      const scheduled = applyOccurrenceChange(db, existing, operation, plan.frequency);
+      plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, scheduled);
+      plan.extra.maintenanceRevision = existing.maintenanceRevision + 1;
+    }
     insertOrReplaceMaintenancePlan(db, plan);
     touchWorkspaceInfo(db, plan.updatedAt);
     runForeignKeyCheck(db);
@@ -439,14 +459,78 @@ export function updateMaintenancePlan(db, planIdInput, input) {
   })();
 }
 
-export function scheduleMaintenancePlan(db, planIdInput, nextDueDateInput) {
+function assertMaintenanceRevision(plan, revision) {
+  if (!Number.isInteger(revision) || revision !== (plan.maintenanceRevision || 0)) {
+    throw new WorkspaceMaintenanceError("This maintenance plan has changed. Refresh and try again.", 409);
+  }
+}
+
+function resolveOccurrence(db, plan, input = {}) {
+  const jobs = loadWorkspaceStateFromDb(db).jobs;
+  const key = input.occurrenceKey || plan.nextOccurrence?.key;
+  const exception = plan.occurrenceExceptions?.find((entry) => entry.key === key);
+  const segment = maintenanceSchedule(plan).segments.find((entry) => entry.firstOccurrence?.key === key && (!entry.untilDate || entry.anchorDate < entry.untilDate));
+  const date = exception?.overrideDate || exception?.snapshot?.date || segment?.anchorDate || key?.slice(-10);
+  const occurrence = expandMaintenanceOccurrences({ ...plan, active: true }, date, date, jobs).find((entry) => entry.key === key);
+  if (!occurrence) throw new WorkspaceMaintenanceError("This maintenance occurrence is no longer on the schedule. Refresh and try again.", 409);
+  const protectedSegment = maintenanceSchedule(plan).segments.find((entry) => entry.protectedOccurrences?.some((candidate) => candidate.key === key && (!entry.untilDate || candidate.date < entry.untilDate)));
+  const protectedDate = protectedSegment?.protectedOccurrences.find((entry) => entry.key === key)?.date;
+  return protectedDate ? { ...occurrence, segmentId: protectedSegment.id, baseDate: protectedDate } : occurrence;
+}
+
+function applyOccurrenceChange(db, plan, input, frequency = plan.frequency) {
+  const date = normalizeDateInput(input.nextDueDate, "Maintenance date", { allowEmpty: false });
+  const occurrence = resolveOccurrence(db, plan, input);
+  if (date === occurrence.date && frequency === plan.frequency) return plan;
+  assertMaintenanceRevision(plan, input.revision);
+  if (!["occurrence", "schedule"].includes(input.scope)) throw new WorkspaceMaintenanceError("Choose This occurrence only or Change maintenance schedule before saving.");
+  if (occurrence.locked) throw new WorkspaceMaintenanceError("Historical or completed maintenance cannot be moved.", 409);
+  const prior = plan.occurrenceExceptions?.find((entry) => entry.key === occurrence.key);
+  if (input.scope === "occurrence") {
+    writeMaintenanceException(db, plan.id, { ...prior, ...occurrence, overrideDate: date, snapshot: prior?.snapshot || occurrence });
+    return plan;
+  }
+  let updated;
+  // Adopt legacy generated jobs as sparse facts before replacing a schedule.
+  // The job records themselves are untouched.
+  const jobs = loadWorkspaceStateFromDb(db).jobs.filter((job) => job.maintenancePlanId === plan.id);
+  const facts = [...(plan.occurrenceExceptions || [])];
+  for (const job of jobs) {
+    if (facts.some((entry) => entry.jobId === job.id)) continue;
+    const linked = expandMaintenanceOccurrences({ ...plan, active: true }, job.maintenanceDueDate, job.maintenanceDueDate, jobs).find((entry) => entry.jobId === job.id);
+    if (!linked) continue;
+    const fact = { ...linked, snapshot: linked };
+    writeMaintenanceException(db, plan.id, fact);
+    facts.push(fact);
+  }
+  plan = { ...plan, occurrenceExceptions: facts };
+  try { updated = changeMaintenanceSchedule(plan, occurrence, date, frequency, crypto.randomUUID()); }
+  catch (error) { throw new WorkspaceMaintenanceError(error.message, 409); }
+  // Remove only ungenerated overrides in the replaced future schedule.
+  // Generated/completed facts are kept at their saved date and never rewritten.
+  const replacedIds = new Set(maintenanceSchedule(plan).segments.slice(
+    maintenanceSchedule(plan).segments.findIndex((entry) => entry.id === occurrence.seriesId || entry.firstOccurrence?.key === occurrence.key)
+  ).map((entry) => entry.id));
+  for (const entry of plan.occurrenceExceptions || []) {
+    if (entry.key !== occurrence.key && !entry.jobId && !entry.generatedJobId && !entry.completedAt && replacedIds.has(entry.snapshot?.segmentId || entry.snapshot?.seriesId) && entry.snapshot.baseDate >= occurrence.baseDate) {
+      db.prepare("DELETE FROM maintenance_occurrence_exceptions WHERE occurrence_key = ?").run(entry.key);
+    }
+  }
+  if (prior) writeMaintenanceException(db, plan.id, { ...prior, overrideDate: date, snapshot: { ...occurrence, baseDate: date, date } });
+  return updated;
+}
+
+export function scheduleMaintenancePlan(db, planIdInput, input = {}) {
   const planId = normalizeId(planIdInput, "Maintenance plan ID");
-  const nextDueDate = normalizeDateInput(nextDueDateInput, "Next service date", { allowEmpty: false });
+  normalizeDateInput(input.nextDueDate, "Next service date", { allowEmpty: false });
 
   return db.transaction(() => {
     const existing = getPlanState(db, planId);
     if (!existing) throw new WorkspaceMaintenanceError("Maintenance plan not found.", 404);
-    const plan = normalizeMaintenancePlanInput({ ...existing, nextDueDate, id: planId }, existing);
+    const occurrence = resolveOccurrence(db, existing, input);
+    if (occurrence.date === input.nextDueDate) return existing;
+    const updated = applyOccurrenceChange(db, existing, input);
+    const plan = normalizeMaintenancePlanInput(updated, updated);
     insertOrReplaceMaintenancePlan(db, plan);
     touchWorkspaceInfo(db, plan.updatedAt);
     runForeignKeyCheck(db);
@@ -461,10 +545,17 @@ export function completeMaintenanceCycle(db, planIdInput, input = {}) {
     const existing = getPlanState(db, planId);
     if (!existing) throw new WorkspaceMaintenanceError("Maintenance plan not found.", 404);
     const completedAt = trimText(input.completedAt) || nowIso();
-    const advanceRecurrence = input.advanceRecurrence === true;
-    const nextDueDate = advanceRecurrence
-      ? addMonthsToDateInput(existing.nextDueDate || toDateInputValue(completedAt), maintenanceFrequencyMonths[existing.frequency] || 3)
-      : existing.nextDueDate;
+    if (Number.isNaN(new Date(completedAt).getTime())) throw new WorkspaceMaintenanceError("Completion date is invalid.");
+    if (input.revision !== undefined) assertMaintenanceRevision(existing, input.revision);
+    if (input.occurrenceKey || input.advanceRecurrence === true) {
+      if (!input.occurrenceKey) throw new WorkspaceMaintenanceError("Choose the maintenance occurrence to complete.");
+      const occurrence = resolveOccurrence(db, existing, input);
+      if (occurrence.completedAt) return existing;
+      assertMaintenanceRevision(existing, input.revision);
+      const previous = existing.occurrenceExceptions?.find((entry) => entry.key === occurrence.key);
+      writeMaintenanceException(db, planId, { ...previous, ...occurrence, snapshot: previous?.snapshot || occurrence, overrideDate: previous?.overrideDate, completedAt });
+    }
+    const nextDueDate = existing.nextDueDate;
     const plan = normalizeMaintenancePlanInput({
       ...existing,
       id: planId,
@@ -551,11 +642,10 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
     const customer = state.customers.find((entry) => entry.id === plan.customerId);
     if (!customer) throw new WorkspaceMaintenanceError("Customer not found.", 404);
 
-    const dueDate = plan.nextDueDate || toDateInputValue(new Date());
+    const occurrence = resolveOccurrence(db, plan, input);
+    const dueDate = occurrence.date;
     const existingOpenJob = state.jobs.find((job) =>
-      job.maintenancePlanId === plan.id
-      && job.maintenanceDueDate === dueDate
-      && job.status !== "Completed"
+      job.id === occurrence.jobId
     );
     if (existingOpenJob) {
       return {
@@ -564,6 +654,11 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
         duplicate: true,
       };
     }
+    if (!plan.active) throw new WorkspaceMaintenanceError("Activate this maintenance plan before generating a job.", 409);
+    if (occurrence.completedAt) throw new WorkspaceMaintenanceError("This maintenance occurrence is already completed.", 409);
+    if (occurrence.generated) throw new WorkspaceMaintenanceError("The job for this occurrence is archived. Restore that job instead of generating it again.", 409);
+    if (!input.occurrenceKey) throw new WorkspaceMaintenanceError("Choose the maintenance occurrence to generate a job for.");
+    assertMaintenanceRevision(plan, input.revision);
 
     const staff = plan.defaultTechnicianId
       ? db.prepare("SELECT name FROM staff WHERE id = ?").get(plan.defaultTechnicianId)
@@ -588,7 +683,13 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
     });
 
     const updatedAt = nowIso();
-    const nextDueDate = addMonthsToDateInput(dueDate, maintenanceFrequencyMonths[plan.frequency] || 3);
+    const previous = plan.occurrenceExceptions?.find((entry) => entry.key === occurrence.key);
+    writeMaintenanceException(db, plan.id, { ...previous, ...occurrence, jobId: job.id, snapshot: previous?.snapshot || occurrence, overrideDate: previous?.overrideDate });
+    // Freeze the initial anchor before the legacy next_due_date cache advances.
+    const extra = parseJson(db.prepare("SELECT extra_json FROM maintenance_plans WHERE id = ?").get(plan.id).extra_json, {});
+    db.prepare("UPDATE maintenance_plans SET extra_json = ? WHERE id = ?").run(objectJson({ ...extra, recurrence: maintenanceSchedule(plan), maintenanceRevision: plan.maintenanceRevision + 1 }), plan.id);
+    const refreshed = getPlanState(db, plan.id);
+    const nextDueDate = nextMaintenanceOccurrence(refreshed, loadWorkspaceStateFromDb(db).jobs)?.date || advanceMaintenanceDate(dueDate, plan.frequency);
     db.prepare(`
       UPDATE maintenance_plans
          SET last_generated_at = ?,
@@ -607,11 +708,21 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
   })();
 }
 
+export function getMaintenanceOccurrences(db, from, to) {
+  if (!isMaintenanceDate(from) || !isMaintenanceDate(to) || from > to || (new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000 > 732) {
+    throw new WorkspaceMaintenanceError("Choose a valid maintenance range of at most two years.");
+  }
+  const state = loadWorkspaceStateFromDb(db);
+  const customers = new Map(state.customers.map((customer) => [customer.id, customer]));
+  return state.maintenancePlans.flatMap((plan) => expandMaintenanceOccurrences(plan, from, to, state.jobs)
+    .map((entry) => ({ ...entry, customerName: customers.get(plan.customerId)?.name || "Unknown customer" })));
+}
+
 function buildMaintenanceJobDescription(plan) {
   const sections = [
     `Recurring maintenance visit for ${plan.planName}.`,
     plan.siteAddress ? `Site: ${plan.siteAddress}` : "",
-    `Frequency: ${getMaintenanceFrequencyLabel(plan.frequency)}`,
+    `Frequency: ${getMaintenanceFrequencyMeta(plan.frequency).label}`,
     plan.notes ? `Plan notes: ${plan.notes}` : "",
     Array.isArray(plan.checklist) && plan.checklist.length > 0
       ? `Checklist:\n${plan.checklist.map((item) => `- ${item}`).join("\n")}`
@@ -619,11 +730,4 @@ function buildMaintenanceJobDescription(plan) {
   ];
 
   return sections.filter(Boolean).join("\n\n");
-}
-
-function getMaintenanceFrequencyLabel(frequency) {
-  if (frequency === "monthly") return "Monthly";
-  if (frequency === "six-monthly") return "6 Monthly";
-  if (frequency === "annual") return "Annual";
-  return "Quarterly";
 }

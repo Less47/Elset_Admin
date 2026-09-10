@@ -78,24 +78,7 @@ function getJobValueAmount(job) {
   return 0;
 }
 
-export function formatStreetAndSuburb(address) {
-  const parts = String(address || "")
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length === 0) return "Site not set";
-
-  const street = parts[0];
-  const suburbSource = parts[1] || parts[0];
-  const suburb = suburbSource
-    .replace(/\b(VIC|NSW|QLD|SA|WA|TAS|ACT|NT)\b/gi, "")
-    .replace(/\b\d{4}\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return suburb && suburb !== street ? `${street}, ${suburb}` : street;
-}
+export { formatStreetAndSuburb } from "../../lib/site-address.js";
 
 export function sortJobsForColumn(jobs, sortMode = "recent") {
   return [...jobs].sort((a, b) => {

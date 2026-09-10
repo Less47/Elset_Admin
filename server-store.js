@@ -4,6 +4,8 @@ import crypto from "crypto";
 import { Buffer } from "buffer";
 import { fileURLToPath } from "url";
 import { appearanceSettingKeys as workspaceUiSettingKeys } from "./src/lib/user-ui-preferences.js";
+import { normalizeMaintenanceFrequency } from "./src/lib/maintenance-frequency.js";
+import { canonicalMaintenancePlanInput, maintenancePlanIdentity, structuredSiteAddress } from "./src/lib/maintenance-plan.js";
 import {
   ADMIN_EMAIL,
   calculateDocTotal,
@@ -182,7 +184,6 @@ const defaultCustomers = [
 ];
 
 const inventoryCategories = ["Automation", "Access Control", "Electrical", "Hardware", "Consumables", "Tools", "Other"];
-const maintenanceFrequencyValues = ["monthly", "quarterly", "six-monthly", "annual"];
 const userRoleValues = ["admin", "office", "technician"];
 const customerTypeValues = ["homeowner", "strata", "property-manager", "builder", "business", "government", "other"];
 const siteTypeValues = ["residential", "commercial", "industrial", "mixed-use", "other"];
@@ -378,6 +379,8 @@ function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAccessNote
   if (!address) return null;
 
   return {
+    ...structuredSiteAddress(site),
+    ...(site?._inferredProfile ? { _inferredProfile: true } : {}),
     id: site?.id || crypto.randomUUID(),
     label: String(site?.label || "").trim(),
     address,
@@ -403,7 +406,10 @@ function mergeSiteProfileRecords(existing, incoming) {
   const hasExplicitField = (key) => Boolean(mergeOptions[key]);
 
   return normalizeSiteProfileRecord({
-    id: existing.id || incoming.id,
+    ...structuredSiteAddress(existing),
+    ...structuredSiteAddress(incoming),
+    ...(existing._inferredProfile && incoming._inferredProfile ? { _inferredProfile: true } : {}),
+    id: existing._inferredProfile && !incoming._inferredProfile ? incoming.id : existing.id || incoming.id,
     label: hasExplicitField("label") ? incoming.label : existing.label,
     address: incoming.address || existing.address,
     siteType: hasExplicitField("siteType") ? incoming.siteType : existing.siteType,
@@ -459,13 +465,14 @@ function normalizeCustomerSiteProfiles(sites, primaryAddress = "", legacySiteAcc
 
   const normalizedPrimaryAddress = normalizeSiteAddress(primaryAddress);
   if (normalizedPrimaryAddress) {
-    addSiteProfile({ address: normalizedPrimaryAddress }, normalizedPrimaryAddress);
+    addSiteProfile({ address: normalizedPrimaryAddress, _inferredProfile: true }, normalizedPrimaryAddress);
   }
 
   normalizeSiteAccessNotes(legacySiteAccessNotes).forEach((siteAccessNote) => {
     addSiteProfile(
       {
         address: siteAccessNote.address,
+        _inferredProfile: true,
         accessNotes: siteAccessNote.notes,
         updatedAt: siteAccessNote.updatedAt,
       },
@@ -629,11 +636,18 @@ function normalizeChecklistItems(items) {
 function normalizeMaintenancePlanRecord(plan) {
   if (!plan) return null;
   return {
+    ...(plan.siteId ? { siteId: String(plan.siteId).trim() } : {}),
+    ...(plan.assetId ? { assetId: String(plan.assetId).trim() } : {}),
+    recurrence: plan.recurrence,
+    maintenanceRevision: plan.maintenanceRevision || 0,
+    occurrenceExceptions: plan.occurrenceExceptions || [],
+    active: plan.active !== false,
+    contractPriceSet: plan.contractPriceSet ?? Number(plan.contractPrice) > 0,
     id: plan.id || crypto.randomUUID(),
     planName: String(plan.planName || "").trim() || "Untitled maintenance plan",
     customerId: String(plan.customerId || "").trim(),
     siteAddress: normalizeSiteAddress(plan.siteAddress),
-    frequency: maintenanceFrequencyValues.includes(plan.frequency) ? plan.frequency : "quarterly",
+    frequency: normalizeMaintenanceFrequency(plan.frequency),
     nextDueDate: toDateInputValue(plan.nextDueDate),
     defaultTechnicianId: String(plan.defaultTechnicianId || "").trim(),
     estimatedDurationHours: Math.max(0, normalizeNumber(plan.estimatedDurationHours, 0)),
@@ -747,6 +761,7 @@ function normalizeJobRecord(job) {
     maintenancePlanId: String(job.maintenancePlanId || "").trim(),
     maintenancePlanName: String(job.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job.maintenanceDueDate),
+    maintenanceOccurrenceKey: job.maintenanceOccurrenceKey || "",
     serviceBoardTomorrowDate: toDateInputValue(job.serviceBoardTomorrowDate),
     serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
     createdAt: job.createdAt || new Date().toISOString(),
@@ -1178,7 +1193,7 @@ function buildUserState(data, user) {
     staff: data.staff,
     customers: data.customers,
     inventoryItems: data.inventoryItems,
-    maintenancePlans: data.maintenancePlans,
+    maintenancePlans: data.maintenancePlans.map((plan) => maintenancePlanIdentity(plan, data.customers)),
     jobs: data.jobs,
     deletedJobs: data.deletedJobs,
     deletedCustomers: data.deletedCustomers,
@@ -1221,17 +1236,18 @@ function mergeTechnicianState(existingData, incomingState) {
 }
 
 function mergeOfficeState(existingData, incomingState) {
+  const customers = Array.isArray(incomingState?.customers) ? incomingState.customers.map(normalizeCustomerRecord).filter(Boolean) : existingData.customers;
   return {
     ...existingData,
     staff: Array.isArray(incomingState?.staff) ? incomingState.staff.map(normalizeStaffRecord).filter(Boolean) : existingData.staff,
-    customers: Array.isArray(incomingState?.customers) ? incomingState.customers.map(normalizeCustomerRecord).filter(Boolean) : existingData.customers,
+    customers,
     inventoryItems: Array.isArray(incomingState?.inventoryItems)
       ? incomingState.inventoryItems.map(normalizeInventoryRecord).filter(Boolean)
       : Array.isArray(incomingState?.parts)
         ? incomingState.parts.map(normalizeInventoryRecord).filter(Boolean)
         : existingData.inventoryItems,
     maintenancePlans: Array.isArray(incomingState?.maintenancePlans)
-      ? incomingState.maintenancePlans.map(normalizeMaintenancePlanRecord).filter(Boolean)
+      ? incomingState.maintenancePlans.map((plan) => normalizeMaintenancePlanRecord(canonicalMaintenancePlanInput(plan, existingData.maintenancePlans.find((entry) => entry.id === plan.id), customers))).filter(Boolean)
       : existingData.maintenancePlans,
     jobs: Array.isArray(incomingState?.jobs) ? incomingState.jobs.map(normalizeJobRecord).filter(Boolean) : existingData.jobs,
     deletedJobs: Array.isArray(incomingState?.deletedJobs) ? incomingState.deletedJobs.map(normalizeDeletedJobRecord).filter(Boolean) : existingData.deletedJobs,

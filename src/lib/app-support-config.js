@@ -48,12 +48,7 @@ export const siteTypeOptions = [
   { value: "mixed-use", label: "Mixed Use" },
   { value: "other", label: "Other" },
 ];
-export const maintenanceFrequencyOptions = [
-  { value: "monthly", label: "Monthly", intervalMonths: 1 },
-  { value: "quarterly", label: "Quarterly", intervalMonths: 3 },
-  { value: "six-monthly", label: "6 Monthly", intervalMonths: 6 },
-  { value: "annual", label: "Annual", intervalMonths: 12 },
-];
+export { maintenanceFrequencyOptions } from "./maintenance-frequency.js";
 
 export const defaultThemeSettings = {
   pageBackgroundStart: "#0F90CD",
