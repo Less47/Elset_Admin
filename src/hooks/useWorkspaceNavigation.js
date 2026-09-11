@@ -183,8 +183,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     return navigateTo({ type: "document", jobId: job.id, documentType: type, path: `/jobs/${encodeURIComponent(job.id)}/${type}` });
   }, [navigateTo]);
 
-  const navigateToSection = useCallback((section, onNavigated) => {
-    return navigateTo({ type: "section", path: ["customers", "maintenance"].includes(section) ? `/${section}` : "/", section }, { onNavigated });
+  const navigateToSection = useCallback((section, onNavigated, options = {}) => {
+    return navigateTo({ type: "section", path: ["customers", "maintenance"].includes(section) ? `/${section}` : "/", section }, { ...options, onNavigated });
   }, [navigateTo]);
 
   const navigateToCustomer = useCallback((customerId, options = {}) => {

@@ -5,22 +5,24 @@ export async function sendDocumentAndPersistHistory({
   onSuccess,
   onError,
 }) {
+  let payload;
   try {
-    const payload = await sendEmail();
+    payload = await sendEmail();
+    if (payload?.ok !== true) throw Object.assign(new Error("Email acceptance was not confirmed."), { code: "SEND_UNCONFIRMED" });
+  } catch (error) {
+    if (typeof onError === "function") onError(error);
+    return { status: "failed", code: error?.code || "SEND_FAILED" };
+  }
+
+  try {
     const historyEntry = buildHistoryEntry(payload);
     const persisted = await persistHistory({ payload, historyEntry });
-
-    if (!persisted) return false;
-
-    if (typeof onSuccess === "function") {
+    if (persisted && typeof onSuccess === "function") {
       onSuccess({ payload, historyEntry });
     }
-
-    return true;
-  } catch (error) {
-    if (typeof onError === "function") {
-      onError(error);
-    }
-    return false;
+    return { status: "sent", payload, historySaved: Boolean(persisted) };
+  } catch {
+    // The email was already accepted. A local save failure must not invite a resend.
+    return { status: "sent", payload, historySaved: false };
   }
 }

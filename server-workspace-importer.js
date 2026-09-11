@@ -148,6 +148,7 @@ function sourceCounts(data) {
     maintenanceChecklistItems: maintenancePlans.reduce((sum, plan) => sum + (plan.checklist || []).length, 0),
     deletedJobs: (data.deletedJobs || []).length,
     deletedCustomers: (data.deletedCustomers || []).length,
+    deletedInvoices: (data.deletedInvoices || []).length,
   };
 }
 
@@ -233,6 +234,7 @@ export function summarizeWorkspaceDb(db) {
       maintenanceChecklistItems: countTable(db, "maintenance_checklist_items"),
       deletedJobs: db.prepare("SELECT COUNT(*) AS count FROM deleted_records WHERE kind = 'job'").get().count,
       deletedCustomers: db.prepare("SELECT COUNT(*) AS count FROM deleted_records WHERE kind = 'customer'").get().count,
+      deletedInvoices: countTable(db, "deleted_invoices"),
     },
     financials: {
       quoteTotalsCents: groupDocumentTotals(db, "quotes", "quote_line_items", "quote_id"),
@@ -282,6 +284,7 @@ function getNonEmptyEntityTables(db) {
     "maintenance_plans",
     "inventory_items",
     "deleted_records",
+    "deleted_invoices",
   ];
 
   return tableNames
@@ -860,6 +863,11 @@ function insertWorkspaceData(db, data, { sourceJsonSha256 = "" } = {}) {
       json(entry.job || entry),
       objectJson(pickExtra(entry, new Set(["deletedAt", "job"])))
     );
+  });
+
+  (data.deletedInvoices || []).forEach((entry) => {
+    db.prepare("INSERT INTO deleted_invoices (id, invoice_id, job_id, deleted_at, payload_json) VALUES (?, ?, ?, ?, ?)")
+      .run(entry.id, entry.invoiceId || `${entry.jobId}:invoice`, entry.jobId, entry.deletedAt, json(entry));
   });
 
   (data.deletedCustomers || []).forEach((entry, index) => {

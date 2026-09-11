@@ -1,3 +1,4 @@
+import { normalizeDeletedInvoices } from "./src/lib/invoice-deletion.js";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -770,6 +771,7 @@ function normalizeJobRecord(job) {
     photos: Array.isArray(job.photos) ? job.photos.map(normalizePhoto).filter(Boolean) : [],
     quote: normalizeDocumentRecord(job.quote, "quote"),
     invoice: normalizeDocumentRecord(job.invoice, "invoice"),
+    ...(job.invoiceArchiveRevision ? { invoiceArchiveRevision: job.invoiceArchiveRevision } : {}),
     externalRefs: normalizeExternalRefs(job.externalRefs),
   };
 }
@@ -919,6 +921,7 @@ function buildSeedData() {
     ],
     deletedJobs: [],
     deletedCustomers: [],
+    deletedInvoices: [],
     quoteTemplate: normalizeQuoteTemplate(defaultQuoteTemplate),
     invoiceTemplate: normalizeInvoiceTemplate(defaultInvoiceTemplate),
     settings: normalizeSettings(defaultSettings),
@@ -1005,6 +1008,7 @@ export function normalizeStoredData(rawData) {
     jobs: Array.isArray(data.jobs) ? data.jobs.map(normalizeJobRecord).filter(Boolean) : [],
     deletedJobs: Array.isArray(data.deletedJobs) ? data.deletedJobs.map(normalizeDeletedJobRecord).filter(Boolean) : [],
     deletedCustomers: Array.isArray(data.deletedCustomers) ? data.deletedCustomers.map(normalizeDeletedCustomerRecord).filter(Boolean) : [],
+    deletedInvoices: normalizeDeletedInvoices(data.deletedInvoices),
     quoteTemplate: normalizeQuoteTemplate(data.quoteTemplate),
     invoiceTemplate: normalizeInvoiceTemplate(data.invoiceTemplate),
     settings: normalizeSettings(data.settings),
@@ -1183,6 +1187,7 @@ function buildUserState(data, user) {
       jobs,
       deletedJobs: [],
       deletedCustomers: [],
+      deletedInvoices: [],
       quoteTemplate: normalizeQuoteTemplate(data.quoteTemplate),
       invoiceTemplate: normalizeInvoiceTemplate(data.invoiceTemplate),
       settings: normalizeSettings(data.settings),
@@ -1197,6 +1202,7 @@ function buildUserState(data, user) {
     jobs: data.jobs,
     deletedJobs: data.deletedJobs,
     deletedCustomers: data.deletedCustomers,
+    deletedInvoices: data.deletedInvoices,
     quoteTemplate: normalizeQuoteTemplate(data.quoteTemplate),
     invoiceTemplate: normalizeInvoiceTemplate(data.invoiceTemplate),
     settings: normalizeSettings(data.settings),
@@ -1237,6 +1243,14 @@ function mergeTechnicianState(existingData, incomingState) {
 
 function mergeOfficeState(existingData, incomingState) {
   const customers = Array.isArray(incomingState?.customers) ? incomingState.customers.map(normalizeCustomerRecord).filter(Boolean) : existingData.customers;
+  const existingJobs = new Map(existingData.jobs.map((job) => [job.id, job]));
+  const jobs = Array.isArray(incomingState?.jobs) ? incomingState.jobs.map(normalizeJobRecord).filter(Boolean).map((job) => {
+    const existing = existingJobs.get(job.id);
+    if (!existing?.invoiceArchiveRevision) return job;
+    // An autosave from before deletion/restoration must not resurrect or erase the invoice.
+    return { ...job, invoiceArchiveRevision: existing.invoiceArchiveRevision,
+      invoice: job.invoiceArchiveRevision === existing.invoiceArchiveRevision ? job.invoice : existing.invoice };
+  }) : existingData.jobs;
   return {
     ...existingData,
     staff: Array.isArray(incomingState?.staff) ? incomingState.staff.map(normalizeStaffRecord).filter(Boolean) : existingData.staff,
@@ -1249,7 +1263,7 @@ function mergeOfficeState(existingData, incomingState) {
     maintenancePlans: Array.isArray(incomingState?.maintenancePlans)
       ? incomingState.maintenancePlans.map((plan) => normalizeMaintenancePlanRecord(canonicalMaintenancePlanInput(plan, existingData.maintenancePlans.find((entry) => entry.id === plan.id), customers))).filter(Boolean)
       : existingData.maintenancePlans,
-    jobs: Array.isArray(incomingState?.jobs) ? incomingState.jobs.map(normalizeJobRecord).filter(Boolean) : existingData.jobs,
+    jobs,
     deletedJobs: Array.isArray(incomingState?.deletedJobs) ? incomingState.deletedJobs.map(normalizeDeletedJobRecord).filter(Boolean) : existingData.deletedJobs,
     deletedCustomers: Array.isArray(incomingState?.deletedCustomers)
       ? incomingState.deletedCustomers.map(normalizeDeletedCustomerRecord).filter(Boolean)

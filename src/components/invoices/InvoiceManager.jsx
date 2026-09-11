@@ -27,6 +27,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateInvoiceTotal, money } from "@/lib/quote-template";
+import { statuses } from "@/lib/job-status";
+import { matchesInvoiceJobStatus } from "@/lib/invoice-filters";
 
 const invoiceTimeRangeOptions = [
   { value: "all-time", label: "All time" },
@@ -57,6 +59,7 @@ export default function InvoiceManager({
   const [search, setSearch] = useState("");
   const [timeRange, setTimeRange] = useState("all-time");
   const [filterBy, setFilterBy] = useState("all");
+  const [jobStatusFilter, setJobStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("status");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filterClock] = useState(() => ({ now: Date.now() }));
@@ -152,7 +155,7 @@ export default function InvoiceManager({
             ? Boolean(row.invoice) && row.paymentSummary.balanceAmount > 0
             : row.invoiceStatus.id === filterBy;
 
-      return matchesSearch && matchesFilter;
+      return matchesSearch && matchesFilter && matchesInvoiceJobStatus(row, jobStatusFilter);
     });
 
     rows.sort((a, b) => {
@@ -164,8 +167,8 @@ export default function InvoiceManager({
     });
 
     return rows;
-  }, [deferredSearch, filterBy, rangedRows, sortBy, toTimestamp]);
-  const activeFilterCount = [timeRange !== "all-time", filterBy !== "all"].filter(Boolean).length;
+  }, [deferredSearch, filterBy, jobStatusFilter, rangedRows, sortBy, toTimestamp]);
+  const activeFilterCount = [timeRange !== "all-time", filterBy !== "all", jobStatusFilter !== "all"].filter(Boolean).length;
   const visibleInvoiceCount = filteredRows.filter((row) => row.invoice).length;
 
   return (
@@ -190,7 +193,7 @@ export default function InvoiceManager({
 
       <DesktopPageControls
         search={(
-          <DesktopControlField label="Search" size="search">
+          <DesktopControlField label="Search" size="search" className="flex-[1_1_12rem]">
             <PageSearchField compact value={search} onChange={setSearch} placeholder="Search billing records..." label="Search billing records" />
           </DesktopControlField>
         )}
@@ -226,6 +229,18 @@ export default function InvoiceManager({
                 <SelectItem value="partially-paid">Partially paid</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
+          </DesktopControlField>
+
+          <DesktopControlField htmlFor="desktop-invoice-job-status" label="Job Status" size="large">
+            <Select value={jobStatusFilter} onValueChange={setJobStatusFilter}>
+              <SelectTrigger id="desktop-invoice-job-status" className="data-toolbar-field rounded-lg border-border bg-card">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Job Statuses</SelectItem>
+                {statuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
               </SelectContent>
             </Select>
           </DesktopControlField>
@@ -492,10 +507,11 @@ export default function InvoiceManager({
       onOpenChange={setFiltersOpen}
       returnFocusRef={filterTriggerRef}
       activeCount={activeFilterCount}
-      description="Filter billing records by time range and payment status."
+      description="Filter billing records by time range, payment status, and job status."
       onReset={() => {
         setTimeRange("all-time");
         setFilterBy("all");
+        setJobStatusFilter("all");
       }}
     >
       <FilterSheetField id="mobile-invoice-time-range" label="Time range">
@@ -519,6 +535,15 @@ export default function InvoiceManager({
             <SelectItem value="partially-paid">Partially paid</SelectItem>
             <SelectItem value="overdue">Overdue</SelectItem>
             <SelectItem value="paid">Paid</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterSheetField>
+      <FilterSheetField id="mobile-invoice-job-status" label="Job Status">
+        <Select value={jobStatusFilter} onValueChange={setJobStatusFilter}>
+          <SelectTrigger id="mobile-invoice-job-status" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Job Statuses</SelectItem>
+            {statuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
           </SelectContent>
         </Select>
       </FilterSheetField>

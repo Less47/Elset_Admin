@@ -34,6 +34,7 @@ function countJsonBusinessRecords(data) {
     + (Array.isArray(data?.maintenancePlans) ? data.maintenancePlans.length : 0)
     + (Array.isArray(data?.deletedJobs) ? data.deletedJobs.length : 0)
     + (Array.isArray(data?.deletedCustomers) ? data.deletedCustomers.length : 0)
+    + (Array.isArray(data?.deletedInvoices) ? data.deletedInvoices.length : 0)
   );
 }
 
@@ -214,6 +215,7 @@ function filterAuthorizedState(data, user) {
       jobs,
       deletedJobs: [],
       deletedCustomers: [],
+      deletedInvoices: [],
       quoteTemplate: normalized.quoteTemplate,
       invoiceTemplate: normalized.invoiceTemplate,
       settings: normalized.settings,
@@ -228,6 +230,7 @@ function filterAuthorizedState(data, user) {
     jobs: normalized.jobs,
     deletedJobs: normalized.deletedJobs,
     deletedCustomers: normalized.deletedCustomers,
+    deletedInvoices: normalized.deletedInvoices,
     quoteTemplate: normalized.quoteTemplate,
     invoiceTemplate: normalized.invoiceTemplate,
     settings: normalized.settings,

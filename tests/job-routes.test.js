@@ -263,6 +263,32 @@ test("date scheduling and removal preserve time, status, assignment and commerci
   }, fixture);
 });
 
+test("job create saves contact snapshot names and roles without rewriting the master contact", async () => {
+  const fixture = readFixture();
+  fixture.customers[0].contacts = [{ id: "saved-caretaker", name: "John Smith", role: "Caretaker", phone: "0400 123 456" }];
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    const before = getDbState(dbPath).customers[0].contacts.find((contact) => contact.id === "saved-caretaker");
+    await withServer(env, async (baseUrl) => {
+      for (const [index, name] of ["John Smith", "Mary Jane Brown", "A  B Services"].entries()) {
+        const created = await requestJson(baseUrl, "/api/jobs", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: { id: fixture.customers[0].id },
+            siteInput: { address: `${index + 20} Contact Street, Melbourne VIC 3000`, contactName: name, contactPhone: "0400 123 456" },
+            job: { title: "Contact regression", description: "Preserve the current contact draft", onsiteContact: { name: ` ${name} `, role: " Site Manager ", phone: "0400 123 456" } },
+          }),
+        });
+        assert.equal(created.response.status, 200, created.payload.error);
+        const state = getDbState(dbPath);
+        const saved = state.jobs.find((job) => job.id === created.payload.result.id);
+        assert.equal(saved.onsiteContact.name, name);
+        assert.equal(saved.onsiteContact.role, "Site Manager");
+        assert.deepEqual(state.customers[0].contacts.find((contact) => contact.id === "saved-caretaker"), before);
+      }
+    });
+  }, fixture);
+});
+
 test("job create supports existing customer/site, new customer/site, existing customer/new site, and server job numbers", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {

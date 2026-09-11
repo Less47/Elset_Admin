@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
 import { canonicalMaintenancePlanInput, maintenancePlanIdentity, updatedStructuredSiteAddress } from "@/lib/maintenance-plan";
 import {
@@ -52,6 +52,7 @@ import {
 } from "./workspace-customer-api";
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
 import { getSupportedInvoiceUpdateKeys } from "./workspace-invoice-updates";
+import { withDocumentSiteSnapshot } from "@/lib/document-site-snapshot";
 
 export function useWorkspaceActions({
   applyServerWorkspaceState,
@@ -75,6 +76,8 @@ export function useWorkspaceActions({
 }) {
   const useSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
   const useCustomerSqliteApi = useSqliteApi;
+  const documentSendInFlightRef = useRef(false);
+  const invoiceArchiveInFlightRef = useRef(false);
 
   function applyServerState(state) {
     if (typeof applyServerWorkspaceState === "function") {
@@ -150,7 +153,7 @@ export function useWorkspaceActions({
       const state = applyServerState(payload.state);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : errorMessage);
+      if (!documentSendInFlightRef.current) window.alert(error instanceof Error ? error.message : errorMessage);
       return { ok: false, result: null, state: null };
     }
   }
@@ -1017,7 +1020,34 @@ export function useWorkspaceActions({
     return true;
   }
 
+  async function updateInvoiceArchive(path, method, body) {
+    if (!canManageBusiness) return { ok: false, error: "You do not have permission to change invoices." };
+    if (invoiceArchiveInFlightRef.current) return { ok: false, error: "An invoice update is already in progress." };
+    invoiceArchiveInFlightRef.current = true;
+    const fallback = "Unable to update the invoice. Please try again.";
+    try {
+      const response = await fetchWithAuth(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok !== true || !payload.state) {
+        return { ok: false, error: response.status >= 400 && response.status < 500 ? payload.error || fallback : fallback, code: payload.code };
+      }
+      applyServerState(payload.state);
+      return { ok: true, result: payload.result };
+    } catch {
+      return { ok: false, error: fallback };
+    } finally { invoiceArchiveInFlightRef.current = false; }
+  }
+
+  function handleDeleteInvoice(jobId, options = {}) {
+    return updateInvoiceArchive(documentPath(jobId, "invoice"), "DELETE", { confirmSent: options.confirmSent === true });
+  }
+
+  function handleRestoreDeletedInvoice(archiveId) {
+    return updateInvoiceArchive(`/api/deleted-invoices/${encodeURIComponent(archiveId)}/restore`, "POST");
+  }
+
   async function handleDeleteDocument(jobId, type) {
+    if (type === "invoice") return (await handleDeleteInvoice(jobId)).ok;
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
@@ -1681,6 +1711,7 @@ export function useWorkspaceActions({
       customerPhone: job.customerPhone,
       jobAddress: job.jobAddress,
       ocNumber: job.ocNumber || "",
+      ...(Object.hasOwn(job, "siteSnapshot") ? { siteSnapshot: job.siteSnapshot } : {}),
       requesterContact: job.requesterContact || null,
       onsiteContact: job.onsiteContact || null,
       billingContact: job.billingContact || null,
@@ -1712,7 +1743,7 @@ export function useWorkspaceActions({
       },
       body: JSON.stringify({
         documentType: docType,
-        job: selectedFreshJob,
+        job: withDocumentSiteSnapshot(selectedFreshJob, data.customers, docType),
         document: {
           ...doc,
           sentHistory: doc.sentHistory || [],
@@ -1813,15 +1844,17 @@ export function useWorkspaceActions({
 
   async function handleSendDocument(doc, options = {}) {
     if (!canManageBusiness || !selectedFreshJob) return false;
+    if (documentSendInFlightRef.current) return { status: "pending" };
     const recipientEmail = getDocumentRecipientEmail(selectedFreshJob);
     const recipientName = getDocumentRecipientName(selectedFreshJob);
     if (!recipientEmail) {
-      window.alert(`Add a billing or customer email address before sending the ${docType}.`);
-      return false;
+      return { status: "failed", code: "NO_RECIPIENT" };
     }
+    documentSendInFlightRef.current = true;
     setIsSendingDocument(true);
-    const template = getDocumentTemplateSnapshot(docType);
     try {
+      const template = getDocumentTemplateSnapshot(docType);
+      const documentJob = withDocumentSiteSnapshot(selectedFreshJob, data.customers, docType);
       const requestHeaders = {
         "Content-Type": "application/json",
       };
@@ -1831,7 +1864,7 @@ export function useWorkspaceActions({
             method: "POST",
             headers: requestHeaders,
             body: JSON.stringify({
-              job: selectedFreshJob,
+              job: documentJob,
               documentType: docType,
               document: {
                 ...doc,
@@ -1847,14 +1880,13 @@ export function useWorkspaceActions({
                 signature: themeSettings.emailSignature,
               },
             }),
-          });
+          }).catch(() => { throw Object.assign(new Error("Email response unavailable."), { code: "SEND_UNCONFIRMED" }); });
 
           const payload = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            if (response.status === 404) {
-              throw new Error("The email API needs a backend restart before invoice sending is available.");
-            }
-            throw new Error(payload.error || `Failed to send the ${docType} PDF.`);
+          if (!response.ok || payload.ok !== true) {
+            throw Object.assign(new Error("Email acceptance was not confirmed."), {
+              code: response.ok ? "SEND_UNCONFIRMED" : payload.code || "SEND_FAILED",
+            });
           }
 
           return payload;
@@ -1863,13 +1895,13 @@ export function useWorkspaceActions({
           id: crypto.randomUUID(),
           sentAt: payload.sentAt || new Date().toISOString(),
           fromEmail: payload.fromEmail || ADMIN_EMAIL,
-          toEmail: recipientEmail,
+          toEmail: payload.recipientEmail || recipientEmail,
           toName: recipientName,
           subject: payload.subject || "",
           messageId: payload.messageId || "",
           stampText: options.stampText || "",
           emailPurpose: options.emailPurpose || "",
-          jobSnapshot: buildDocumentJobSnapshot(selectedFreshJob),
+          jobSnapshot: buildDocumentJobSnapshot(documentJob),
           documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
           templateSnapshot: template,
         }),
@@ -1898,12 +1930,9 @@ export function useWorkspaceActions({
           updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, documentToSave) });
           return true;
         },
-        onError: (error) => {
-          const message = error instanceof Error ? error.message : `Failed to send the ${docType} PDF.`;
-          window.alert(message);
-        },
       });
     } finally {
+      documentSendInFlightRef.current = false;
       setIsSendingDocument(false);
     }
   }
@@ -2260,6 +2289,8 @@ export function useWorkspaceActions({
     handleCreateSiteProfile,
     handleDeleteCustomer,
     handleDeleteDocument,
+    handleDeleteInvoice,
+    handleRestoreDeletedInvoice,
     handleDeleteInventoryItem,
     handleDeleteInvoicePayment,
     handleDeleteJob,

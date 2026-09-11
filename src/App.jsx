@@ -23,6 +23,7 @@ export default function App() {
   const [data, setData] = useState(getInitialState);
   const [selectedJob, setSelectedJob] = useState(null);
   const [isSendingDocument, setIsSendingDocument] = useState(false);
+  const [invoiceNotice, setInvoiceNotice] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
   const [activeSection, setActiveSection] = useState("service-board");
   const [activeSettingsTab, setActiveSettingsTab] = useState("preferences");
@@ -42,6 +43,7 @@ export default function App() {
   const resetWorkspaceChrome = useCallback(() => {
     setSelectedJob(null);
     setIsSendingDocument(false);
+    setInvoiceNotice("");
     setActiveTemplateType("quote");
     setActiveSection("service-board");
     setActiveSettingsTab("preferences");
@@ -58,6 +60,7 @@ export default function App() {
 
   const handleActiveSectionChange = useCallback((nextSection) => {
     return navigateToSection(nextSection, () => {
+        if (nextSection !== "invoices") setInvoiceNotice("");
         if (nextSection !== "service-board") {
           setServiceBoardFullScreen(false);
           setServiceBoardTomorrowPanelOpen(false);
@@ -266,6 +269,11 @@ export default function App() {
               onPreviewDocument={workspaceActions.handlePreviewDocument}
               onSendDocument={workspaceActions.handleSendDocument}
               onOpenSentDocument={() => workspaceActions.handleOpenSentDocumentCopy(routeSelectedJob, workspaceRoute.documentType)}
+              onDeleteInvoice={(options) => workspaceActions.handleDeleteInvoice(routeSelectedJob.id, options)}
+              onInvoiceDeleted={() => {
+                setInvoiceNotice("Invoice moved to Recycle Bin");
+                workspaceNavigation.navigateToSection("invoices", undefined, { force: true, replace: true });
+              }}
               isSendingDocument={isSendingDocument}
             />
           : <RecordWorkspace title={workspaceRoute.documentType === "quote" ? "Quote" : "Invoice"} backLabel={backLabel} onBack={() => workspaceNavigation.closeWorkspace({ force: true })}>
@@ -282,6 +290,8 @@ export default function App() {
           activeSection: effectiveActiveSection,
           activeSettingsTab: effectiveActiveSettingsTab,
           activeTemplateType,
+          invoiceNotice,
+          dismissInvoiceNotice: () => setInvoiceNotice(""),
           officeSearch,
           serviceBoardColumnSorts,
           serviceBoardColumnViews,

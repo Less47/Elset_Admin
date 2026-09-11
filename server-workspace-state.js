@@ -346,6 +346,8 @@ export function loadWorkspaceStateFromDb(db) {
     deletedCustomers: deletedRows
       .filter((row) => row.kind === "customer")
       .map((row) => ({ deletedAt: row.deleted_at, customer: parseJson(row.payload_json, {}) })),
+    deletedInvoices: db.prepare("SELECT * FROM deleted_invoices ORDER BY deleted_at DESC").all()
+      .map((row) => ({ ...parseJson(row.payload_json, {}), id: row.id, invoiceId: row.invoice_id, jobId: row.job_id, deletedAt: row.deleted_at })),
     quoteTemplate: mapDocumentTemplate(templatesByType.get("quote")) || {},
     invoiceTemplate: mapDocumentTemplate(templatesByType.get("invoice")) || {},
     settings,

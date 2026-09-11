@@ -159,12 +159,15 @@ function getDocumentNotes(type, notes) {
   return normalized;
 }
 
-function buildCustomerLines(job) {
-  return uniqueTextLines([
+function buildCustomerLines(job, type) {
+  const lines = uniqueTextLines([
     cleanText(job?.billingContact?.name),
     cleanText(job?.customerName),
     ...splitAddressLines(job?.jobAddress),
   ]);
+  const siteOcNumber = type === "invoice" ? cleanText(job?.siteSnapshot?.ocNumber) : "";
+  if (siteOcNumber) lines.push(/^OC\s*:/i.test(siteOcNumber) ? siteOcNumber : `OC: ${siteOcNumber}`);
+  return lines;
 }
 
 function fallbackWorkText(job, document) {
@@ -294,7 +297,7 @@ export function buildDocumentPresentationModel({ job = {}, document = {}, templa
       abn: cleanText(normalizedTemplate.companyAbn),
       acn: cleanText(normalizedTemplate.companyAcn),
     },
-    customerLines: buildCustomerLines(job),
+    customerLines: buildCustomerLines(job, documentType),
     introText,
     work: { heading: workHeading, text: workText },
     table: {
@@ -610,10 +613,24 @@ export async function generateDocumentPdf({ job, document, template, type = "quo
 
     let customerY = Math.min(logoBottom, rightY) - 27;
     const customerX = PAGE_MARGIN + 84;
-    const customerLines = model.customerLines.flatMap((line) => (
-      wrapText(line, regularFont, 10.1, 310)
-    ));
+    const customerLines = model.customerLines.flatMap((line, index) => {
+      const wrapped = wrapText(line, regularFont, 10.1, 310);
+      const isSiteOcLine = model.type === "invoice" && cleanText(job?.siteSnapshot?.ocNumber)
+        && index === model.customerLines.length - 1;
+      if (isSiteOcLine && wrapped.length > 1 && /^OC\s*:$/i.test(wrapped[0])) {
+        // Keep the label with the value even when an OC contains one very long token.
+        const prefix = `${wrapped[0]} `;
+        const valueLines = wrapText(line.slice(wrapped[0].length), regularFont, 10.1, 310 - textWidth(regularFont, prefix, 10.1));
+        valueLines[0] = `${prefix}${valueLines[0]}`;
+        return valueLines;
+      }
+      return wrapped;
+    });
     for (const line of customerLines) {
+      if (model.type === "invoice" && customerY - 12.3 < CONTENT_BOTTOM) {
+        startPage();
+        customerY = state.y;
+      }
       drawText(line, {
         x: customerX,
         y: customerY,

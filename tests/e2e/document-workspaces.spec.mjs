@@ -10,18 +10,29 @@ import { normalizeStoredData } from '../../server-store.js';
 import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
+import { readPdfTextRuns } from "../helpers/pdf-text.js";
+import { getDocumentRecipientEmail } from "../../src/lib/quote-template.js";
+import { themePresets } from "../../src/lib/theme-presets.js";
 
 import { insertJobTree } from "../../server-workspace-jobs.js";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturePath = path.join(repoRoot, "fixtures/demo-workspace.json");
 const screenshotDir = path.join(repoRoot, "test-results/document-workspaces");
 const accountPassword = "E2E-document-pass-123";
+const storageMode = process.env.ELSET_DOCUMENT_E2E_STORAGE || "sqlite";
 let tempDataDir = "";
 let baseUrl = "";
 let serverProcess = null;
 let serverOutput = "";
 let mailServer, mailPort;
 const messages = [];
+let holdMail = false;
+let rejectMail = false;
+const pendingMail = [];
+function releaseMail() {
+  holdMail = false;
+  pendingMail.splice(0).forEach((complete) => complete());
+}
 
 async function startMailSink() {
   mailServer = net.createServer((socket) => {
@@ -33,7 +44,16 @@ async function startMailSink() {
       while ((end = buffer.indexOf("\r\n")) >= 0) {
         const line = buffer.slice(0, end); buffer = buffer.slice(end + 2);
         if (receiving) {
-          if (line === ".") { messages.push(message); message = ""; receiving = false; socket.write("250 captured locally\r\n"); }
+          if (line === ".") {
+            const email = message;
+            message = ""; receiving = false;
+            const complete = () => {
+              if (rejectMail) socket.write("550 PRIVATE provider rejection details\r\n");
+              else { messages.push(email); socket.write("250 captured locally\r\n"); }
+            };
+            if (holdMail) pendingMail.push(complete);
+            else complete();
+          }
           else message += line.replace(/^\.\./, ".") + "\r\n";
         } else if (/^EHLO|^HELO/.test(line)) socket.write("250-localhost\r\n250-AUTH PLAIN\r\n250 SIZE 25000000\r\n");
         else if (/^AUTH/.test(line)) socket.write("235 authenticated\r\n");
@@ -78,6 +98,7 @@ async function waitForServer(url) {
 }
 
 function readWorkspaceState() {
+  if (storageMode === "json") return normalizeStoredData(JSON.parse(fs.readFileSync(path.join(tempDataDir, "app-data.json"), "utf8")));
   const db = openWorkspaceDb({
     dbPath: path.join(tempDataDir, "elset-workspace.db"),
     readonly: true,
@@ -131,7 +152,7 @@ async function seedLoginAccounts() {
       ELSET_AUTH_DB_PATH: authDbPath,
       ELSET_DATA_DIR: tempDataDir,
       ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
-      ELSET_WORKSPACE_STORAGE: "sqlite",
+      ELSET_WORKSPACE_STORAGE: storageMode,
       FLY_APP_NAME: "",
       NODE_ENV: "test",
       TZ: "Australia/Sydney",
@@ -154,7 +175,7 @@ async function startServer() {
     ELSET_DATA_DIR: tempDataDir,
     ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
     ELSET_FRONTEND_URL: baseUrl,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
+    ELSET_WORKSPACE_STORAGE: storageMode,
     FLY_APP_NAME: "",
     NODE_ENV: "test",
     PORT: String(port),
@@ -197,21 +218,32 @@ const NEW_JOB = 'document-new';
 function documentFixture() {
   const fixture=JSON.parse(fs.readFileSync(fixturePath,'utf8'));
   const original=fixture.jobs.find(job=>job.id===EXISTING_JOB);
+  const customer = fixture.customers.find((entry) => entry.id === original.customerId);
+  customer.sites[0].ocNumber = "222222";
+  customer.address = "1 Primary Site Road, Sampleton VIC 3000";
+  customer.sites.unshift({ id: "document-site-a", address: customer.address, ocNumber: "111111" });
   fixture.jobs=[original,{...original,id:NEW_JOB,jobNumber:1200,title:'Document creation test',notes:[],photos:[],quote:null,invoice:null}];
   return fixture;
 }
 test.beforeAll(async()=>{
   tempDataDir=fs.mkdtempSync(path.join(os.tmpdir(),'elset-document-playwright-'));
   fs.mkdirSync(screenshotDir,{recursive:true});
-  const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
-  try { importWorkspaceJsonData(db,documentFixture()); } finally { db.close(); }
+  if (storageMode === "json") fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(normalizeStoredData(documentFixture())));
+  else {
+    const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
+    try { importWorkspaceJsonData(db,documentFixture()); } finally { db.close(); }
+  }
   await seedLoginAccounts();
   await startMailSink();
   await startServer();
 });
 test.beforeEach(()=>{
+  rejectMail = false;
+  releaseMail();
+  if (storageMode === "json") { fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(normalizeStoredData(documentFixture()))); return; }
   const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
   try {
+    db.exec("DELETE FROM deleted_invoices");
     const clean=normalizeStoredData(documentFixture());
     for(const job of clean.jobs){db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);insertJobTree(db,job);}
   }finally{db.close();}
@@ -222,9 +254,14 @@ test.afterAll(async()=>{
   const target=path.resolve(tempDataDir);
   if(target.startsWith(path.join(os.tmpdir(),'elset-document-playwright-')))fs.rmSync(target,{recursive:true,force:true});
 });
-async function openWorkspace(browser, {width=1440,height=900,jobId=EXISTING_JOB,type='quote',username='mobileadmin'}={}) {
+async function openWorkspace(browser, {width=1440,height=900,jobId=EXISTING_JOB,type='quote',username='mobileadmin',preset=null}={}) {
   const context=await browser.newContext({viewport:{width,height},hasTouch:width<1280,isMobile:width<768,locale:'en-AU',timezoneId:'Australia/Sydney',reducedMotion:'reduce'});
   const page=await context.newPage();
+  if (preset) await page.route("**/api/user-preferences", async (route) => {
+    const response = await route.fetch();
+    const payload = await response.json();
+    await route.fulfill({ response, json: { ...payload, preferences: { ...payload.preferences, ...preset.values } } });
+  });
   const writes=[];
   page.on('request',req=>{const url=new URL(req.url()); if(url.pathname.startsWith('/api/')&&['POST','PUT','PATCH','DELETE'].includes(req.method())&&!url.pathname.startsWith('/api/auth/'))writes.push({path:url.pathname,method:req.method(),body:req.postDataJSON()});});
   await page.goto(baseUrl+'/jobs/'+jobId+'/'+type);
@@ -236,6 +273,181 @@ async function openWorkspace(browser, {width=1440,height=900,jobId=EXISTING_JOB,
 }
 const editor=page=>page.locator('[data-document-workspace]');
 const dbJob=id=>readWorkspaceState().jobs.find(job=>job.id===id);
+function prepareDeletionInvoice({ sent = false, receipt = false, payments = [] } = {}) {
+  const state = readWorkspaceState();
+  const job = state.jobs.find((entry) => entry.id === EXISTING_JOB);
+  job.invoice = { ...job.invoice, payments, paidAmount: 0, paymentStatus: "unpaid", sentHistory: sent || receipt ? [{ id: "delete-sent", sentAt: "2026-09-01T00:00:00.000Z", toEmail: job.customerEmail, subject: "Original invoice", messageId: "local-original", emailPurpose: receipt ? "paid-receipt" : "invoice", documentSnapshot: { items: job.invoice.items, payments: [] }, jobSnapshot: { id: job.id, title: job.title, siteSnapshot: { ocNumber: "222222" } }, templateSnapshot: { companyName: "Original Company" } }] : [] };
+  if (storageMode === "json") fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(normalizeStoredData(state)));
+  else {
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
+  }
+  return dbJob(EXISTING_JOB);
+}
+async function navigateSection(page, label) {
+  if (page.viewportSize().width < 1024) await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: label, exact: true }).click();
+}
+
+for (const scenario of [{ width: 1440, height: 900, sent: false, username: "mobileadmin" }, { width: 390, height: 844, sent: true, username: "mobileoffice" }]) {
+  test(`invoice deletion ${scenario.sent ? "sent mobile office" : "unsent desktop admin"} cancels, deletes once and restores`, async ({ browser }, info) => {
+    const original = prepareDeletionInvoice(scenario);
+    const { page, context, writes } = await openWorkspace(browser, { ...scenario, type: "invoice" });
+    try {
+      await page.getByRole("button", { name: "Delete Invoice", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: scenario.sent ? "Delete sent invoice?" : "Delete invoice?", exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+      if (scenario.sent) await expect(dialog).toContainText("Deleting it will not remove the customer's copy.");
+      else await expect(dialog).not.toContainText("already been sent");
+      await capture(page, info, `invoice-delete-${storageMode}-${scenario.width}`, false);
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      expect(dbJob(EXISTING_JOB)).toEqual(original);
+      expect(writes).toEqual([]);
+      await page.getByLabel("Work completed", { exact: true }).fill("Unsaved edits to discard");
+      await page.getByRole("button", { name: "Delete Invoice", exact: true }).click();
+      await expect(dialog).toContainText("Unsaved edits will be discarded.");
+      await dialog.getByRole("button", { name: scenario.sent ? "Delete Sent Invoice" : "Delete Invoice", exact: true }).evaluate((button) => { button.click(); button.click(); });
+      await expect(page.getByRole("status").filter({ hasText: "Invoice moved to Recycle Bin" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: scenario.width < 1280 ? "Search invoices" : "Search billing records", exact: true })).toBeVisible();
+      await noModalOrOverflow(page);
+      expect(writes.filter((entry) => entry.method === "DELETE")).toHaveLength(1);
+      expect(dbJob(EXISTING_JOB)).toEqual({ ...original, invoice: null, updatedAt: expect.any(String), ...(storageMode === "json" ? { invoiceArchiveRevision: expect.any(String) } : {}) });
+      await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]").filter({ hasText: "#1001" })).toHaveCount(0);
+      const [archive] = readWorkspaceState().deletedInvoices;
+      expect(archive.invoice).toEqual(original.invoice);
+      await navigateSection(page, "Recycle Bin");
+      await page.getByRole("tab", { name: "Invoices", exact: true }).click();
+      await expect(page.getByText("INV-1001", { exact: true })).toBeVisible();
+      await expect(page.getByText(original.customerName, { exact: true })).toBeVisible();
+      await expect(page.getByText("Amount", { exact: true })).toBeVisible();
+      await capture(page, info, `invoice-recycle-${storageMode}-${scenario.width}`, false);
+      await page.getByRole("button", { name: "Restore Invoice", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Invoice restored" })).toBeVisible();
+      expect(dbJob(EXISTING_JOB).invoice).toEqual(original.invoice);
+      expect(readWorkspaceState().deletedInvoices).toEqual([]);
+      await navigateSection(page, "Invoices");
+      await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]").filter({ hasText: "#1001" })).toHaveCount(1);
+    } finally { await context.close(); }
+  });
+}
+
+test("invoice deletion pending and failed requests keep the editor open and allow retry", async ({ browser }) => {
+  const original = prepareDeletionInvoice();
+  const { page, context, writes } = await openWorkspace(browser, { type: "invoice" });
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let attempts = 0;
+  await page.route(`**/api/jobs/${EXISTING_JOB}/invoice`, async (route) => {
+    if (route.request().method() !== "DELETE" || ++attempts > 1) return route.continue();
+    await pending;
+    await route.fulfill({ status: 500, json: { error: "PRIVATE database credentials" } });
+  });
+  try {
+    await page.getByRole("button", { name: "Delete Invoice", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Delete Invoice", exact: true }).evaluate((button) => { button.click(); button.click(); });
+    await expect(dialog.getByRole("button", { name: "Deleting...", exact: true })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    expect(writes.filter((entry) => entry.method === "DELETE")).toHaveLength(1);
+    release();
+    await expect(dialog.getByRole("alert")).toContainText("Unable to update the invoice. Please try again.");
+    await expect(dialog).not.toContainText("PRIVATE");
+    expect(dbJob(EXISTING_JOB)).toEqual(original);
+    await expect(page).toHaveURL(`${baseUrl}/jobs/${EXISTING_JOB}/invoice`);
+    await dialog.getByRole("button", { name: "Delete Invoice", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Invoice moved to Recycle Bin" })).toBeVisible();
+    expect(writes.filter((entry) => entry.method === "DELETE")).toHaveLength(2);
+  } finally { release(); await context.close(); }
+});
+
+for (const receipt of [false, true]) test(`invoice deletion blocks ${receipt ? "receipt history" : "recorded payments"} in editor and API`, async ({ browser }) => {
+  const original = prepareDeletionInvoice({ receipt, payments: receipt ? [] : [{ id: "deposit", amount: 20, date: "2026-09-01" }] });
+  const { page, context } = await openWorkspace(browser, { type: "invoice" });
+  try {
+    await expect(page.getByRole("button", { name: "Delete Invoice", exact: true })).toBeDisabled();
+    await expect(page.locator("#document-delete-help")).toContainText(receipt ? "payment receipt history" : "recorded payments");
+    const response = await page.request.delete(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice`, { data: { confirmSent: true } });
+    expect(response.status()).toBe(409);
+    expect(dbJob(EXISTING_JOB)).toEqual(original);
+    expect(readWorkspaceState().deletedInvoices).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("invoice deletion upgrades confirmation when send history changes while the dialog is open", async ({ browser }) => {
+  prepareDeletionInvoice();
+  const { page, context } = await openWorkspace(browser, { type: "invoice" });
+  try {
+    await page.getByRole("button", { name: "Delete Invoice", exact: true }).click();
+    const original = prepareDeletionInvoice({ sent: true });
+    await page.getByRole("dialog").getByRole("button", { name: "Delete Invoice", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Delete sent invoice?", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Deleting it will not remove the customer's copy.");
+    expect(dbJob(EXISTING_JOB)).toEqual(original);
+    await dialog.getByRole("button", { name: "Delete Sent Invoice", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Invoice moved to Recycle Bin" })).toBeVisible();
+    expect(readWorkspaceState().deletedInvoices[0].invoice.sentHistory).toEqual(original.invoice.sentHistory);
+  } finally { await context.close(); }
+});
+
+test("invoice deletion is unavailable to technicians and unauthenticated requests", async ({ browser }) => {
+  prepareDeletionInvoice();
+  const { page, context } = await openWorkspace(browser, { type: "invoice", username: "mobiletech" });
+  try {
+    await expect(page.getByText("You do not have permission to edit this document.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete Invoice", exact: true })).toHaveCount(0);
+    expect((await page.request.delete(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice`)).status()).toBe(403);
+    expect((await page.request.post(`${baseUrl}/api/deleted-invoices/missing/restore`)).status()).toBe(403);
+    const stateResponse = await page.request.get(`${baseUrl}/api/app-state`);
+    expect((await stateResponse.json()).state.deletedInvoices).toEqual([]);
+    expect((await fetch(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice`, { method: "DELETE" })).status).toBe(401);
+    expect(readWorkspaceState().deletedInvoices).toEqual([]);
+  } finally { await context.close(); }
+});
+
+if (storageMode === "json") test("invoice deletion and recovery resist stale JSON autosaves", async ({ browser }) => {
+  prepareDeletionInvoice();
+  const { page, context } = await openWorkspace(browser, { type: "invoice" });
+  try {
+    const before = await (await page.request.get(`${baseUrl}/api/app-state`)).json();
+    const deletion = await (await page.request.delete(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice`)).json();
+    expect(deletion.ok).toBe(true);
+    const staleSave = await page.request.put(`${baseUrl}/api/app-state`, { data: before.state });
+    expect(staleSave.ok()).toBe(true);
+    expect(dbJob(EXISTING_JOB).invoice).toBeNull();
+    expect(readWorkspaceState().deletedInvoices).toHaveLength(1);
+    const restored = await page.request.post(`${baseUrl}/api/deleted-invoices/${deletion.result.archiveId}/restore`);
+    expect(restored.ok()).toBe(true);
+    await page.request.put(`${baseUrl}/api/app-state`, { data: deletion.state });
+    expect(dbJob(EXISTING_JOB).invoice).not.toBeNull();
+    expect(readWorkspaceState().deletedInvoices).toEqual([]);
+  } finally { await context.close(); }
+});
+
+for (const preset of themePresets) test(`invoice deletion dialog follows ${preset.label} on desktop and mobile`, async ({ browser }, info) => {
+  prepareDeletionInvoice({ sent: true });
+  for (const width of [1440, 390]) {
+    const { page, context } = await openWorkspace(browser, { type: "invoice", width, height: width === 390 ? 844 : 900, preset });
+    try {
+      await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--primary"))).toBe(preset.values.actionColor);
+      await page.getByRole("button", { name: "Delete Invoice", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Delete sent invoice?", exact: true });
+      await expect(dialog).toBeVisible();
+      const bounds = await dialog.boundingBox();
+      expect(bounds.x).toBeGreaterThanOrEqual(15);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width - 15);
+      expect(bounds.height).toBeLessThan(400);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+      const colors = await dialog.evaluate((element) => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color }));
+      expect(colors.background).not.toBe(colors.color);
+      await capture(page, info, `invoice-delete-theme-${preset.id}-${width}`, false);
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    } finally { await context.close(); }
+  }
+});
 const save=async(page,type)=>{await page.getByRole('button',{name:'Save '+(type==='quote'?'Quote':'Invoice'),exact:true}).click();await expect(editor(page).locator('.document-feedback')).toHaveText('Saved');};
 async function noModalOrOverflow(page){
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -243,8 +455,8 @@ async function noModalOrOverflow(page){
   expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   expect(await page.evaluate(()=>getComputedStyle(document.body).pointerEvents)).not.toBe('none');
 }
-async function capture(page,info,name){
-  const body=await page.screenshot({path:path.join(screenshotDir,name+'.png'),fullPage:true});
+async function capture(page,info,name,fullPage=true){
+  const body=await page.screenshot({path:path.join(screenshotDir,name+'.png'),fullPage});
   await info.attach(name,{body,contentType:'image/png'});
 }
 
@@ -292,6 +504,9 @@ for (const type of ["quote", "invoice"]) {
       expect(response.headers()["content-type"]).toContain("application/pdf");
       expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
       expect((await PDFDocument.load(pdf)).getPageCount()).toBeGreaterThan(0);
+      const recipientText = (await readPdfTextRuns(pdf)).flat().map((run) => run.text);
+      expect(recipientText.includes("OC: 222222")).toBe(type === "invoice");
+      expect(recipientText.includes("OC: 111111")).toBe(false);
       await expect(page.getByRole("heading", { name: `Preview ${label}`, exact: true })).toBeVisible();
       await noModalOrOverflow(page);
       await capture(page, info, `${type}-preview-1440x900`);
@@ -462,8 +677,15 @@ test("quote and invoice sends use actual server PDFs captured only by the local 
       const mailCount = messages.length;
       await page.getByRole("button", { name: /^Preview & Send/ }).click();
       await expect(page.locator("[data-document-preview]")).toBeVisible();
+      const frame = page.getByTitle(`${type === "invoice" ? "Invoice" : "Quote"} PDF preview`);
+      const previewPdf = Buffer.from(await frame.evaluate(async (element) => Array.from(new Uint8Array(await (await fetch(element.src)).arrayBuffer()))));
+      const previewRuns = await readPdfTextRuns(previewPdf);
+      expect(previewRuns.flat().some((run) => run.text === "OC: 222222")).toBe(type === "invoice");
+      expect(previewRuns.flat().some((run) => run.text === "OC: 111111")).toBe(false);
       await page.getByRole("button", { name: /^Confirm & Send/ }).click();
-      await expect(editor(page).locator(".document-feedback")).toContainText("sent with PDF attachment");
+      await expect(page.locator('[data-document-send-status="success"]')).toContainText(`${type === "invoice" ? "Invoice" : "Quote"} emailed successfully to:`);
+      await expect(page.locator('[data-document-send-status="success"]')).toContainText(getDocumentRecipientEmail(dbJob(EXISTING_JOB)));
+      await expect(page.locator("[data-document-preview]")).toHaveCount(0);
       expect(messages).toHaveLength(mailCount + 1);
       const email = messages.at(-1);
       expect(email).toContain("Content-Type: application/pdf");
@@ -471,9 +693,13 @@ test("quote and invoice sends use actual server PDFs captured only by the local 
       const pdf = Buffer.from(attachment.slice(attachment.indexOf("\r\n\r\n") + 4).trim(), "base64");
       expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
       expect((await PDFDocument.load(pdf)).getPageCount()).toBeGreaterThan(0);
+      expect(await readPdfTextRuns(pdf)).toEqual(previewRuns);
       fs.writeFileSync(path.join(screenshotDir, `${type}-email-attachment.pdf`), pdf);
       expect(dbJob(EXISTING_JOB)[type].sentHistory).toHaveLength(before.sentHistory.length + 1);
-      if (type === "invoice") expect(dbJob(EXISTING_JOB).invoice.payments).toEqual(before.payments);
+      if (type === "invoice") {
+        expect(dbJob(EXISTING_JOB).invoice.payments).toEqual(before.payments);
+        expect(dbJob(EXISTING_JOB).invoice.sentHistory.at(-1).jobSnapshot.siteSnapshot).toMatchObject({ id: "demo-site-front-entry", ocNumber: "222222" });
+      }
       expect(writes.some((write) => write.path === "/api/app-state")).toBe(false);
       const send = writes.find((write) => write.path === "/api/documents/send");
       expect(send.body.documentType).toBe(type);
@@ -483,6 +709,190 @@ test("quote and invoice sends use actual server PDFs captured only by the local 
       await expect(editor(page).getByRole("button", { name: type === "quote" ? "Open Quote" : "Open Invoice", exact: true })).toBeVisible();
     } finally { await context.close(); }
   }
+});
+
+for (const type of ["quote", "invoice"]) {
+  for (const width of [1440, 390]) {
+    test(`${type} sending waits for the provider, blocks duplicate clicks and confirms recipient at ${width}px`, async ({ browser }, info) => {
+      const { context, page, writes } = await openWorkspace(browser, { type, width, height: width === 390 ? 844 : 900 });
+      const before = dbJob(EXISTING_JOB)[type];
+      const mailCount = messages.length;
+      let responses = 0;
+      page.on("response", (response) => { if (response.url().endsWith("/api/documents/send")) responses++; });
+      try {
+        await page.getByRole("button", { name: /^Preview & Send/ }).click();
+        await expect(page.locator("[data-document-preview]")).toBeVisible();
+        holdMail = true;
+        // Two synchronous DOM clicks exercise the guard before React can rerender.
+        await page.getByRole("button", { name: /^Confirm & Send/ }).evaluate((button) => { button.click(); button.click(); });
+        await expect(page.getByRole("button", { name: "Sending...", exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Sending...", exact: true })).toHaveAttribute("aria-busy", "true");
+        await expect(page.locator('[data-document-send-status="sending"]')).toContainText(`Sending ${type}...`);
+        await expect.poll(() => pendingMail.length).toBe(1);
+        await page.waitForTimeout(750);
+        expect(responses).toBe(0);
+        expect(messages).toHaveLength(mailCount);
+        expect(dbJob(EXISTING_JOB)[type]).toEqual(before);
+        expect(writes.filter((write) => write.path === "/api/documents/send")).toHaveLength(1);
+        await expect(page.locator("[data-document-preview]")).toBeVisible();
+        await noModalOrOverflow(page);
+        await capture(page, info, `${type}-sending-${width}`, false);
+        releaseMail();
+        const banner = page.locator('[data-document-send-status="success"]');
+        await expect(banner).toContainText(`${type === "invoice" ? "Invoice" : "Quote"} emailed successfully to:`);
+        await expect(banner).toContainText(getDocumentRecipientEmail(dbJob(EXISTING_JOB)));
+        await expect(banner).toHaveAttribute("role", "status");
+        await expect(banner).toBeInViewport();
+        await expect(page.locator("[data-document-preview]")).toHaveCount(0);
+        expect(responses).toBe(1);
+        expect(messages).toHaveLength(mailCount + 1);
+        expect(dbJob(EXISTING_JOB)[type].sentHistory).toHaveLength(before.sentHistory.length + 1);
+        // The persistent confirmation must remain visible even when the draft is edited.
+        await page.getByLabel(type === "quote" ? "Scope / notes" : "Work completed", { exact: true }).fill("Next draft edit");
+        await expect(banner).toBeVisible();
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await noModalOrOverflow(page);
+        await capture(page, info, `${type}-sent-${width}`, false);
+      } finally { releaseMail(); await context.close(); }
+    });
+  }
+
+  test(`${type} provider failure keeps the preview and supports retry without exposing raw errors`, async ({ browser }, info) => {
+    const width = type === "quote" ? 390 : 1440;
+    const { context, page, writes } = await openWorkspace(browser, { type, width, height: 844 });
+    const before = dbJob(EXISTING_JOB)[type];
+    const mailCount = messages.length;
+    const dialogs = [];
+    page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+    try {
+      await page.getByRole("button", { name: /^Preview & Send/ }).click();
+      rejectMail = true;
+      await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+      const banner = page.locator('[data-document-send-status="error"]');
+      await expect(banner).toHaveAttribute("role", "alert");
+      await expect(banner).toContainText(`${type === "invoice" ? "Invoice" : "Quote"} could not be sent. Please try again.`);
+      await expect(banner).not.toContainText("PRIVATE");
+      await expect(banner).toBeInViewport();
+      await expect(page.locator("[data-document-preview]")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Retry Send", exact: true })).toBeEnabled();
+      expect(dbJob(EXISTING_JOB)[type]).toEqual(before);
+      expect(messages).toHaveLength(mailCount);
+      expect(dialogs).toEqual([]);
+      await noModalOrOverflow(page);
+      await capture(page, info, `${type}-failed-${width}`, false);
+      rejectMail = false;
+      await page.getByRole("button", { name: "Retry Send", exact: true }).click();
+      await expect(page.locator('[data-document-send-status="success"]')).toBeVisible();
+      await expect(page.locator("[data-document-preview]")).toHaveCount(0);
+      expect(messages).toHaveLength(mailCount + 1);
+      expect(writes.filter((write) => write.path === "/api/documents/send")).toHaveLength(2);
+      expect(dbJob(EXISTING_JOB)[type].sentHistory).toHaveLength(before.sentHistory.length + 1);
+    } finally { rejectMail = false; await context.close(); }
+  });
+
+  test(`${type} attachment generation failure keeps the preview and never sends or logs success`, async ({ browser }) => {
+    const { context, page } = await openWorkspace(browser, { type });
+    const before = dbJob(EXISTING_JOB)[type];
+    const mailCount = messages.length;
+    try {
+      await page.getByRole("button", { name: /^Preview & Send/ }).click();
+      await page.route("**/api/documents/send", async (route) => {
+        const body = route.request().postDataJSON();
+        // Force the actual PDF renderer's unsupported-character failure only at send time.
+        body.document.notes = "Unsupported font character: \u{1F600}";
+        await route.continue({ postData: JSON.stringify(body) });
+      });
+      const responsePromise = page.waitForResponse((response) => response.url().endsWith("/api/documents/send"));
+      await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+      const response = await responsePromise;
+      expect(response.status()).toBe(500);
+      expect((await response.json()).code).toBe("ATTACHMENT_FAILED");
+      await expect(page.locator('[data-document-send-status="error"]')).toContainText(`Could not prepare ${type} attachment.`);
+      await expect(page.locator("[data-document-preview]")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Retry Send", exact: true })).toBeEnabled();
+      await expect(page.locator('[data-document-send-status="success"]')).toHaveCount(0);
+      expect(messages).toHaveLength(mailCount);
+      expect(dbJob(EXISTING_JOB)[type]).toEqual(before);
+    } finally { await context.close(); }
+  });
+}
+
+test("an HTTP success without explicit send confirmation never closes the preview or logs success", async ({ browser }) => {
+  const { context, page } = await openWorkspace(browser);
+  const before = dbJob(EXISTING_JOB).quote;
+  try {
+    await page.route("**/api/documents/send", (route) => route.fulfill({ status: 200, json: {} }));
+    await page.getByRole("button", { name: /^Preview & Send/ }).click();
+    await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+    await expect(page.locator('[data-document-send-status="error"]')).toContainText("Could not confirm whether the quote was sent. Check before retrying.");
+    await expect(page.locator("[data-document-preview]")).toBeVisible();
+    expect(dbJob(EXISTING_JOB).quote).toEqual(before);
+  } finally { await context.close(); }
+});
+
+test("accepted invoice email with failed history persistence shows success plus a warning without a resend prompt", async ({ browser }) => {
+  const { context, page } = await openWorkspace(browser, { type: "invoice" });
+  const before = dbJob(EXISTING_JOB).invoice;
+  const mailCount = messages.length;
+  const dialogs = [];
+  page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
+  try {
+    await page.route(`**/api/jobs/${EXISTING_JOB}/invoice/sent-history`, (route) => route.fulfill({ status: 500, json: { error: "PRIVATE database details" } }));
+    await page.getByRole("button", { name: /^Preview & Send/ }).click();
+    await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+    const banner = page.locator('[data-document-send-status="success"]');
+    await expect(banner).toContainText("Invoice emailed successfully to:");
+    await expect(banner).toContainText("The email was sent, but the send record could not be saved. Do not resend just to update the history.");
+    await expect(banner).not.toContainText("PRIVATE");
+    await expect(page.locator("[data-document-preview]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Retry Send", exact: true })).toHaveCount(0);
+    expect(dialogs).toEqual([]);
+    expect(messages).toHaveLength(mailCount + 1);
+    expect(dbJob(EXISTING_JOB).invoice.sentHistory).toEqual(before.sentHistory);
+  } finally { await context.close(); }
+});
+
+test("invoice previews use current Site OC while old sent copies keep their saved Site data", async ({ browser }) => {
+  const { context, page, writes } = await openWorkspace(browser, { type: "invoice" });
+  const before = dbJob(EXISTING_JOB);
+  try {
+    // Save a historical send using the existing JSON snapshot columns, without sending mail.
+    const saved = await page.request.post(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice/sent-history`, { data: { history: {
+      id: "site-oc-sent-copy", sentAt: "2026-01-02T00:00:00Z", toEmail: "accounts@example.test",
+      jobSnapshot: { ...before, siteSnapshot: { id: "demo-site-front-entry", address: before.jobAddress, ocNumber: "OLD-SITE-OC" } },
+      documentSnapshot: before.invoice,
+    } } });
+    expect(saved.ok()).toBe(true);
+    await page.reload();
+    await expect(editor(page)).toBeVisible();
+    const sentResponse = page.waitForResponse((response) => response.url().endsWith("/api/quotes/preview-pdf"));
+    await page.getByRole("button", { name: "Open Invoice", exact: true }).click();
+    const sent = await sentResponse;
+    expect(sent.status()).toBe(200);
+    const sentRequest = sent.request().postDataJSON();
+    expect(sentRequest.job.siteSnapshot.ocNumber).toBe("OLD-SITE-OC");
+    const copy = await page.request.post(`${baseUrl}/api/quotes/preview-pdf`, { data: sentRequest });
+    expect((await readPdfTextRuns(await copy.body())).flat().some((run) => run.text === "OC: OLD-SITE-OC")).toBe(true);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(page.locator("[data-document-preview]")).toBeVisible();
+    expect(writes.filter((write) => write.path === "/api/quotes/preview-pdf").at(-1).body.job.siteSnapshot.ocNumber).toBe("222222");
+
+    // A legacy send did not record a Site OC, so reopening it must not add today's value.
+    await page.getByRole("button", { name: "Back to Invoice editor", exact: true }).click();
+    const legacy = await page.request.post(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice/sent-history`, { data: { history: {
+      id: "legacy-no-site-snapshot", sentAt: "2026-01-03T00:00:00Z", toEmail: "accounts@example.test",
+      jobSnapshot: before, documentSnapshot: before.invoice,
+    } } });
+    expect(legacy.ok()).toBe(true);
+    await page.reload();
+    await expect(editor(page)).toBeVisible();
+    const legacyResponse = page.waitForResponse((response) => response.url().endsWith("/api/quotes/preview-pdf"));
+    await page.getByRole("button", { name: "Open Invoice", exact: true }).click();
+    const legacyRequest = (await legacyResponse).request().postDataJSON();
+    expect(legacyRequest.job.siteSnapshot).toBeUndefined();
+    const legacyCopy = await page.request.post(`${baseUrl}/api/quotes/preview-pdf`, { data: legacyRequest });
+    expect((await readPdfTextRuns(await legacyCopy.body())).flat().some((run) => /^OC:/.test(run.text))).toBe(false);
+  } finally { await context.close(); }
 });
 
 test("document deep links retain auth and office permissions and reject missing records", async ({ browser }) => {

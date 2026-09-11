@@ -39,6 +39,7 @@ const expectedWorkspaceTables = [
   "document_send_history",
   "inventory_items",
   "deleted_records",
+  "deleted_invoices",
   "service_m8_refs",
   "deleted_maintenance_plans",
   "deleted_inventory_items",

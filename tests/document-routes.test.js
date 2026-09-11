@@ -11,6 +11,8 @@ import { createJobRouter } from "../server-job-routes.js";
 import { openWorkspaceDb } from "../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
+import { deleteInvoiceForJob, restoreDeletedInvoice } from "../server-workspace-documents.js";
+import { getAuthorizedWorkspaceState } from "../server-workspace-storage.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -110,6 +112,137 @@ function getDbState(dbPath) {
     db.close();
   }
 }
+
+function deletableFixture(history = [], payments = []) {
+  const fixture = readFixture();
+  const job = fixture.jobs.find((entry) => entry.id === "demo-job-1001");
+  job.invoice = { ...job.invoice, paidAmount: 0, paymentStatus: "unpaid", payments, sentHistory: history };
+  return fixture;
+}
+
+for (const role of ["admin", "office"]) test(`${role} can archive and restore an unpaid invoice without changing linked records`, async () => {
+  const history = role === "office" ? [sentHistoryPayload("archive-send", "invoice", { stampText: "", emailPurpose: "invoice" }), sentHistoryPayload("archive-resend", "invoice", { stampText: "", emailPurpose: "invoice" })] : [];
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    const before = getDbState(dbPath);
+    const original = before.jobs.find((job) => job.id === "demo-job-1001");
+    await withServer(env, async (baseUrl) => {
+      const deleted = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE", body: JSON.stringify({ confirmSent: true }) });
+      assert.equal(deleted.response.status, 200, deleted.payload.error);
+      const state = deleted.payload.state;
+      const persisted = getDbState(dbPath);
+      assert.deepEqual(persisted.jobs.find((job) => job.id === original.id), { ...original, invoice: null, updatedAt: deleted.payload.result.deletedAt });
+      assert.deepEqual(persisted.jobs.filter((job) => job.id !== original.id), before.jobs.filter((job) => job.id !== original.id));
+      for (const field of ["customers", "staff", "maintenancePlans", "inventoryItems", "deletedJobs", "deletedCustomers"]) assert.deepEqual(persisted[field], before[field], field);
+      const [archive] = state.deletedInvoices;
+      assert.equal(archive.invoiceNumber, "INV-1001");
+      assert.equal(archive.customerName, original.customerName);
+      assert.equal(archive.deletedBy, "test-admin");
+      assert.deepEqual(archive.invoice, original.invoice);
+      assert.deepEqual(getDbState(dbPath).deletedInvoices, state.deletedInvoices);
+      const duplicate = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE", body: JSON.stringify({ confirmSent: true }) });
+      assert.equal(duplicate.response.status, 404);
+      assert.equal(getDbState(dbPath).deletedInvoices.length, 1);
+      const restored = await requestJson(baseUrl, `/api/deleted-invoices/${archive.id}/restore`, { method: "POST" });
+      assert.equal(restored.response.status, 200, restored.payload.error);
+      assert.deepEqual(restored.payload.result.invoice, original.invoice);
+      assert.equal(restored.payload.state.deletedInvoices.length, 0);
+      assert.deepEqual(getDbState(dbPath).jobs.find((job) => job.id === original.id).invoice, original.invoice);
+    }, { role });
+  }, deletableFixture(history));
+});
+
+test("server requires explicit sent confirmation and refuses a truthy string", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const before = getDbState(dbPath);
+    for (const confirmSent of [undefined, false, "true"]) {
+      const result = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE", body: JSON.stringify({ confirmSent }) });
+      assert.equal(result.response.status, 409);
+      assert.equal(result.payload.code, "INVOICE_ALREADY_SENT");
+      assert.match(result.payload.error, /customer will still have their copy/);
+      assert.deepEqual(getDbState(dbPath), before);
+    }
+  }), deletableFixture([sentHistoryPayload("already-sent", "invoice", { stampText: "", emailPurpose: "invoice" })]));
+});
+
+for (const [name, history, payments] of [
+  ["partial payment", [], [{ id: "deposit", amount: 10 }]],
+  ["full payment", [], [{ id: "full-payment", amount: 99999 }]],
+  ["zero payment record", [], [{ id: "zero-payment", amount: 0 }]],
+  ["receipt purpose", [sentHistoryPayload("receipt-purpose", "invoice", { stampText: "" })], []],
+  ["receipt stamp", [sentHistoryPayload("receipt-stamp", "invoice", { emailPurpose: "" })], []],
+  ["historical snapshot payment", [sentHistoryPayload("receipt-snapshot", "invoice", { emailPurpose: "", stampText: "", documentSnapshot: { items: [], payments: [{ id: "old", amount: 10 }] } })], []],
+]) test(`invoice deletion blocks ${name} without changing any stored data`, async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    if (name === "zero payment record") {
+      const db = openWorkspaceDb({ dbPath });
+      db.prepare("INSERT INTO payments (id, invoice_id, amount_cents, created_at) SELECT 'zero-payment', id, 0, '2026-01-01' FROM invoices WHERE job_id = 'demo-job-1001'").run();
+      db.close();
+    }
+    const before = getDbState(dbPath);
+    const result = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE", body: JSON.stringify({ confirmSent: true }) });
+    assert.equal(result.response.status, 409);
+    assert.match(result.payload.error, /payment/i);
+    assert.deepEqual(getDbState(dbPath), before);
+  }), deletableFixture(history, payments));
+});
+
+test("technicians cannot delete or restore invoices or read invoice archives", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    const db = openWorkspaceDb({ dbPath });
+    const archived = deleteInvoiceForJob(db, "demo-job-1001");
+    db.close();
+    const before = getDbState(dbPath);
+    assert.equal(before.deletedInvoices.length, 1);
+    assert.deepEqual(getAuthorizedWorkspaceState({ id: "tech", role: "technician" }, { env }).deletedInvoices, []);
+    await withServer(env, async (baseUrl) => {
+      for (const [url, method] of [["/api/jobs/demo-job-1001/invoice", "DELETE"], [`/api/deleted-invoices/${archived.archiveId}/restore`, "POST"]]) {
+        assert.equal((await requestJson(baseUrl, url, { method })).response.status, 403);
+      }
+      assert.deepEqual(getDbState(dbPath), before);
+    }, { role: "technician" });
+  }, deletableFixture());
+});
+
+test("archive deletion is atomic on database failure and returns a safe error", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    const db = openWorkspaceDb({ dbPath });
+    db.exec("CREATE TRIGGER fail_invoice_delete BEFORE DELETE ON invoices BEGIN SELECT RAISE(ABORT, 'PRIVATE database detail'); END;");
+    db.close();
+    const before = getDbState(dbPath);
+    await withServer(env, async (baseUrl) => {
+      const result = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE" });
+      assert.equal(result.response.status, 500);
+      assert.equal(result.payload.error, "Unable to update the invoice. Please try again.");
+      assert.deepEqual(getDbState(dbPath), before);
+    });
+  }, deletableFixture());
+});
+
+test("invoice archive survives export/import and recovery refuses missing jobs or existing invoices", async () => {
+  await withTempWorkspace(async ({ dbPath }) => {
+    const db = openWorkspaceDb({ dbPath });
+    try {
+      const original = loadWorkspaceStateFromDb(db).jobs.find((job) => job.id === "demo-job-1001");
+      const archived = deleteInvoiceForJob(db, original.id);
+      const exported = loadWorkspaceStateFromDb(db);
+      await withTempWorkspace(async ({ dbPath: importedPath }) => {
+        const imported = openWorkspaceDb({ dbPath: importedPath });
+        try {
+          assert.deepEqual(loadWorkspaceStateFromDb(imported).deletedInvoices, exported.deletedInvoices);
+          restoreDeletedInvoice(imported, archived.archiveId);
+          assert.deepEqual(loadWorkspaceStateFromDb(imported).jobs.find((job) => job.id === original.id).invoice, original.invoice);
+        } finally { imported.close(); }
+      }, exported);
+      db.prepare("INSERT INTO invoices (id, job_id, created_at, updated_at) VALUES ('replacement', ?, '2026-01-01', '2026-01-01')").run(original.id);
+      assert.throws(() => restoreDeletedInvoice(db, archived.archiveId), /already has an invoice/);
+      assert.equal(loadWorkspaceStateFromDb(db).deletedInvoices.length, 1);
+      db.prepare("DELETE FROM jobs WHERE id = ?").run(original.id);
+      assert.throws(() => restoreDeletedInvoice(db, archived.archiveId), /Restore the linked job/);
+      assert.equal(loadWorkspaceStateFromDb(db).deletedInvoices.length, 1);
+      assert.throws(() => restoreDeletedInvoice(db, "missing"), /not found/);
+    } finally { db.close(); }
+  }, deletableFixture());
+});
 
 function sentHistoryPayload(id, type = "quote", overrides = {}) {
   return {
@@ -302,11 +435,11 @@ test("invoice routes calculate totals and payment-driven statuses", async () => 
       assert.equal(overdue.payload.result.invoice.paymentNotes, "Updated synthetic payment notes.");
 
       const deleteInvoice = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE" });
-      assert.equal(deleteInvoice.response.status, 200, deleteInvoice.payload.error);
-      assert.equal(deleteInvoice.payload.state.jobs.find((job) => job.id === "demo-job-1001").invoice, null);
-
+      assert.equal(deleteInvoice.response.status, 409);
+      assert.match(deleteInvoice.payload.error, /recorded payments/);
       const state = getDbState(dbPath);
-      assert.equal(state.jobs.find((job) => job.id === "demo-job-1001").invoice, null);
+      assert.deepEqual(state.jobs.find((job) => job.id === "demo-job-1001").invoice, overdue.payload.result.invoice);
+      assert.equal(state.deletedInvoices.length, 0);
     });
   });
 });

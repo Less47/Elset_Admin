@@ -4,7 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { RECORD_WORKSPACE_WIDE_MAX_WIDTH, RecordWorkspace, WorkspaceActionBar } from "@/components/workspace/RecordWorkspace";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RECORD_WORKSPACE_WIDE_MAX_WIDTH, RecordWorkspace, WorkspaceActionBar, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
+import { documentSendErrorMessage } from "@/lib/document-send-status";
+import { invoiceDeletionRestriction, invoiceHasBeenSent } from "@/lib/invoice-deletion";
 import { buildDefaultDoc, formatDate, getInvoicePaymentSummary, getInvoiceStatus, normalizeDocument, slugDate } from "@/lib/app-support";
 import { ADMIN_EMAIL, buildDocumentReference, calculateDocTotal, calculateQuoteGst, calculateQuoteTotal, getDocumentRecipientEmail, getDocumentRecipientName, money } from "@/lib/quote-template";
 import "./DocumentWorkspace.css";
@@ -21,20 +24,51 @@ function draftSnapshot(document) {
   return JSON.stringify(document, (key, value) => ["qty", "rate", "amount"].includes(key) ? String(value ?? "") : value);
 }
 
-export default function DocumentEditor({ job, type, backLabel, onBack, registerNavigationBlocker, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, isSendingDocument = false }) {
+export default function DocumentEditor({ job, type, backLabel, onBack, registerNavigationBlocker, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, onDeleteInvoice, onInvoiceDeleted, isSendingDocument = false }) {
   const [docState, setDocState] = useState(() => normalizeDocument(type, job[type] || buildDefaultDoc(job, type)));
   const [baseline, setBaseline] = useState(() => draftSnapshot(docState));
   const [isSaving, setIsSaving] = useState(false);
   const [isPreviewingDocument, setIsPreviewingDocument] = useState(false);
   const [sendPreview, setSendPreview] = useState(null);
+  const [sendStatus, setSendStatus] = useState(null);
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [confirmSentRequired, setConfirmSentRequired] = useState(false);
+  const deleteCancelRef = useRef(null);
   const workspaceRef = useRef(null);
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const dirty = draftSnapshot(docState) !== baseline;
-  const busy = isSaving || isSendingDocument;
+  const sending = isSendingDocument || sendStatus?.phase === "sending";
+  const busy = isSaving || sending || isDeleting;
   const previewOpen = Boolean(sendPreview);
+  const deleteRestriction = type === "invoice" ? invoiceDeletionRestriction(job.invoice) || invoiceDeletionRestriction(docState) : "";
+  const deletingSentInvoice = confirmSentRequired || invoiceHasBeenSent(job.invoice) || sendStatus?.phase === "success";
+
+  async function deleteInvoice() {
+    if (busyRef.current || deleteRestriction || !job.invoice) return;
+    busyRef.current = true;
+    setIsDeleting(true);
+    setDeleteError("");
+    try {
+      const result = await onDeleteInvoice({ confirmSent: deletingSentInvoice });
+      if (!result?.ok) {
+        if (result?.code === "INVOICE_ALREADY_SENT") setConfirmSentRequired(true);
+        setDeleteError(result?.error || "Unable to delete the invoice. Please try again.");
+        return;
+      }
+      setDeleteOpen(false);
+      onInvoiceDeleted?.();
+    } catch {
+      setDeleteError("Unable to delete the invoice. Please try again.");
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setIsDeleting(false);
+    }
+  }
 
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
@@ -76,6 +110,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
   async function previewDocument(options = {}) {
     if (busyRef.current || isPreviewingDocument) return;
     setIsPreviewingDocument(true);
+    setSendStatus(null);
     setError("");
     try {
       const preview = await onPreviewDocument(docState, options);
@@ -92,6 +127,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
     if (busyRef.current) return;
     busyRef.current = true;
     setIsSaving(true);
+    setSendStatus(null);
     setError("");
     setFeedback("");
     try {
@@ -107,13 +143,29 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
     if (busyRef.current || !sendPreview?.document) return;
     busyRef.current = true;
     setError("");
+    setFeedback("");
+    setSendStatus({ phase: "sending" });
+    window.scrollTo({ top: 0, behavior: "auto" });
     try {
       const sent = await onSendDocument(sendPreview.document, sendPreview.sendOptions || {});
-      if (sent === false) { setError("Unable to finish sending. Review the error before trying again."); return; }
-      setBaseline(draftSnapshot(docState));
-      setFeedback(`${sendActionLabel} sent with PDF attachment`);
+      if (!mountedRef.current) return;
+      if (sent?.status !== "sent") {
+        setSendStatus({ phase: "error", message: documentSendErrorMessage(type, sent?.code || "SEND_UNCONFIRMED") });
+        return;
+      }
+      if (sent.historySaved) setBaseline(draftSnapshot(docState));
+      setSendStatus({
+        phase: "success", recipient: sent.payload.recipientEmail || sendPreview.toEmail || recipientEmail,
+        warning: sent.payload.warning,
+        historySaved: sent.historySaved,
+      });
       setSendPreview(null);
-    } finally { busyRef.current = false; }
+    } catch (failure) {
+      if (mountedRef.current) setSendStatus({ phase: "error", message: documentSendErrorMessage(type, failure?.code) });
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) window.scrollTo({ top: 0, behavior: "auto" });
+    }
   }
   const updateItem = (id, key, value) => setDocState((prev) => ({ ...prev, items: prev.items.map((item) => item.id === id ? { ...item, [key]: value } : item) }));
   const removeItem = (id) => setDocState((prev) => ({ ...prev, items: prev.items.filter((item) => item.id !== id) }));
@@ -124,13 +176,22 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
     <Button type="button" disabled={busy || isPreviewingDocument} onClick={saveDocument}>{isSaving ? "Saving..." : `Save ${documentLabel}`}</Button>
   </>;
   const previewActions = <>
-    <Button type="button" disabled={!recipientEmail || isSendingDocument} onClick={sendDocument}>{isSendingDocument ? "Sending..." : sendPreview?.confirmLabel}</Button>
+    <Button type="button" disabled={!recipientEmail || sending} aria-busy={sending} onClick={sendDocument}>{sending ? "Sending..." : sendStatus?.phase === "error" ? "Retry Send" : sendPreview?.confirmLabel}</Button>
   </>;
   const title = sendPreview ? sendPreview.previewTitle : job[type] ? `${documentLabel} ${buildDocumentReference(job, type)}` : `New ${documentLabel}`;
 
   return <div ref={workspaceRef} className="document-workspace" data-document-workspace={type} data-document-mode={job[type] ? "edit" : "create"}>
-    <RecordWorkspace maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} title={title} eyebrow={`Job #${job.jobNumber} · ${job.title}`} subtitle={`${job.customerName} · ${job.jobAddress || ""}`} backLabel={sendPreview ? `${documentLabel} editor` : backLabel} onBack={sendPreview ? () => { if (!isSendingDocument) setSendPreview(null); } : () => onBack()} headerActions={<div className="hidden gap-2 lg:flex">{sendPreview ? previewActions : actions}</div>}>
-      <p className="document-feedback" role="status" aria-live="polite">{busy ? isSaving ? "Saving..." : "Sending..." : dirty ? "Unsaved changes" : feedback}</p>
+    <RecordWorkspace maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} title={title} eyebrow={`Job #${job.jobNumber} · ${job.title}`} subtitle={`${job.customerName} · ${job.jobAddress || ""}`} backLabel={sendPreview ? `${documentLabel} editor` : backLabel} onBack={sendPreview ? () => { if (!busyRef.current && !sending) setSendPreview(null); } : () => onBack()} headerActions={<div className="hidden gap-2 lg:flex">{sendPreview ? previewActions : actions}</div>}>
+      <div role={sendStatus?.phase === "error" ? "alert" : "status"} aria-live={sendStatus?.phase === "error" ? "assertive" : "polite"} aria-atomic="true" className="document-send-status" data-document-send-status={sendStatus?.phase}>
+        {sendStatus ? <WorkspaceMessage tone={sendStatus.phase === "error" ? "error" : sendStatus.phase === "success" ? "success" : "neutral"}>
+          {sendStatus.phase === "sending" ? <p className="font-semibold">Sending {type}...</p> : sendStatus.phase === "error" ? <p className="font-semibold">{sendStatus.message}</p> : <>
+            <p className="font-semibold">{documentLabel} emailed successfully to:</p><p>{sendStatus.recipient}</p>
+            {sendStatus.warning ? <p className="mt-2">{sendStatus.warning}</p> : null}
+            {!sendStatus.historySaved ? <p className="mt-2">The email was sent, but the send record could not be saved. Do not resend just to update the history.</p> : null}
+          </>}
+        </WorkspaceMessage> : null}
+      </div>
+      <p className="document-feedback" role="status" aria-live="polite">{busy ? isDeleting ? "Deleting..." : isSaving ? "Saving..." : "Sending..." : dirty ? "Unsaved changes" : feedback}</p>
       {error ? <p role="alert" className="document-error">{error}</p> : null}
       {sendPreview ? <div className="document-preview-layout" data-document-preview>
         <div className="document-pdf-panel"><iframe title={`${documentLabel} PDF preview`} src={sendPreview.previewUrl} /><a href={sendPreview.previewUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-status-info underline">Open PDF in a new tab</a></div>
@@ -184,8 +245,26 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
           <h2 id="document-email-title">Email</h2><dl className="document-email-details"><Detail label="Recipient">{recipientName}</Detail><Detail label="Send to">{recipientEmail || "No email saved"}</Detail><Detail label="Send from">{ADMIN_EMAIL}</Detail><Detail label="Previous attempts">{sentCount}</Detail></dl>
           <div className="mt-3 flex flex-wrap gap-2">{sentCount > 0 && onOpenSentDocument ? <Button type="button" variant="outline" onClick={onOpenSentDocument}>Open {documentLabel}</Button> : null}<Button type="button" variant="secondary" disabled={!recipientEmail || isPreviewingDocument} onClick={() => previewDocument(sendActionOptions)}>Preview &amp; Send {sendActionLabel}</Button></div>
         </section>
+        {type === "invoice" && job.invoice && onDeleteInvoice ? <section className="document-section" aria-labelledby="document-delete-title">
+          <h2 id="document-delete-title">Delete invoice</h2>
+          <p id="document-delete-help" className="mb-3 text-sm text-text-secondary">{deleteRestriction || "Move this invoice to Recycle Bin. Its linked job will stay in place."}</p>
+          <Button type="button" variant="outline" className="border-status-danger-border text-status-danger hover:bg-status-danger-surface hover:text-status-danger" disabled={Boolean(deleteRestriction) || isPreviewingDocument} aria-describedby="document-delete-help" onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Trash2 className="h-4 w-4" /> Delete Invoice</Button>
+        </section> : null}
       </fieldset>}
-      <div className="lg:hidden"><WorkspaceActionBar status={busy ? isSaving ? "Saving..." : "Sending..." : dirty ? "Unsaved" : feedback}>{sendPreview ? previewActions : actions}</WorkspaceActionBar></div>
+      <div className="lg:hidden"><WorkspaceActionBar status={busy ? isDeleting ? "Deleting..." : isSaving ? "Saving..." : "Sending..." : sendStatus?.phase === "success" ? "Email sent" : sendStatus?.phase === "error" ? "Send failed" : dirty ? "Unsaved" : feedback}>{sendPreview ? previewActions : actions}</WorkspaceActionBar></div>
     </RecordWorkspace>
+    <Dialog open={deleteOpen} onOpenChange={(open) => { if (!busyRef.current) setDeleteOpen(open); }}>
+      <DialogContent className="sm:max-w-md" showCloseButton={!isDeleting} onOpenAutoFocus={(event) => { event.preventDefault(); deleteCancelRef.current?.focus(); }} onEscapeKeyDown={(event) => { if (busyRef.current) event.preventDefault(); }} onPointerDownOutside={(event) => { if (busyRef.current) event.preventDefault(); }}>
+        <DialogHeader>
+          <DialogTitle>{deletingSentInvoice ? "Delete sent invoice?" : "Delete invoice?"}</DialogTitle>
+          <DialogDescription>{deletingSentInvoice ? "This invoice has already been sent to the customer. Deleting it will not remove the customer's copy. The invoice and its send history will move to Recycle Bin." : "This invoice will be removed from active invoices and moved to Recycle Bin, where it can be restored."} The linked job will be kept.{dirty ? " Unsaved edits will be discarded." : ""}</DialogDescription>
+        </DialogHeader>
+        {deleteError || deleteRestriction ? <div role="alert"><WorkspaceMessage tone="error">{deleteRestriction || deleteError}</WorkspaceMessage></div> : null}
+        <DialogFooter>
+          <Button ref={deleteCancelRef} type="button" variant="outline" disabled={isDeleting} onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button type="button" variant="destructive" disabled={isDeleting || Boolean(deleteRestriction)} onClick={deleteInvoice}>{isDeleting ? "Deleting..." : deletingSentInvoice ? "Delete Sent Invoice" : "Delete Invoice"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>;
 }

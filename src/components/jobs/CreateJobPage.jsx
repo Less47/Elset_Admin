@@ -15,6 +15,7 @@ import {
   WorkspaceSection,
 } from "@/components/workspace/RecordWorkspace";
 import {
+  buildContactSnapshot,
   buildCustomerSites,
   customerTypeOptions,
   formatCustomerType,
@@ -41,6 +42,7 @@ function createEmptySiteDraft() {
     notes: "",
     contactId: "",
     contactName: "",
+    contactRole: "Site contact",
     contactPhone: "",
     contactEmail: "",
   };
@@ -95,6 +97,7 @@ export default function CreateJobPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const submittingRef = useRef(false);
+  const initializedCustomerIdRef = useRef(null);
 
   const markDirty = () => {
     setIsDirty(true);
@@ -146,7 +149,13 @@ export default function CreateJobPage({
   const availableContacts = customerMode === "existing" ? selectedCustomerContacts : [];
 
   useEffect(() => {
-    if (customerMode !== "existing" || !selectedCustomer) return;
+    if (customerMode !== "existing" || !selectedCustomer) {
+      initializedCustomerIdRef.current = null;
+      return;
+    }
+    // Refreshing the same customer's records must not reset a newer form draft.
+    if (initializedCustomerIdRef.current === selectedCustomer.id) return;
+    initializedCustomerIdRef.current = selectedCustomer.id;
     const defaultSite = selectedCustomerSites[0] || null;
     if (defaultSite) {
       setSiteMode("select");
@@ -215,12 +224,21 @@ export default function CreateJobPage({
       const existingCustomer = orderedCustomers.find((entry) => entry.id === selectedCustomerId) || null;
       const jobAddress = normalizeSiteAddress(selectedJobAddress);
       const shouldCreateSite = customerMode === "new" || siteMode === "create";
+      const { contactRole, ...siteProfileDraft } = siteDraft;
       const siteInput = shouldCreateSite
-        ? { ...siteDraft, address: jobAddress }
+        ? { ...siteProfileDraft, address: jobAddress }
         : null;
+      const siteContact = shouldCreateSite ? buildContactSnapshot({
+        id: siteDraft.contactId,
+        name: siteDraft.contactName,
+        role: contactRole,
+        phone: siteDraft.contactPhone,
+        email: siteDraft.contactEmail,
+      }, "Site contact") : null;
       const saved = await onSave({
         job: {
           ...job,
+          onsiteContact: buildContactSnapshot(job.onsiteContact, "On-site contact") || siteContact,
           jobAddress,
           ocNumber: (job.ocNumber || "").trim(),
         },
@@ -539,7 +557,7 @@ export default function CreateJobPage({
                 value={{
                   id: siteDraft.contactId,
                   name: siteDraft.contactName,
-                  role: "Site contact",
+                  role: siteDraft.contactRole,
                   phone: siteDraft.contactPhone,
                   email: siteDraft.contactEmail,
                 }}
@@ -549,6 +567,7 @@ export default function CreateJobPage({
                     ...current,
                     contactId: contact?.id || "",
                     contactName: contact?.name || "",
+                    contactRole: contact?.role ?? "Site contact",
                     contactPhone: contact?.phone || "",
                     contactEmail: contact?.email || "",
                   }));

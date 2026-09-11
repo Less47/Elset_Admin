@@ -7,12 +7,14 @@ import {
   deleteQuoteForJob,
   replaceInvoiceForJob,
   replaceQuoteForJob,
+  restoreDeletedInvoice,
   updateInvoiceForJob,
   updateInvoicePayment,
   WorkspaceDocumentError,
 } from "./server-workspace-documents.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState, getWorkspaceStorageMode, loadWorkspaceState, saveWorkspaceState } from "./server-workspace-storage.js";
+import { deleteJsonInvoice, restoreJsonInvoice } from "./server-invoice-archive.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -65,6 +67,30 @@ function handleDocumentRoute(operation, env) {
   };
 }
 
+function handleInvoiceArchiveRoute(operation, jsonOperation, env) {
+  return (req, res) => {
+    let db;
+    try {
+      let result;
+      if (getWorkspaceStorageMode(env) === "json") {
+        const updated = jsonOperation(loadWorkspaceState({ env }), req);
+        saveWorkspaceState(updated.state, { env });
+        result = updated.result;
+      } else {
+        db = openSqliteWorkspaceDb(env);
+        result = operation(db, req);
+      }
+      return sendSuccess(req, res, result, env);
+    } catch (error) {
+      const statusCode = getStatusCode(error);
+      return res.status(statusCode).json({
+        error: statusCode < 500 ? getErrorMessage(error, "Unable to update the invoice.") : "Unable to update the invoice. Please try again.",
+        ...(error.code === "INVOICE_ALREADY_SENT" ? { code: error.code } : {}),
+      });
+    } finally { db?.close(); }
+  };
+}
+
 export function createDocumentRouter({
   requireAuth,
   requireRole,
@@ -108,7 +134,21 @@ export function createDocumentRouter({
   router.delete(
     "/api/jobs/:id/invoice",
     ...middleware,
-    handleDocumentRoute((db, req) => deleteInvoiceForJob(db, req.params.id), env)
+    handleInvoiceArchiveRoute(
+      (db, req) => deleteInvoiceForJob(db, req.params.id, { confirmSent: req.body?.confirmSent, deletedBy: req.user.id }),
+      (state, req) => deleteJsonInvoice(state, req.params.id, { confirmSent: req.body?.confirmSent, deletedBy: req.user.id }),
+      env
+    )
+  );
+
+  router.post(
+    "/api/deleted-invoices/:id/restore",
+    ...middleware,
+    handleInvoiceArchiveRoute(
+      (db, req) => restoreDeletedInvoice(db, req.params.id),
+      (state, req) => restoreJsonInvoice(state, req.params.id),
+      env
+    )
   );
 
   router.post(

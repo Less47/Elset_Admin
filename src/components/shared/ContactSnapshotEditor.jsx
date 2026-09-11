@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { FormField } from "@/components/shared/FormField";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,17 +18,11 @@ function hasContactContent(contact) {
 function buildDraftContact(contact, fallbackRole = "") {
   return {
     id: String(contact?.id || "").trim(),
-    name: String(contact?.name || "").trim(),
-    role: String(contact?.role || fallbackRole || "").trim(),
-    phone: String(contact?.phone || "").trim(),
-    email: String(contact?.email || "").trim(),
+    name: String(contact?.name ?? ""),
+    role: String(contact?.role ?? fallbackRole),
+    phone: String(contact?.phone ?? ""),
+    email: String(contact?.email ?? ""),
   };
-}
-
-function buildCommittedContact(contact, fallbackRole = "") {
-  const draft = buildDraftContact(contact, fallbackRole);
-  if (!hasContactContent(draft)) return null;
-  return draft;
 }
 
 function getSelectValue(contact, contacts) {
@@ -46,6 +41,7 @@ export default function ContactSnapshotEditor({
   fallbackRole = "",
   onChange,
 }) {
+  const fieldId = useId();
   const draftContact = buildDraftContact(value, fallbackRole);
   const selectValue = getSelectValue(value, contacts);
 
@@ -56,7 +52,7 @@ export default function ContactSnapshotEditor({
     }
 
     if (nextValue === CUSTOM_VALUE) {
-      onChange(buildCommittedContact(draftContact, fallbackRole));
+      onChange(draftContact);
       return;
     }
 
@@ -73,7 +69,8 @@ export default function ContactSnapshotEditor({
       id: linkedContact ? "" : draftContact.id,
     };
 
-    onChange(buildCommittedContact(nextContact, fallbackRole));
+    // Keep raw input authoritative while typing; persistence normalizes the snapshot.
+    onChange(nextContact);
   };
 
   return (
@@ -84,9 +81,9 @@ export default function ContactSnapshotEditor({
       </div>
 
       <div className="mt-3 grid gap-3">
-        <FormField label="Saved customer contact">
+        <FormField label="Saved customer contact" htmlFor={`${fieldId}-saved`}>
           <Select value={selectValue} onValueChange={handleSelectValue}>
-            <SelectTrigger>
+            <SelectTrigger id={`${fieldId}-saved`}>
               <SelectValue placeholder="Choose a saved customer contact" />
             </SelectTrigger>
             <SelectContent>
@@ -106,29 +103,33 @@ export default function ContactSnapshotEditor({
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Name">
+          <FormField label="Name" htmlFor={`${fieldId}-name`}>
             <Input
+              id={`${fieldId}-name`}
               value={draftContact.name}
               onChange={(event) => handleFieldChange("name", event.target.value)}
               placeholder="Contact name"
             />
           </FormField>
-          <FormField label="Role">
+          <FormField label="Role" htmlFor={`${fieldId}-role`}>
             <Input
+              id={`${fieldId}-role`}
               value={draftContact.role}
               onChange={(event) => handleFieldChange("role", event.target.value)}
               placeholder={fallbackRole || "Role"}
             />
           </FormField>
-          <FormField label="Phone">
+          <FormField label="Phone" htmlFor={`${fieldId}-phone`}>
             <Input
+              id={`${fieldId}-phone`}
               value={draftContact.phone}
               onChange={(event) => handleFieldChange("phone", event.target.value)}
               placeholder="Phone number"
             />
           </FormField>
-          <FormField label="Email">
+          <FormField label="Email" htmlFor={`${fieldId}-email`}>
             <Input
+              id={`${fieldId}-email`}
               value={draftContact.email}
               onChange={(event) => handleFieldChange("email", event.target.value)}
               placeholder="Email address"

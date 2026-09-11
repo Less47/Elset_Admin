@@ -1,3 +1,4 @@
+import { normalizeDeletedInvoices } from "./invoice-deletion.js";
 import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 /* eslint-disable react-refresh/only-export-components */
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
@@ -579,6 +580,7 @@ export const seedData = {
   jobs: [],
   deletedJobs: [],
   deletedCustomers: [],
+  deletedInvoices: [],
   quoteTemplate: defaultQuoteTemplate,
   invoiceTemplate: defaultInvoiceTemplate,
   settings: defaultThemeSettings,
@@ -597,7 +599,8 @@ export function countBusinessRecords(state) {
     (Array.isArray(state.maintenancePlans) ? state.maintenancePlans.length : 0) +
     (Array.isArray(state.jobs) ? state.jobs.length : 0) +
     (Array.isArray(state.deletedJobs) ? state.deletedJobs.length : 0) +
-    (Array.isArray(state.deletedCustomers) ? state.deletedCustomers.length : 0)
+    (Array.isArray(state.deletedCustomers) ? state.deletedCustomers.length : 0) +
+    (Array.isArray(state.deletedInvoices) ? state.deletedInvoices.length : 0)
   );
 }
 
@@ -1872,6 +1875,7 @@ export function normalizeAppState(savedState) {
     jobs,
     deletedJobs,
     deletedCustomers,
+    deletedInvoices: normalizeDeletedInvoices(savedState?.deletedInvoices),
     quoteTemplate: normalizeQuoteTemplate(savedState?.quoteTemplate),
     invoiceTemplate: normalizeInvoiceTemplate(savedState?.invoiceTemplate),
     settings: normalizeThemeSettings(savedState?.settings),
@@ -1948,6 +1952,7 @@ export function getInitialState() {
     jobs: assignJobNumbers(demoJobs.map(normalizeJobRecord)),
     deletedJobs: [],
     deletedCustomers: [],
+    deletedInvoices: [],
     quoteTemplate: normalizeQuoteTemplate(seedData.quoteTemplate),
     invoiceTemplate: normalizeInvoiceTemplate(seedData.invoiceTemplate),
     settings: normalizeThemeSettings(seedData.settings),

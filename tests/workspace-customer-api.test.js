@@ -268,6 +268,7 @@ test("document send workflow records sent history only after email success", asy
 
   const result = await sendDocumentAndPersistHistory({
     sendEmail: async () => ({
+      ok: true,
       messageId: "message-success",
       sentAt: "2026-02-03T00:00:00.000Z",
     }),
@@ -282,7 +283,9 @@ test("document send workflow records sent history only after email success", asy
     },
   });
 
-  assert.equal(result, true);
+  assert.equal(result.status, "sent");
+  assert.equal(result.historySaved, true);
+  assert.equal(result.payload.messageId, "message-success");
   assert.deepEqual(calls, [
     {
       id: "sent-history-stable-1",
@@ -310,9 +313,50 @@ test("document send workflow skips sent history when email sending fails", async
     onError: (error) => errors.push(error.message),
   });
 
-  assert.equal(result, false);
+  assert.deepEqual(result, { status: "failed", code: "SEND_FAILED" });
   assert.deepEqual(calls, []);
   assert.deepEqual(errors, ["SMTP rejected the message."]);
+});
+
+test("document send workflow rejects unconfirmed success without saving history", async () => {
+  for (const payload of [undefined, false, {}, { ok: false }]) {
+    const result = await sendDocumentAndPersistHistory({
+      sendEmail: async () => payload,
+      buildHistoryEntry: () => assert.fail("Must not build history before confirmed acceptance"),
+      persistHistory: () => assert.fail("Must not persist history before confirmed acceptance"),
+    });
+    assert.deepEqual(result, { status: "failed", code: "SEND_UNCONFIRMED" });
+  }
+});
+
+test("document send workflow waits for acceptance before recording history", async () => {
+  let accept;
+  const accepted = new Promise((resolve) => { accept = resolve; });
+  const events = [];
+  const sending = sendDocumentAndPersistHistory({
+    sendEmail: () => accepted,
+    buildHistoryEntry: () => { events.push("build"); return {}; },
+    persistHistory: async () => { events.push("persist"); return true; },
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, []);
+  accept({ ok: true });
+  assert.equal((await sending).status, "sent");
+  assert.deepEqual(events, ["build", "persist"]);
+});
+
+test("a history save failure after acceptance remains a successful email without retrying", async () => {
+  for (const throws of [false, true]) {
+    let sends = 0;
+    const result = await sendDocumentAndPersistHistory({
+      sendEmail: async () => { sends++; return { ok: true }; },
+      buildHistoryEntry: () => ({}),
+      persistHistory: async () => { if (throws) throw new Error("Database unavailable"); return false; },
+      onError: () => assert.fail("Must not report a send failure after acceptance"),
+    });
+    assert.deepEqual(result, { status: "sent", payload: { ok: true }, historySaved: false });
+    assert.equal(sends, 1);
+  }
 });
 
 test("maintenance API helper sends record-specific plan requests", async () => {

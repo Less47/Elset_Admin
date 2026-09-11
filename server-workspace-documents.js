@@ -6,6 +6,8 @@ import {
   moneyToCents,
 } from "./server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { invoiceDeletionRestriction, invoiceHasBeenSent } from "./src/lib/invoice-deletion.js";
+import { buildDocumentReference } from "./src/lib/quote-template.js";
 
 const QUANTITY_SCALE = 1_000_000;
 
@@ -706,19 +708,56 @@ export function updateInvoiceForJob(db, jobIdInput, input) {
   })();
 }
 
-export function deleteInvoiceForJob(db, jobIdInput) {
+export function deleteInvoiceForJob(db, jobIdInput, { confirmSent = false, deletedBy = "" } = {}) {
   const jobId = normalizeId(jobIdInput, "Job ID");
 
   return db.transaction(() => {
     ensureJobExists(db, jobId);
     const invoiceRow = getInvoiceRowForJob(db, jobId);
     if (!invoiceRow) throw new WorkspaceDocumentError("Invoice not found.", 404);
+    if (db.prepare("SELECT 1 FROM payments WHERE invoice_id = ? LIMIT 1").get(invoiceRow.id)) {
+      throw new WorkspaceDocumentError("This invoice has recorded payments and cannot be deleted until those payments are handled.", 409);
+    }
+    const job = loadWorkspaceStateFromDb(db).jobs.find((entry) => entry.id === jobId);
+    const restriction = invoiceDeletionRestriction(job.invoice);
+    if (restriction) throw new WorkspaceDocumentError(restriction, 409);
+    if (invoiceHasBeenSent(job.invoice) && confirmSent !== true) {
+      throw Object.assign(new WorkspaceDocumentError("This invoice has already been sent. Confirm deletion of the sent invoice; the customer will still have their copy.", 409), { code: "INVOICE_ALREADY_SENT" });
+    }
+    const deletedAt = nowIso();
+    const archiveId = crypto.randomUUID();
+    const snapshot = {
+      invoiceId: invoiceRow.id, jobId, jobNumber: job.jobNumber,
+      invoiceNumber: buildDocumentReference(job, "invoice"), customerName: job.customerName,
+      invoice: job.invoice, createdAt: invoiceRow.created_at, updatedAt: invoiceRow.updated_at,
+      deletedBy,
+    };
+    db.prepare("INSERT INTO deleted_invoices (id, invoice_id, job_id, deleted_at, payload_json) VALUES (?, ?, ?, ?, ?)")
+      .run(archiveId, invoiceRow.id, jobId, deletedAt, JSON.stringify(snapshot));
     db.prepare("DELETE FROM invoices WHERE id = ?").run(invoiceRow.id);
+    updateJobTouchedAt(db, jobId, deletedAt);
+    touchWorkspaceInfo(db, deletedAt);
+    runForeignKeyCheck(db);
+    return { jobId, invoiceId: invoiceRow.id, archiveId, deletedAt };
+  })();
+}
+
+export function restoreDeletedInvoice(db, archiveIdInput) {
+  const archiveId = normalizeId(archiveIdInput, "Deleted invoice ID");
+  return db.transaction(() => {
+    const row = db.prepare("SELECT * FROM deleted_invoices WHERE id = ?").get(archiveId);
+    if (!row) throw new WorkspaceDocumentError("Deleted invoice not found.", 404);
+    const job = db.prepare("SELECT id FROM jobs WHERE id = ?").get(row.job_id);
+    if (!job) throw new WorkspaceDocumentError("Restore the linked job before restoring this invoice.", 409);
+    if (getInvoiceRowForJob(db, row.job_id)) throw new WorkspaceDocumentError("This job already has an invoice. Its current invoice will not be overwritten.", 409);
+    const snapshot = JSON.parse(row.payload_json);
+    writeInvoiceTree(db, row.job_id, { ...snapshot.invoice, id: row.invoice_id, createdAt: snapshot.createdAt, updatedAt: snapshot.updatedAt }, { includePayments: true, includeSentHistory: true });
+    db.prepare("DELETE FROM deleted_invoices WHERE id = ?").run(archiveId);
     const updatedAt = nowIso();
-    updateJobTouchedAt(db, jobId, updatedAt);
+    updateJobTouchedAt(db, row.job_id, updatedAt);
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
-    return { jobId, invoiceId: invoiceRow.id };
+    return getInvoiceResult(db, row.job_id, { archiveId });
   })();
 }
 

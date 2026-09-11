@@ -233,6 +233,7 @@ test("POST /api/admin/workspace-restore supports validation-only SQLite restore"
 
 test("POST /api/admin/workspace-restore restores a verified SQLite backup and creates a pre-restore backup", async () => {
   const sourceFixture = readFixture({ customerName: "Restored Synthetic Customer", jobTitle: "Restored Synthetic Job" });
+  sourceFixture.deletedInvoices = [{ id: "archived-invoice", invoiceId: "original-invoice", jobId: sourceFixture.jobs[0].id, invoiceNumber: "INV-1001", customerName: "Original billing name", deletedAt: "2026-09-01T00:00:00.000Z", invoice: { items: [{ id: "archived-item", qty: 1, rate: 200, description: "Archived work" }], payments: [], sentHistory: [{ id: "archived-send", messageId: "sent-original", documentSnapshot: { items: [{ qty: 1, rate: 200 }] }, templateSnapshot: { companyName: "Original company" } }] } }];
   const sourceCustomerId = sourceFixture.customers[0].id;
   const source = await createBackupBundleFromFixture(sourceFixture);
   try {
@@ -249,12 +250,14 @@ test("POST /api/admin/workspace-restore restores a verified SQLite backup and cr
         assert.equal(result.response.status, 200, result.payload.error);
         assert.equal(result.payload.restore.restoredBackup.summary.counts.customers, source.bundle.metadata.workspace.summary.counts.customers);
         assert.equal(result.payload.state.customers.find((customer) => customer.id === sourceCustomerId).name, "Restored Synthetic Customer");
+        assert.deepEqual(result.payload.state.deletedInvoices, sourceFixture.deletedInvoices);
         assert.ok(result.payload.restore.preRestoreBackup.backupDir.startsWith(path.join(tempDir, "backups")));
         assert.ok(fs.existsSync(path.join(result.payload.restore.preRestoreBackup.backupDir, "metadata.json")));
       });
 
       assert.equal(fs.readFileSync(authDbPath, "utf8"), "synthetic-auth-database");
       assert.deepEqual(getDbSummary(dbPath), source.bundle.metadata.workspace.summary);
+      assert.deepEqual(getDbState(dbPath).deletedInvoices, sourceFixture.deletedInvoices);
     });
   } finally {
     fs.rmSync(source.tempDir, { recursive: true, force: true });

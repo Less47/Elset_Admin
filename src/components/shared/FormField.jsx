@@ -1,9 +1,9 @@
 import { Label } from "@/components/ui/label";
 
-export function FormField({ label, children }) {
+export function FormField({ label, htmlFor, children }) {
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>
   );

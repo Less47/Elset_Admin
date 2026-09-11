@@ -570,8 +570,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         ) : null}
 
         {canManageBusiness && activeSection === "invoices" ? (
+          <div className="space-y-4">
+          {chrome.invoiceNotice ? <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-status-success-border bg-status-success-surface px-4 py-3 text-sm text-status-success">
+            <span>{chrome.invoiceNotice}</span><Button variant="ghost" size="sm" onClick={chrome.dismissInvoiceNotice}>Dismiss</Button>
+          </div> : null}
           <InvoiceManager
-            jobs={data.jobs}
+            jobs={data.jobs.filter((job) => job.invoice || !(data.deletedInvoices || []).some((record) => record.jobId === job.id))}
             onOpenJob={handleOpenJob}
             onOpenInvoice={(job) => handleOpenDoc(job, "invoice")}
             onOpenSentInvoice={(job) => handleOpenSentDocumentCopy(job, "invoice")}
@@ -582,6 +586,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             normalizeDocument={normalizeDocument}
             toTimestamp={toTimestamp}
           />
+          </div>
         ) : null}
 
         {canManageBusiness && activeSection === "maintenance" ? (
@@ -675,6 +680,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           <RecycleBinPanel
             deletedJobs={data.deletedJobs}
             deletedCustomers={data.deletedCustomers}
+            deletedInvoices={data.deletedInvoices || []}
+            onRestoreInvoice={actions.handleRestoreDeletedInvoice}
             onRestoreJob={handleRestoreDeletedJob}
             onRestoreCustomer={handleRestoreDeletedCustomer}
             onEmptyDeletedJobs={handleEmptyDeletedJobs}

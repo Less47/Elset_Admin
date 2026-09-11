@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 5;
+export const WORKSPACE_SCHEMA_VERSION = 6;
 
 const migrations = [
   {
@@ -467,6 +467,22 @@ const migrations = [
       CREATE INDEX idx_maintenance_exception_date ON maintenance_occurrence_exceptions(override_date);
       CREATE UNIQUE INDEX idx_maintenance_exception_job ON maintenance_occurrence_exceptions(job_id) WHERE job_id IS NOT NULL;
       UPDATE workspace_info SET schema_version = 5 WHERE id = 1;
+    `,
+  },
+  {
+    version: 6,
+    name: "invoice-archive-records",
+    sql: `
+      CREATE TABLE deleted_invoices (
+        id TEXT PRIMARY KEY,
+        invoice_id TEXT NOT NULL,
+        job_id TEXT NOT NULL,
+        deleted_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        extra_json TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX idx_deleted_invoice_job ON deleted_invoices(job_id);
+      UPDATE workspace_info SET schema_version = 6 WHERE id = 1;
     `,
   },
 ];

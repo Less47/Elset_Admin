@@ -2476,6 +2476,10 @@ test("Create Job preserves nested customer and site work and confirms discarding
     await page.getByRole("button", { name: "Add New Customer", exact: true }).click();
     await page.getByLabel("Customer or company name").fill("Created inside job workspace");
     await page.getByLabel("Primary site address").fill("44 Test Street, Melbourne VIC 3000");
+    const siteContactEditor = page.locator("#create-job-site .contact-snapshot-editor");
+    await siteContactEditor.getByLabel("Name", { exact: true }).pressSequentially("John Smith");
+    await siteContactEditor.getByLabel("Role", { exact: true }).fill("");
+    await siteContactEditor.getByLabel("Role", { exact: true }).pressSequentially("Building Manager");
     await page.getByLabel("Job title").fill("New customer workspace job");
     await page.getByLabel("Description of work").fill("Create the customer, site, and job through the existing atomic job API.");
     const newCustomerResponse = page.waitForResponse((response) =>
@@ -2485,6 +2489,7 @@ test("Create Job preserves nested customer and site work and confirms discarding
     expect((await newCustomerResponse).ok()).toBe(true);
     await expect.poll(() => readWorkspaceState().customers.some((customer) => customer.name === "Created inside job workspace")).toBe(true);
     await expect.poll(() => readWorkspaceState().jobs.some((job) => job.title === "New customer workspace job")).toBe(true);
+    expect(readWorkspaceState().jobs.find((job) => job.title === "New customer workspace job").onsiteContact).toMatchObject({ name: "John Smith", role: "Building Manager" });
     await page.getByRole("button", { name: "Back to Service Board" }).click();
 
     await page.getByRole("button", { name: "Add job", exact: true }).click();

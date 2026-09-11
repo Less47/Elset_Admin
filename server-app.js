@@ -1,11 +1,12 @@
 import fs from "fs";
 import path from "path";
 import express from "express";
-import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { fileURLToPath } from "url";
 import { generateDocumentPdf } from "./quote-pdf.js";
+import { DocumentEmailError, submitDocumentEmail } from "./server-document-email.js";
+import { documentSendErrorMessage } from "./src/lib/document-send-status.js";
 import {
   auth,
   getAuthBackupUsers,
@@ -17,8 +18,6 @@ import {
   verifyUserPassword,
 } from "./server-auth.js";
 import {
-  ADMIN_EMAIL,
-  buildDocumentEmail,
   getDocumentRecipientEmail,
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
@@ -654,65 +653,22 @@ export function createServerApp() {
     const missingEnv = getMissingEnv();
     if (missingEnv.length > 0) {
       return res.status(500).json({
-        error: `Missing SMTP configuration in ${configSourceLabel}: ${missingEnv.join(", ")}.`,
+        code: "EMAIL_NOT_CONFIGURED",
+        error: documentSendErrorMessage(getDocumentType(req.body), "EMAIL_NOT_CONFIGURED"),
       });
     }
 
     const { job, template, emailSettings, emailPurpose, stampText } = req.body;
     const documentType = getDocumentType(req.body);
     const document = getDocumentRequestPayload(req.body);
-    const recipientEmail = getDocumentRecipientEmail(job);
-
     try {
-      const normalizedTemplate = documentType === "invoice"
-        ? normalizeInvoiceTemplate(template)
-        : normalizeQuoteTemplate(template);
-      const { bytes, filename } = await generateDocumentPdf({
-        job,
-        document,
-        template: normalizedTemplate,
-        type: documentType,
-        stampText,
-      });
-      const { subject, body, htmlBody } = buildDocumentEmail({
-        job,
-        type: documentType,
-        emailSettings,
-        emailPurpose,
-      });
-      const transporter = nodemailer.createTransport(getTransportConfig());
-      const fromEmail = emailSettings?.fromEmail || process.env.EMAIL_FROM || ADMIN_EMAIL;
-      const replyToEmail = emailSettings?.replyToEmail || fromEmail;
-      const ccEmail = emailSettings?.ccEmail || undefined;
-      const info = await transporter.sendMail({
-        from: fromEmail,
-        to: recipientEmail,
-        replyTo: replyToEmail,
-        cc: ccEmail,
-        subject,
-        text: body,
-        html: htmlBody,
-        attachments: [
-          {
-            filename,
-            content: Buffer.from(bytes),
-            contentType: "application/pdf",
-          },
-        ],
-      });
-
-      return res.json({
-        ok: true,
-        messageId: info.messageId,
-        sentAt: new Date().toISOString(),
-        fromEmail,
-        subject,
-      });
+      return res.json(await submitDocumentEmail({
+        job, document, template, type: documentType, stampText, emailSettings, emailPurpose,
+        defaultFromEmail: process.env.EMAIL_FROM, transportConfig: getTransportConfig(),
+      }));
     } catch (error) {
-      const message = error instanceof Error
-        ? error.message
-        : `Failed to send ${documentType === "invoice" ? "invoice" : "quote"} email.`;
-      return res.status(500).json({ error: message });
+      const code = error instanceof DocumentEmailError ? error.code : "SEND_FAILED";
+      return res.status(500).json({ code, error: documentSendErrorMessage(documentType, code) });
     }
   };
 

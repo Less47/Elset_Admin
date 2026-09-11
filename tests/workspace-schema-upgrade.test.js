@@ -85,6 +85,44 @@ function snapshot(db) {
   return Object.fromEntries(tables.map(({ name }) => [name, db.prepare(`SELECT * FROM ${quoteIdentifier(name)} ORDER BY rowid`).all()]));
 }
 
+test("v5 invoice archive migration rolls back safely, preserves existing records and is idempotent", (t) => {
+  const { dbPath, env } = withFixture(t);
+  // Build the historical v5 schema without running the new archive migration.
+  inspect(dbPath, (db) => db.exec(`
+    CREATE TABLE maintenance_occurrence_exceptions (
+      occurrence_key TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES maintenance_plans(id) ON DELETE CASCADE,
+      series_id TEXT NOT NULL, original_date TEXT NOT NULL, override_date TEXT NOT NULL DEFAULT '',
+      job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL, generated_job_id TEXT NOT NULL DEFAULT '',
+      completed_at TEXT NOT NULL DEFAULT '', snapshot_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      UNIQUE(plan_id, series_id, original_date)
+    );
+    CREATE INDEX idx_maintenance_exception_plan ON maintenance_occurrence_exceptions(plan_id);
+    CREATE INDEX idx_maintenance_exception_date ON maintenance_occurrence_exceptions(override_date);
+    CREATE UNIQUE INDEX idx_maintenance_exception_job ON maintenance_occurrence_exceptions(job_id) WHERE job_id IS NOT NULL;
+    INSERT INTO maintenance_occurrence_exceptions (occurrence_key, plan_id, series_id, original_date, job_id, snapshot_json, created_at, updated_at)
+      VALUES ('visit', 'plan', 'series', '2026-09-09', 'job', '{"keep":true}', '2026-01-01', '2026-01-01');
+    INSERT INTO workspace_schema_migrations VALUES (5, 'maintenance-recurrence-exceptions', '2026-01-01');
+    UPDATE workspace_info SET schema_version = 5; PRAGMA user_version = 5;
+    CREATE TRIGGER fail_v6 BEFORE INSERT ON workspace_schema_migrations WHEN NEW.version = 6 BEGIN SELECT RAISE(ABORT, 'injected archive migration failure'); END;
+  `), false);
+  const before = inspect(dbPath, snapshot);
+  assert.throws(() => initializeWorkspaceStorage(env, { log() {} }), /5 -> 6 failed: injected archive migration failure/);
+  assert.deepEqual(inspect(dbPath, snapshot), before);
+  inspect(dbPath, (db) => db.exec("DROP TRIGGER fail_v6"), false);
+  const logs = [];
+  initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
+  assert.deepEqual(logs, ["Workspace database schema: 5", "Migrating workspace schema 5 -> 6", "Workspace schema migration complete: 6"]);
+  const after = inspect(dbPath, snapshot);
+  for (const [table, rows] of Object.entries(before)) {
+    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 6 })));
+    else if (table === "workspace_schema_migrations") assert.deepEqual(after[table].slice(0, 5), rows);
+    else assert.deepEqual(after[table], rows, table);
+  }
+  assert.deepEqual(after.deleted_invoices, []);
+  initializeWorkspaceStorage(env, { log() { assert.fail("No migration on restart"); } });
+  assert.deepEqual(inspect(dbPath, snapshot), after);
+});
+
 test("production initialization upgrades genuine v4, preserves all existing rows, and restarts without writes", (t) => {
   const { tempDir, dbPath, env } = withFixture(t);
   const authPath = path.join(tempDir, "auth.db");
@@ -95,21 +133,21 @@ test("production initialization upgrades genuine v4, preserves all existing rows
   const before = inspect(dbPath, snapshot);
   assert.equal(before.workspace_info[0].schema_version, 4);
   assert.equal(before.maintenance_occurrence_exceptions, undefined);
-  assert.throws(() => assertSqliteWorkspaceReady(dbPath), /schema version 4 is not compatible with required version 5/);
+  assert.throws(() => assertSqliteWorkspaceReady(dbPath), /schema version 4 is not compatible with required version 6/);
   assert.equal(getWorkspaceReadinessStatus(env).ok, false);
   assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 4, "health checks must not migrate");
   const logs = [];
   assert.equal(initializeWorkspaceStorage(env, { log: (line) => logs.push(line) }).mode, "sqlite");
-  assert.deepEqual(logs, ["Workspace database schema: 4", "Migrating workspace schema 4 -> 5", "Workspace schema migration complete: 5"]);
-  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 5 });
+  assert.deepEqual(logs, ["Workspace database schema: 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Workspace schema migration complete: 6"]);
+  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 6 });
   assert.equal(getWorkspaceReadinessStatus(env).ok, true);
   const after = inspect(dbPath, snapshot);
   for (const [table, rows] of Object.entries(before)) {
-    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 5 })));
+    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 6 })));
     else if (table === "workspace_schema_migrations") assert.deepEqual(after[table].slice(0, 4), rows);
     else assert.deepEqual(after[table], rows, `unchanged ${table}`);
   }
-  assert.equal(after.workspace_schema_migrations.length, 5);
+  assert.equal(after.workspace_schema_migrations.length, 6);
   assert.deepEqual(after.maintenance_occurrence_exceptions, []);
   logs.length = 0;
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
@@ -118,12 +156,12 @@ test("production initialization upgrades genuine v4, preserves all existing rows
   assert.deepEqual(fs.readFileSync(authPath), authBefore);
 });
 
-test("supported v3 applies 3 -> 4 -> 5 in order", (t) => {
+test("supported v3 applies 3 -> 4 -> 5 -> 6 in order", (t) => {
   const { dbPath, env } = withFixture(t, { version: 3 });
   const logs = [];
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
-  assert.deepEqual(logs, ["Workspace database schema: 3", "Migrating workspace schema 3 -> 4", "Migrating workspace schema 4 -> 5", "Workspace schema migration complete: 5"]);
-  assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 5);
+  assert.deepEqual(logs, ["Workspace database schema: 3", "Migrating workspace schema 3 -> 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Workspace schema migration complete: 6"]);
+  assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 6);
 });
 
 for (const version of [3, 4]) test(`failed v${version} upgrade rolls back DDL and all metadata; retry succeeds`, (t) => {
@@ -141,13 +179,13 @@ for (const version of [3, 4]) test(`failed v${version} upgrade rolls back DDL an
     db.exec("DROP TRIGGER fail_v5");
   }, false);
   initializeWorkspaceStorage(env, { log() {} });
-  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 5 });
+  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 6 });
 });
 
 const invalidSchemas = [
-  ["newer metadata", "UPDATE workspace_info SET schema_version = 6", /newer than required version 5/],
-  ["newer user_version", "PRAGMA user_version = 6", /refusing to downgrade/],
-  ["newer migration ledger", "INSERT INTO workspace_schema_migrations VALUES (6, 'future', '2026-01-01')", /refusing to downgrade/],
+  ["newer metadata", "UPDATE workspace_info SET schema_version = 7", /newer than required version 6/],
+  ["newer user_version", "PRAGMA user_version = 7", /refusing to downgrade/],
+  ["newer migration ledger", "INSERT INTO workspace_schema_migrations VALUES (7, 'future', '2026-01-01')", /refusing to downgrade/],
   ["missing intermediate migration", "DELETE FROM workspace_schema_migrations WHERE version = 2", /metadata is inconsistent/],
   ["mismatched metadata", "UPDATE workspace_info SET schema_version = 3", /metadata is inconsistent/],
   ["missing metadata row", "DELETE FROM workspace_info", /metadata is inconsistent/],
@@ -184,14 +222,14 @@ test("foreign-key failures prevent migration without changing the schema version
   assert.deepEqual(inspect(dbPath, snapshot), before);
 });
 
-test("fresh databases bootstrap to complete v5 metadata; missing production storage is not created", (t) => {
+test("fresh databases bootstrap to complete v6 metadata; missing production storage is not created", (t) => {
   const { tempDir, env } = withFixture(t);
   const freshPath = path.join(tempDir, "fresh.db");
   const fresh = openWorkspaceDb({ dbPath: freshPath });
-  assert.equal(readWorkspaceSchemaVersion(fresh), 5);
+  assert.equal(readWorkspaceSchemaVersion(fresh), 6);
   migrateWorkspaceSchema(fresh);
   fresh.close();
-  assert.deepEqual(assertSqliteWorkspaceReady(freshPath), { schemaVersion: 5 });
+  assert.deepEqual(assertSqliteWorkspaceReady(freshPath), { schemaVersion: 6 });
   const missingPath = path.join(tempDir, "missing.db");
   assert.throws(() => initializeWorkspaceStorage({ ...env, ELSET_WORKSPACE_DB_PATH: missingPath }, { log() {} }), /database does not exist/);
   assert.equal(fs.existsSync(missingPath), false);
@@ -232,7 +270,7 @@ test("concurrent initializers apply the migration only once", async (t) => {
     return output();
   }));
   assert.equal(results.join("\n").match(/Migrating workspace schema 4 -> 5/g)?.length, 1);
-  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 5 });
+  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 6 });
 });
 
 test("normal production server startup upgrades v4 before listening and serves healthy storage", { timeout: 20000 }, async (t) => {
@@ -256,9 +294,9 @@ test("normal production server startup upgrades v4 before listening and serves h
       await delay(50);
     }
     assert.ok(healthy, output());
-    assert.match(output(), /Workspace schema migration complete: 5/);
-    assert.ok(output().indexOf("Workspace schema migration complete: 5") < output().indexOf("Elset quote API listening"), output());
-    assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 5 });
+    assert.match(output(), /Workspace schema migration complete: 6/);
+    assert.ok(output().indexOf("Workspace schema migration complete: 6") < output().indexOf("Elset quote API listening"), output());
+    assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 6 });
   } finally {
     if (child.exitCode === null) { const exited = once(child, "exit"); child.kill(); await exited; }
   }

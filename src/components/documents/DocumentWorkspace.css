@@ -3,6 +3,8 @@
 .document-workspace .record-workspace-header button { height: 36px; }
 .document-feedback { min-height: 16px; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
 .document-feedback:empty { display: none; }
+.document-send-status { margin-bottom: 12px; overflow-wrap: anywhere; }
+.document-send-status:empty { margin: 0; }
 .document-error { margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--status-danger-border); background: var(--status-danger-surface); color: var(--status-danger); font-size: 13px; }
 .document-section, .document-summary { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--card); }
 .document-section h2, .document-summary h2 { margin-bottom: 10px; font-size: 14px; font-weight: 650; }
