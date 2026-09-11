@@ -18,7 +18,7 @@ export const defaultUserUiPreferences = {
   customerView: "list", siteView: "list",
   boardToDoView: "list", boardInProgressView: "list", boardCompletedView: "list",
   boardToDoSort: "recent", boardInProgressSort: "recent", boardCompletedSort: "recent",
-  boardShowTagLabels: false, boardHiddenColumns: [],
+  boardShowTagLabels: false,
 };
 export const userUiPreferenceKeys = Object.keys(defaultUserUiPreferences);
 const allowedKeys = new Set(userUiPreferenceKeys);
@@ -63,18 +63,13 @@ export function validateUserUiPreferencePatch(input) {
     } else if (key === "boardShowTagLabels") {
       if (typeof value !== "boolean") throw new UserUiPreferenceError(`${key} must be a boolean.`);
       patch[key] = value;
-    } else if (key === "boardHiddenColumns") {
-      if (!Array.isArray(value) || value.length > 3 || value.some((status) => !Object.hasOwn(boardPreferenceKeys, status))) {
-        throw new UserUiPreferenceError("Hidden columns must contain supported board columns.");
-      }
-      patch[key] = [...new Set(value)];
     }
   }
   return patch;
 }
 
 export function normalizeUserUiPreferences(...sources) {
-  const result = { ...defaultUserUiPreferences, boardHiddenColumns: [] };
+  const result = { ...defaultUserUiPreferences };
   for (const source of sources) {
     for (const key of userUiPreferenceKeys) {
       if (!source || !Object.hasOwn(source, key)) continue;

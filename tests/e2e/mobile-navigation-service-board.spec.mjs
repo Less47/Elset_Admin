@@ -2287,10 +2287,7 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
           await expect(page.locator("[data-service-board-status]").getByRole("button", { name: "View Job", exact: true })).toHaveCount(3);
         }
       }
-      await page.getByRole("button", { name: "Show only To Do", exact: true }).click();
-      const focusedCards = page.locator('[data-service-board-status="To Do"] [draggable="true"]');
-      await expect(focusedCards).toHaveCount(2);
-      await page.getByRole("button", { name: "Show all columns", exact: true }).click();
+      await expect(page.getByRole("button", { name: /^(Show only |Show all columns|Hide (To Do|In Progress|Completed))/ })).toHaveCount(0);
       await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
     } finally {
       await context.close();

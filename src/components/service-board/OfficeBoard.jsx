@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, ChevronRight, Columns3, Eye, EyeOff, LayoutGrid, List, Minimize2, Rows3, X } from "lucide-react";
+import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { statuses, statusThemes } from "@/lib/job-status";
+import CompletedShowMore from "./CompletedShowMore";
+import { useCompletedJobLimit } from "./useCompletedJobLimit";
 import {
   buildJobCardIndicators,
   formatStreetAndSuburb,
@@ -40,7 +42,7 @@ function isInteractiveTouchTarget(target) {
 
 function ServiceBoardViewToggle({ status, viewMode, onChange }) {
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-border bg-card/85 p-1 shadow-sm">
+    <div className="ml-auto flex items-center gap-1 rounded-xl border border-border bg-card/85 p-1 shadow-sm @min-[20rem]:ml-0" role="group" aria-label={`${status} view`}>
       {serviceBoardViewOptions.map(({ value, label, icon }) => {
         const isActive = viewMode === value;
         const ViewIcon = icon;
@@ -68,7 +70,7 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
   return (
     <Select value={sortMode} onValueChange={onChange}>
       <SelectTrigger
-        className="h-8 min-w-[96px] rounded-lg border-border bg-card text-xs font-medium 2xl:min-w-[120px]"
+        className="ml-auto h-8 w-24 min-w-20 max-w-24 flex-1 rounded-lg border-border bg-card text-xs font-medium [&_[data-slot=select-value]]:truncate"
         aria-label={`${status} sort order`}
         title={`${status} sort order`}
       >
@@ -88,12 +90,9 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
 export function ServiceBoardTagLegend({
   showTagLabels,
   onToggleShowTagLabels,
-  hiddenColumnCount = 0,
-  onShowHiddenColumns = null,
   tone = "default",
 }) {
   const isHeroTone = tone === "hero";
-  const hasHiddenColumns = hiddenColumnCount > 0;
 
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 ${isHeroTone ? "border-white/20" : "border-border"}`}>
@@ -107,19 +106,6 @@ export function ServiceBoardTagLegend({
         ))}
       </div>
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className={`rounded-xl ${isHeroTone ? "border-white/20 bg-current/10 text-inherit hover:bg-current/20 hover:text-inherit" : "bg-muted"}`}
-          disabled={!hasHiddenColumns}
-          onClick={onShowHiddenColumns || undefined}
-          title={hasHiddenColumns ? "Show hidden columns" : "No hidden columns"}
-        >
-          <Eye className="h-4 w-4" />
-          Show Columns
-          {hasHiddenColumns ? <Badge variant="secondary">{hiddenColumnCount}</Badge> : null}
-        </Button>
         <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${isHeroTone ? "border-white/20 bg-current/10" : "border-border bg-muted"}`}>
           <Checkbox checked={showTagLabels} onCheckedChange={(checked) => onToggleShowTagLabels(Boolean(checked))} />
           <span className={`text-[11px] ${isHeroTone ? "text-inherit" : "text-text-secondary"}`}>Show tag info</span>
@@ -587,10 +573,10 @@ export function OfficeBoard({
   getInvoiceStatus,
   formatDate,
   tomorrowPlanningDate = "",
-  hiddenColumnStatuses = [],
-  onHideColumn,
+  officeSearch = "",
+  showHighUrgencyOnly = false,
 }) {
-  const [focusedColumnStatus, setFocusedColumnStatus] = useState("");
+  const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent");
   const [touchDrag, setTouchDrag] = useState(null);
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
   const touchDragSessionRef = useRef(null);
@@ -735,21 +721,6 @@ export function OfficeBoard({
     };
   }, [clearTouchDragHoldTimer]);
 
-  const hiddenStatusSet = useMemo(() => new Set(hiddenColumnStatuses), [hiddenColumnStatuses]);
-  const visibleStatuses = focusedColumnStatus
-    ? statuses.filter((status) => status === focusedColumnStatus)
-    : statuses.filter((status) => !hiddenStatusSet.has(status));
-  const boardGridClassName = focusedColumnStatus || visibleStatuses.length <= 1
-    ? "grid-cols-1"
-    : visibleStatuses.length === 2
-      ? "md:grid-cols-2"
-      : "md:grid-cols-3";
-
-  const handleHideColumn = (status) => {
-    setFocusedColumnStatus((currentStatus) => (currentStatus === status ? "" : currentStatus));
-    onHideColumn?.(status);
-  };
-
   return (
     <div className="relative grid gap-4">
       {touchDrag?.isActive ? (
@@ -766,19 +737,16 @@ export function OfficeBoard({
           <p className="line-clamp-2 text-xs leading-4 text-text-secondary">{touchDrag.title}</p>
         </div>
       ) : null}
-      <div className={`grid gap-3 ${boardGridClassName}`}>
-        {visibleStatuses.map((status) => {
+      <div className="grid gap-3 md:grid-cols-3">
+        {statuses.map((status) => {
           const columnJobs = jobs.filter((job) => job.status === status);
           const sortedColumnJobs = sortJobsForColumn(columnJobs, columnSortModes[status] || "recent");
+          const visibleJobs = status === "Completed" ? sortedColumnJobs.slice(0, visibleLimit) : sortedColumnJobs;
           const statusTheme = statusThemes[status] || statusThemes["To Do"];
           const sortMode = columnSortModes[status] || "recent";
           const viewMode = columnViewModes[status] || "list";
-          const isFocusedColumn = focusedColumnStatus === status;
-          const shouldAutoFillGridCards = isFocusedColumn || visibleStatuses.length < statuses.length;
           const jobLayoutClassName = viewMode === "grid"
-            ? shouldAutoFillGridCards
-              ? "grid gap-x-2 gap-y-3 pb-1 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]"
-              : "grid grid-cols-2 gap-x-2 gap-y-3 pb-1 @min-[29rem]:grid-cols-3"
+            ? "grid grid-cols-2 gap-x-2 gap-y-3 pb-1 @min-[29rem]:grid-cols-3"
             : "grid grid-cols-1 gap-2";
           const isTouchDropTarget = touchDrag?.isActive && touchDropTargetStatus === status;
 
@@ -793,40 +761,14 @@ export function OfficeBoard({
                 onDropJob(jobId, status);
               }}
             >
-            <CardHeader className="gap-2 px-2">
-              <div className="grid gap-1.5">
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <CardTitle className="min-w-0">{status}</CardTitle>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      className="h-8 w-8 rounded-xl bg-card/80"
-                      onClick={() => setFocusedColumnStatus(isFocusedColumn ? "" : status)}
-                      title={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
-                      aria-label={isFocusedColumn ? "Show all columns" : `Show only ${status}`}
-                    >
-                      {isFocusedColumn ? <Columns3 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      className="h-8 w-8 rounded-xl bg-card/80"
-                      onClick={() => handleHideColumn(status)}
-                      title={`Hide ${status}`}
-                      aria-label={`Hide ${status}`}
-                    >
-                      <EyeOff className="h-4 w-4" />
-                    </Button>
-                  </div>
+            <CardHeader className="@container gap-2 px-2" data-service-board-column-header>
+              <div className="flex min-w-0 flex-wrap items-start gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <CardTitle className="whitespace-nowrap text-sm">{status}</CardTitle>
+                  <Badge aria-label={`${status} matching jobs`} className={`shrink-0 ${statusTheme.badge}`}>{columnJobs.length}</Badge>
                 </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5 2xl:justify-end 2xl:gap-2">
-                  <ServiceBoardSortSelect status={status} sortMode={sortMode} onChange={(nextSortMode) => onColumnSortModeChange?.(status, nextSortMode)} />
-                  <ServiceBoardViewToggle status={status} viewMode={viewMode} onChange={(nextViewMode) => onColumnViewModeChange?.(status, nextViewMode)} />
-                  <Badge className={`shrink-0 ${statusTheme.badge}`}>{columnJobs.length}</Badge>
-                </div>
+                <ServiceBoardSortSelect status={status} sortMode={sortMode} onChange={(nextSortMode) => onColumnSortModeChange?.(status, nextSortMode)} />
+                <ServiceBoardViewToggle status={status} viewMode={viewMode} onChange={(nextViewMode) => onColumnViewModeChange?.(status, nextViewMode)} />
               </div>
             </CardHeader>
             <CardContent className="@container min-w-0 max-w-full px-1.5">
@@ -839,7 +781,7 @@ export function OfficeBoard({
                     />
                   </div>
                 ) : (
-                  sortedColumnJobs.map((job) => (
+                  visibleJobs.map((job) => (
                     <JobCard
                       key={`${job.id}-${viewMode}`}
                       job={job}
@@ -862,6 +804,7 @@ export function OfficeBoard({
                   ))
                 )}
               </div>
+              {status === "Completed" ? <CompletedShowMore visibleLimit={visibleLimit} totalCount={columnJobs.length} onShowMore={showMore} /> : null}
             </CardContent>
           </Card>
         );

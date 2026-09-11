@@ -19,7 +19,7 @@ Better Auth uses a separate SQLite `auth.db` with opaque string user IDs, sessio
 | Customers and Sites List/Grid | One preference for each page |
 | Service Board List/Grid/Compact | One preference for each status column |
 | Service Board sort order | One preference for each status column |
-| Show tag info and hidden board columns | Personal display choices |
+| Show tag info | Personal display choice |
 
 These are the existing controls; no speculative settings were added. Every authenticated role can edit its own appearance. Technicians see only UI Settings within Settings; company, templates, backup and business actions retain their existing authorization.
 
@@ -56,7 +56,7 @@ The timestamp is an ISO string. Repeated startup is idempotent. Existing auth ro
 
 ## 6. Preference schema
 
-The explicit flat schema has 23 fields. Its defaults are:
+The explicit flat schema has 22 fields. Its defaults are:
 
 ```json
 {
@@ -81,12 +81,13 @@ The explicit flat schema has 23 fields. Its defaults are:
   "boardToDoSort": "recent",
   "boardInProgressSort": "recent",
   "boardCompletedSort": "recent",
-  "boardShowTagLabels": false,
-  "boardHiddenColumns": []
+  "boardShowTagLabels": false
 }
 ```
 
-Colours accept `#RGB` or `#RRGGBB` and normalize to uppercase six-digit hex. Sidebar choices are icon-only/compact/standard/wide; density is compact/comfortable/spacious. Page views are list/grid; board views add compact. Board sorts are recent/oldest/urgency/customer/scheduled/value. Tag labels require a boolean; hidden columns accept only the three existing statuses, with duplicates removed. Unknown keys, nested arbitrary objects, invalid values, and prototype-pollution keys are rejected with 400.
+Colours accept `#RGB` or `#RRGGBB` and normalize to uppercase six-digit hex. Sidebar choices are icon-only/compact/standard/wide; density is compact/comfortable/spacious. Page views are list/grid; board views add compact. Board sorts are recent/oldest/urgency/customer/scheduled/value. Tag labels require a boolean. Unknown keys, nested arbitrary objects, invalid values, and prototype-pollution keys are rejected with 400.
+
+The retired `boardHiddenColumns` preference is ignored when reading existing rows and removed from the stored JSON on the next preference save. All three Service Board columns remain visible on tablet and desktop; no database migration is needed.
 
 ## 7. API endpoints
 
@@ -112,7 +113,7 @@ The app-level personal store updates visible drafts immediately and coalesces co
 
 ## 12. Cross-account isolation results
 
-Automated real Better Auth browser sessions ran concurrently: A selected orange and compact density; B selected blue and retained comfortable density. Refresh preserved both choices. Customer/Site views and board layout, sorting, hidden columns and tag labels were also isolated. A sign-out/pending-save test delayed B's preference load and verified default appearance while waiting, followed by B's own colour, without A leaking into B.
+Automated real Better Auth browser sessions ran concurrently: A selected orange and compact density; B selected blue and retained comfortable density. Refresh preserved both choices. Customer/Site views and board layout, sorting and tag labels were also isolated. A sign-out/pending-save test delayed B's preference load and verified default appearance while waiting, followed by B's own colour, without A leaking into B.
 
 The requested separate manual browser interaction remains unverified: the computer-use inventory exposed no browser, and opening Chrome or the in-app browser returned `Browser is not available`. Automated independent browser contexts and visual inspection of their saved screenshots were completed; these are not reported as a manual two-browser check.
 

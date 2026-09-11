@@ -1,4 +1,4 @@
-import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
+import { calculateInvoiceTotal, calculateQuoteTotal, money } from "../../lib/quote-template.js";
 
 export const TOMORROW_VIEW = "__tomorrow__";
 
@@ -112,7 +112,8 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
         || (b.jobNumber || 0) - (a.jobNumber || 0);
     }
 
-    return toSortTimestamp(b.updatedAt) - toSortTimestamp(a.updatedAt)
+    // Unknown legacy creation dates sort as oldest; activity never substitutes for creation.
+    return toSortTimestamp(b.createdAt) - toSortTimestamp(a.createdAt)
       || (b.jobNumber || 0) - (a.jobNumber || 0);
   });
 }

@@ -8,6 +8,8 @@ import { statuses, statusThemes } from "@/lib/job-status";
 import MobileJobCard from "./MobileJobCard";
 import { MobileBoardFilters, MobileStatusChangeSheet } from "./MobileBoardSheets";
 import MobileStatusTabs from "./MobileStatusTabs";
+import CompletedShowMore from "./CompletedShowMore";
+import { useCompletedJobLimit } from "./useCompletedJobLimit";
 import {
   getMobileBoardPanelId,
   getMobileMoveButtonId,
@@ -45,6 +47,7 @@ export default function MobileServiceBoard({
   const [moveJob, setMoveJob] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const filterTriggerRef = useRef(null);
+  const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent");
 
   const counts = useMemo(
     () => Object.fromEntries(statuses.map((status) => [status, jobs.filter((job) => job.status === status).length])),
@@ -67,6 +70,7 @@ export default function MobileServiceBoard({
     ? tomorrowJobs
     : sortJobsForColumn(jobs.filter((job) => job.status === selectedView), sortMode);
   const selectedLabel = isTomorrowView ? "Tomorrow" : selectedView;
+  const visibleJobs = selectedView === "Completed" ? selectedJobs.slice(0, visibleLimit) : selectedJobs;
   const activeFilterCount = showHighUrgencyOnly ? 1 : 0;
 
   const handlePlanForTomorrow = async (jobId) => {
@@ -203,7 +207,7 @@ export default function MobileServiceBoard({
           </div>
         ) : (
           <div className="grid gap-2">
-            {selectedJobs.map((job) => (
+            {visibleJobs.map((job) => (
               <MobileJobCard
                 key={job.id}
                 canManageTomorrow={canManageTomorrow}
@@ -222,6 +226,7 @@ export default function MobileServiceBoard({
             ))}
           </div>
         )}
+        {selectedView === "Completed" ? <CompletedShowMore visibleLimit={visibleLimit} totalCount={selectedJobs.length} onShowMore={showMore} /> : null}
       </div>
 
       <MobileBoardFilters

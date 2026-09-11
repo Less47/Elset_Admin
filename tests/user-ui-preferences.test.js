@@ -32,7 +32,7 @@ test("personal schema matches legacy appearance defaults and strictly validates 
   assert.deepEqual(validateUserUiPreferencePatch({ actionColor: "#abc", contentDensity: "compact" }), { actionColor: "#AABBCC", contentDensity: "compact" });
   for (const input of [null, [], {}, { userId: "B" }, { companyName: "Private company" }, { theme: { accent: "#abc" } },
     { actionColor: "url(evil)" }, { sidebarWidth: "enormous" }, { contentDensity: "dense" }, { customerView: "compact" },
-    { boardToDoSort: "unknown" }, { boardShowTagLabels: "true" }, { boardHiddenColumns: ["other"] },
+    { boardToDoSort: "unknown" }, { boardShowTagLabels: "true" }, { boardHiddenColumns: ["Completed"] },
     JSON.parse('{"__proto__":{"polluted":true}}'), { constructor: {} }, { prototype: {} }]) {
     assert.throws(() => validateUserUiPreferencePatch(input));
   }
@@ -57,6 +57,22 @@ test("additive account migration leaves an existing auth schema and workspace in
     assert.equal(auth.prepare("SELECT count(*) AS n FROM user_ui_preferences").get().n, 0);
     assert.deepEqual(fs.readFileSync(path.join(f.dir, "elset-workspace.db")), workspaceBefore);
   } finally { auth?.close(); f.cleanup(); }
+});
+
+test("retired column visibility is ignored on read and removed on the next preference save", () => {
+  const f = fixture();
+  const db = openUserPreferencesDb({ env: f.env, migrate: true });
+  try {
+    const previous = { ...defaultUserUiPreferences, boardHiddenColumns: ["Completed"], boardToDoView: "grid", boardCompletedSort: "oldest" };
+    db.prepare("INSERT INTO user_ui_preferences (user_id, preferences_json, created_at, updated_at) VALUES ('A', ?, '2026-01-01', '2026-01-01')").run(JSON.stringify(previous));
+    const current = getUserUiPreferences(db, "A");
+    assert.equal(Object.hasOwn(current, "boardHiddenColumns"), false);
+    assert.equal(current.boardToDoView, "grid");
+    assert.equal(current.boardCompletedSort, "oldest");
+    patchUserUiPreferences(db, "A", { boardShowTagLabels: true });
+    const stored = JSON.parse(db.prepare("SELECT preferences_json FROM user_ui_preferences WHERE user_id='A'").get().preferences_json);
+    assert.deepEqual(stored, { ...current, boardShowTagLabels: true });
+  } finally { db.close(); f.cleanup(); }
 });
 
 test("fresh users get fallback without a row; partial upserts isolate users and survive a reopened connection", () => {

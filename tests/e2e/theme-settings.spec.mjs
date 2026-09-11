@@ -1143,12 +1143,11 @@ test("Customer, Site and Service Board display choices follow only their account
     await a.page.getByRole("button", { name: "In Progress Compact view", exact: true }).click();
     await a.page.getByRole("combobox", { name: "To Do sort order", exact: true }).click();
     await a.page.getByRole("option", { name: "Oldest", exact: true }).click();
-    await a.page.getByRole("button", { name: "Hide Completed", exact: true }).click();
     await a.page.getByText("Show tag info", { exact: true }).locator("..").getByRole("checkbox").check();
-    await expect.poll(() => readPersonalSettings()).toMatchObject({ customerView: "grid", siteView: "grid", boardToDoView: "grid", boardInProgressView: "compact", boardToDoSort: "oldest", boardHiddenColumns: ["Completed"], boardShowTagLabels: true });
+    await expect.poll(() => readPersonalSettings()).toMatchObject({ customerView: "grid", siteView: "grid", boardToDoView: "grid", boardInProgressView: "compact", boardToDoSort: "oldest", boardShowTagLabels: true });
     await a.page.reload();
     await expect(a.page.getByRole("button", { name: "To Do Grid view", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(a.page.locator('[data-service-board-status="Completed"]')).toHaveCount(0);
+    await expect(a.page.locator('[data-service-board-status="Completed"]')).toBeVisible();
     await navigate(a.page, "Customers", 1440);
     await expect(a.page.getByRole("group", { name: "Customer view", exact: true }).getByRole("button", { name: "Grid view", exact: true })).toHaveAttribute("aria-pressed", "true");
     await navigate(a.page, "Sites", 1440);
