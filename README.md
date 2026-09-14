@@ -57,9 +57,9 @@ The bottom of the desktop sidebar and mobile navigation drawer shows `ELSET Admi
 
 `scripts/build-metadata.mjs` provides one public allowlist: `{ version, commit, sha, buildTime }`. Vite embeds it into the frontend as `__ELSET_BUILD__`; `src/lib/build-info.js` shares it with the indicator and formats the saved instant. The server serves the built assets. No metadata API, browser network lookup, credentials or filesystem paths are included. `ELSET_BUILD_SHA` can supply a revision for CI or a source archive, otherwise Git HEAD is used. Local development without a timestamp shows the short SHA and `Local development` (`dev` in the narrow sidebar); without Git it shows only that fallback. Restart Vite after switching commits to refresh local metadata.
 
-Use the existing `npm run deploy:fly` command for production. It resolves the full source SHA and captures a fresh UTC ISO timestamp once at deployment start, then passes `ELSET_BUILD_SHA` and `ELSET_BUILD_TIME` as Docker build arguments. Docker's existing `ELSET_REQUIRE_BUILD_SHA=true` production guard now validates both values, because `.git` is excluded and production assets must carry complete metadata. Build time changes invalidate the build layer even when redeploying the same commit. Fly secrets and runtime environment changes cannot update already-built frontend metadata.
+Use the existing `npm run deploy:fly` command for production. It requires `VITE_GOOGLE_MAPS_API_KEY` in the deployment shell and fails before invoking Fly if it is missing or blank. It resolves the full source SHA and captures a fresh UTC ISO timestamp once at deployment start, then passes the key, `ELSET_BUILD_SHA` and `ELSET_BUILD_TIME` as separate Docker build arguments without printing the key. Docker exposes the Google argument to Vite before building. The existing `ELSET_REQUIRE_BUILD_SHA=true` production guard validates both metadata values, because `.git` is excluded and production assets must carry complete metadata. Build time changes invalidate the build layer even when redeploying the same commit. Fly secrets and runtime environment changes cannot update already-built frontend metadata or the browser Maps key.
 
-For CI that builds Docker directly, pass `--build-arg ELSET_BUILD_SHA=<source-commit>` and `--build-arg ELSET_BUILD_TIME=<UTC-ISO-timestamp>` (for example `2026-09-10T05:42:00.000Z`). The normal workflow remains commit, push, then `npm run deploy:fly`. There is no dirty-tree check or automatic commit/version change; uncommitted files are still identified by HEAD, so commit the release's changes first. The footer identifies the loaded assets: an older open tab or cached bundle continues to show its older build until refreshed. No auto-refresh or cache-clearing behavior is added.
+For CI that builds Docker directly, pass `--build-arg ELSET_BUILD_SHA=<source-commit>`, `--build-arg ELSET_BUILD_TIME=<UTC-ISO-timestamp>` (for example `2026-09-10T05:42:00.000Z`), and supply `VITE_GOOGLE_MAPS_API_KEY` as a build argument from the CI environment without logging its value. The normal workflow remains commit, push, then `npm run deploy:fly`. There is no dirty-tree check or automatic commit/version change; uncommitted files are still identified by HEAD, so commit the release's changes first. The footer identifies the loaded assets: an older open tab or cached bundle continues to show its older build until refreshed. No auto-refresh or cache-clearing behavior is added.
 
 Build integration references: [Vite define](https://vite.dev/config/shared-options#define) and [Fly build arguments](https://fly.io/docs/reference/configuration/#specify-docker-build-arguments).
 
@@ -236,7 +236,7 @@ When the API is running, quote sends:
 
 Do not rely on a local `.env` file being present inside the Fly machine. Set production config as Fly secrets and environment variables instead.
 
-Required secret for the jobs map:
+Required runtime secret for the legacy Geoapify map (`/map/legacy`):
 
 ```bash
 flyctl secrets set GEOAPIFY_API_KEY=replace-me -a elset-admin
@@ -254,11 +254,14 @@ Typical production secrets:
 flyctl secrets set BETTER_AUTH_SECRET=replace-me SMTP_HOST=smtp.resend.com SMTP_PORT=465 SMTP_SECURE=true SMTP_USER=resend SMTP_PASS=replace-me EMAIL_FROM=admin@elset.com.au -a elset-admin
 ```
 
-After updating secrets, deploy again or restart the machine:
+Google Maps and Places require a browser key during the Vite build. Set it in the same PowerShell session before deploying; the launcher automatically forwards it, so no manual `--build-arg` is needed. The launcher does not read `.env.local`, and setting only a Fly runtime secret does not supply the build value.
 
-```bash
-npm run deploy:fly -- -a elset-admin
+```powershell
+$env:VITE_GOOGLE_MAPS_API_KEY = Read-Host "Paste Google Maps API key"
+npm run deploy:fly
 ```
+
+Keep the real value out of Git and deployment logs. This browser key is embedded in the frontend bundle: restrict it in Google Cloud to `https://admin.elset.com.au/*` and `http://localhost:5173/*`, and to Maps JavaScript API and Places API (New). Runtime server secrets remain configured separately as above.
 
 You can confirm what Fly has configured with:
 
