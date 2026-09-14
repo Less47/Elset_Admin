@@ -1,5 +1,7 @@
 Shared Site navigation is implemented on `feature/google-maps-test`. Changes remain uncommitted. Nothing was pushed, merged or deployed.
 
+> Historical report: this records an earlier migration stage. Current mapping uses Google only; retired routes and provider setup described below no longer apply. See [the cleanup report](geoapify-cleanup-report.md).
+
 The pre-edit audit traced `/jobs/:jobId` through `App.jsx` to `JobDetailsPage.jsx`, whose sidebar and overview both rendered plain Site address text. `buildCustomerSites` resolves Sites within the selected customer by normalized address; jobs do not have a `siteId`. Sites carry optional `streetAddress` / `addressLine1`, `suburb` / `locality` / `city`, `state`, `postcode`, and coordinate metadata. `readSavedPosition` validates coordinate pairs, while `resolveJobMapPosition` preserves the existing Site-first behavior and explicitly cleared coordinates.
 
 For `/map`, `WorkspaceShell.jsx` renders `GoogleJobsMap.jsx`. Its enriched jobs resolve the same customer/address relationship and use Site, existing cached, or Job coordinates according to the existing location helper. `groupJobsByPosition` already groups identical coordinates. The selected panel rendered an article per Job with Open Job and Open Site actions. No shared maps-launch or device-detection utility existed; workspace navigation helpers handle internal SPA routes, and the existing `window.open` calls handle document previews. `/map/legacy` is separately rendered by `JobsMapManager.jsx` and remains unchanged by this task.

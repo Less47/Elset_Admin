@@ -45,7 +45,7 @@ async function mockWorkspace(context, state, preferences = {}) {
     calls.push(`${route.request().method()} ${pathname}`);
     const json = pathname === "/api/auth/me" ? { user: { id: "navigation-test-user", name: "Navigation Test", role: "admin" } }
       : pathname === "/api/app-state" ? { state, storageMode: "sqlite" }
-        : pathname === "/api/map/locations" ? { source: "geoapify-runtime-cache", results: [] }
+        : pathname === "/api/map/locations" ? { source: "saved-site-coordinates", results: [] }
           : pathname === "/api/user-preferences" ? { preferences }
             : pathname === "/api/admin/user-accounts" ? { users: [] } : null;
     if (json && route.request().method() === "GET") return route.fulfill({ json });
@@ -239,7 +239,7 @@ test("live cluster panel has one Navigate action per distinct coordinate pair", 
   assertReadOnly(calls);
 });
 
-test("live Map can navigate to a coordinate-only pin without a Site address", async ({ page, context }) => {
+test("live Map leaves a Job without a saved Site unmapped even if the Job has coordinates", async ({ page, context }) => {
   test.skip(!live, "Requires live Google Maps on an allowed local referrer");
   const { state, customer, job } = workspace();
   customer.address = "";
@@ -250,10 +250,8 @@ test("live Map can navigate to a coordinate-only pin without a Site address", as
   const calls = await mockWorkspace(context, state);
   await page.goto(`${baseUrl}/map`);
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true", { timeout: 30_000 });
-  await page.locator(".google-test-pin").click();
-  const panel = page.getByRole("complementary", { name: "Map job details" });
-  await expect(panel).toContainText("Address not set");
-  await expect(panel.getByRole("button", { name: "Open Site", exact: true })).toHaveCount(0);
-  await activate(context, page, navigationLinks(panel), "Google Maps", coords);
+  await expect(page.locator(".google-test-status")).toContainText("1 job · 0 mapped · 1 missing location");
+  await expect(page.locator(".google-test-status")).toContainText("1 without a matching saved Site");
+  await expect(page.locator(".google-test-pin")).toHaveCount(0);
   assertReadOnly(calls);
 });

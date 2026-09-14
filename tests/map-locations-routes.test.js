@@ -3,22 +3,26 @@ import test from "node:test";
 import express from "express";
 import { createMapLocationsRouter } from "../server-map-locations-routes.js";
 
-test("coordinate endpoint uses only authorized job addresses and never resolves cache misses", async () => {
+test("coordinate endpoint resolves authorized saved Sites without geocoding or writes", async () => {
   const app = express();
-  const addresses = [];
-  const cache = new Map([["10 Example Lane", { lat: -37.8, lon: 145, formatted: "Do not return this" }], ["Invalid", { lat: null, lon: null }]]);
-  const before = structuredClone(cache);
+  const workspace = { customers: [{ id: "customer", address: "Private main office", sites: [
+    { id: "main", address: "Private main office", latitude: 1, longitude: 2 },
+    { id: "site", address: "Private service address", lat: "-37.8", lon: "145" },
+    { id: "missing", address: "Private missing location" },
+  ] }], jobs: [
+    { id: "one", customerId: "customer", siteId: "site", jobAddress: "Private main office" },
+    { id: "two", customerId: "customer", jobAddress: " Private   service address " },
+    { id: "missing", customerId: "customer", siteId: "missing", latitude: -35, longitude: 140 },
+    { id: "unlinked", customerId: "customer", jobAddress: "Unknown", latitude: -35, longitude: 140 },
+  ] };
+  const before = structuredClone(workspace);
   app.use(createMapLocationsRouter({
     requireAuth: (req, res, next) => {
       if (!req.headers["x-test-role"]) return res.sendStatus(401);
       req.user = { role: req.headers["x-test-role"] }; next();
     },
     requireRole: (roles) => (req, res, next) => roles.includes(req.user.role) ? next() : res.sendStatus(403),
-    readWorkspace: (user) => { assert.ok(["admin", "office"].includes(user.role)); return { jobs: [
-      { id: "one", jobAddress: " 10   Example Lane " }, { id: "two", jobAddress: "10 Example Lane" },
-      { id: "missing", jobAddress: "Unknown" }, { id: "invalid", jobAddress: "Invalid" }, { id: "blank", jobAddress: "" },
-    ] }; },
-    getCachedLocation: (address) => { addresses.push(address); return cache.get(address); },
+    readWorkspace: (user) => { assert.ok(["admin", "office"].includes(user.role)); return workspace; },
   }));
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
@@ -32,12 +36,16 @@ test("coordinate endpoint uses only authorized job addresses and never resolves 
       assert.equal(response.headers.get("cache-control"), "no-store");
       const payload = await response.json();
       assert.deepEqual(payload.results, [
-        { jobId: "one", location: { lat: -37.8, lon: 145 } }, { jobId: "two", location: { lat: -37.8, lon: 145 } },
-        { jobId: "missing", location: null }, { jobId: "invalid", location: null }, { jobId: "blank", location: null },
+        { jobId: "one", siteId: "site", location: { lat: -37.8, lng: 145 }, reason: null },
+        { jobId: "two", siteId: "site", location: { lat: -37.8, lng: 145 }, reason: null },
+        { jobId: "missing", siteId: "missing", location: null, reason: "site-missing-coordinates" },
+        { jobId: "unlinked", siteId: null, location: null, reason: "site-not-found" },
       ]);
-      assert.equal(payload.source, "geoapify-runtime-cache");
+      assert.equal(payload.source, "saved-site-coordinates");
+      assert.equal(payload.summary.mappedJobs, 2);
+      assert.equal(payload.summary.unmappedJobs, 2);
+      assert.equal(JSON.stringify(payload).includes("Private"), false);
     }
-    assert.deepEqual(cache, before);
-    assert.deepEqual([...new Set(addresses)], ["10 Example Lane", "Unknown", "Invalid"]);
+    assert.deepEqual(workspace, before);
   } finally { await new Promise((resolve) => server.close(resolve)); }
 });

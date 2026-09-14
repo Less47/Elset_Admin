@@ -1,5 +1,7 @@
 # Primary Map route promotion
 
+> Historical report: this records an earlier migration stage. Current mapping uses Google only; retired routes and provider setup described below no longer apply. See [the cleanup report](geoapify-cleanup-report.md).
+
 Branch: `feature/google-maps-test`. Local transition on 14 September 2026. No commit, push, merge or deployment.
 
 ## 1. Previous route structure

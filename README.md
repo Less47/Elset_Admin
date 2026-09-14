@@ -72,12 +72,6 @@ ELSET_API_PORT=3101
 ELSET_FRONTEND_URL=http://localhost:5173
 BETTER_AUTH_SECRET=replace-me-with-a-random-secret
 BETTER_AUTH_URL=http://localhost:3101
-GEOAPIFY_API_KEY=replace-me
-# Optional: only needed if you want a separate Geoapify key for map tiles
-GEOAPIFY_MAPS_API_KEY=
-GEOAPIFY_COUNTRY_CODE=au
-GEOAPIFY_MAP_STYLE=osm-bright
-GEOAPIFY_AUTOCOMPLETE_LIMIT=6
 SMTP_HOST=smtp.resend.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -86,8 +80,8 @@ SMTP_PASS=replace-me
 EMAIL_FROM=admin@elset.com.au
 ```
 
-`GEOAPIFY_API_KEY` enables address autocomplete and map geocoding.
-`GEOAPIFY_MAPS_API_KEY` is optional because the server falls back to `GEOAPIFY_API_KEY` for map tiles.
+Google Maps at `/map` and all address pickers use `VITE_GOOGLE_MAPS_API_KEY`. Put its local value in ignored `.env.local`; production needs it in the deployment shell when the Vite build runs. Saved Site coordinates supply map markers independently of the address lookup service.
+
 `EMAIL_FROM` must use a domain you have verified in Resend, so `admin@elset.com.au` will work once `elset.com.au` is verified in your Resend account.
 
 ## Live Data Backups
@@ -235,18 +229,6 @@ When the API is running, quote sends:
 ## Fly.io Deployment
 
 Do not rely on a local `.env` file being present inside the Fly machine. Set production config as Fly secrets and environment variables instead.
-
-Required runtime secret for the legacy Geoapify map (`/map/legacy`):
-
-```bash
-flyctl secrets set GEOAPIFY_API_KEY=replace-me -a elset-admin
-```
-
-Optional if you want a separate Geoapify tiles key:
-
-```bash
-flyctl secrets set GEOAPIFY_MAPS_API_KEY=replace-me -a elset-admin
-```
 
 Typical production secrets:
 

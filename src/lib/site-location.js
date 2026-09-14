@@ -62,3 +62,66 @@ export function resolveJobMapPosition(job, site, cached) {
   return readSavedPosition(site) || readSavedPosition(cached)
     || (has(site, "latitude") || has(site, "longitude") ? null : readSavedPosition(job));
 }
+
+// The persisted legacy Job relationship is customerId + jobAddress. Prefer an
+// explicit Site ID when supplied, and never substitute a customer's main address.
+export function indexCustomerSites(customers = []) {
+  const byId = new Map();
+  const byAddress = new Map();
+  const sites = [];
+  for (const customer of customers) for (const site of customer.sites || []) {
+    sites.push(site);
+    byId.set(`${customer.id}:${site.id}`, site);
+    const address = addressKey(site.address);
+    if (!address) continue;
+    const key = `${customer.id}:${address}`;
+    if (!byAddress.has(key)) byAddress.set(key, []);
+    byAddress.get(key).push(site);
+  }
+  return { byId, byAddress, sites };
+}
+
+export function resolveJobSiteLocation(job, index) {
+  const siteId = clean(job?.siteId || job?.site_id);
+  const address = addressKey(job?.jobAddress);
+  const matches = siteId ? [index.byId.get(`${job?.customerId}:${siteId}`)].filter(Boolean)
+    : address ? index.byAddress.get(`${job?.customerId}:${address}`) || [] : [];
+  const site = matches.length === 1 ? matches[0] : null;
+  const position = readSavedPosition(site);
+  return {
+    site, position, matchBy: site ? siteId ? "id" : "address" : null,
+    reason: matches.length > 1 ? "ambiguous-site" : !site ? "site-not-found" : !position ? "site-missing-coordinates" : null,
+  };
+}
+
+export function siteGeocodingAddress(site) {
+  const street = clean(site?.streetAddress || site?.addressLine1);
+  const locality = clean(site?.suburb || site?.city || site?.locality);
+  const region = [locality, clean(site?.state), clean(site?.postcode)].filter(Boolean).join(" ");
+  return street && locality ? `${street}, ${region}` : clean(site?.address) || (street ? [street, region].filter(Boolean).join(", ") : "");
+}
+
+export function summarizeSiteLocations(customers = [], jobs = []) {
+  const index = indexCustomerSites(customers);
+  const resolutions = jobs.map((job) => resolveJobSiteLocation(job, index));
+  const referenced = new Set(resolutions.map((entry) => entry.site).filter(Boolean));
+  const count = (records, predicate) => records.filter(predicate).length;
+  const valid = (site) => Boolean(readSavedPosition(site));
+  return {
+    totalJobs: jobs.length,
+    jobsWithSiteId: count(jobs, (job) => Boolean(clean(job.siteId || job.site_id))),
+    jobsLinkedById: count(resolutions, (entry) => entry.matchBy === "id"),
+    jobsLinkedByAddress: count(resolutions, (entry) => entry.matchBy === "address"),
+    jobsWithoutSite: count(resolutions, (entry) => entry.reason === "site-not-found"),
+    jobsWithAmbiguousSite: count(resolutions, (entry) => entry.reason === "ambiguous-site"),
+    mappedJobs: count(resolutions, (entry) => Boolean(entry.position)),
+    unmappedJobs: count(resolutions, (entry) => !entry.position),
+    uniqueSitesReferenced: referenced.size,
+    totalSites: index.sites.length,
+    sitesWithValidCoordinates: count(index.sites, valid),
+    sitesMissingCoordinates: count(index.sites, (site) => !valid(site)),
+    sitesWithAddressNoCoordinates: count(index.sites, (site) => !valid(site) && Boolean(siteGeocodingAddress(site))),
+    referencedSitesWithAddressNoCoordinates: count([...referenced], (site) => !valid(site) && Boolean(siteGeocodingAddress(site))),
+    sitesWithLegacyCoordinateFields: count(index.sites, (site) => ["lat", "lon", "lng", "location"].some((key) => has(site, key))),
+  };
+}

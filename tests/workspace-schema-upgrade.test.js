@@ -297,6 +297,11 @@ test("normal production server startup upgrades v4 before listening and serves h
     assert.match(output(), /Workspace schema migration complete: 6/);
     assert.ok(output().indexOf("Workspace schema migration complete: 6") < output().indexOf("Elset quote API listening"), output());
     assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 6 });
+    for (const [method, route] of [["GET", "/api/address/autocomplete?q=example"], ["GET", "/api/map/config"], ["POST", "/api/map/geocode"]]) {
+      const response = await fetch(url + route, { method });
+      assert.equal(response.status, 404, `${method} ${route} must be retired`);
+    }
+    assert.doesNotMatch(output(), /geoapify|leaflet/i);
   } finally {
     if (child.exitCode === null) { const exited = once(child, "exit"); child.kill(); await exited; }
   }

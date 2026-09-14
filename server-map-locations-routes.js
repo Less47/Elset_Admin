@@ -1,22 +1,21 @@
 import express from "express";
+import { indexCustomerSites, resolveJobSiteLocation, summarizeSiteLocations } from "./src/lib/site-location.js";
 
-// Read the existing resolver cache only. This router has no geocoder or write dependency.
-export function createMapLocationsRouter({ requireAuth, requireRole, readWorkspace, getCachedLocation }) {
+// Saved Sites survive restarts. This router has no geocoder or write dependency.
+export function createMapLocationsRouter({ requireAuth, requireRole, readWorkspace }) {
   const router = express.Router();
   router.get("/api/map/locations", requireAuth, requireRole(["admin", "office"]), (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
       const workspace = readWorkspace(req.user);
+      const index = indexCustomerSites(workspace.customers);
       const results = (workspace.jobs || []).map((job) => {
-        const address = String(job.jobAddress || "").replace(/\s+/g, " ").trim();
-        const cached = address ? getCachedLocation(address) : null;
-        const valid = Number.isFinite(cached?.lat) && Number.isFinite(cached?.lon)
-          && Math.abs(cached.lat) <= 90 && Math.abs(cached.lon) <= 180;
-        return { jobId: job.id, location: valid ? { lat: cached.lat, lon: cached.lon } : null };
+        const { site, position, reason } = resolveJobSiteLocation(job, index);
+        return { jobId: job.id, siteId: site?.id || null, location: position, reason };
       });
-      return res.json({ source: "geoapify-runtime-cache", results });
+      return res.json({ source: "saved-site-coordinates", results, summary: summarizeSiteLocations(workspace.customers, workspace.jobs) });
     } catch {
-      return res.status(503).json({ error: "Existing map coordinates are temporarily unavailable." });
+      return res.status(503).json({ error: "Saved Site coordinates are temporarily unavailable." });
     }
   });
   return router;

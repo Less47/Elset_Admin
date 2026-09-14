@@ -52,15 +52,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.join(__dirname, "dist");
 const envPath = path.join(__dirname, ".env");
-const GEOAPIFY_AUTOCOMPLETE_URL = "https://api.geoapify.com/v1/geocode/autocomplete";
-const GEOAPIFY_GEOCODE_SEARCH_URL = "https://api.geoapify.com/v1/geocode/search";
-const DEFAULT_GEOAPIFY_MAP_STYLE = "osm-bright";
-const DEFAULT_GEOAPIFY_COUNTRY_CODE = "au";
-const DEFAULT_GEOAPIFY_AUTOCOMPLETE_LIMIT = 6;
-const MIN_ADDRESS_QUERY_LENGTH = 3;
-const MAX_ADDRESS_QUERY_LENGTH = 160;
-const GEOAPIFY_MAP_ATTRIBUTION = 'Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer">Geoapify</a> | <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a>';
-const geoapifyGeocodeCache = new Map();
 const BACKUP_FORMAT_VERSION = "elset-backup-v2";
 
 dotenv.config({ path: envPath });
@@ -113,136 +104,13 @@ function getTransportConfig() {
   };
 }
 
-function getGeoapifyApiKey() {
-  return String(process.env.GEOAPIFY_API_KEY || "").trim();
-}
-
-function getGeoapifyMapsApiKey() {
-  return String(process.env.GEOAPIFY_MAPS_API_KEY || process.env.GEOAPIFY_API_KEY || "").trim();
-}
-
-function getGeoapifyCountryCode() {
-  const configuredValue = String(process.env.GEOAPIFY_COUNTRY_CODE || DEFAULT_GEOAPIFY_COUNTRY_CODE).trim().toLowerCase();
-  return /^[a-z]{2}$/.test(configuredValue) ? configuredValue : "";
-}
-
-function getGeoapifyMapStyle() {
-  return String(process.env.GEOAPIFY_MAP_STYLE || DEFAULT_GEOAPIFY_MAP_STYLE).trim() || DEFAULT_GEOAPIFY_MAP_STYLE;
-}
-
-function getGeoapifyAutocompleteLimit() {
-  const configuredValue = Number.parseInt(String(process.env.GEOAPIFY_AUTOCOMPLETE_LIMIT || DEFAULT_GEOAPIFY_AUTOCOMPLETE_LIMIT), 10);
-  if (!Number.isFinite(configuredValue)) return DEFAULT_GEOAPIFY_AUTOCOMPLETE_LIMIT;
-  return Math.min(Math.max(configuredValue, 1), 10);
-}
-
 function logOptionalConfigWarnings() {
-  const configSourceLabel = getConfigSourceLabel();
   const missingEmailEnv = getMissingEnv();
-
   if (missingEmailEnv.length > 0) {
     console.warn(
-      `[config] Missing ${missingEmailEnv.join(", ")} in ${configSourceLabel}. Quote email sending will be unavailable.`
+      `[config] Missing ${missingEmailEnv.join(", ")} in ${getConfigSourceLabel()}. Quote email sending will be unavailable.`
     );
   }
-
-  if (!getGeoapifyApiKey()) {
-    console.warn(
-      `[config] Missing GEOAPIFY_API_KEY in ${configSourceLabel}. Address lookup and map geocoding will be unavailable.`
-    );
-  }
-
-  if (!getGeoapifyMapsApiKey()) {
-    console.warn(
-      `[config] Missing GEOAPIFY_MAPS_API_KEY or GEOAPIFY_API_KEY in ${configSourceLabel}. Jobs map tiles will be unavailable.`
-    );
-  }
-}
-
-function buildGeoapifyAutocompleteUrl(query) {
-  const params = new URLSearchParams({
-    text: query,
-    format: "json",
-    lang: "en",
-    limit: String(getGeoapifyAutocompleteLimit()),
-    apiKey: getGeoapifyApiKey(),
-  });
-  const countryCode = getGeoapifyCountryCode();
-
-  if (countryCode) {
-    params.set("filter", `countrycode:${countryCode}`);
-  }
-
-  return `${GEOAPIFY_AUTOCOMPLETE_URL}?${params.toString()}`;
-}
-
-function buildGeoapifyGeocodeSearchUrl(query) {
-  const params = new URLSearchParams({
-    text: query,
-    format: "json",
-    lang: "en",
-    limit: "1",
-    apiKey: getGeoapifyApiKey(),
-  });
-  const countryCode = getGeoapifyCountryCode();
-
-  if (countryCode) {
-    params.set("filter", `countrycode:${countryCode}`);
-  }
-
-  return `${GEOAPIFY_GEOCODE_SEARCH_URL}?${params.toString()}`;
-}
-
-function normalizeGeoapifyLocationResult(result) {
-  const formatted = typeof result?.formatted === "string" ? result.formatted.trim() : "";
-  if (!formatted) return null;
-
-  const addressLine1 = typeof result?.address_line1 === "string" ? result.address_line1.trim() : "";
-  const addressLine2 = typeof result?.address_line2 === "string" ? result.address_line2.trim() : "";
-  const latitude = Number(result?.lat);
-  const longitude = Number(result?.lon);
-
-  return {
-    placeId:
-      typeof result?.place_id === "string"
-        ? result.place_id
-        : (typeof result?.rank?.place_id === "string" ? result.rank.place_id : ""),
-    formatted,
-    addressLine1: addressLine1 || formatted,
-    addressLine2,
-    city: typeof result?.city === "string" ? result.city : "",
-    state: typeof result?.state === "string" ? result.state : "",
-    postcode: typeof result?.postcode === "string" ? result.postcode : "",
-    country: typeof result?.country === "string" ? result.country : "",
-    resultType: typeof result?.result_type === "string" ? result.result_type : "",
-    lat: Number.isFinite(latitude) ? latitude : null,
-    lon: Number.isFinite(longitude) ? longitude : null,
-  };
-}
-
-async function geocodeAddressQuery(query, signal) {
-  const normalizedQuery = String(query || "").trim().slice(0, MAX_ADDRESS_QUERY_LENGTH);
-  if (normalizedQuery.length < MIN_ADDRESS_QUERY_LENGTH) return null;
-
-  const cacheKey = `${getGeoapifyCountryCode() || "world"}:${normalizedQuery.toLowerCase()}`;
-  if (geoapifyGeocodeCache.has(cacheKey)) {
-    return geoapifyGeocodeCache.get(cacheKey);
-  }
-
-  const response = await fetch(buildGeoapifyGeocodeSearchUrl(normalizedQuery), {
-    method: "GET",
-    signal,
-  });
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const providerMessage = typeof payload?.message === "string" ? payload.message : "Geoapify geocoding request failed.";
-    throw new Error(providerMessage);
-  }
-
-  const location = normalizeGeoapifyLocationResult(Array.isArray(payload?.results) ? payload.results[0] : null);
-  geoapifyGeocodeCache.set(cacheKey, location);
-  return location;
 }
 
 function buildBackupFilename() {
@@ -301,7 +169,6 @@ export function createServerApp() {
   const app = express();
   const shouldServeStatic = process.env.ELSET_DISABLE_STATIC !== "true";
   const frontendUrl = String(process.env.ELSET_FRONTEND_URL || "").trim();
-  const configSourceLabel = getConfigSourceLabel();
   logOptionalConfigWarnings();
 
   async function requireAuth(req, res, next) {
@@ -348,9 +215,6 @@ export function createServerApp() {
     requireAuth,
     requireRole,
     readWorkspace: (user) => getAuthorizedWorkspaceState(user),
-    getCachedLocation: (address) => geoapifyGeocodeCache.get(
-      `${getGeoapifyCountryCode() || "world"}:${String(address).trim().slice(0, MAX_ADDRESS_QUERY_LENGTH).toLowerCase()}`
-    ),
   }));
 
   app.get("/api/health", (_req, res) => {
@@ -360,123 +224,6 @@ export function createServerApp() {
     }
 
     return res.json(readiness);
-  });
-
-  app.get("/api/address/autocomplete", requireAuth, async (req, res) => {
-    const apiKey = getGeoapifyApiKey();
-    if (!apiKey) {
-      return res.status(503).json({
-        error: `Address lookup is not configured. Add GEOAPIFY_API_KEY to ${configSourceLabel}.`,
-      });
-    }
-
-    const query = String(req.query.q || "").trim().slice(0, MAX_ADDRESS_QUERY_LENGTH);
-    if (query.length < MIN_ADDRESS_QUERY_LENGTH) {
-      return res.json({ ok: true, suggestions: [] });
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const response = await fetch(buildGeoapifyAutocompleteUrl(query), {
-        method: "GET",
-        signal: controller.signal,
-      });
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        const providerMessage = typeof payload?.message === "string" ? payload.message : "Geoapify autocomplete request failed.";
-        return res.status(502).json({ error: providerMessage });
-      }
-
-      const seen = new Set();
-      const suggestions = (Array.isArray(payload?.results) ? payload.results : [])
-        .map(normalizeGeoapifyLocationResult)
-        .filter((suggestion) => {
-          if (!suggestion) return false;
-          const dedupeKey = suggestion.formatted.toLowerCase();
-          if (seen.has(dedupeKey)) return false;
-          seen.add(dedupeKey);
-          return true;
-        });
-
-      return res.json({ ok: true, suggestions });
-    } catch (error) {
-      const message = error?.name === "AbortError"
-        ? "Address lookup timed out."
-        : (error instanceof Error ? error.message : "Address lookup failed.");
-      return res.status(502).json({ error: message });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  });
-
-  app.get("/api/map/config", requireAuth, (req, res) => {
-    const mapsApiKey = getGeoapifyMapsApiKey();
-    if (!mapsApiKey) {
-      return res.status(503).json({
-        error: `Map tiles are not configured. Add GEOAPIFY_MAPS_API_KEY or GEOAPIFY_API_KEY to ${configSourceLabel}.`,
-      });
-    }
-
-    const mapStyle = getGeoapifyMapStyle();
-    return res.json({
-      ok: true,
-      tiles: {
-        style: mapStyle,
-        url: `https://maps.geoapify.com/v1/tile/${mapStyle}/{z}/{x}/{y}.png?apiKey=${mapsApiKey}`,
-        retinaUrl: `https://maps.geoapify.com/v1/tile/${mapStyle}/{z}/{x}/{y}@2x.png?apiKey=${mapsApiKey}`,
-        attribution: GEOAPIFY_MAP_ATTRIBUTION,
-        maxZoom: 20,
-      },
-    });
-  });
-
-  app.post("/api/map/geocode", requireAuth, async (req, res) => {
-    const apiKey = getGeoapifyApiKey();
-    if (!apiKey) {
-      return res.status(503).json({
-        error: `Address geocoding is not configured. Add GEOAPIFY_API_KEY to ${configSourceLabel}.`,
-      });
-    }
-
-    const requestedAddresses = Array.isArray(req.body?.addresses) ? req.body.addresses : [];
-    const addresses = [...new Set(
-      requestedAddresses
-        .map((address) => String(address || "").trim())
-        .filter((address) => address.length >= MIN_ADDRESS_QUERY_LENGTH)
-        .slice(0, 200)
-    )];
-
-    if (addresses.length === 0) {
-      return res.json({ ok: true, results: [] });
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-    try {
-      const results = await Promise.all(
-        addresses.map(async (address) => {
-          try {
-            const location = await geocodeAddressQuery(address, controller.signal);
-            return { address, location };
-          } catch {
-            return { address, location: null };
-          }
-        })
-      );
-
-      return res.json({ ok: true, results });
-    } catch (error) {
-      const message = error?.name === "AbortError"
-        ? "Map geocoding timed out."
-        : (error instanceof Error ? error.message : "Map geocoding failed.");
-      return res.status(502).json({ error: message });
-    } finally {
-      clearTimeout(timeoutId);
-    }
   });
 
   app.get("/api/app-state", requireAuth, (req, res) => {

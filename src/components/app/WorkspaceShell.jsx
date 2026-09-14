@@ -43,9 +43,8 @@ import {
 } from "@/lib/app-support";
 
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
-const LegacyJobsMap = lazy(() => import("@/components/map/JobsMapManager"));
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, mapVariant }) {
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -533,11 +532,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {canManageBusiness && activeSection === "map" ? (
           <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground" role="status">Loading map...</div>}>
-            {mapVariant === "legacy" ? (
-              <LegacyJobsMap customers={data.customers} jobs={data.jobs} onOpenJob={handleOpenJob} />
-            ) : (
-              <GoogleJobsMap customers={data.customers} jobs={data.jobs} onOpenJob={handleOpenJob} onOpenSite={handleOpenSiteProfile} />
-            )}
+            <GoogleJobsMap customers={data.customers} jobs={data.jobs} onOpenJob={handleOpenJob} onOpenSite={handleOpenSiteProfile} />
           </Suspense>
         ) : null}
 

@@ -1,5 +1,7 @@
 # Customer and Site Google Places migration
 
+> Historical report: this records an earlier migration stage. Current mapping uses Google only; retired routes and provider setup described below no longer apply. See [the cleanup report](geoapify-cleanup-report.md).
+
 Branch: `feature/google-maps-test`. Changes are local and uncommitted. No push, merge or deployment.
 
 **Follow-up correction:** The initial audit missed Customer/Site creation embedded in `/jobs/new`. Those fields have now been migrated too, and live Google Places suggestions and Details now pass. The service-disabled result below records the earlier run. See [the corrective audit and verification report](google-address-route-fix-report.md) for the current route coverage and results.

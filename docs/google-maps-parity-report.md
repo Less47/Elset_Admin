@@ -1,5 +1,7 @@
 # Google Maps feature parity comparison
 
+> Historical report: this records an earlier migration stage. Current mapping uses Google only; retired routes and provider setup described below no longer apply. See [the cleanup report](geoapify-cleanup-report.md).
+
 > Historical parity-stage report. The [primary-route promotion report](google-map-promotion-report.md) supersedes its routing, development-only endpoint/component and production-key statements. The coordinate-cache limitation still applies.
 
 Branch: `feature/google-maps-test`. Local work on 14 September 2026. No commit, push, merge or deployment.

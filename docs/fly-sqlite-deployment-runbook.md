@@ -42,7 +42,7 @@ Confirm before continuing:
 - The volume is mounted at `/app/data`.
 - `ELSET_DATA_DIR` is `/app/data`.
 - No Fly process group, autoscaling setting, or extra machine can create concurrent SQLite writers.
-- Required environment variables exist without printing their values: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `GEOAPIFY_API_KEY`, and optional `GEOAPIFY_MAPS_API_KEY`, `GEOAPIFY_COUNTRY_CODE`, `GEOAPIFY_MAP_STYLE`, `GEOAPIFY_AUTOCOMPLETE_LIMIT`.
+- Required environment variables exist without printing their values: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`. Google Maps and Places also require `VITE_GOOGLE_MAPS_API_KEY` in the deployment shell at build time; `npm run deploy:fly` forwards it automatically.
 
 ## 2. Write-Free Maintenance Window
 

@@ -1,4 +1,4 @@
-import { resolveJobMapPosition } from "@/lib/site-location";
+import { indexCustomerSites, resolveJobSiteLocation, siteAddressMetadata } from "@/lib/site-location";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw, X } from "lucide-react";
 import { MarkerClusterer, SuperClusterAlgorithm } from "@googlemaps/markerclusterer";
@@ -25,7 +25,10 @@ export default function GoogleJobsMap({ customers, jobs, onOpenJob, onOpenSite }
   const [filters, setFilters] = useState({ search: "", jobFilter: "all", siteTypeFilter: "all", customerTypeFilter: "all" });
   const [selectedIds, setSelectedIds] = useState([]);
   const search = useDeferredValue(filters.search);
-  const datasetKey = useMemo(() => JSON.stringify(jobs.map((job) => [job.id, normalizeSiteAddress(job.jobAddress)]).sort()), [jobs]);
+  const datasetKey = useMemo(() => JSON.stringify([
+    jobs.map((job) => [job.id, job.customerId, job.siteId || job.site_id, normalizeSiteAddress(job.jobAddress)]),
+    customers.map((customer) => [customer.id, (customer.sites || []).map((site) => [site.id, site.address, siteAddressMetadata(site)])]),
+  ]), [jobs, customers]);
   const coordinates = useExistingMapLocations(datasetKey, Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()) && jobs.length > 0);
   const { locations } = coordinates;
 
@@ -37,24 +40,27 @@ export default function GoogleJobsMap({ customers, jobs, onOpenJob, onOpenSite }
       jobsByCustomer.get(job.customerId).push(job);
     });
     const siteByCustomerAddress = new Map();
-    const savedSiteByAddress = new Map();
+    const savedSiteIndex = indexCustomerSites(customers);
     customers.forEach((customer) => {
       buildCustomerSites(customer, jobsByCustomer.get(customer.id) || []).forEach((site) => {
         siteByCustomerAddress.set(`${customer.id}:${normalizeSiteAddress(site.address).toLowerCase()}`, site);
       });
-      customer.sites?.forEach((site) => savedSiteByAddress.set(`${customer.id}:${normalizeSiteAddress(site.address).toLowerCase()}`, site));
     });
     return [...jobs].sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt)).map((job) => {
       const customer = customerById.get(job.customerId);
       const addressKey = normalizeSiteAddress(job.jobAddress).toLowerCase();
-      const site = siteByCustomerAddress.get(`${job.customerId}:${addressKey}`);
-      const savedSite = savedSiteByAddress.get(`${job.customerId}:${addressKey}`);
+      const resolved = resolveJobSiteLocation(job, savedSiteIndex);
+      const savedSite = resolved.site;
+      const site = savedSite || siteByCustomerAddress.get(`${job.customerId}:${addressKey}`);
+      const latest = locations.get(job.id);
       const customerType = customer?.customerType || "";
       const siteType = site?.siteType || "";
-      const position = resolveJobMapPosition(job, savedSite, locations.get(job.id));
+      const position = latest ? latest.siteId ? readSavedPosition(latest.location) : null : resolved.position;
       return { ...job, customerType, siteType,
         customerTypeLabel: formatCustomerType(customerType), siteTypeLabel: formatSiteType(siteType),
-        siteKey: site?.siteProfileId || site?.id || "", siteLabel: site?.label || "",
+        siteKey: latest ? latest.siteId || "" : savedSite?.id || "", siteLabel: site?.label || "",
+        mapSiteAddress: savedSite?.address || job.jobAddress,
+        locationReason: latest ? latest.reason : resolved.reason,
         position,
         navigationDestination: jobNavigationDestination(job, savedSite || site, position),
       };
@@ -65,7 +71,7 @@ export default function GoogleJobsMap({ customers, jobs, onOpenJob, onOpenSite }
   const groups = useMemo(() => groupJobsByPosition(filteredJobs), [filteredJobs]);
   const viewportKey = useMemo(() => JSON.stringify(groups.map((group) => group.position).sort((a, b) => a.lat - b.lat || a.lng - b.lng)), [groups]);
   const mappedCount = groups.reduce((count, group) => count + group.jobs.length, 0);
-  const cachedCount = filteredJobs.filter((job) => readSavedPosition(locations.get(job.id))).length;
+  const missingSiteCount = filteredJobs.filter((job) => ["site-not-found", "ambiguous-site"].includes(job.locationReason)).length;
   const selectedJobs = filteredJobs.filter((job) => selectedIds.includes(job.id));
   // Cluster panels may contain several locations; coincident jobs share one action.
   const navigationJobIds = new Set(groupJobsByPosition(selectedJobs).map((group) => group.jobs[0].id));
@@ -198,11 +204,11 @@ export default function GoogleJobsMap({ customers, jobs, onOpenJob, onOpenSite }
       </div>
     </div>}
     <div ref={statusRef} className="google-test-status rounded-xl border border-border bg-card/95 px-3 py-2 text-xs text-card-foreground shadow-sm" role="status"
-      data-eligible-count={mappedCount} data-geoapify-cache-count={cachedCount} data-unmapped-count={filteredJobs.length - mappedCount}>
-      {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"} · {mappedCount} mapped
-      {coordinates.loading && <p className="mt-1 flex items-center gap-2"><LoaderCircle className="h-3 w-3 animate-spin" />Reading existing map coordinates...</p>}
+      data-eligible-count={mappedCount} data-site-coordinate-count={mappedCount} data-unmapped-count={filteredJobs.length - mappedCount}>
+      {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"} · {mappedCount} mapped · {filteredJobs.length - mappedCount} missing location
+      {coordinates.loading && <p className="mt-1 flex items-center gap-2"><LoaderCircle className="h-3 w-3 animate-spin" />Reading saved Site coordinates...</p>}
       {coordinates.error && <p className="mt-1" role="alert">{coordinates.error}</p>}
-      {!coordinates.loading && mappedCount < filteredJobs.length && <p className="mt-1">{filteredJobs.length - mappedCount} without coordinates.</p>}
+      {!coordinates.loading && missingSiteCount > 0 && <p className="mt-1">{missingSiteCount} without a matching saved Site.</p>}
       {!coordinates.loading && (mappedCount < filteredJobs.length || coordinates.error) && <Button size="sm" variant="ghost" className="pointer-events-auto mt-1" onClick={coordinates.refresh}><RefreshCw className="h-3 w-3" />Refresh coordinates</Button>}
     </div>
     {selectedJobs.length > 0 && !loadState.error && <aside className="google-test-details rounded-xl border border-border bg-popover text-popover-foreground shadow-xl" aria-label="Map job details">
@@ -215,7 +221,7 @@ export default function GoogleJobsMap({ customers, jobs, onOpenJob, onOpenSite }
           <p className="text-xs text-muted-foreground">#{job.jobNumber || "—"} · {job.status || "Status not set"}</p>
           <h3 className="text-sm font-semibold">{job.title || "Job"}</h3>
           <p className="text-sm">{job.customerName || "Customer not set"}</p>
-          <p className="text-xs text-muted-foreground">{[job.siteLabel, job.jobAddress].filter(Boolean).join(" · ") || "Address not set"}</p>
+          <p className="text-xs text-muted-foreground">{[job.siteLabel, job.mapSiteAddress].filter(Boolean).join(" · ") || "Address not set"}</p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => onOpenJob(job)}>Open Job</Button>
             {job.siteKey && onOpenSite && <Button size="sm" variant="outline" onClick={() => onOpenSite(job.customerId, job.siteKey)}>Open Site</Button>}

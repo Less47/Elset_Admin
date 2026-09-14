@@ -1,5 +1,7 @@
 # Customer/Site address route correction
 
+> Historical report: this records an earlier migration stage. Current mapping uses Google only; retired routes and provider setup described below no longer apply. See [the cleanup report](geoapify-cleanup-report.md).
+
 Branch: `feature/google-maps-test`. Local, uncommitted changes only.
 
 **Root cause:** the previous migration missed the Customer/Site creation forms embedded in **Create Job**. Their labels include **Add New Customer**, **Primary site address**, and **Add a new site**. They were incorrectly treated as Job-only address editing. This omission is now fixed.

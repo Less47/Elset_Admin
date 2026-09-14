@@ -1,5 +1,7 @@
 # Google Maps proof of concept
 
+> Historical report: this records an earlier migration stage. Current mapping uses Google only; retired routes and provider setup described below no longer apply. See [the cleanup report](geoapify-cleanup-report.md).
+
 > Current route arrangement is documented in the [primary-route promotion report](google-map-promotion-report.md): Google at `/map`, Leaflet at `/map/legacy`, and the retired test URL redirects to `/map`.
 
 > Historical POC snapshot. The follow-up [feature parity report](google-maps-parity-report.md) supersedes this report's coordinate, viewport, shared-filter, source-preservation and verification claims. In particular, the Google page now reads existing Geoapify cache results, fits filtered positions, and shares the original filter definitions; the legacy component has a behavior-preserving filter extraction.

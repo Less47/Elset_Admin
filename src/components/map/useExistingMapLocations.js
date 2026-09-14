@@ -17,9 +17,9 @@ export function useExistingMapLocations(datasetKey, enabled) {
         const response = await fetch("/api/map/locations", { signal: controller.signal, cache: "no-store" });
         if (!response.ok) throw new Error("Map coordinates could not be loaded. Please try again.");
         const payload = await response.json();
-        if (payload.source !== "geoapify-runtime-cache" || !Array.isArray(payload.results)) throw new Error("Map coordinates are temporarily unavailable. Please try again.");
+        if (payload.source !== "saved-site-coordinates" || !Array.isArray(payload.results)) throw new Error("Saved Site coordinates are temporarily unavailable. Please try again.");
         if (controller.signal.aborted || currentRequest !== requestRevision) return;
-        setSnapshot({ datasetKey, locations: new Map(payload.results.map((entry) => [entry.jobId, entry.location])), loading: false, error: "" });
+        setSnapshot({ datasetKey, locations: new Map(payload.results.map((entry) => [entry.jobId, entry])), loading: false, error: "" });
       } catch (error) {
         if (controller.signal.aborted || currentRequest !== requestRevision) return;
         setSnapshot((previous) => ({ ...previous, loading: false, error: error.message }));

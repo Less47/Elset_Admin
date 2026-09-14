@@ -2,24 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseWorkspacePath } from "../src/hooks/useWorkspaceNavigation.js";
 
-test("primary Google, legacy and retired map routes retain the correct navigation origin", () => {
-  for (const path of ["/map", "/map/", "/map/google-test", "/map/google-test/"]) {
+test("the production map route and record navigation use one map", () => {
+  for (const path of ["/map", "/map/"]) {
     assert.equal(parseWorkspacePath(path).section, "map");
-    assert.equal(parseWorkspacePath(path).mapVariant, "google");
     assert.equal(parseWorkspacePath(path).path, "/map");
   }
-  const route = parseWorkspacePath("/map/legacy/", { section: "service-board", historyIndex: 2 });
-  assert.equal(route.section, "map");
-  assert.equal(route.mapVariant, "legacy");
-  assert.equal(route.path, "/map/legacy");
+  const route = parseWorkspacePath("/map", { historyIndex: 2 });
   assert.equal(route.historyIndex, 2);
-  assert.equal(parseWorkspacePath("/jobs/example", { returnPath: route.path, sourceSection: "map" }).returnPath, "/map/legacy");
-  assert.equal(parseWorkspacePath("/jobs/example", { sourceMapVariant: "google" }).sourceMapVariant, "google");
-  assert.equal(parseWorkspacePath("/jobs/example", { sourceMapVariant: "google-test" }).sourceMapVariant, "google");
-  assert.equal(parseWorkspacePath("/jobs/example", { sourceMapVariant: "geoapify" }).sourceMapVariant, "legacy");
+  assert.equal(parseWorkspacePath("/jobs/example", { returnPath: route.path, sourceSection: "map" }).returnPath, "/map");
   assert.equal(parseWorkspacePath("/", { section: "map" }).path, "/map");
-  assert.equal(parseWorkspacePath("/", { section: "map" }).mapVariant, "google");
-  assert.equal(parseWorkspacePath("/map/unsupported").mapVariant, undefined);
+});
+
+test("retired and unknown map subroutes cannot render a hidden map from old history state", () => {
+  for (const path of ["/map/legacy", "/map/legacy/", "/map/google-test", "/map/google-test/", "/map/unsupported"]) {
+    for (const state of [null, { section: "map", sourceSection: "map" }]) {
+      assert.equal(parseWorkspacePath(path, state).section, "service-board");
+      assert.equal(parseWorkspacePath(path, state).path, path);
+    }
+  }
 });
 
 test("document workspace routes identify the job and type and retain their navigation origin", () => {

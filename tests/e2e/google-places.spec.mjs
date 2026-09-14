@@ -10,7 +10,7 @@ import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import { createCustomer, createCustomerSite, updateCustomerSite, updateCustomer } from "../../server-workspace-customers.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
 import { normalizeStoredData } from "../../server-store.js";
-import { createJob } from "../../server-workspace-jobs.js";
+import { createJob, updateJobDetails } from "../../server-workspace-jobs.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const shots = path.join(root, "test-results/google-places");
@@ -60,7 +60,7 @@ async function workspace(page, { mode = "sqlite", midnight = false } = {}) {
       const json = pathname === "/api/auth/me" ? { user: { id: "places-test", name: "Places Test", role: "admin" } }
         : pathname === "/api/app-state" ? { state, storageMode: mode }
           : pathname === "/api/user-preferences" ? { preferences }
-            : pathname === "/api/map/locations" ? { source: "geoapify-runtime-cache", results: [] }
+            : pathname === "/api/map/locations" ? { source: "saved-site-coordinates", results: [] }
               : pathname === "/api/admin/user-accounts" ? { users: [] } : null;
       if (json) return route.fulfill({ json });
     }
@@ -70,6 +70,12 @@ async function workspace(page, { mode = "sqlite", midnight = false } = {}) {
     }
     if (mode === "sqlite" && req.method() === "POST" && pathname === "/api/jobs") {
       const result = createJob(db, req.postDataJSON());
+      state = loadWorkspaceStateFromDb(db);
+      return route.fulfill({ json: { ok: true, result, state } });
+    }
+    if (mode === "sqlite" && req.method() === "PATCH" && /^\/api\/jobs\/[^/]+$/.test(pathname)) {
+      const body = req.postDataJSON();
+      const result = updateJobDetails(db, pathname.split("/").at(-1), body.job || body);
       state = loadWorkspaceStateFromDb(db);
       return route.fulfill({ json: { ok: true, result, state } });
     }
@@ -128,6 +134,37 @@ async function choose(page, query = "14 Sesa", { touch = false } = {}) {
   else { await input.press("ArrowDown"); await input.press("Enter"); }
   await expect(page.getByRole("status").filter({ hasText: "Address selected" })).toBeVisible();
 }
+
+for (const mode of ["selection", "missing-key", "unavailable"]) test(`Job Details address editor uses Google and preserves Site coordinates: ${mode}`, async ({ page }) => {
+  const app = await workspace(page);
+  if (mode !== "missing-key") await mockPlaces(page, { fail: mode === "unavailable", detailsDelay: 600 });
+  const customersBefore = structuredClone(app.state().customers);
+  const job = app.state().jobs[0];
+  const origin = mode === "missing-key" ? missingKeyUrl : baseUrl;
+  await page.goto(`${origin}/jobs/${job.id}`);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const input = page.getByRole("combobox", { name: "Site address", exact: true });
+  const save = page.getByRole("button", { name: "Save changes", exact: true });
+  let address = "Manual fixture job address";
+  await input.fill(mode === "selection" ? "14 Sesa" : address);
+  if (mode === "selection") {
+    await expect(page.getByRole("option")).toBeVisible();
+    await input.press("ArrowDown");
+    await input.press("Enter");
+    await expect(save).toBeDisabled();
+    await expect(page.getByRole("status").filter({ hasText: "Address selected" })).toBeVisible();
+    address = selected.address;
+  } else {
+    await expect(page.getByRole("status").filter({ hasText: mode === "missing-key" ? "VITE_GOOGLE_MAPS_API_KEY" : "Google Places address lookup could not be loaded" })).toBeVisible();
+  }
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
+  expect(app.state().jobs.find((entry) => entry.id === job.id).jobAddress).toBe(address);
+  expect(app.state().customers).toEqual(customersBefore);
+  expect(app.calls.filter((call) => call.startsWith("PATCH "))).toEqual([`PATCH /api/jobs/${job.id}`]);
+  expect(app.calls.some((call) => /address\/autocomplete|map\/geocode/.test(call))).toBe(false);
+});
 
 for (const mode of ["sqlite", "json"]) test(`Create Customer saves primary Site metadata through ${mode} and survives reload`, async ({ page }) => {
   const app = await workspace(page, { mode }); await mockPlaces(page);
@@ -317,12 +354,12 @@ test("a saved Places fixture renders on live Google Maps without a geocoding cal
 });
 
 
-for (const flow of ['create-customer', 'edit-customer-site-link', 'create-site', 'edit-site']) test('active address route uses Google with no Geoapify dependency: ' + flow, async ({ page }) => {
+for (const flow of ['create-customer', 'edit-customer-site-link', 'create-site', 'edit-site']) test('active address route uses Google without a server autocomplete dependency: ' + flow, async ({ page }) => {
   const app = await workspace(page); await mockPlaces(page);
   let legacyRequests = 0;
   await page.route('**/api/address/autocomplete?**', (route) => {
     legacyRequests += 1;
-    return route.fulfill({ status: 503, json: { error: 'Address lookup is not configured. Add GEOAPIFY_API_KEY to .env.local.' } });
+    return route.fulfill({ status: 503, json: { error: 'Retired endpoint must not be called.' } });
   });
   const activeUrl = process.env.ELSET_GOOGLE_PLACES_ACTIVE_URL || baseUrl;
   if (flow === 'create-customer') {
@@ -342,7 +379,6 @@ for (const flow of ['create-customer', 'edit-customer-site-link', 'create-site',
   await page.getByRole('combobox', { name: 'Address', exact: true }).fill('33 garr');
   await expect(page.getByRole('option')).toContainText('33 Garrard Street');
   await expect(page.getByText('Google Maps', { exact: true })).toBeVisible();
-  await expect(page.getByText(/GEOAPIFY_API_KEY|Address lookup is not configured/)).toHaveCount(0);
   expect(legacyRequests).toBe(0);
   expect(app.calls.some((call) => call.includes('/api/address/autocomplete'))).toBe(false);
   expect(await page.evaluate(() => window.placesCalls.queries.at(-1).input)).toBe('33 garr');
@@ -357,7 +393,6 @@ test('missing Google key names the Vite variable and allows Customer and Site ma
   await page.getByLabel('Customer / company name').fill('Missing Google key fixture');
   await page.getByRole('combobox', { name: 'Address', exact: true }).fill('33 garr');
   await expect(page.getByRole('status').filter({ hasText: 'Google address lookup is not configured.' })).toContainText('VITE_GOOGLE_MAPS_API_KEY');
-  await expect(page.getByText(/GEOAPIFY_API_KEY/)).toHaveCount(0);
   await page.screenshot({ path: path.join(routeShots, 'missing-google-key.png'), fullPage: true });
   await page.getByRole('button', { name: 'Create Customer', exact: true }).click();
   await expect.poll(() => app.state().customers.some((customer) => customer.name === 'Missing Google key fixture')).toBe(true);
@@ -375,7 +410,7 @@ for (const customerMode of ['new', 'existing']) test('embedded Customer/Site cre
   let legacyRequests = 0;
   await page.route('**/api/address/autocomplete?**', (route) => {
     legacyRequests += 1;
-    return route.fulfill({ status: 503, json: { error: 'Address lookup is not configured. Add GEOAPIFY_API_KEY to .env.local.' } });
+    return route.fulfill({ status: 503, json: { error: 'Retired endpoint must not be called.' } });
   });
   const activeUrl = process.env.ELSET_GOOGLE_PLACES_ACTIVE_URL || baseUrl;
   await page.goto(activeUrl + '/jobs/new');

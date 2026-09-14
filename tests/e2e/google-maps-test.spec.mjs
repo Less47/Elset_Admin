@@ -6,6 +6,7 @@ import net from "node:net";
 import { fileURLToPath } from "node:url";
 import { themePresets } from "../../src/lib/theme-presets.js";
 import { readSavedPosition } from "../../src/components/map/google-map-data.js";
+import { indexCustomerSites, resolveJobSiteLocation } from "../../src/lib/site-location.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const screenshotDir = path.join(root, "test-results/google-map-promotion");
@@ -42,15 +43,84 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await missingKeyServer?.close(); await server?.close(); });
 
+function saveFixtureCoordinates(state, results) {
+  for (const job of state.jobs) {
+    const customer = state.customers.find((entry) => entry.id === job.customerId);
+    let site = customer.sites.find((entry) => entry.address === job.jobAddress);
+    if (!site) {
+      site = { ...customer.sites[0], id: `saved-${customer.id}-${customer.sites.length}`, address: job.jobAddress };
+      customer.sites.push(site);
+    }
+    const position = readSavedPosition(results.find((entry) => entry.jobId === job.id)?.location);
+    Object.assign(site, { latitude: position?.lat ?? null, longitude: position?.lng ?? null });
+  }
+}
+
+function savedResults(state, override = null) {
+  const index = indexCustomerSites(state.customers);
+  return state.jobs.map((job) => {
+    const resolved = resolveJobSiteLocation(job, index);
+    const location = override ? override.find((entry) => entry.jobId === job.id)?.location : resolved.position;
+    return { jobId: job.id, siteId: resolved.site?.id || null, location, reason: !resolved.site ? "site-not-found" : !location ? "site-missing-coordinates" : null };
+  });
+}
+
+test("live production-shaped dataset shows 204 unmapped then 175 after only linked Sites receive coordinates", async ({ page }) => {
+  test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
+  const state = structuredClone(fixture);
+  const customer = state.customers[0];
+  customer.sites = Array.from({ length: 161 }, (_, index) => ({ id: `audit-site-${index}`, address: `Fixture Site ${index}, Melbourne VIC` }));
+  const template = state.jobs[0];
+  state.jobs = Array.from({ length: 204 }, (_, index) => ({ ...template, id: `audit-job-${index}`, jobNumber: 9000 + index,
+    jobAddress: index < 175 ? customer.sites[index % 122].address : `Unlinked fixture address ${index % 24}` }));
+  const calls = await mockWorkspace(page, state);
+  await page.goto(`${process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl}/map`);
+  await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true", { timeout: 30_000 });
+  await expect(page.locator(".google-test-status")).toContainText("204 jobs · 0 mapped · 204 missing location");
+  await expect(page.locator(".google-test-status")).toContainText("29 without a matching saved Site");
+  await expect(page.locator(".google-test-pin")).toHaveCount(0);
+  const beforeJobs = JSON.stringify(state.jobs);
+  // Simulate a future approved backfill. Only the authoritative Site records change.
+  customer.sites.slice(0, 122).forEach((site, index) => Object.assign(site, { latitude: -37.8136 + (index % 3) * 0.0001, longitude: 144.9631 + (index % 3) * 0.0001 }));
+  await page.getByRole("button", { name: "Refresh coordinates", exact: true }).click();
+  await expect(page.locator(".google-test-status")).toContainText("204 jobs · 175 mapped · 29 missing location");
+  await expect(page.locator(".google-test-cluster")).toHaveText("175");
+  await page.locator(".google-test-cluster").click();
+  await expect(page.getByRole("complementary", { name: "Map job details" }).locator("article")).toHaveCount(175);
+  expect(JSON.stringify(state.jobs)).toBe(beforeJobs);
+  expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
+  expect(calls.some((call) => call.includes("geocode"))).toBe(false);
+});
+
+test("live Google uses the explicitly linked Site for a multi-site customer even when the Job address is stale", async ({ page }) => {
+  test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
+  const state = markerFixture();
+  const site = state.customers[0].sites.find((entry) => entry.address === "Nearby fixture Site");
+  state.jobs = [{ ...state.jobs[0], siteId: site.id }];
+  await mockWorkspace(page, state);
+  await page.goto(`${process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl}/map`);
+  await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true", { timeout: 30_000 });
+  await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-center", "-37.814000,144.964000");
+  await page.locator(".google-test-pin").click();
+  const panel = page.getByRole("complementary", { name: "Map job details" });
+  await expect(panel).toContainText("Nearby fixture Site");
+  const url = new URL(await panel.getByRole("link", { name: /^Navigate to/ }).getAttribute("href"));
+  expect(url.searchParams.get("destination")).toBe("-37.814,144.964");
+  await panel.getByRole("button", { name: "Open Site", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/sites/${site.id}$`));
+});
+
 function markerFixture() {
   const state = structuredClone(fixture);
   const source = { ...state.jobs[0], quote: null, invoice: null };
   state.jobs = [
     { ...source, id: "google-one", jobNumber: 7001, title: "Google test first job", latitude: -37.8136, longitude: 144.9631 },
     { ...source, id: "google-two", jobNumber: 7002, title: "Google test second job", location: { lat: -37.8136, lon: 144.9631 }, urgency: "High", status: "Completed" },
-    { ...source, id: "google-nearby", jobNumber: 7003, title: "Google test nearby job", lat: -37.814, lng: 144.964 },
-    { ...source, id: "google-missing", jobNumber: 7004, title: "Google test missing coordinates" },
+    { ...source, id: "google-nearby", jobAddress: "Nearby fixture Site", jobNumber: 7003, title: "Google test nearby job", lat: -37.814, lng: 144.964 },
+    { ...source, id: "google-missing", jobAddress: "Missing fixture Site", jobNumber: 7004, title: "Google test missing coordinates" },
   ];
+  saveFixtureCoordinates(state, state.jobs.map((job) => ({ jobId: job.id, location: readSavedPosition(job) })));
+  for (const job of state.jobs) for (const key of ["latitude", "longitude", "lat", "lng", "location"]) delete job[key];
   return state;
 }
 
@@ -64,10 +134,7 @@ async function mockWorkspace(page, state = markerFixture(), preferences = {}, co
     calls.push(`${request.method()} ${pathname}`);
     const json = pathname === "/api/auth/me" ? { user: { id: "google-test-user", name: "Map Test", role: "admin" } }
       : pathname === "/api/app-state" ? { state, storageMode: "sqlite" }
-        : pathname === "/api/map/locations" ? { source: "geoapify-runtime-cache", results: coordinateResults || state.jobs.map((job) => {
-          const position = readSavedPosition(job);
-          return { jobId: job.id, location: position ? { lat: position.lat, lon: position.lng } : null };
-        }) }
+        : pathname === "/api/map/locations" ? { source: "saved-site-coordinates", results: savedResults(state, coordinateResults) }
         : pathname === "/api/user-preferences" ? { preferences }
           : pathname === "/api/admin/user-accounts" ? { users: [] }
             : null;
@@ -118,25 +185,6 @@ test("missing key has a clear message without requesting Google or geocoding", a
   expect(googleRequests).toHaveLength(0);
   expect(calls.some((call) => /\/api\/map\/(config|geocode)/.test(call))).toBe(false);
   await capture(page, "missing-key-1440x900.png");
-});
-
-test("Legacy route keeps its tiles, markers and Job Details interaction", async ({ page }) => {
-  await mockWorkspace(page, fixture);
-  await page.route("**/api/map/config", (route) => route.fulfill({ json: { tiles: { url: `${baseUrl}/__map-tile/{z}/{x}/{y}.svg`, retinaUrl: `${baseUrl}/__map-tile/{z}/{x}/{y}.svg`, attribution: "Test tile", maxZoom: 20 } } }));
-  await page.route("**/__map-tile/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#dce8ed"/></svg>' }));
-  await page.route("**/api/map/geocode", (route) => route.fulfill({ json: { results: route.request().postDataJSON().addresses.map((address) => ({ address, location: { lat: -37.8136, lon: 144.9631 } })) } }));
-  await page.goto(`${baseUrl}/map/legacy`);
-  await expect(page.locator(".leaflet-marker-icon")).toHaveCount(1);
-  await expect(page.locator("[data-google-map-workspace]")).toHaveCount(0);
-  await expect(page.locator('script[src*="maps.googleapis.com/maps/api/js"]')).toHaveCount(0);
-  await page.locator(".leaflet-marker-icon").click();
-  await expect(page.locator(".leaflet-popup")).toContainText(fixture.jobs[0].title);
-  await capture(page, "geoapify-regression-fixture-1440x900.png");
-  await page.getByRole("button", { name: "Job Details", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/jobs/${fixture.jobs[0].id}$`));
-  await page.goBack();
-  await expect(page.locator(".leaflet-marker-icon")).toHaveCount(1);
-  await expect(page).toHaveURL(/\/map\/legacy$/);
 });
 
 test("blocked Google request reports an error and leaves navigation usable", async ({ page }) => {
@@ -242,7 +290,7 @@ test("live Google shows address-only jobs as unmapped and themes its controls", 
   await mockWorkspace(page, fixture, themePresets.find((preset) => preset.id === "midnight-signal").values);
   await page.goto(`${process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl}/map`);
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true", { timeout: 30_000 });
-  await expect(page.locator(".google-test-status")).toContainText("1 without coordinates");
+  await expect(page.locator(".google-test-status")).toContainText("1 missing location");
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-center", "-37.813600,144.963100");
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-zoom", "10");
   await expect(page.locator(".google-test-pin")).toHaveCount(0);
@@ -271,86 +319,45 @@ function parityFixture(denseCount = 0) {
   const results = state.jobs.map((job, index) => ({ jobId: job.id, location: denseCount
     ? { lat: -37.8136 + (index % 12) * 0.0001, lon: 144.9631 + (index % 12) * 0.0001 }
     : positions[addresses.indexOf(job.jobAddress)] }));
+  saveFixtureCoordinates(state, results);
   return { state, results };
 }
 
-async function mockLegacyComparison(page, state, results) {
-  const byAddress = new Map(state.jobs.map((job) => [job.jobAddress, results.find((entry) => entry.jobId === job.id)?.location || null]));
-  const env = loadEnv("development", root, "");
-  const tileKey = env.GEOAPIFY_MAPS_API_KEY || env.GEOAPIFY_API_KEY;
-  const tiles = live && tileKey ? {
-    url: `https://maps.geoapify.com/v1/tile/${env.GEOAPIFY_MAP_STYLE || "osm-bright"}/{z}/{x}/{y}.png?apiKey=${tileKey}`,
-    retinaUrl: `https://maps.geoapify.com/v1/tile/${env.GEOAPIFY_MAP_STYLE || "osm-bright"}/{z}/{x}/{y}@2x.png?apiKey=${tileKey}`,
-    attribution: 'Powered by Geoapify | © OpenMapTiles © OpenStreetMap', maxZoom: 20,
-  } : { url: `${baseUrl}/__map-tile/{z}/{x}/{y}.svg`, retinaUrl: `${baseUrl}/__map-tile/{z}/{x}/{y}.svg`, attribution: "Test tile", maxZoom: 20 };
-  await page.route("**/api/map/config", (route) => route.fulfill({ json: { tiles } }));
-  await page.route("**/__map-tile/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#dce8ed"/></svg>' }));
-  await page.route("**/api/map/geocode", (route) => route.fulfill({ json: { results: route.request().postDataJSON().addresses.map((address) => ({ address, location: byAddress.get(address) || null })) } }));
-}
-
-test("live providers have matching record coverage for all search and filter states", async ({ browser }) => {
+test("live Google preserves record coverage for all search and keyboard filter states", async ({ page }) => {
   test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
   const { state, results } = parityFixture();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const googlePage = await context.newPage(), legacyPage = await context.newPage();
-  await googlePage.addInitScript(() => {
-    window.mapComparisonFocusCount = 0;
-    window.addEventListener("focus", () => { window.mapComparisonFocusCount++; });
-  });
-  const comparison = [];
-  try {
-    const googleCalls = await mockWorkspace(googlePage, state, {}, results);
-    await mockWorkspace(legacyPage, state, {}, results);
-    await mockLegacyComparison(legacyPage, state, results);
-    await legacyPage.goto(`${baseUrl}/map/legacy`);
-    await googlePage.goto(`${process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl}/map`);
-    await expect(googlePage.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true");
-    const cases = [
-      { name: "default", count: 11 },
-      { name: "job-number", search: "8001", count: 1 },
-      { name: "customer", search: "Arcadia Example", count: 8 },
-      { name: "address", search: "Box Hill", count: 1 },
-      { name: "title", search: "Parity gate service 5", count: 1 },
-      { name: "completed", jobFilter: "Completed", count: 4 },
-      { name: "incomplete", jobFilter: "Incomplete", count: 7 },
-      { name: "urgent", jobFilter: "Urgent", count: 6 },
-      { name: "site-type", siteType: "Commercial", count: 3 },
-      { name: "customer-type", customerType: "Strata", count: 8 },
-      { name: "not-set", siteType: "Not set", count: 0 },
-      { name: "no-coordinates", search: "Unresolved test address", count: 0 },
-    ];
-    for (const scenario of cases) {
-      for (const [page, legacy] of [[googlePage, false], [legacyPage, true]]) {
-        await page.getByRole("textbox", { name: "Search map jobs" }).fill(scenario.search || "");
-        for (const [label, option] of [[legacy ? "Job filter" : "Jobs", scenario.jobFilter || "All Jobs"], ["Site type", scenario.siteType || "All site types"], ["Customer type", scenario.customerType || "All customer types"]]) {
-          await page.getByRole("combobox", { name: label, exact: true }).click();
-          await page.getByRole("option", { name: option, exact: true }).click();
-        }
-      }
-      await expect(legacyPage.locator(".leaflet-marker-icon")).toHaveCount(scenario.count);
-      await expect(googlePage.locator(".google-test-status")).toHaveAttribute("data-eligible-count", String(scenario.count));
-      await expect(googlePage.locator(".google-test-status")).toHaveAttribute("data-geoapify-cache-count", String(scenario.count));
-      comparison.push({ state: scenario.name, geoapify: scenario.count, google: scenario.count });
-      if (scenario.name === "default" || scenario.name === "urgent") {
-        await capture(googlePage, `parity-google-${scenario.name}-1440x900.png`);
-        await legacyPage.waitForTimeout(1000);
-        await capture(legacyPage, `parity-geoapify-${scenario.name}-1440x900.png`);
-        if (scenario.name === "default") {
-          for (const [page, provider] of [[googlePage, "google"], [legacyPage, "geoapify"]]) {
-            await page.setViewportSize({ width: 390, height: 844 });
-            await capture(page, `primary-comparison-${provider}-390x844.png`);
-            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-            await page.setViewportSize({ width: 1440, height: 900 });
-          }
-        }
-      }
+  const calls = await mockWorkspace(page, state, {}, results);
+  await page.goto(`${process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl}/map`);
+  await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true");
+  const cases = [
+    { name: "default", count: 11 },
+    { name: "job-number", search: "8001", count: 1 },
+    { name: "customer", search: "Arcadia Example", count: 8 },
+    { name: "address", search: "Box Hill", count: 1 },
+    { name: "title", search: "Parity gate service 5", count: 1 },
+    { name: "completed", jobFilter: "Completed", count: 4 },
+    { name: "incomplete", jobFilter: "Incomplete", count: 7 },
+    { name: "urgent", jobFilter: "Urgent", count: 6 },
+    { name: "site-type", siteType: "Commercial", count: 3 },
+    { name: "customer-type", customerType: "Strata", count: 8 },
+    { name: "not-set", siteType: "Not set", count: 0 },
+    { name: "no-coordinates", search: "Unresolved test address", count: 0 },
+  ];
+  for (const scenario of cases) {
+    await page.getByRole("textbox", { name: "Search map jobs" }).fill(scenario.search || "");
+    for (const [label, option] of [["Jobs", scenario.jobFilter || "All Jobs"], ["Site type", scenario.siteType || "All site types"], ["Customer type", scenario.customerType || "All customer types"]]) {
+      const trigger = page.getByRole("combobox", { name: label, exact: true });
+      await trigger.press("Space");
+      const item = page.getByRole("option", { name: option, exact: true });
+      await expect(item).toBeVisible();
+      await item.press("Enter");
+      await expect(trigger).toHaveText(option);
     }
-    const focusRefreshes = await googlePage.evaluate(() => window.mapComparisonFocusCount);
-    expect(googleCalls.filter((call) => call === "GET /api/map/locations").length).toBeLessThanOrEqual(2 + focusRefreshes);
-    expect(googleCalls.every((call) => call.startsWith("GET "))).toBe(true);
-    expect(googleCalls.some((call) => call.includes("/api/map/geocode"))).toBe(false);
-    fs.writeFileSync(path.join(screenshotDir, "parity-counts.json"), JSON.stringify(comparison, null, 2));
-  } finally { await context.close(); }
+    await expect(page.locator(".google-test-status")).toHaveAttribute("data-eligible-count", String(scenario.count));
+    await expect(page.locator(".google-test-status")).toHaveAttribute("data-site-coordinate-count", String(scenario.count));
+  }
+  expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
+  expect(calls.some((call) => /\/api\/map\/(config|geocode)/.test(call))).toBe(false);
 });
 
 test("live dense clusters expose every job, retain viewport, and work with touch and dark theme", async ({ browser }) => {
@@ -402,29 +409,29 @@ test("live dense clusters expose every job, retain viewport, and work with touch
   } finally { await context.close(); }
 });
 
-test("live cache refresh adds existing coordinates without geocoding or changing records", async ({ page }) => {
+test("live Site refresh reads persisted coordinates without geocoding or changing records", async ({ page }) => {
   test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
   const { state, results } = parityFixture();
   const before = JSON.stringify(state);
   const calls = await mockWorkspace(page, state);
   let warmed = false;
-  await page.route("**/api/map/locations", (route) => route.fulfill({ json: { source: "geoapify-runtime-cache",
-    results: warmed ? results : state.jobs.map((job) => ({ jobId: job.id, location: null })),
+  await page.route("**/api/map/locations", (route) => route.fulfill({ json: { source: "saved-site-coordinates",
+    results: savedResults(state, warmed ? results : state.jobs.map((job) => ({ jobId: job.id, location: null }))),
   } }));
   await page.goto(`${process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl}/map`);
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true");
   await expect(page.locator(".google-test-status")).toHaveAttribute("data-eligible-count", "0");
-  await expect(page.locator(".google-test-status")).toContainText("12 without coordinates");
-  warmed = true; // Simulates the original map having resolved its existing addresses.
+  await expect(page.locator(".google-test-status")).toContainText("12 missing location");
+  warmed = true; // Simulates a completed Site coordinate backfill, with no Job writes.
   await page.getByRole("button", { name: "Refresh coordinates", exact: true }).click();
   await expect(page.locator(".google-test-status")).toHaveAttribute("data-eligible-count", "11");
-  await expect(page.locator(".google-test-status")).toHaveAttribute("data-geoapify-cache-count", "11");
+  await expect(page.locator(".google-test-status")).toHaveAttribute("data-site-coordinate-count", "11");
   expect(calls.some((call) => call.includes("/api/map/geocode"))).toBe(false);
   expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
   expect(JSON.stringify(state)).toBe(before);
 });
 
-test("live primary route supports the sidebar, direct load, refresh and retired URL", async ({ page }) => {
+test("live primary route supports the sidebar, direct load and refresh", async ({ page }) => {
   test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
   const calls = await mockWorkspace(page);
   const loadedModules = [];
@@ -433,7 +440,6 @@ test("live primary route supports the sidebar, direct load, refresh and retired 
   await page.goto(origin);
   const sidebar = page.locator("aside").first();
   await expect(sidebar.getByRole("button", { name: "Map", exact: true })).toHaveCount(1);
-  await expect(sidebar.getByRole("button", { name: /Google Map|Legacy Map|Geoapify Map/ })).toHaveCount(0);
   await sidebar.getByRole("button", { name: "Map", exact: true }).click();
   await expect(page).toHaveURL(`${origin}/map`);
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true");
@@ -445,9 +451,6 @@ test("live primary route supports the sidebar, direct load, refresh and retired 
   await expect(page).toHaveURL(`${origin}/map`);
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true");
   await expect(page.locator(".google-test-status")).toHaveAttribute("data-eligible-count", "3");
-  await page.goto(`${origin}/map/google-test/?comparison=1#saved-link`);
-  await expect(page).toHaveURL(`${origin}/map?comparison=1#saved-link`);
-  await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true");
   expect(calls.some((call) => /\/api\/map\/(config|geocode)/.test(call))).toBe(false);
   expect(loadedModules.some((pathname) => /JobsMapManager|\/leaflet[./]/i.test(pathname))).toBe(false);
   expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
@@ -487,7 +490,7 @@ for (const themeId of ["elset", "evergreen-ledger", "midnight-signal"]) {
   });
 }
 
-test("live production build serves Google at map and lazy legacy fallback", async ({ browser }) => {
+test("live production build serves Google at the only map route", async ({ browser }) => {
   test.skip(!live || !configuredKey, "Requires a build and live Maps JavaScript API");
   const origin = process.env.ELSET_GOOGLE_MAPS_TEST_URL || baseUrl;
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -498,7 +501,7 @@ test("live production build serves Google at map and lazy legacy fallback", asyn
     // App APIs remain isolated fixtures; Google network requests stay live.
     await page.route("**/*", (route) => {
       const url = new URL(route.request().url());
-      if (url.origin !== origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/__map-tile/")) return route.fallback();
+      if (url.origin !== origin || url.pathname.startsWith("/api/")) return route.fallback();
       const relative = url.pathname.startsWith("/assets/") ? url.pathname.slice(1) : "index.html";
       const file = path.resolve(root, "dist", relative);
       if (!file.startsWith(path.resolve(root, "dist") + path.sep)) return route.abort();
@@ -514,11 +517,18 @@ test("live production build serves Google at map and lazy legacy fallback", asyn
     expect(assets.some((asset) => asset.includes("JobsMapManager"))).toBe(false);
     expect(calls.some((call) => /\/api\/map\/(config|geocode)/.test(call))).toBe(false);
     await capture(page, "production-primary-1440x900.png");
-    await mockLegacyComparison(page, markerFixture(), markerFixture().jobs.map((job) => ({ jobId: job.id, location: { lat: -37.8136, lon: 144.9631 } })));
-    await page.goto(`${origin}/map/legacy`);
-    await expect(page.locator(".leaflet-marker-icon")).toHaveCount(4);
-    await expect(page.locator("[data-google-map-canvas]")).toHaveCount(0);
-    await expect(page.locator('script[src*="maps.googleapis.com/maps/api/js"]')).toHaveCount(0);
-    expect(assets.some((asset) => asset.includes("JobsMapManager"))).toBe(true);
   } finally { await context.close(); }
+});
+
+for (const retiredPath of ["/map/legacy", "/map/google-test"]) test("retired map route is unavailable: " + retiredPath, async ({ page }) => {
+  const calls = await mockWorkspace(page);
+  let googleRequests = 0;
+  page.on("request", (request) => { if (new URL(request.url()).hostname.endsWith("googleapis.com")) googleRequests++; });
+  await page.addInitScript(() => history.replaceState({ elsetWorkspace: { section: "map", sourceSection: "map" } }, "", location.href));
+  await page.goto(baseUrl + retiredPath);
+  await expect(page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Service Board", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("[data-google-map-canvas], [data-map-canvas]")).toHaveCount(0);
+  await expect(page).toHaveURL(baseUrl + retiredPath);
+  expect(googleRequests).toBe(0);
+  expect(calls.some((call) => /\/api\/map\//.test(call))).toBe(false);
 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
-import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import SiteNavigationLink from "@/components/shared/SiteNavigationLink";
 import { Badge } from "@/components/ui/badge";
@@ -119,6 +119,7 @@ export default function JobDetailsPage({
   const [note, setNote] = useState("");
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [isSavingOverview, setIsSavingOverview] = useState(false);
+  const [addressPending, setAddressPending] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [pendingStatus, setPendingStatus] = useState("");
   const [pageError, setPageError] = useState("");
@@ -179,7 +180,7 @@ export default function JobDetailsPage({
   const invoicePayment = getInvoicePaymentSummary(job.invoice);
   const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
   const canSaveOverview = Boolean(
-    overviewDraft.title.trim() && overviewDraft.description.trim() && normalizeSiteAddress(overviewDraft.jobAddress)
+    !addressPending && overviewDraft.title.trim() && overviewDraft.description.trim() && normalizeSiteAddress(overviewDraft.jobAddress)
   );
   const visibleTabs = [
     { value: "overview", label: "Overview" },
@@ -314,7 +315,7 @@ export default function JobDetailsPage({
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-address">Site address</Label>
-                          <AddressAutocompleteInput id="edit-job-address" className="h-11" value={overviewDraft.jobAddress} onChange={(value) => setOverviewDraft((current) => ({ ...current, jobAddress: value }))} placeholder="Search the job site address" />
+                          <GoogleAddressAutocompleteInput id="edit-job-address" className="h-11" value={{ address: overviewDraft.jobAddress }} onSelectionPending={setAddressPending} onChange={(value) => setOverviewDraft((current) => ({ ...current, jobAddress: value.address }))} placeholder="Search the job site address" />
                           {!normalizeSiteAddress(overviewDraft.jobAddress) ? <p className="text-sm text-status-danger">This field is required.</p> : null}
                         </div>
                         {customerSites.length > 0 ? (
@@ -322,7 +323,7 @@ export default function JobDetailsPage({
                             <p className="text-sm font-medium text-text-secondary">Saved sites</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {customerSites.map((site) => (
-                                <Button key={site.id} type="button" variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address }))}>
+                                <Button key={site.id} type="button" disabled={addressPending} variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address }))}>
                                   <span className="truncate">{site.address}</span>
                                 </Button>
                               ))}

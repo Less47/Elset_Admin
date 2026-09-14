@@ -15,3 +15,5 @@ backups/
 *.db-wal
 *.db-shm
 *.db-journal
+test-results/
+playwright-report/

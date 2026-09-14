@@ -35,7 +35,6 @@ test("all existing job-opening surfaces retain the centralized page navigator", 
     "CalendarManager",
     "InvoiceManager",
     "MaintenanceManager",
-    "LegacyJobsMap",
     "GoogleJobsMap",
   ]) {
     assert.match(shellSource, new RegExp(`<${component}[\\s\\S]*?onOpenJob=\\{handleOpenJob\\}`));
@@ -166,7 +165,7 @@ test("database pages share accessible responsive and desktop page controls", () 
   assert.match(styles, /\.page-controls__filter--medium,[\s\S]*?width: 9rem/);
   assert.match(styles, /\.page-controls__filter--large[\s\S]*?width: 11rem/);
 
-  const mapSource = readSource("src/components/map/JobsMapManager.jsx");
+  const mapSource = readSource("src/components/map/GoogleMapFilters.jsx");
   assert.match(mapSource, /<ResponsivePageControls/);
   assert.match(mapSource, /map-desktop-filter-bar[^"]*hidden[^"]*xl:block/);
 });
@@ -206,16 +205,16 @@ test("database pages declare the shared semantic phone record system and desktop
 
 test("Map owns an edge-to-edge, resize-aware workspace instead of a contained card", () => {
   const shellSource = readSource("src/components/app/WorkspaceShell.jsx");
-  const mapSource = readSource("src/components/map/JobsMapManager.jsx");
+  const mapSource = readSource("src/components/map/GoogleJobsMap.jsx");
 
   assert.match(shellSource, /mapWorkspaceOpen/);
   assert.match(shellSource, /map-workspace-shell[^"]*lg:pl-\[var\(--sidebar-width\)\]/);
-  assert.match(mapSource, /data-map-workspace/);
-  assert.match(mapSource, /data-map-canvas/);
-  assert.match(mapSource, /map-filter-surface/);
+  assert.match(mapSource, /data-google-map-workspace/);
+  assert.match(mapSource, /data-google-map-canvas/);
+  assert.match(readSource("src/components/map/GoogleMapFilters.jsx"), /map-filter-surface/);
   assert.match(mapSource, /ResizeObserver/);
-  assert.match(mapSource, /invalidateSize/);
-  assert.match(mapSource, /L\.control\.zoom\(\{ position: "bottomright" \}\)/);
+  assert.match(mapSource, /event\.trigger\(map, "resize"\)/);
+  assert.match(mapSource, /zoomControl: true/);
   assert.doesNotMatch(mapSource, /<Card|<CardContent|h-\[60vh\]|calc\(100vh-18rem\)/);
 });
 
@@ -227,7 +226,7 @@ test("secondary page filters move into shared sheets while Staff avoids a redund
     "src/components/invoices/InvoiceManager.jsx",
     "src/components/maintenance/MaintenanceManager.jsx",
     "src/components/inventory/InventoryManager.jsx",
-    "src/components/map/JobsMapManager.jsx",
+    "src/components/map/GoogleMapFilters.jsx",
   ]) {
     assert.match(readSource(relativePath), /<MobileFilterSheet/);
   }

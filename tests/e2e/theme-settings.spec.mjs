@@ -321,7 +321,7 @@ async function assertDarkSurfaces(page, label) {
     return [...document.querySelectorAll('body *')].flatMap(el => {
       const r = el.getBoundingClientRect(), style = getComputedStyle(el);
       if (r.width * r.height < 1200 || r.width < 35 || r.height < 20 || r.bottom < 0 || r.top > innerHeight || style.visibility === 'hidden'
-        || el.closest('[data-theme-sample], .bg-paper, iframe, .leaflet-tile-pane, .leaflet-control-attribution') || ['IMG', 'CANVAS'].includes(el.tagName)) return [];
+        || el.closest('[data-theme-sample], .bg-paper, iframe') || ['IMG', 'CANVAS'].includes(el.tagName)) return [];
       ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = style.backgroundColor; ctx.fillRect(0, 0, 1, 1);
       const [red, green, blue, alpha] = ctx.getImageData(0, 0, 1, 1).data;
       return red > 225 && green > 225 && blue > 225 && alpha > 210 ? [{ tag: el.tagName, class: String(el.className).slice(0, 160), background: style.backgroundColor }] : [];
@@ -589,30 +589,6 @@ test('semantic presets save once under rapid switching and Midnight stays privat
   } finally { await Promise.all([a.context.close(), b.context.close()]); }
 });
 
-test('semantic legacy map marker popups and tooltips use themed chrome with provider fixtures', async ({ browser }) => {
-  const a = await openSettings(browser);
-  const page = a.page;
-  try {
-    await page.getByRole('button', { name: /^Midnight Signal/ }).click();
-    await expect(status(page)).toHaveText('Saved');
-    // The isolated server has no provider key. Fixture only the provider data;
-    // the real Leaflet map, markers, controls, tooltip and popup are rendered.
-    await page.route('**/api/map/config', route => route.fulfill({ json: { tiles: { url: `${baseUrl}/__theme_tile/{z}/{x}/{y}.svg`, retinaUrl: `${baseUrl}/__theme_tile/{z}/{x}/{y}.svg`, maxZoom: 20, attribution: 'Theme test tile fixture' } } }));
-    await page.route('**/api/map/geocode', route => route.fulfill({ json: { results: route.request().postDataJSON().addresses.map(address => ({ address, location: { lat: -37.8136, lon: 144.9631 } })) } }));
-    await page.route('**/__theme_tile/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#dce8ed"/><path d="M0 100H256M120 0V256" stroke="#fafafa" stroke-width="16"/></svg>' }));
-    await page.goto(baseUrl + '/map/legacy');
-    const marker = page.locator('.leaflet-marker-icon');
-    await expect(marker).toBeVisible();
-    await marker.hover();
-    await expect(page.locator('.leaflet-tooltip')).toBeVisible();
-    await themeScreenshot(page, 'midnight-1440-map-tooltip');
-    await marker.click();
-    await expect(page.locator('.leaflet-popup-content')).toBeVisible();
-    await themeScreenshot(page, 'midnight-1440-map-popup');
-    await expect(page.locator('.leaflet-popup-content-wrapper')).toHaveCSS('background-color', 'rgb(22, 34, 53)');
-  } finally { await a.context.close(); }
-});
-
 test('semantic custom popup colours select a safe local foreground independently of Midnight', async ({ browser }) => {
   const a = await openSettings(browser);
   try {
@@ -661,7 +637,14 @@ test('semantic mobile fields, autocomplete, focus, drawers and discard dialogs r
     await expect(date).not.toHaveCSS('box-shadow', 'none');
     await expect(page.getByRole('button', { name: 'Create Plan', exact: true })).toBeDisabled();
     await themeScreenshot(page, 'midnight-390-date-and-disabled');
-    await page.route('**/api/address/autocomplete?**', route => route.fulfill({ json: { suggestions: [{ formatted: '10 Example Lane, Sampleton VIC 3000', addressLine1: '10 Example Lane', addressLine2: 'Sampleton VIC 3000' }] } }));
+    await page.addInitScript(() => {
+      window.google = { maps: { importLibrary: async () => ({
+        AutocompleteSessionToken: class {},
+        AutocompleteSuggestion: { fetchAutocompleteSuggestions: async () => ({ suggestions: [
+          { placePrediction: { placeId: 'theme-address', text: { toString: () => '10 Example Lane, Sampleton VIC 3000' } } },
+        ] }) },
+      }) } };
+    });
     await page.goto(baseUrl + '/customers/new');
     await page.getByLabel('Address', { exact: true }).fill('10 Example');
     await expect(page.getByRole('option').first()).toBeVisible();
