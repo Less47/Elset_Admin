@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
@@ -21,6 +21,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
   const [draftSite, setDraftSite] = useState(initial);
   const [newAssetDraft, setNewAssetDraft] = useState(EMPTY_ASSET);
   const [saving, setSaving] = useState(false);
+  const [addressPending, setAddressPending] = useState(false);
   const [error, setError] = useState("");
   const submitting = useRef(false);
   const dirty = isEditingSite && (JSON.stringify(draftSite) !== JSON.stringify(initial) || JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET));
@@ -31,7 +32,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
   const siteJobs = [...jobs].filter((job) => normalizeSiteAddress(job.jobAddress).toLowerCase() === activeAddress.toLowerCase()).sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt));
   const openJobs = siteJobs.filter((job) => job.status !== "Completed").length;
   const hasSavedProfile = Boolean(site?.siteProfileId);
-  const canSave = Boolean(activeAddress) && !saving;
+  const canSave = Boolean(activeAddress) && !saving && !addressPending;
   const canAddAsset = Boolean(newAssetDraft.name.trim());
   const updateDraftAsset = (assetId, key, value) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.map((asset) => asset.id === assetId ? { ...asset, [key]: value } : asset) }));
   const removeDraftAsset = (assetId) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.filter((asset) => asset.id !== assetId) }));
@@ -63,9 +64,10 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
                 {isEditingSite ? (
                   <>
                     <FormField label="Address">
-                      <AddressAutocompleteInput
-                        value={draftSite.address}
-                        onChange={(value) => setDraftSite((prev) => ({ ...prev, address: value }))}
+                      <GoogleAddressAutocompleteInput
+                        value={draftSite}
+                        onChange={(address) => setDraftSite((current) => ({ ...current, ...address }))}
+                        onSelectionPending={setAddressPending}
                         placeholder="Search this site address"
                       />
                     </FormField>

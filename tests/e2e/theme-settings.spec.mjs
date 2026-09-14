@@ -589,7 +589,7 @@ test('semantic presets save once under rapid switching and Midnight stays privat
   } finally { await Promise.all([a.context.close(), b.context.close()]); }
 });
 
-test('semantic map marker popups and tooltips use themed chrome with provider fixtures', async ({ browser }) => {
+test('semantic legacy map marker popups and tooltips use themed chrome with provider fixtures', async ({ browser }) => {
   const a = await openSettings(browser);
   const page = a.page;
   try {
@@ -600,7 +600,7 @@ test('semantic map marker popups and tooltips use themed chrome with provider fi
     await page.route('**/api/map/config', route => route.fulfill({ json: { tiles: { url: `${baseUrl}/__theme_tile/{z}/{x}/{y}.svg`, retinaUrl: `${baseUrl}/__theme_tile/{z}/{x}/{y}.svg`, maxZoom: 20, attribution: 'Theme test tile fixture' } } }));
     await page.route('**/api/map/geocode', route => route.fulfill({ json: { results: route.request().postDataJSON().addresses.map(address => ({ address, location: { lat: -37.8136, lon: 144.9631 } })) } }));
     await page.route('**/__theme_tile/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#dce8ed"/><path d="M0 100H256M120 0V256" stroke="#fafafa" stroke-width="16"/></svg>' }));
-    await navigate(page, 'Map', 1440);
+    await page.goto(baseUrl + '/map/legacy');
     const marker = page.locator('.leaflet-marker-icon');
     await expect(marker).toBeVisible();
     await marker.hover();

@@ -37,6 +37,7 @@ import { registerInventoryRoutes } from "./server-inventory-routes.js";
 import { registerJobRoutes } from "./server-job-routes.js";
 import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
+import { createMapLocationsRouter } from "./server-map-locations-routes.js";
 import { createWorkspaceLogoRouter } from "./server-workspace-logo-routes.js";
 import { createUserPreferencesRouter } from "./server-user-preferences-routes.js";
 import { registerStaffRoutes } from "./server-staff-routes.js";
@@ -343,6 +344,14 @@ export function createServerApp() {
   app.all("/api/auth/{*any}", toNodeHandler(auth));
   app.use("/api/admin/workspace-restore", express.json({ limit: MAX_SQLITE_BACKUP_PAYLOAD_BYTES }));
   app.use(express.json({ limit: "15mb" }));
+  app.use(createMapLocationsRouter({
+    requireAuth,
+    requireRole,
+    readWorkspace: (user) => getAuthorizedWorkspaceState(user),
+    getCachedLocation: (address) => geoapifyGeocodeCache.get(
+      `${getGeoapifyCountryCode() || "world"}:${String(address).trim().slice(0, MAX_ADDRESS_QUERY_LENGTH).toLowerCase()}`
+    ),
+  }));
 
   app.get("/api/health", (_req, res) => {
     const readiness = getWorkspaceReadinessStatus();

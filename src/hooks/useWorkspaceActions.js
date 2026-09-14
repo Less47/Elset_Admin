@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
-import { canonicalMaintenancePlanInput, maintenancePlanIdentity, updatedStructuredSiteAddress } from "@/lib/maintenance-plan";
+import { siteAddressMetadata, updatedSiteAddressMetadata } from "@/lib/site-location";
+import { canonicalMaintenancePlanInput, maintenancePlanIdentity } from "@/lib/maintenance-plan";
 import {
   addDaysToDateInput,
   buildContactSnapshot,
@@ -1476,7 +1477,7 @@ export function useWorkspaceActions({
   async function handleCreateCustomer(customerInput) {
     if (!canManageBusiness) return null;
 
-    const { primarySiteType = "", primaryOcNumber = "", ...customerFields } = customerInput || {};
+    const { primarySiteType = "", primaryOcNumber = "", primarySiteAddress = {}, ...customerFields } = customerInput || {};
     const createdAt = new Date().toISOString();
     const primaryAddress = normalizeSiteAddress(customerFields.address);
     const nextSites = primaryAddress
@@ -1484,6 +1485,7 @@ export function useWorkspaceActions({
           normalizeSiteProfileRecord({
             id: crypto.randomUUID(),
             address: primaryAddress,
+            ...siteAddressMetadata(primarySiteAddress),
             siteType: primarySiteType,
             ocNumber: primaryOcNumber,
             createdAt,
@@ -1540,7 +1542,7 @@ export function useWorkspaceActions({
       );
       const siteForSave = {
         ...normalizedSite,
-        ...updatedStructuredSiteAddress(existingSite, normalizedSite),
+        ...updatedSiteAddressMetadata(existingSite, normalizedSite),
         id: existingSite?.id || normalizedSite.id,
       };
       const saved = await saveCustomerApiRequest({
@@ -1575,7 +1577,7 @@ export function useWorkspaceActions({
         ...(existingSite || {}),
         ...normalizedSite,
         _inferredProfile: false,
-        ...updatedStructuredSiteAddress(existingSite, normalizedSite),
+        ...updatedSiteAddressMetadata(existingSite, normalizedSite),
         id: normalizedSite.id,
         createdAt:
           existingSite?.createdAt || normalizedSite.createdAt || new Date().toISOString(),

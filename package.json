@@ -24,6 +24,8 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.8",
+    "@googlemaps/js-api-loader": "^2.1.1",
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@tailwindcss/vite": "^4.2.2",
     "better-auth": "^1.6.16",
     "better-sqlite3": "^12.10.0",

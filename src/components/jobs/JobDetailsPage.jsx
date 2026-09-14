@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
 import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
+import SiteNavigationLink from "@/components/shared/SiteNavigationLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +27,7 @@ import {
   urgencyOptions,
 } from "@/lib/app-support";
 import { statuses, statusThemes } from "@/lib/job-status";
+import { jobNavigationDestination } from "@/lib/site-navigation";
 import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
 
 const UNASSIGNED_VALUE = "unassigned";
@@ -172,6 +174,7 @@ export default function JobDetailsPage({
       ? { id: "", name: job.customerName, role: "Billing contact", phone: job.customerPhone, email: job.customerEmail }
       : null);
   const siteAccessNote = getCustomerSiteAccessNote(customer, job.jobAddress);
+  const navigationDestination = jobNavigationDestination(job, currentJobSite);
   const invoiceStatus = getInvoiceStatus(job);
   const invoicePayment = getInvoicePaymentSummary(job.invoice);
   const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
@@ -261,7 +264,7 @@ export default function JobDetailsPage({
               </div>
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-1">
-              <InfoItem label="Site">{job.jobAddress || "Not set"}</InfoItem>
+              <InfoItem label="Site"><SiteNavigationLink destination={navigationDestination} /></InfoItem>
               <InfoItem label="Scheduled">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</InfoItem>
               <InfoItem label="Technician">{job.assignedTechnicianName || "Unassigned"}</InfoItem>
               <InfoItem label="Urgency"><Badge className={urgencyClassName(job.urgency)}>{job.urgency || "Low"}</Badge></InfoItem>
@@ -365,7 +368,7 @@ export default function JobDetailsPage({
                         <dl className="record-subtle-divider-y grid gap-x-4 gap-y-3 py-3 sm:grid-cols-2">
                           <InfoItem label="Customer">{job.customerName || "Not set"}</InfoItem>
                           <InfoItem label="Customer contact">{[job.customerPhone, job.customerEmail].filter(Boolean).join(" · ") || "Not set"}</InfoItem>
-                          <InfoItem label="Site">{job.jobAddress || "Not set"}</InfoItem>
+                          <InfoItem label="Site"><SiteNavigationLink destination={navigationDestination} /></InfoItem>
                           <InfoItem label="OC number">{currentJobSite?.ocNumber || "Not set"}</InfoItem>
                           <InfoItem label="Client reference / PO number">{job.ocNumber || "Not set"}</InfoItem>
                           {job.maintenancePlanName ? <InfoItem label="Maintenance plan">{job.maintenancePlanName}</InfoItem> : null}

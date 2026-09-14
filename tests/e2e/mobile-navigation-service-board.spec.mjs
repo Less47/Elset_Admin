@@ -1547,14 +1547,14 @@ test("tablet and desktop database pages retain their existing fitted result grid
   }
 });
 
-test("Map search and all secondary filters remain functional without stealing map interaction", async ({ browser }) => {
+test("Legacy Map search and all secondary filters remain functional without stealing map interaction", async ({ browser }) => {
   const width = 390;
   const context = await browser.newContext(mobileContextOptions(width, 844));
   const page = await context.newPage();
   try {
     await mockMapServices(page);
     await loginAs(page, "mobileadmin");
-    await navigateToWorkspaceSection(page, "Map", width);
+    await page.goto(`${baseUrl}/map/legacy`);
 
     const map = page.locator("[data-map-canvas]");
     const controls = page.locator("[data-responsive-page-controls]");
@@ -1610,7 +1610,7 @@ test("Map search and all secondary filters remain functional without stealing ma
   }
 });
 
-test("Map fills the application workspace across the responsive viewport matrix", async ({ browser }, testInfo) => {
+test("Legacy Map fills the application workspace across the responsive viewport matrix", async ({ browser }, testInfo) => {
   const screenshotSizes = new Set(["390x844", "820x1180", "1024x768", "1440x900"]);
   for (const viewport of [
     { width: 390, height: 844 },
@@ -1631,7 +1631,7 @@ test("Map fills the application workspace across the responsive viewport matrix"
     try {
       await mockMapServices(page);
       await loginAs(page, "mobileadmin", mobile);
-      await navigateToWorkspaceSection(page, "Map", viewport.width);
+      await page.goto(`${baseUrl}/map/legacy`);
       if (mobile) {
         await expect.poll(() => page.evaluate(() => document.body.hasAttribute("data-scroll-locked"))).toBe(false);
       }

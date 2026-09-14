@@ -234,7 +234,9 @@ export function FilterSheetField({ id, label, children }) {
 export function MobileFilterSheet({
   activeCount = 0,
   children,
+  className,
   description = "Refine the records shown on this page.",
+  modal = true,
   onOpenChange,
   onReset,
   open,
@@ -242,9 +244,9 @@ export function MobileFilterSheet({
   title = "Filters",
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={modal}>
       <DialogContent
-        className={responsiveSheetClassName}
+        className={cn(responsiveSheetClassName, className)}
         showCloseButton={false}
         onCloseAutoFocus={(event) => {
           event.preventDefault();

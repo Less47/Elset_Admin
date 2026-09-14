@@ -4,7 +4,7 @@ import {
   restoreMaintenancePlansForCustomer,
 } from "./server-workspace-maintenance.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
-import { structuredSiteAddress, updatedStructuredSiteAddress } from "./src/lib/maintenance-plan.js";
+import { siteAddressMetadata, updatedSiteAddressMetadata } from "./src/lib/site-location.js";
 
 const customerTypeValues = new Set(["homeowner", "strata", "property-manager", "builder", "business", "government", "other", ""]);
 const siteTypeValues = new Set(["residential", "commercial", "industrial", "mixed-use", "other", ""]);
@@ -98,6 +98,7 @@ const customerKnownKeys = new Set([
   "updatedAt",
 ]);
 const siteKnownKeys = new Set([
+  "extra",
   "_inferredProfile",
   "id",
   "label",
@@ -171,7 +172,7 @@ function normalizeSiteRecord(site, fallbackAddress = "") {
   if (!address) return null;
 
   return {
-    ...structuredSiteAddress(site),
+    ...siteAddressMetadata(site),
     id: trimText(site.id) || crypto.randomUUID(),
     label: trimText(site.label),
     address,
@@ -184,7 +185,7 @@ function normalizeSiteRecord(site, fallbackAddress = "") {
     createdAt: trimText(site.createdAt) || nowIso(),
     updatedAt: trimText(site.updatedAt || site.createdAt) || nowIso(),
     assets: normalizeAssets(site.assets),
-    extra: pickExtra(site, siteKnownKeys),
+    extra: { ...(site.extra || {}), ...pickExtra(site, siteKnownKeys), ...siteAddressMetadata(site) },
   };
 }
 
@@ -703,7 +704,7 @@ export function updateCustomerSite(db, customerIdInput, siteIdInput, input) {
       throw new WorkspaceCustomerError("Site not found.", 404);
     }
 
-    const nextSite = normalizeSiteRecord({ ...existingSite, ...updatedStructuredSiteAddress(existingSite, input), ...input, id: siteId, createdAt: existingSite.createdAt });
+    const nextSite = normalizeSiteRecord({ ...existingSite, ...input, ...updatedSiteAddressMetadata(existingSite, input), id: siteId, createdAt: existingSite.createdAt });
     if (!nextSite) {
       throw new WorkspaceCustomerError("Site address is required.");
     }

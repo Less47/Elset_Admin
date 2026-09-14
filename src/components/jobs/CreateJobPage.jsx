@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Plus, Search, UserRound } from "lucide-react";
-import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,6 +95,7 @@ export default function CreateJobPage({
   const [touched, setTouched] = useState({});
   const [isDirty, setIsDirty] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addressPending, setAddressPending] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const submittingRef = useRef(false);
   const initializedCustomerIdRef = useRef(null);
@@ -196,7 +197,7 @@ export default function CreateJobPage({
   const hasAddress = Boolean(normalizeSiteAddress(selectedJobAddress));
   const hasTitle = Boolean(job.title.trim());
   const hasDescription = Boolean(job.description.trim());
-  const canSave = hasCustomer && hasAddress && hasTitle && hasDescription && !isSubmitting;
+  const canSave = hasCustomer && hasAddress && hasTitle && hasDescription && !isSubmitting && !addressPending;
 
   const selectCustomer = (entry) => {
     markDirty();
@@ -514,13 +515,14 @@ export default function CreateJobPage({
               ) : null}
               <div className="grid gap-1.5">
                 <Label htmlFor="new-site-address">{customerMode === "new" ? "Primary site address" : "Site address"}</Label>
-                <AddressAutocompleteInput
+                <GoogleAddressAutocompleteInput
                   id="new-site-address"
-                  value={siteDraft.address}
+                  value={siteDraft}
+                  onSelectionPending={setAddressPending}
                   onBlur={() => setTouched((current) => ({ ...current, site: true }))}
-                  onChange={(value) => {
+                  onChange={(address) => {
                     markDirty();
-                    setSiteDraft((current) => ({ ...current, address: value }));
+                    setSiteDraft((current) => ({ ...current, ...address }));
                   }}
                   placeholder="Search the site address for this job"
                 />
