@@ -3,7 +3,7 @@ import { readSavedPosition, siteGeocodingAddress, summarizeSiteLocations } from 
 
 function parseExtra(value) {
   try {
-    const parsed = JSON.parse(value || "{}");
+    const parsed = JSON.parse(value);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
   } catch { /* Fail closed rather than overwriting malformed metadata. */ }
   throw new Error("Site location audit found invalid record metadata.");
@@ -39,55 +39,93 @@ export function auditSiteLocations(db) {
 }
 
 const fingerprint = (site) => createHash("sha256").update(siteGeocodingAddress(site).replace(/\s+/g, " ").trim().toLowerCase()).digest("hex");
-const failure = (code, stop = false) => Object.assign(new Error(code), { code, stop });
-const safeCodes = new Set(["ZERO_RESULTS", "MULTIPLE_RESULTS", "PARTIAL_MATCH", "IMPRECISE_RESULT", "OUTSIDE_AU", "INVALID_COORDINATES", "REQUEST_DENIED", "OVER_QUERY_LIMIT", "OVER_DAILY_LIMIT", "INVALID_REQUEST", "NETWORK_ERROR"]);
+const failure = (code, stop = false, retryable = false) => Object.assign(new Error(code), { code, stop, retryable });
+const safeCodes = new Set(["ZERO_RESULTS", "MULTIPLE_RESULTS", "PARTIAL_MATCH", "IMPRECISE_RESULT", "OUTSIDE_AU", "INVALID_COORDINATES", "REQUEST_DENIED", "OVER_QUERY_LIMIT", "OVER_DAILY_LIMIT", "INVALID_REQUEST", "NETWORK_ERROR", "UNKNOWN_ERROR", "INVALID_RESPONSE"]);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function geocodeSiteAddress(address, { apiKey, fetchImpl = fetch } = {}) {
-  if (!apiKey?.trim()) throw failure("REQUEST_DENIED", true);
-  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-  url.search = new URLSearchParams({ address, key: apiKey.trim(), components: "country:AU", region: "au", language: "en" }).toString();
+export function backfillGeocodingAddress(site) {
+  // Reuse the app's structured-address preference; ignore non-text legacy values.
+  const addressFields = ["address", "streetAddress", "addressLine1", "suburb", "city", "locality", "state", "postcode"];
+  const usable = Object.fromEntries(addressFields.map((key) => [key,
+    typeof site?.[key] === "string" ? site[key].trim() : key === "postcode" && Number.isInteger(site?.[key]) ? String(site[key]) : "",
+  ]));
+  const country = typeof site?.country === "string" ? site.country.trim() : "";
+  if (country && !/^(AU|Australia)$/i.test(country)) return "";
+  // Check controls before the shared helper normalizes whitespace.
+  // eslint-disable-next-line no-control-regex -- Explicitly reject unsafe address control characters.
+  if (Object.values(usable).some((value) => /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value))) return "";
+  const address = siteGeocodingAddress(usable);
+  if (address.length < 5 || address.length > 1000 || !/[\p{L}]{2}/u.test(address)
+    || !/\s/u.test(address) || /^(unknown(?: address)?|not (?:known|available|provided)|n\/?a|none|null|undefined|tba|tbc|australia)$/i.test(address)) return "";
+  return /(?:^|[,\s])(?:Australia|AU)$/i.test(address) ? address : `${address}, Australia`;
+}
+
+async function requestSiteGeocode(url, fetchImpl) {
   let response, payload;
   try {
     response = await fetchImpl(url, { signal: AbortSignal.timeout(15_000), redirect: "error" });
-    if (response.ok) payload = await response.json();
-  } catch { throw failure("NETWORK_ERROR", true); }
-  if (!response.ok) throw failure(response.status === 429 ? "OVER_QUERY_LIMIT" : [401, 403].includes(response.status) ? "REQUEST_DENIED" : "NETWORK_ERROR", true);
+  } catch { throw failure("NETWORK_ERROR", true, true); }
+  if (!response.ok) {
+    if (response.status === 429) throw failure("OVER_QUERY_LIMIT", true, true);
+    if (response.status >= 500) throw failure("NETWORK_ERROR", true, true);
+    throw failure(response.status === 400 ? "INVALID_REQUEST" : "REQUEST_DENIED", response.status !== 400);
+  }
+  try { payload = await response.json(); }
+  catch (error) { throw error instanceof SyntaxError ? failure("INVALID_RESPONSE", true) : failure("NETWORK_ERROR", true, true); }
+  if (!payload || typeof payload !== "object") throw failure("INVALID_RESPONSE", true);
   if (payload.status !== "OK") {
-    const code = safeCodes.has(payload.status) ? payload.status : "NETWORK_ERROR";
-    throw failure(code, code !== "ZERO_RESULTS");
+    const code = safeCodes.has(payload.status) ? payload.status : "INVALID_RESPONSE";
+    throw failure(code, !["ZERO_RESULTS", "INVALID_REQUEST"].includes(code), ["OVER_QUERY_LIMIT", "UNKNOWN_ERROR"].includes(code));
   }
   if (!Array.isArray(payload.results) || payload.results.length !== 1) throw failure("MULTIPLE_RESULTS");
   const result = payload.results[0];
+  if (!result || typeof result !== "object") throw failure("INVALID_RESPONSE", true);
   if (result.partial_match) throw failure("PARTIAL_MATCH");
-  if (result.geometry?.location_type !== "ROOFTOP" || !result.types?.some((type) => ["street_address", "premise", "subpremise"].includes(type))) throw failure("IMPRECISE_RESULT");
-  if (!result.address_components?.some((component) => component.types?.includes("country") && component.short_name === "AU")) throw failure("OUTSIDE_AU");
+  if (result.geometry?.location_type !== "ROOFTOP" || !Array.isArray(result.types) || !result.types.some((type) => ["street_address", "premise", "subpremise"].includes(type))) throw failure("IMPRECISE_RESULT");
+  if (!Array.isArray(result.address_components) || !result.address_components.some((component) => Array.isArray(component?.types) && component.types.includes("country") && component.short_name === "AU")) throw failure("OUTSIDE_AU");
   const position = readSavedPosition(result.geometry.location);
   if (!position) throw failure("INVALID_COORDINATES");
   return position;
 }
 
-export async function backfillSiteCoordinates(db, { apply = false, limit = 25, retryFailed = false, apiKey, geocode, onProgress = () => {}, pause = () => new Promise((resolve) => setTimeout(resolve, 200)), now = () => new Date() } = {}) {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new Error("Backfill limit must be an integer from 1 to 1000.");
+export async function geocodeSiteAddress(address, { apiKey, fetchImpl = fetch, pause = sleep } = {}) {
+  if (!apiKey?.trim()) throw failure("REQUEST_DENIED", true);
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.search = new URLSearchParams({ address, key: apiKey.trim(), components: "country:AU", region: "au", language: "en" }).toString();
+  for (let attempt = 0; ; attempt++) {
+    try { return await requestSiteGeocode(url, fetchImpl); }
+    catch (error) {
+      if (!error.retryable || attempt >= 2) throw error;
+      await pause(500 * (2 ** attempt));
+    }
+  }
+}
+
+export async function backfillSiteCoordinates(db, { apply = false, limit = 25, retryFailed = false, apiKey, geocode, onProgress = () => {}, pause = sleep } = {}) {
+  if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 1000)) throw new Error("Backfill limit must be an integer from 1 to 1000, or null for all eligible Sites.");
   if (apply && !geocode && !apiKey?.trim()) throw new Error("GOOGLE_GEOCODING_API_KEY is required for an applied backfill. The browser Maps key is not used.");
-  const { rows } = readSiteLocationWorkspace(db);
+  // Backfill reads Sites only. Jobs are relevant to the separate audit, never writes.
+  const rows = db.prepare("SELECT id, customer_id, address, extra_json FROM sites ORDER BY id").all();
   const candidates = [];
-  const summary = { mode: apply ? "apply" : "dry-run", totalSites: rows.length, alreadyLocated: 0, noAddress: 0, heldForReview: 0, eligibleSites: 0, selectedSites: 0, processed: 0, saved: 0, skippedChanged: 0, failed: 0, errors: {}, stopped: false };
+  const summary = { mode: apply ? "apply" : "dry-run", totalSites: rows.length, alreadyLocated: 0, noAddress: 0, invalidMetadata: 0, heldForReview: 0, eligibleSites: 0, selectedSites: 0, processed: 0, saved: 0, skippedChanged: 0, failed: 0, errors: {}, stopped: false };
   for (const row of rows) {
-    const site = siteRecord(row);
+    let site;
+    try { site = siteRecord(row); }
+    catch { summary.invalidMetadata++; continue; }
     if (readSavedPosition(site)) { summary.alreadyLocated++; continue; }
-    if (!siteGeocodingAddress(site)) { summary.noAddress++; continue; }
+    if (!backfillGeocodingAddress(site)) { summary.noAddress++; continue; }
     const last = site.coordinateBackfill;
     if (!retryFailed && last?.status === "failed" && last.addressFingerprint === fingerprint(site)) { summary.heldForReview++; continue; }
     candidates.push(row);
   }
   summary.eligibleSites = candidates.length;
-  summary.selectedSites = Math.min(candidates.length, limit);
+  summary.selectedSites = Math.min(candidates.length, limit ?? candidates.length);
   // Preview never invokes the provider, writes the database, or needs a key.
   if (!apply) return summary;
   const resolve = geocode || ((address) => geocodeSiteAddress(address, { apiKey }));
   const readCurrent = db.prepare("SELECT id, customer_id, address, extra_json FROM sites WHERE id = ?");
-  const save = db.prepare("UPDATE sites SET extra_json = ? WHERE id = ? AND customer_id = ? AND address = ? AND extra_json = ?");
-  for (const original of candidates.slice(0, limit)) {
+  const save = db.prepare("UPDATE sites SET extra_json = json_set(extra_json, '$.latitude', ?, '$.longitude', ?) WHERE id = ? AND customer_id = ? AND address = ? AND extra_json = ?");
+  for (const original of candidates.slice(0, summary.selectedSites)) {
     const row = readCurrent.get(original.id);
     summary.processed++;
     if (!row || row.address !== original.address || row.extra_json !== original.extra_json || row.customer_id !== original.customer_id) {
@@ -96,27 +134,30 @@ export async function backfillSiteCoordinates(db, { apply = false, limit = 25, r
       continue;
     }
     const site = siteRecord(row);
+    onProgress({ ...summary, errors: { ...summary.errors }, phase: "geocoding" });
     let position = null, error = null;
     try {
-      position = readSavedPosition(await resolve(siteGeocodingAddress(site)));
+      position = readSavedPosition(await resolve(backfillGeocodingAddress(site)));
       if (!position) throw failure("INVALID_COORDINATES");
     } catch (caught) {
       // Never relay provider exception text, which could contain an address/key.
       error = { code: safeCodes.has(caught?.code) ? caught.code : "NETWORK_ERROR", stop: caught?.stop || !safeCodes.has(caught?.code) };
     }
-    const next = { ...parseExtra(row.extra_json),
-      ...(position ? { latitude: position.lat, longitude: position.lng } : {}),
-      coordinateBackfill: { status: error ? "failed" : "saved", ...(error ? { code: error.code } : {}), addressFingerprint: fingerprint(site), attemptedAt: now().toISOString() },
-    };
-    // Compare-and-set: a concurrent address/metadata edit wins over this result.
-    const { changes } = save.run(JSON.stringify(next), row.id, row.customer_id, row.address, row.extra_json);
-    if (!changes) summary.skippedChanged++;
-    else if (error) { summary.failed++; summary.errors[error.code] = (summary.errors[error.code] || 0) + 1; }
-    else summary.saved++;
+    if (error) {
+      // Failed/ambiguous records remain byte-for-byte unchanged, including metadata.
+      summary.failed++;
+      summary.errors[error.code] = (summary.errors[error.code] || 0) + 1;
+    } else {
+      // Compare-and-set: a concurrent address/metadata edit wins over this result.
+      // json_set changes only these two keys, preserving other JSON values exactly.
+      const { changes } = save.run(position.lat, position.lng, row.id, row.customer_id, row.address, row.extra_json);
+      if (!changes) summary.skippedChanged++;
+      else summary.saved++;
+    }
     summary.stopped = Boolean(error?.stop);
     onProgress({ ...summary, errors: { ...summary.errors } });
     if (summary.stopped) break;
-    if (summary.processed < summary.selectedSites) await pause();
+    if (summary.processed < summary.selectedSites) await pause(250);
   }
   return summary;
 }

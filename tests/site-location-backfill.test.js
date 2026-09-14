@@ -108,19 +108,20 @@ test("concurrent Site address or coordinate changes win over in-flight geocoding
   }
 });
 
-test("failures are sanitized, held for explicit retry, and fatal provider failures stop the batch", async () => {
+test("failures are sanitized without writes, and fatal provider failures stop the batch", async () => {
   const db = workspace();
   try {
+    const before = sites(db);
     let calls = 0;
     const failed = await backfillSiteCoordinates(db, { apply: true, pause, geocode: async () => { calls++; throw new Error("Private address and key must never be logged"); } });
     assert.equal(calls, 1);
     assert.equal(failed.stopped, true);
     assert.deepEqual(failed.errors, { NETWORK_ERROR: 1 });
     assert.equal(JSON.stringify(failed).includes("Private"), false);
-    assert.equal(JSON.parse(sites(db)[0].extra_json).latitude, undefined);
+    assert.deepEqual(sites(db), before);
     const preview = await backfillSiteCoordinates(db);
-    assert.equal(preview.heldForReview, 1);
-    assert.equal(preview.eligibleSites, 1);
+    assert.equal(preview.heldForReview, 0);
+    assert.equal(preview.eligibleSites, 2);
     assert.equal((await backfillSiteCoordinates(db, { retryFailed: true })).eligibleSites, 2);
     db.prepare("UPDATE sites SET address='New service address' WHERE id='a'").run();
     assert.equal((await backfillSiteCoordinates(db)).eligibleSites, 2);

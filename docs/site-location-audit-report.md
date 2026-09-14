@@ -60,7 +60,9 @@ The status shows total Jobs, mapped Jobs and missing locations, with a separate 
 
 **161 unique existing Sites need coordinates.** Of these, 122 currently serve 175 Jobs; 39 are not referenced by the current Jobs. Successfully filling those 122 referenced Sites would map **175 of 204 Jobs**. Backfill alone cannot resolve the remaining 29 Jobs across 24 customer/address pairs. They require separate Site reconciliation; this change does not create Sites or rewrite Job links.
 
-`scripts/site-locations.mjs` provides an aggregate audit and bounded backfill. The following describes the interface; no applied backfill was run on real data:
+For production, follow [the Fly-only backfill runbook](site-coordinate-backfill.md). The counts above are historical audit results, not a current production inventory. Only a dry-run inside the deployed Machine against `/app/data/elset-workspace.db` establishes current production counts.
+
+`scripts/site-locations.mjs` is the older explicit-path audit and bounded backfill interface. The following describes that interface; use the new Fly-only entry point for the production workflow:
 
 ```text
 node scripts/site-locations.mjs audit --db <existing-workspace.db>
@@ -72,7 +74,7 @@ Audit and default backfill preview open the database read-only and make no provi
 
 Each batch considers existing unique Site records, skips valid canonical/legacy coordinates, and uses a structured full Site address or its formatted address fallback. Sites with only a locality and no street/formatted address are skipped. The default batch is 25, with sequential requests and a short delay. One successful Site lookup supplies every Job linked to that Site.
 
-Only Site `extra_json` is updated: canonical coordinates plus `coordinateBackfill` status, timestamp, address fingerprint and a sanitized failure code when needed. Addresses, ownership, other metadata, notes and Jobs are preserved. A compare-and-set update prevents an in-flight result overwriting a concurrent Site edit. Successful Sites are skipped on later runs. Failed attempts are held for review until their address changes or `--retry-failed` is explicitly provided. Permission, quota and network failures stop the batch. Progress reports counts and codes without keys, addresses or raw provider errors.
+The shared helper now updates only `latitude` and `longitude` inside Site `extra_json`. Failed attempts make no writes. Existing historical `coordinateBackfill` markers are preserved; old failure markers still require `--retry-failed` or a changed address. Addresses, ownership, other metadata, notes and Jobs are preserved. A compare-and-set update prevents an in-flight result overwriting a concurrent Site edit. Successful Sites are skipped on later runs. Transient failures receive up to two retries; permission, exhausted quota and network failures stop the batch. Progress reports counts and codes without keys, addresses or raw provider errors.
 
 The provider adapter accepts one non-partial Australian rooftop result of street/premise/subpremise type with valid coordinates. Ambiguous, approximate or rejected results are left without coordinates for review. Consequently, 175 mapped is the maximum expected from the existing links, not a guaranteed provider success count.
 
