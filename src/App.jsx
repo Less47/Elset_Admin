@@ -323,6 +323,7 @@ export default function App() {
           handleSaveStaffLoginAccount: session.handleSaveStaffLoginAccount,
         }}
         workspacePage={workspacePageOpen ? workspacePage : null}
+        mapVariant={workspaceRoute.mapVariant || workspaceRoute.sourceMapVariant}
         personalPreferences={personalPreferences}
       />
 

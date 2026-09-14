@@ -35,7 +35,8 @@ test("all existing job-opening surfaces retain the centralized page navigator", 
     "CalendarManager",
     "InvoiceManager",
     "MaintenanceManager",
-    "JobsMapManager",
+    "LegacyJobsMap",
+    "GoogleJobsMap",
   ]) {
     assert.match(shellSource, new RegExp(`<${component}[\\s\\S]*?onOpenJob=\\{handleOpenJob\\}`));
   }

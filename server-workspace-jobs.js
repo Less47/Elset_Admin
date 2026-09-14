@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { siteAddressMetadata } from "./src/lib/site-location.js";
 import { insertInvoiceTree, insertQuoteTree } from "./server-workspace-documents.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 
@@ -118,6 +119,7 @@ const customerKnownKeys = new Set([
   "updatedAt",
 ]);
 const siteKnownKeys = new Set([
+  "extra",
   "id",
   "label",
   "address",
@@ -225,6 +227,7 @@ function normalizeSiteRecord(site, fallbackAddress = "") {
   if (!address) return null;
 
   return {
+    ...siteAddressMetadata(site),
     id: trimText(site.id) || crypto.randomUUID(),
     label: trimText(site.label),
     address,
@@ -239,7 +242,7 @@ function normalizeSiteRecord(site, fallbackAddress = "") {
     createdAt: trimText(site.createdAt) || nowIso(),
     updatedAt: trimText(site.updatedAt || site.createdAt) || nowIso(),
     assets: normalizeAssets(site.assets),
-    extra: pickExtra(site, siteKnownKeys),
+    extra: { ...(site.extra || {}), ...pickExtra(site, siteKnownKeys), ...siteAddressMetadata(site) },
   };
 }
 

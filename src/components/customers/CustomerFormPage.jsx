@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AddressAutocompleteInput } from "@/components/shared/AddressAutocompleteInput";
+import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
   const [initial] = useState(() => buildDraft(customer));
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const [addressPending, setAddressPending] = useState(false);
   const [error, setError] = useState("");
   const submitting = useRef(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
@@ -47,7 +48,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
 
   const submit = async (event) => {
     event?.preventDefault();
-    if (submitting.current || (!editing && !draft.name.trim())) return;
+    if (addressPending || submitting.current || (!editing && !draft.name.trim())) return;
     submitting.current = true;
     setSaving(true);
     setError("");
@@ -69,7 +70,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
   const saveStatus = saving ? "Saving…" : dirty ? "Unsaved changes" : "";
   const formActions = <>
     <Button type="button" variant="outline" className={editing ? "h-11" : "h-9 max-lg:h-11"} disabled={saving} onClick={() => onCancel()}>Cancel</Button>
-    <Button type="submit" className={editing ? "h-11" : "h-9 max-lg:h-11"} disabled={saving || (!editing && !draft.name.trim())} aria-busy={saving}>{saving ? "Saving…" : editing ? "Save Customer" : "Create Customer"}</Button>
+    <Button type="submit" className={editing ? "h-11" : "h-9 max-lg:h-11"} disabled={saving || addressPending || (!editing && !draft.name.trim())} aria-busy={saving}>{saving ? "Saving…" : editing ? "Save Customer" : "Create Customer"}</Button>
   </>;
 
   return <RecordWorkspace backLabel={backLabel} eyebrow="Customers" title={editing ? "Edit Customer" : "New Customer"}
@@ -89,7 +90,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
             <div className="min-w-0 text-sm [overflow-wrap:anywhere]"><p>{customer.address || "No primary site saved"}</p><p className="mt-1 text-xs text-text-secondary">Address, site type, OC number and access information are managed in the Site profile.</p></div>
             {primarySite ? <Button type="button" variant="outline" onClick={() => onOpenSite(primarySite)}>Open Site Profile</Button> : null}
           </div> : <div className="grid min-w-0 items-start gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2"><CustomerField id="primary-site-address" label="Address"><AddressAutocompleteInput id="primary-site-address" value={draft.address} onChange={(value) => update("address", value)} placeholder="Search the customer's main address" /></CustomerField></div>
+            <div className="sm:col-span-2"><CustomerField id="primary-site-address" label="Address"><GoogleAddressAutocompleteInput id="primary-site-address" value={draft.primarySiteAddress || { address: draft.address }} onSelectionPending={setAddressPending} onChange={(address) => setDraft((current) => ({ ...current, address: address.address, primarySiteAddress: address }))} placeholder="Search the customer's main address" /></CustomerField></div>
             <CustomerTypeField id="primary-site-type" label="Primary site type" options={siteTypeOptions} value={draft.primarySiteType} onChange={(value) => update("primarySiteType", value)} />
             <CustomerField id="primary-site-oc" label="OC number"><Input id="primary-site-oc" value={draft.primaryOcNumber} onChange={(event) => update("primaryOcNumber", event.target.value)} placeholder="e.g. PS123456" /><p className="text-xs text-text-secondary">Owners Corporation / plan reference for this property.</p></CustomerField>
           </div>}

@@ -2,7 +2,8 @@ import { normalizeDeletedInvoices } from "./invoice-deletion.js";
 import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 /* eslint-disable react-refresh/only-export-components */
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
-import { maintenancePlanIdentity, structuredSiteAddress } from "./maintenance-plan.js";
+import { maintenancePlanIdentity } from "./maintenance-plan.js";
+import { siteAddressMetadata } from "./site-location.js";
 
 import {
   BarChart3,
@@ -1324,7 +1325,7 @@ export function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAcc
   if (!address) return null;
 
   return {
-    ...structuredSiteAddress(site),
+    ...siteAddressMetadata(site),
     ...(site?._inferredProfile ? { _inferredProfile: true } : {}),
     id: site?.id || crypto.randomUUID(),
     label: String(site?.label || "").trim(),
@@ -1351,8 +1352,8 @@ export function mergeSiteProfileRecords(existing, incoming) {
   const hasExplicitField = (key) => Boolean(mergeOptions[key]);
 
   return normalizeSiteProfileRecord({
-    ...structuredSiteAddress(existing),
-    ...structuredSiteAddress(incoming),
+    ...siteAddressMetadata(existing),
+    ...siteAddressMetadata(incoming),
     ...(existing._inferredProfile && incoming._inferredProfile ? { _inferredProfile: true } : {}),
     id: existing._inferredProfile && !incoming._inferredProfile ? incoming.id : existing.id || incoming.id,
     label: hasExplicitField("label") ? incoming.label : existing.label,
@@ -1635,6 +1636,7 @@ export function buildCustomerSites(customer, jobs) {
     }
 
     if (siteProfile) {
+      Object.assign(current, siteAddressMetadata(siteProfile));
       const resolvedContact = resolveSiteContactRecord(siteProfile, customerContacts);
       current.siteProfileId = siteProfile.id;
       current.label = siteProfile.label;
@@ -1722,8 +1724,9 @@ export function buildSiteProfileDraft(site) {
   }
 
   return {
+    ...siteAddressMetadata(site),
     id: site.siteProfileId || site.id || crypto.randomUUID(),
-    label: "",
+    label: String(site.label || "").trim(),
     address: normalizeSiteAddress(site.address),
     siteType: normalizeOptionValue(site.siteType, siteTypeOptions, ""),
     ocNumber: String(site.ocNumber || "").trim(),

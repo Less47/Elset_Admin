@@ -1,3 +1,4 @@
+import { siteAddressMetadata } from "./src/lib/site-location.js";
 import { normalizeDeletedInvoices } from "./src/lib/invoice-deletion.js";
 import fs from "fs";
 import path from "path";
@@ -6,7 +7,7 @@ import { Buffer } from "buffer";
 import { fileURLToPath } from "url";
 import { appearanceSettingKeys as workspaceUiSettingKeys } from "./src/lib/user-ui-preferences.js";
 import { normalizeMaintenanceFrequency } from "./src/lib/maintenance-frequency.js";
-import { canonicalMaintenancePlanInput, maintenancePlanIdentity, structuredSiteAddress } from "./src/lib/maintenance-plan.js";
+import { canonicalMaintenancePlanInput, maintenancePlanIdentity } from "./src/lib/maintenance-plan.js";
 import {
   ADMIN_EMAIL,
   calculateDocTotal,
@@ -380,7 +381,7 @@ function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAccessNote
   if (!address) return null;
 
   return {
-    ...structuredSiteAddress(site),
+    ...siteAddressMetadata(site),
     ...(site?._inferredProfile ? { _inferredProfile: true } : {}),
     id: site?.id || crypto.randomUUID(),
     label: String(site?.label || "").trim(),
@@ -407,8 +408,8 @@ function mergeSiteProfileRecords(existing, incoming) {
   const hasExplicitField = (key) => Boolean(mergeOptions[key]);
 
   return normalizeSiteProfileRecord({
-    ...structuredSiteAddress(existing),
-    ...structuredSiteAddress(incoming),
+    ...siteAddressMetadata(existing),
+    ...siteAddressMetadata(incoming),
     ...(existing._inferredProfile && incoming._inferredProfile ? { _inferredProfile: true } : {}),
     id: existing._inferredProfile && !incoming._inferredProfile ? incoming.id : existing.id || incoming.id,
     label: hasExplicitField("label") ? incoming.label : existing.label,

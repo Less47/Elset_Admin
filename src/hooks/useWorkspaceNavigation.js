@@ -5,11 +5,18 @@ const WORKSPACE_HISTORY_KEY = "elsetWorkspace";
 export function parseWorkspacePath(pathname, state = null) {
   const context = {
     sourceSection: state?.sourceSection || "service-board",
+    sourceMapVariant: state?.sourceMapVariant === "google-test" ? "google"
+      : state?.sourceMapVariant === "geoapify" ? "legacy" : state?.sourceMapVariant,
     sourceScrollY: Number(state?.sourceScrollY || 0),
     returnPath: state?.returnPath || null,
     historyIndex: Number(state?.historyIndex || 0),
     tab: state?.tab || "overview",
   };
+  if (/^\/map(?:\/(?:google-test|legacy))?\/?$/.test(pathname) || (pathname === "/" && state?.section === "map")) {
+    const legacy = pathname.replace(/\/$/, "") === "/map/legacy";
+    return { ...context, type: "section", path: legacy ? "/map/legacy" : "/map", section: "map",
+      mapVariant: legacy ? "legacy" : "google" };
+  }
   if (/^\/maintenance\/?$/.test(pathname)) return { ...context, type: "section", path: "/maintenance", section: "maintenance" };
   const maintenanceMatch = pathname.match(/^\/maintenance\/([^/]+)(\/edit)?\/?$/);
   if (maintenanceMatch) {
@@ -101,8 +108,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
       ...current,
       historyIndex: routeRef.current.historyIndex || 0,
       ...(routeRef.current.type === "section" ? { section: activeSection } : {}),
-    } }, "", window.location.href);
-  }, [activeSection]);
+    } }, "", route.section === "map" ? `${route.path}${window.location.search}${window.location.hash}` : window.location.href);
+  }, [activeSection, route.path, route.section]);
 
   const restoreSourceScroll = useCallback((scrollY) => {
     pendingScrollRestoreRef.current = Number(scrollY || 0);
@@ -150,6 +157,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
         [WORKSPACE_HISTORY_KEY]: {
           owned: replace ? Boolean(getWorkspaceState()?.owned) : true,
           sourceSection,
+          ...(nextRoute.type !== "section" && (currentRoute.mapVariant || currentRoute.sourceMapVariant)
+            ? { sourceMapVariant: currentRoute.mapVariant || currentRoute.sourceMapVariant } : {}),
           sourceScrollY,
           returnPath: nextRoute.type !== "section"
             ? (replace || (nextRoute.type === "document" && currentRoute.type === "document") ? currentRoute.returnPath : currentRoute.path)
@@ -184,7 +193,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, [navigateTo]);
 
   const navigateToSection = useCallback((section, onNavigated, options = {}) => {
-    return navigateTo({ type: "section", path: ["customers", "maintenance"].includes(section) ? `/${section}` : "/", section }, { ...options, onNavigated });
+    return navigateTo({ type: "section", path: ["customers", "maintenance", "map"].includes(section) ? `/${section}` : "/", section,
+      ...(section === "map" ? { mapVariant: "google" } : {}) }, { ...options, onNavigated });
   }, [navigateTo]);
 
   const navigateToCustomer = useCallback((customerId, options = {}) => {

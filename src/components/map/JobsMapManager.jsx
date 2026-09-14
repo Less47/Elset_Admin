@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LoaderCircle } from "lucide-react";
+import { ALL_FILTER_VALUE, NOT_SET_FILTER_VALUE, JOB_FILTERS, matchesMapFilters } from "./map-filters";
 import {
   FilterButton,
   FilterSheetField,
@@ -22,14 +23,6 @@ import {
 } from "@/lib/app-support";
 
 const MELBOURNE_CENTER = [-37.8136, 144.9631];
-const ALL_FILTER_VALUE = "all";
-const NOT_SET_FILTER_VALUE = "not-set";
-const JOB_FILTERS = [
-  { value: "all", label: "All Jobs" },
-  { value: "incomplete", label: "Incomplete" },
-  { value: "urgent", label: "Urgent" },
-  { value: "completed", label: "Completed" },
-];
 
 function createAuthorizedHeaders(contentType = null) {
   const headers = new Headers();
@@ -236,49 +229,9 @@ export default function JobsMapManager({ customers, jobs, onOpenJob }) {
     [customerById, jobs, siteTypeByCustomerAddress]
   );
 
-  const filteredJobs = useMemo(() => {
-    const query = deferredSearch.toLowerCase().trim();
-    return enrichedJobs.filter((job) => {
-      const matchesQuery = query
-        ? [
-          job.jobNumber,
-          job.customerName,
-          job.title,
-          job.description,
-          job.jobAddress,
-          formatCustomerType(job.customerType),
-          formatSiteType(job.siteType),
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query)
-        : true;
-
-      const matchesJobFilter = jobFilter === ALL_FILTER_VALUE
-        ? true
-        : jobFilter === "incomplete"
-          ? job.status !== "Completed"
-        : jobFilter === "urgent"
-          ? job.urgency === "High"
-          : jobFilter === "completed"
-            ? job.status === "Completed"
-            : true;
-
-      const matchesSiteType = siteTypeFilter === ALL_FILTER_VALUE
-        ? true
-        : siteTypeFilter === NOT_SET_FILTER_VALUE
-          ? !job.siteType
-          : job.siteType === siteTypeFilter;
-
-      const matchesCustomerType = customerTypeFilter === ALL_FILTER_VALUE
-        ? true
-        : customerTypeFilter === NOT_SET_FILTER_VALUE
-          ? !job.customerType
-          : job.customerType === customerTypeFilter;
-
-      return matchesQuery && matchesJobFilter && matchesSiteType && matchesCustomerType;
-    });
-  }, [customerTypeFilter, deferredSearch, enrichedJobs, jobFilter, siteTypeFilter]);
+  const filteredJobs = useMemo(() => enrichedJobs.filter((job) => matchesMapFilters(job, {
+    search: deferredSearch, jobFilter, siteTypeFilter, customerTypeFilter,
+  }, { formatCustomerType, formatSiteType })), [customerTypeFilter, deferredSearch, enrichedJobs, jobFilter, siteTypeFilter]);
 
   const uniqueJobAddresses = useMemo(
     () => [...new Set(

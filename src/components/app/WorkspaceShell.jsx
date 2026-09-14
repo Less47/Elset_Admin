@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
 import WorkspaceLogo from "@/components/app/WorkspaceLogo";
@@ -9,7 +9,6 @@ import InventoryManager from "@/components/inventory/InventoryManager";
 import InvoiceManager from "@/components/invoices/InvoiceManager";
 import JobHistoryManager from "@/components/jobs/JobHistoryManager";
 import MaintenanceManager from "@/components/maintenance/MaintenanceManager";
-import JobsMapManager from "@/components/map/JobsMapManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
 import MobileServiceBoard from "@/components/service-board/MobileServiceBoard";
 import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPanel } from "@/components/service-board/OfficeBoard";
@@ -43,7 +42,10 @@ import {
   toTimestamp,
 } from "@/lib/app-support";
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences }) {
+const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
+const LegacyJobsMap = lazy(() => import("@/components/map/JobsMapManager"));
+
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, mapVariant }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -530,11 +532,13 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         ) : null}
 
         {canManageBusiness && activeSection === "map" ? (
-          <JobsMapManager
-            customers={data.customers}
-            jobs={data.jobs}
-            onOpenJob={handleOpenJob}
-          />
+          <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground" role="status">Loading map...</div>}>
+            {mapVariant === "legacy" ? (
+              <LegacyJobsMap customers={data.customers} jobs={data.jobs} onOpenJob={handleOpenJob} />
+            ) : (
+              <GoogleJobsMap customers={data.customers} jobs={data.jobs} onOpenJob={handleOpenJob} onOpenSite={handleOpenSiteProfile} />
+            )}
+          </Suspense>
         ) : null}
 
         {canManageBusiness && activeSection === "calendar" ? (
