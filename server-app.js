@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { fromNodeHeaders, toNodeHandler } from "better-auth/node";
 import { fileURLToPath } from "url";
 import { generateDocumentPdf } from "./quote-pdf.js";
+import { createDocumentJsonParser } from "./server-document-json.js";
 import { DocumentEmailError, submitDocumentEmail } from "./server-document-email.js";
 import { documentSendErrorMessage } from "./src/lib/document-send-status.js";
 import {
@@ -209,6 +210,72 @@ export function createServerApp() {
   });
 
   app.all("/api/auth/{*any}", toNodeHandler(auth));
+  // Authenticate before reading PDF/email bodies; register these complete routes
+  // before the workspace parser so their own finite limit takes effect.
+  const documentMiddleware = [requireAuth, requireRole(["admin", "office"]), createDocumentJsonParser()];
+  const sendDocumentEmail = async (req, res) => {
+    const validationError = validateDocumentPayload(req.body);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    const missingEnv = getMissingEnv();
+    if (missingEnv.length > 0) {
+      return res.status(500).json({
+        code: "EMAIL_NOT_CONFIGURED",
+        error: documentSendErrorMessage(getDocumentType(req.body), "EMAIL_NOT_CONFIGURED"),
+      });
+    }
+
+    const { job, template, emailSettings, emailPurpose, stampText } = req.body;
+    const documentType = getDocumentType(req.body);
+    const document = getDocumentRequestPayload(req.body);
+    try {
+      return res.json(await submitDocumentEmail({
+        job, document, template, type: documentType, stampText, emailSettings, emailPurpose,
+        defaultFromEmail: process.env.EMAIL_FROM, transportConfig: getTransportConfig(),
+      }));
+    } catch (error) {
+      const code = error instanceof DocumentEmailError ? error.code : "SEND_FAILED";
+      return res.status(500).json({ code, error: documentSendErrorMessage(documentType, code) });
+    }
+  };
+
+  app.post("/api/quotes/preview-pdf", ...documentMiddleware, async (req, res) => {
+    const validationError = validateDocumentPayload(req.body, { requireCustomerEmail: false });
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    const { job, template, stampText } = req.body;
+    const documentType = req.body.documentType === "invoice" ? "invoice" : "quote";
+    const document = getDocumentRequestPayload(req.body);
+
+    try {
+      const normalizedTemplate = documentType === "invoice"
+        ? normalizeInvoiceTemplate(template)
+        : normalizeQuoteTemplate(template);
+      const { bytes, filename } = await generateDocumentPdf({
+        job,
+        document,
+        template: normalizedTemplate,
+        type: documentType,
+        stampText,
+      });
+
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+      return res.send(Buffer.from(bytes));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to render the quote PDF preview.";
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/quotes/send", ...documentMiddleware, sendDocumentEmail);
+  app.post("/api/documents/send", ...documentMiddleware, sendDocumentEmail);
+
   app.use("/api/admin/workspace-restore", express.json({ limit: MAX_SQLITE_BACKUP_PAYLOAD_BYTES }));
   app.use(express.json({ limit: "15mb" }));
   app.use(createMapLocationsRouter({
@@ -399,69 +466,6 @@ export function createServerApp() {
       return res.status(400).json({ error: message });
     }
   });
-
-  const sendDocumentEmail = async (req, res) => {
-    const validationError = validateDocumentPayload(req.body);
-    if (validationError) {
-      return res.status(400).json({ error: validationError });
-    }
-
-    const missingEnv = getMissingEnv();
-    if (missingEnv.length > 0) {
-      return res.status(500).json({
-        code: "EMAIL_NOT_CONFIGURED",
-        error: documentSendErrorMessage(getDocumentType(req.body), "EMAIL_NOT_CONFIGURED"),
-      });
-    }
-
-    const { job, template, emailSettings, emailPurpose, stampText } = req.body;
-    const documentType = getDocumentType(req.body);
-    const document = getDocumentRequestPayload(req.body);
-    try {
-      return res.json(await submitDocumentEmail({
-        job, document, template, type: documentType, stampText, emailSettings, emailPurpose,
-        defaultFromEmail: process.env.EMAIL_FROM, transportConfig: getTransportConfig(),
-      }));
-    } catch (error) {
-      const code = error instanceof DocumentEmailError ? error.code : "SEND_FAILED";
-      return res.status(500).json({ code, error: documentSendErrorMessage(documentType, code) });
-    }
-  };
-
-  app.post("/api/quotes/preview-pdf", requireAuth, requireRole(["admin", "office"]), async (req, res) => {
-    const validationError = validateDocumentPayload(req.body, { requireCustomerEmail: false });
-    if (validationError) {
-      return res.status(400).json({ error: validationError });
-    }
-
-    const { job, template, stampText } = req.body;
-    const documentType = req.body.documentType === "invoice" ? "invoice" : "quote";
-    const document = getDocumentRequestPayload(req.body);
-
-    try {
-      const normalizedTemplate = documentType === "invoice"
-        ? normalizeInvoiceTemplate(template)
-        : normalizeQuoteTemplate(template);
-      const { bytes, filename } = await generateDocumentPdf({
-        job,
-        document,
-        template: normalizedTemplate,
-        type: documentType,
-        stampText,
-      });
-
-      res.setHeader("Cache-Control", "no-store");
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-      return res.send(Buffer.from(bytes));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to render the quote PDF preview.";
-      return res.status(500).json({ error: message });
-    }
-  });
-
-  app.post("/api/quotes/send", requireAuth, requireRole(["admin", "office"]), sendDocumentEmail);
-  app.post("/api/documents/send", requireAuth, requireRole(["admin", "office"]), sendDocumentEmail);
 
   if (shouldServeStatic && fs.existsSync(distDir)) {
     app.use(express.static(distDir));

@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { normalizeStoredData } from '../../server-store.js';
 import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
@@ -13,6 +14,7 @@ import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import { readPdfTextRuns } from "../helpers/pdf-text.js";
 import { getDocumentRecipientEmail } from "../../src/lib/quote-template.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
+import { DOCUMENT_JSON_LIMIT_BYTES } from "../../server-document-json.js";
 
 import { insertJobTree } from "../../server-workspace-jobs.js";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -669,6 +671,113 @@ test("failed and pending saves retain the draft and prevent duplicate document w
   } finally { release(); await context.close(); }
 });
 
+for (const type of ["invoice", "quote"]) test(`${type} unsaved PDF requests stay compact and large PDFs reach the actual renderer`, async ({ browser }) => {
+  // SQLite uploads each photo separately, so a job can legitimately accumulate
+  // more than 15 MB of data URLs. None of these images belong in a PDF request.
+  const state = readWorkspaceState();
+  const photoJob = state.jobs.find((job) => job.id === EXISTING_JOB);
+  photoJob.photos = Array.from({ length: 3 }, (_, index) => ({
+    id: `payload-photo-${index}`, name: `photo-${index}.jpg`,
+    url: "data:image/jpeg;base64," + Buffer.alloc(4 * 1024 * 1024).toString("base64"),
+  }));
+  if (storageMode === "json") fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(state));
+  else {
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { db.prepare("DELETE FROM jobs WHERE id = ?").run(EXISTING_JOB); insertJobTree(db, photoJob); }
+    finally { db.close(); }
+  }
+  const { context, page, writes } = await openWorkspace(browser, { type });
+  try {
+    const original = dbJob(EXISTING_JOB);
+    const label = type === "invoice" ? "Invoice" : "Quote";
+    const draftText = `Unsaved ${type} payload regression`;
+    await page.getByLabel(type === "invoice" ? "Work completed" : "Scope / notes", { exact: true }).fill(draftText);
+    await page.getByLabel("Item 1 description", { exact: true }).fill("Unsaved line item");
+    await page.getByLabel("Item 1 rate", { exact: true }).fill("321");
+    const pending = page.waitForResponse((response) => response.url().endsWith("/api/quotes/preview-pdf"));
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    expect((await pending).status()).toBe(200);
+    const request = writes.find((entry) => entry.path === "/api/quotes/preview-pdf").body;
+    expect(request.document.notes).toBe(draftText);
+    expect(request.document.items[0].rate).toBe("321");
+    expect(request.job.invoice).toBeUndefined();
+    expect(request.job.quote).toBeUndefined();
+    expect(request.job.photos).toBeUndefined();
+    expect(request.document.sentHistory).toBeUndefined();
+    expect(Buffer.byteLength(JSON.stringify(request))).toBeLessThan(10_000);
+    const legacyBytes = Buffer.byteLength(JSON.stringify({ ...request, job: original, document: { ...original[type], ...request.document, sentHistory: original[type].sentHistory } }));
+    expect(legacyBytes).toBeGreaterThan(15 * 1024 * 1024);
+    const frame = page.getByTitle(`${label} PDF preview`);
+    await expect(frame).toBeVisible();
+    const previewPdf = Buffer.from(await frame.evaluate(async (element) => Array.from(new Uint8Array(await (await fetch(element.src)).arrayBuffer()))));
+    const text = (await readPdfTextRuns(previewPdf)).flat().map((run) => run.text).join(" ");
+    expect(text).toContain(draftText);
+    expect(text).toContain("Unsaved line item");
+    // The viewer/new-tab/download actions all use this generated PDF blob.
+    await expect(page.getByRole("link", { name: "Open PDF in a new tab" })).toHaveAttribute("href", await frame.getAttribute("src"));
+    const download = await page.request.post(`${baseUrl}/api/quotes/preview-pdf`, { data: request });
+    expect(download.status()).toBe(200);
+    expect(download.headers()["content-disposition"]).toMatch(/inline; filename=".*\.pdf"/);
+    expect(download.headers()["cache-control"]).toBe("no-store");
+    const downloadedPdf = await download.body();
+    fs.writeFileSync(path.join(screenshotDir, `payload-${type}-download.pdf`), downloadedPdf);
+    expect(await readPdfTextRuns(downloadedPdf)).toEqual(await readPdfTextRuns(previewPdf));
+
+    const large = { ...request, document: { ...request.document, items: Array.from({ length: 250 }, (_, index) => ({ description: `LARGE-ITEM-${index} ` + "Detailed installation work and materials. ".repeat(15), qty: 1, rate: 12.5 })) } };
+    const largeBytes = Buffer.byteLength(JSON.stringify(large));
+    expect(largeBytes).toBeGreaterThan(100 * 1024);
+    expect(largeBytes).toBeLessThan(DOCUMENT_JSON_LIMIT_BYTES);
+    const response = await page.request.post(`${baseUrl}/api/quotes/preview-pdf`, { data: large });
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("application/pdf");
+    const largePdf = await response.body();
+    const runs = await readPdfTextRuns(largePdf);
+    expect(runs.length).toBeGreaterThan(1);
+    expect(runs.flat().map((run) => run.text).join(" ")).toContain("LARGE-ITEM-249");
+    fs.writeFileSync(path.join(screenshotDir, `payload-${type}-large.pdf`), largePdf);
+    const mailCount = messages.length;
+    // Exercise the legacy quote alias as well as the current document send path.
+    const sendPath = type === "quote" ? "/api/quotes/send" : "/api/documents/send";
+    const sent = await page.request.post(`${baseUrl}${sendPath}`, { data: large });
+    expect(sent.status()).toBe(200);
+    expect((await sent.json()).ok).toBe(true);
+    expect(messages).toHaveLength(mailCount + 1);
+    const attachment = messages.at(-1).split(/--[^\r\n]+/).find((part) => /Content-Type: application\/pdf/i.test(part));
+    expect(attachment).toBeTruthy();
+    const attachmentPdf = Buffer.from(attachment.slice(attachment.indexOf("\r\n\r\n") + 4).trim(), "base64");
+    expect(await readPdfTextRuns(attachmentPdf)).toEqual(runs);
+    expect(dbJob(EXISTING_JOB)).toEqual(original);
+    console.log(`${type} payload bytes: legacy with photos=${legacyBytes}, compact=${Buffer.byteLength(JSON.stringify(request))}, large=${largeBytes}; large PDF pages=${runs.length}`);
+  } finally { await context.close(); }
+});
+
+test("PDF routes reject oversized bodies with safe 413 JSON after authenticating and authorizing", async ({ browser }) => {
+  const routes = ["/api/quotes/preview-pdf", "/api/quotes/send", "/api/documents/send"];
+  const largeBody = JSON.stringify({ notes: "PRIVATE-PAYLOAD-DO-NOT-LOG" + "x".repeat(DOCUMENT_JSON_LIMIT_BYTES) });
+  const mailCount = messages.length;
+  for (const username of ["mobileoffice", "mobiletech"]) {
+    const { context, page } = await openWorkspace(browser, { type: "invoice", username });
+    try {
+      const original = readWorkspaceState();
+      for (const route of routes) {
+        const response = await page.request.post(`${baseUrl}${route}?private=PRIVATE-QUERY-DO-NOT-LOG`, { headers: { "Content-Type": "application/json" }, data: largeBody });
+        expect(response.status()).toBe(username === "mobileoffice" ? 413 : 403);
+        if (username === "mobileoffice") expect(await response.json()).toEqual({ error: route.endsWith("preview-pdf") ? "PDF preview payload is too large." : "Document email payload is too large." });
+      }
+      expect(readWorkspaceState()).toEqual(original);
+    } finally { await context.close(); }
+  }
+  for (const route of routes) {
+    const response = await fetch(`${baseUrl}${route}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: largeBody });
+    expect(response.status).toBe(401);
+  }
+  expect(messages).toHaveLength(mailCount);
+  expect(serverOutput).toContain("[document-json] Request exceeded size limit");
+  expect(stripVTControlCharacters(serverOutput)).toContain(`limitBytes: ${DOCUMENT_JSON_LIMIT_BYTES}`);
+  expect(serverOutput).not.toContain("PRIVATE-PAYLOAD-DO-NOT-LOG");
+  expect(serverOutput).not.toContain("PRIVATE-QUERY-DO-NOT-LOG");
+});
+
 test("quote and invoice sends use actual server PDFs captured only by the local mail sink", async ({ browser }) => {
   for (const type of ["quote", "invoice"]) {
     const { context, page, writes } = await openWorkspace(browser, { type });
@@ -705,6 +814,9 @@ test("quote and invoice sends use actual server PDFs captured only by the local 
       expect(send.body.documentType).toBe(type);
       expect(send.body.job.id).toBe(EXISTING_JOB);
       expect(send.body.template).toBeTruthy();
+      expect(send.body.document.sentHistory).toBeUndefined();
+      expect(send.body.job.invoice).toBeUndefined();
+      expect(send.body.job.quote).toBeUndefined();
       await page.reload();
       await expect(editor(page).getByRole("button", { name: type === "quote" ? "Open Quote" : "Open Invoice", exact: true })).toBeVisible();
     } finally { await context.close(); }

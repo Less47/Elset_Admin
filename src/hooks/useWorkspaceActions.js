@@ -52,6 +52,7 @@ import {
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
+import { buildDocumentPdfPayload } from "../lib/document-pdf-payload.js";
 import { getSupportedInvoiceUpdateKeys } from "./workspace-invoice-updates";
 import { withDocumentSiteSnapshot } from "@/lib/document-site-snapshot";
 
@@ -1743,16 +1744,13 @@ export function useWorkspaceActions({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
+      body: JSON.stringify(buildDocumentPdfPayload({
         documentType: docType,
         job: withDocumentSiteSnapshot(selectedFreshJob, data.customers, docType),
-        document: {
-          ...doc,
-          sentHistory: doc.sentHistory || [],
-        },
+        document: doc,
         template,
         stampText: options.stampText || "",
-      }),
+      })),
     });
 
     if (!response.ok) {
@@ -1811,13 +1809,13 @@ export function useWorkspaceActions({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
+        body: JSON.stringify(buildDocumentPdfPayload({
           documentType: type,
           job: jobSnapshot,
           document: documentSnapshot,
           template: templateSnapshot,
           stampText: latestSentEntry.stampText || "",
-        }),
+        })),
       });
 
       if (!response.ok) {
@@ -1865,13 +1863,10 @@ export function useWorkspaceActions({
           const response = await fetch("/api/documents/send", {
             method: "POST",
             headers: requestHeaders,
-            body: JSON.stringify({
+            body: JSON.stringify(buildDocumentPdfPayload({
               job: documentJob,
               documentType: docType,
-              document: {
-                ...doc,
-                sentHistory: doc.sentHistory || [],
-              },
+              document: doc,
               template,
               stampText: options.stampText || "",
               emailPurpose: options.emailPurpose || "",
@@ -1881,7 +1876,7 @@ export function useWorkspaceActions({
                 ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail,
                 signature: themeSettings.emailSignature,
               },
-            }),
+            })),
           }).catch(() => { throw Object.assign(new Error("Email response unavailable."), { code: "SEND_UNCONFIRMED" }); });
 
           const payload = await response.json().catch(() => ({}));
