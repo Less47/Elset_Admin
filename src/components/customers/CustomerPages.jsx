@@ -4,7 +4,7 @@ import SiteWorkspace from "@/components/sites/SiteWorkspace";
 import { RecordWorkspace, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
 import { buildCustomerSites } from "@/lib/app-support";
 
-export default function CustomerPages({ route, navigation, actions, data, canManageBusiness, backLabel }) {
+export default function CustomerPages({ route, navigation, actions, data, canManageBusiness, backLabel, storageMode }) {
   const customer = data.customers.find((entry) => entry.id === route.customerId);
   const jobs = customer ? data.jobs.filter((job) => job.customerId === customer.id) : [];
   const sites = customer ? buildCustomerSites(customer, jobs) : [];
@@ -36,6 +36,15 @@ export default function CustomerPages({ route, navigation, actions, data, canMan
       onDeleteSiteProfile={async (customerId, entry) => { if (await actions.handleDeleteSiteProfile(customerId, entry)) navigation.closeWorkspace({ force: true }); }} />;
   }
   return <CustomerWorkspace key={customer.id} customer={customer} jobs={jobs} tab={route.tab} onTabChange={navigation.setWorkspaceTab} backLabel={backLabel}
+    accountJobs={data.jobs} storageMode={storageMode}
+    onOpenInvoice={(jobId) => {
+      const job = data.jobs.find((entry) => entry.id === jobId && entry.customerId === customer.id && entry.invoice);
+      if (job) navigation.navigateToDocument(job, "invoice");
+      // A live summary can discover an invoice created in another session.
+      // Reload the existing editor route to hydrate that newly available record.
+      else if (storageMode === "sqlite" && navigation.navigateToDocument({ id: jobId }, "invoice")) window.location.reload();
+    }}
+    onViewInvoices={() => navigation.navigateToSection("invoices", undefined, { customerId: customer.id })}
     onBack={navigation.closeWorkspace} onEdit={() => navigation.navigateToCustomer(customer.id, { edit: true })}
     onOpenSite={(entry) => actions.handleOpenSiteProfile(customer.id, entry.siteProfileId || entry.id)}
     onCreateSite={() => actions.handleCreateSiteProfile(customer.id)} onOpenJob={actions.handleOpenJob}

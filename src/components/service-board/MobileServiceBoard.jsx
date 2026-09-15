@@ -21,9 +21,7 @@ import {
 export default function MobileServiceBoard({
   canManageTomorrow,
   columnSortModes,
-  customers,
   formatDate,
-  getCustomerSiteAccessNote,
   getInvoiceStatus,
   jobs,
   officeSearch,
@@ -57,13 +55,6 @@ export default function MobileServiceBoard({
     const byId = new Map([...jobs, ...tomorrowJobs].map((job) => [job.id, job]));
     return [...byId.values()];
   }, [jobs, tomorrowJobs]);
-  const siteAccessNotesByJobId = useMemo(() => {
-    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
-    return new Map(
-      candidateJobs.map((job) => [job.id, getCustomerSiteAccessNote(customersById.get(job.customerId), job.jobAddress)])
-    );
-  }, [candidateJobs, customers, getCustomerSiteAccessNote]);
-
   const isTomorrowView = selectedView === TOMORROW_VIEW;
   const sortMode = isTomorrowView ? "recent" : columnSortModes[selectedView] || "recent";
   const selectedJobs = isTomorrowView
@@ -221,7 +212,6 @@ export default function MobileServiceBoard({
                 onRemoveFromTomorrow={isTomorrowView ? handleRemoveFromTomorrow : null}
                 showStatus={isTomorrowView}
                 showTagLabels={showTagLabels}
-                siteAccessNote={siteAccessNotesByJobId.get(job.id) || null}
               />
             ))}
           </div>

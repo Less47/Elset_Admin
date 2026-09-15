@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import {
   buildJobCardIndicators,
   formatStreetAndSuburb,
   getJobValueMeta,
-  getSiteAccessNotePreview,
   serviceBoardIndicatorLegend,
   serviceBoardSortOptions,
   sortJobsForColumn,
@@ -316,7 +315,6 @@ function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
 function JobCard({
   job,
   onOpen,
-  siteAccessNote = null,
   draggable = false,
   viewMode = "list",
   showTagLabels = false,
@@ -334,7 +332,6 @@ function JobCard({
   };
   const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
   const invoiceStatus = getInvoiceStatus(job);
-  const siteAccessPreview = getSiteAccessNotePreview(siteAccessNote?.notes);
   const jobValueMeta = getJobValueMeta(job);
   const isGridView = viewMode === "grid";
   const isCompactView = viewMode === "compact";
@@ -348,7 +345,6 @@ function JobCard({
   const cardIndicators = buildJobCardIndicators({
     job,
     invoiceStatus,
-    siteAccessPreview,
   });
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
   const handleCardDoubleClick = () => onOpen(job);
@@ -559,7 +555,6 @@ function JobCard({
 
 export function OfficeBoard({
   jobs,
-  customers = [],
   onDropJob,
   onOpenJob,
   allowDragging = true,
@@ -569,7 +564,6 @@ export function OfficeBoard({
   onColumnViewModeChange,
   onPlanJobForTomorrow,
   showTagLabels = false,
-  getCustomerSiteAccessNote,
   getInvoiceStatus,
   formatDate,
   tomorrowPlanningDate = "",
@@ -581,13 +575,6 @@ export function OfficeBoard({
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
   const touchDragSessionRef = useRef(null);
   const touchDragHoldTimerRef = useRef(null);
-
-  const siteAccessNotesByJobId = useMemo(() => {
-    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
-    return new Map(
-      jobs.map((job) => [job.id, getCustomerSiteAccessNote(customersById.get(job.customerId), job.jobAddress)])
-    );
-  }, [customers, getCustomerSiteAccessNote, jobs]);
 
   const clearTouchDragHoldTimer = useCallback(() => {
     if (touchDragHoldTimerRef.current) {
@@ -786,7 +773,6 @@ export function OfficeBoard({
                       key={`${job.id}-${viewMode}`}
                       job={job}
                       onOpen={onOpenJob}
-                      siteAccessNote={siteAccessNotesByJobId.get(job.id) || null}
                       draggable={allowDragging}
                       viewMode={viewMode}
                       showTagLabels={showTagLabels}

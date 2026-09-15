@@ -46,6 +46,9 @@ const invoiceSortOptions = [
 
 export default function InvoiceManager({
   jobs,
+  customerId = "",
+  customerName,
+  onClearCustomer,
   onOpenJob,
   onOpenInvoice,
   onOpenSentInvoice,
@@ -69,6 +72,7 @@ export default function InvoiceManager({
 
   const invoiceRows = useMemo(() => {
     return jobs
+      .filter((job) => !customerId || (job.customerId === customerId && Boolean(job.invoice)))
       .map((job) => {
         const invoice = normalizeDocument("invoice", job.invoice);
         const invoiceStatus = getInvoiceStatus({ ...job, invoice });
@@ -83,7 +87,7 @@ export default function InvoiceManager({
           outstanding: invoice ? paymentSummary.balanceAmount : 0,
         };
       });
-  }, [getInvoicePaymentSummary, getInvoiceStatus, jobs, normalizeDocument]);
+  }, [customerId, getInvoicePaymentSummary, getInvoiceStatus, jobs, normalizeDocument]);
 
   const rangedRows = useMemo(() => {
     return invoiceRows.filter((row) => {
@@ -174,6 +178,10 @@ export default function InvoiceManager({
   return (
     <>
     <div className="space-y-4">
+      {customerId ? <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" data-invoice-customer-filter>
+        <span>Invoices for <strong>{customerName || "selected customer"}</strong></span>
+        <Button type="button" variant="ghost" size="sm" onClick={onClearCustomer}>Clear customer filter</Button>
+      </div> : null}
       <ResponsivePageControls
         search={(
           <PageSearchField value={search} onChange={setSearch} placeholder="Search invoices..." label="Search invoices" />

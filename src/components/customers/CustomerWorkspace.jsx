@@ -1,4 +1,5 @@
 import { useState } from "react";
+import CustomerAccount from "./CustomerAccount";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { MobileRecordList, MobileRecordCard, MobileRecordHeader, MobileRecordBody, MobileRecordActions } from "@/components/shared/MobileRecordList";
 import { Badge } from "@/components/ui/badge";
@@ -123,12 +124,12 @@ function CustomerJobsSection({ jobs, onOpenJob, desktop }) {
   );
 }
 
-export default function CustomerWorkspace({ customer, jobs, tab = "overview", onTabChange, backLabel, onBack, onEdit, onDelete, onOpenSite, onCreateSite, onOpenJob }) {
+export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, storageMode = "json", onOpenInvoice, onViewInvoices, tab = "overview", onTabChange, backLabel, onBack, onEdit, onDelete, onOpenSite, onCreateSite, onOpenJob }) {
   const desktop = useMediaQuery("(min-width: 64rem)");
   const [deleting, setDeleting] = useState(false);
   const sites = buildCustomerSites(customer, jobs);
   const contacts = getCustomerContacts(customer);
-  const tabValue = ["overview", "sites", "contacts", "jobs"].includes(tab) ? tab : "overview";
+  const tabValue = ["overview", "sites", "contacts", "account", "jobs"].includes(tab) ? tab : "overview";
   const deleteCustomer = async () => {
     setDeleting(true);
     try { await onDelete(); } finally { setDeleting(false); }
@@ -137,6 +138,7 @@ export default function CustomerWorkspace({ customer, jobs, tab = "overview", on
     overview: <CustomerDetailsSection desktop={desktop} customer={customer} jobs={jobs} deleting={deleting} onDelete={deleteCustomer} />,
     sites: <CustomerSitesSection desktop={desktop} sites={sites} onOpenSite={onOpenSite} onCreateSite={onCreateSite} />,
     contacts: <CustomerContactsSection desktop={desktop} customer={customer} contacts={contacts} sites={sites} />,
+    account: <CustomerSection desktop={desktop} name="account" title="Account" panel><CustomerAccount customerId={customer.id} jobs={accountJobs} storageMode={storageMode} onOpenInvoice={onOpenInvoice} onViewInvoices={onViewInvoices} /></CustomerSection>,
     jobs: <CustomerJobsSection desktop={desktop} jobs={jobs} onOpenJob={onOpenJob} />,
   };
 
@@ -149,7 +151,7 @@ export default function CustomerWorkspace({ customer, jobs, tab = "overview", on
           <>
           <div className="customer-workspace-grid grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start gap-3">
             <div className="grid min-w-0 gap-3" data-customer-column="left">{sections.overview}{sections.contacts}</div>
-            <div className="grid min-w-0 gap-3" data-customer-column="right">{sections.sites}{sections.jobs}</div>
+            <div className="grid min-w-0 gap-3" data-customer-column="right">{sections.account}{sections.sites}{sections.jobs}</div>
           </div>
           <section className="mt-3 flex min-w-0 items-center justify-between gap-3 border-y border-border py-2" aria-label="Destructive customer actions" data-customer-danger-zone>
             <span className="text-xs font-medium text-text-secondary">Danger zone</span>
@@ -160,7 +162,7 @@ export default function CustomerWorkspace({ customer, jobs, tab = "overview", on
           <Tabs value={tabValue} onValueChange={onTabChange} className="min-w-0 gap-3">
             <div className="record-tab-strip min-w-0 overflow-x-auto pb-1">
               <TabsList className="record-workspace-tabs h-auto min-h-11 w-max justify-start gap-1 bg-transparent" aria-label="Customer sections">
-                {[['overview', 'Overview', null], ['sites', 'Sites', sites.length], ['contacts', 'Contacts', contacts.length], ['jobs', 'Job History', jobs.length]].map(([value, label, count]) => (
+                {[['overview', 'Overview', null], ['sites', 'Sites', sites.length], ['contacts', 'Contacts', contacts.length], ['account', 'Account', null], ['jobs', 'Job History', jobs.length]].map(([value, label, count]) => (
                   <TabsTrigger key={value} value={value} className="min-h-11 flex-none px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">{label}{count !== null ? <span className="text-xs opacity-75">{count}</span> : null}</TabsTrigger>
                 ))}
               </TabsList>

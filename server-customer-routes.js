@@ -12,6 +12,8 @@ import {
 } from "./server-workspace-customers.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
 import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getCustomerAccountSummary } from "./server-customer-account.js";
+import { invoiceDate, invoiceToday } from "./src/lib/invoice-account.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -84,6 +86,20 @@ export function createCustomerRouter({
   const authMiddleware = requireAuth || ((_req, _res, next) => next());
   const roleMiddleware = requireRole ? requireRole(["admin", "office"]) : ((_req, _res, next) => next());
   const middleware = [authMiddleware, roleMiddleware];
+
+  router.get("/api/customers/:id/account-summary", ...middleware, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    let db;
+    try {
+      const today = req.query.today === undefined ? invoiceToday() : invoiceDate(req.query.today);
+      if (!today) return res.status(400).json({ error: "A valid date is required." });
+      if (getWorkspaceStorageMode(env) !== "sqlite") return res.status(409).json({ error: "The account endpoint requires SQLite workspace storage." });
+      db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), readonly: true, fileMustExist: true, migrate: false });
+      return res.json(getCustomerAccountSummary(db, req.params.id, { today }));
+    } catch (error) {
+      return res.status(error?.statusCode === 404 ? 404 : 503).json({ error: error?.statusCode === 404 ? "Customer not found." : "The customer account is temporarily unavailable." });
+    } finally { db?.close(); }
+  });
 
   router.post(
     "/api/customers",

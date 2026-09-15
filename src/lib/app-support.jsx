@@ -1,4 +1,5 @@
 import { normalizeDeletedInvoices } from "./invoice-deletion.js";
+import { invoiceStatusFromAmounts } from "./invoice-account.js";
 import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 /* eslint-disable react-refresh/only-export-components */
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
@@ -901,61 +902,9 @@ export function normalizeDocument(type, doc) {
 
 export function getInvoiceStatus(job) {
   const invoice = normalizeDocument("invoice", job?.invoice);
-
-  if (!invoice) {
-    return {
-      id: "not-invoiced",
-      label: "Not invoiced",
-      className: "bg-surface-raised text-secondary-foreground",
-      rank: 0,
-    };
-  }
-
   const paymentSummary = getInvoicePaymentSummary(invoice);
-
-  if (paymentSummary.total > 0 && paymentSummary.balanceAmount <= 0) {
-    return {
-      id: "paid",
-      label: "Paid",
-      className: "bg-status-success-surface text-status-success",
-      rank: 6,
-    };
-  }
-
-  const today = toDateInputValue(new Date());
-  if (paymentSummary.balanceAmount > 0 && invoice.dueDate && invoice.dueDate < today) {
-    return {
-      id: "overdue",
-      label: "Overdue",
-      className: "bg-status-danger-surface text-status-danger",
-      rank: 1,
-    };
-  }
-
-  if (paymentSummary.paidAmount > 0) {
-    return {
-      id: paymentSummary.paymentCount <= 1 ? "deposit-paid" : "partially-paid",
-      label: paymentSummary.paymentCount <= 1 ? "Deposit Paid" : "Partially Paid",
-      className: paymentSummary.paymentCount <= 1 ? "bg-status-warning-surface text-status-warning" : "bg-status-special-surface text-status-special",
-      rank: paymentSummary.paymentCount <= 1 ? 4 : 5,
-    };
-  }
-
-  if (invoice.sentHistory?.length) {
-    return {
-      id: "unpaid",
-      label: "Unpaid",
-      className: "bg-status-info-surface text-status-info",
-      rank: 3,
-    };
-  }
-
-  return {
-    id: "draft",
-    label: "Draft",
-    className: "bg-status-warning-surface text-status-warning",
-    rank: 2,
-  };
+  return invoiceStatusFromAmounts({ exists: Boolean(invoice), total: paymentSummary.total, balance: paymentSummary.balanceAmount,
+    paid: paymentSummary.paidAmount, paymentCount: paymentSummary.paymentCount, sentCount: invoice?.sentHistory?.length || 0, dueDate: invoice?.dueDate });
 }
 
 export function normalizeJobRecord(job) {

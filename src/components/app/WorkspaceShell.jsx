@@ -27,7 +27,6 @@ import {
   buildCustomerSites,
   formatDate,
   getCalendarDays,
-  getCustomerSiteAccessNote,
   getInventoryStockStatus,
   getInvoicePaymentSummary,
   getInvoiceStatus,
@@ -425,7 +424,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
                   <OfficeBoard
                     jobs={filteredJobs}
-                    customers={data.customers}
                     onDropJob={handleStatusChange}
                     onOpenJob={handleOpenJob}
                     allowDragging
@@ -433,7 +431,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                     columnViewModes={serviceBoardColumnViews}
                     onPlanJobForTomorrow={handlePlanJobForTomorrow}
                     showTagLabels={showServiceBoardTagLabels}
-                    getCustomerSiteAccessNote={getCustomerSiteAccessNote}
                     getInvoiceStatus={getInvoiceStatus}
                     formatDate={formatDate}
                     tomorrowPlanningDate={derived.tomorrowPlanningDate}
@@ -466,9 +463,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
               <MobileServiceBoard
                 canManageTomorrow={canManageBusiness}
                 columnSortModes={serviceBoardColumnSorts}
-                customers={data.customers}
                 formatDate={formatDate}
-                getCustomerSiteAccessNote={getCustomerSiteAccessNote}
                 getInvoiceStatus={getInvoiceStatus}
                 jobs={filteredJobs}
                 officeSearch={officeSearch}
@@ -560,6 +555,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             <span>{chrome.invoiceNotice}</span><Button variant="ghost" size="sm" onClick={chrome.dismissInvoiceNotice}>Dismiss</Button>
           </div> : null}
           <InvoiceManager
+            key={chrome.invoiceCustomerId || "all-customers"}
+            customerId={chrome.invoiceCustomerId}
+            customerName={data.customers.find((customer) => customer.id === chrome.invoiceCustomerId)?.name}
+            onClearCustomer={chrome.clearInvoiceCustomer}
             jobs={data.jobs.filter((job) => job.invoice || !(data.deletedInvoices || []).some((record) => record.jobId === job.id))}
             onOpenJob={handleOpenJob}
             onOpenInvoice={(job) => handleOpenDoc(job, "invoice")}

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const WORKSPACE_HISTORY_KEY = "elsetWorkspace";
 
-export function parseWorkspacePath(pathname, state = null) {
+export function parseWorkspacePath(pathname, state = null, search = "") {
+  const [basePath, inlineSearch = ""] = pathname.split("?");
+  pathname = basePath;
   const context = {
     sourceSection: state?.sourceSection || "service-board",
     sourceScrollY: Number(state?.sourceScrollY || 0),
@@ -10,6 +12,11 @@ export function parseWorkspacePath(pathname, state = null) {
     historyIndex: Number(state?.historyIndex || 0),
     tab: state?.tab || "overview",
   };
+  if (/^\/invoices\/?$/.test(pathname)) {
+    const customerId = new URLSearchParams(search || inlineSearch).get("customerId") || "";
+    return { ...context, type: "section", section: "invoices", customerId,
+      path: `/invoices${customerId ? `?customerId=${encodeURIComponent(customerId)}` : ""}` };
+  }
   if (/^\/map\/?$/.test(pathname) || (pathname === "/" && state?.section === "map")) {
     return { ...context, type: "section", path: "/map", section: "map" };
   }
@@ -80,7 +87,7 @@ function getWorkspaceState() {
 }
 
 export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
-  const [route, setRoute] = useState(() => parseWorkspacePath(window.location.pathname, getWorkspaceState()));
+  const [route, setRoute] = useState(() => parseWorkspacePath(window.location.pathname, getWorkspaceState(), window.location.search));
   const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
   const routeRef = useRef(route);
   const blockerRef = useRef(null);
@@ -188,7 +195,9 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, [navigateTo]);
 
   const navigateToSection = useCallback((section, onNavigated, options = {}) => {
-    return navigateTo({ type: "section", path: ["customers", "maintenance", "map"].includes(section) ? `/${section}` : "/", section }, { ...options, onNavigated });
+    const customerId = section === "invoices" ? options.customerId || "" : "";
+    const sectionPath = ["customers", "maintenance", "map", "invoices"].includes(section) ? `/${section}` : "/";
+    return navigateTo({ type: "section", path: `${sectionPath}${customerId ? `?customerId=${encodeURIComponent(customerId)}` : ""}`, section, customerId }, { ...options, onNavigated });
   }, [navigateTo]);
 
   const navigateToCustomer = useCallback((customerId, options = {}) => {
@@ -283,7 +292,7 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     const handlePopState = (event) => {
       const currentRoute = routeRef.current;
       const nextHistoryState = event.state?.[WORKSPACE_HISTORY_KEY] || null;
-      const nextRoute = parseWorkspacePath(window.location.pathname, nextHistoryState);
+      const nextRoute = parseWorkspacePath(window.location.pathname, nextHistoryState, window.location.search);
 
       if (restoringBlockedPopRef.current) {
         restoringBlockedPopRef.current = false;

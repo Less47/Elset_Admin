@@ -7,7 +7,6 @@ import {
   formatStreetAndSuburb,
   getJobValueMeta,
   getMobileMoveButtonId,
-  getSiteAccessNotePreview,
 } from "./service-board-utils";
 
 const urgencyTone = {
@@ -54,7 +53,6 @@ export default function MobileJobCard({
   onRemoveFromTomorrow,
   showStatus = false,
   showTagLabels,
-  siteAccessNote,
 }) {
   const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
   const location = formatStreetAndSuburb(job.jobAddress);
@@ -63,7 +61,6 @@ export default function MobileJobCard({
   const indicators = buildJobCardIndicators({
     job,
     invoiceStatus: getInvoiceStatus(job),
-    siteAccessPreview: getSiteAccessNotePreview(siteAccessNote?.notes),
   });
   const openLabel = [
     `Open Job #${job.jobNumber}`,

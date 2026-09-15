@@ -8,6 +8,7 @@ import {
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 import { invoiceDeletionRestriction, invoiceHasBeenSent } from "./src/lib/invoice-deletion.js";
 import { buildDocumentReference } from "./src/lib/quote-template.js";
+import { invoiceStatusFromAmounts } from "./src/lib/invoice-account.js";
 
 const QUANTITY_SCALE = 1_000_000;
 
@@ -305,11 +306,11 @@ function getQuoteFinancials(db, quoteId) {
   };
 }
 
-function getInvoiceFinancials(db, invoiceId) {
-  const subtotalCents = documentSubtotalFromRows(getInvoiceRows(db, invoiceId));
+export function invoiceFinancialsFromRows(itemRows, paymentRows) {
+  const subtotalCents = documentSubtotalFromRows(itemRows);
   const gstCents = gstCentsFromSubtotal(subtotalCents);
   const totalCents = subtotalCents + gstCents;
-  const paidCents = paymentTotalCents(getPaymentRows(db, invoiceId));
+  const paidCents = paymentTotalCents(paymentRows);
   return {
     subtotalCents,
     gstCents,
@@ -318,6 +319,10 @@ function getInvoiceFinancials(db, invoiceId) {
     balanceCents: Math.max(totalCents - paidCents, 0),
     overpaidCents: Math.max(paidCents - totalCents, 0),
   };
+}
+
+function getInvoiceFinancials(db, invoiceId) {
+  return invoiceFinancialsFromRows(getInvoiceRows(db, invoiceId), getPaymentRows(db, invoiceId));
 }
 
 function moneySummary(financials) {
@@ -334,29 +339,16 @@ function getInvoiceStatusSummary(db, invoiceRow) {
     return { id: "not-invoiced", label: "Not invoiced", rank: 0 };
   }
   const financials = getInvoiceFinancials(db, invoiceRow.id);
-  if (financials.totalCents > 0 && financials.balanceCents <= 0) {
-    return { id: "paid", label: "Paid", rank: 6 };
-  }
-  const today = toDateInputValue(new Date());
-  if (financials.balanceCents > 0 && invoiceRow.due_date && invoiceRow.due_date < today) {
-    return { id: "overdue", label: "Overdue", rank: 1 };
-  }
   const paymentCount = getPaymentRows(db, invoiceRow.id).length;
-  if (financials.paidCents > 0) {
-    return paymentCount <= 1
-      ? { id: "deposit-paid", label: "Deposit Paid", rank: 4 }
-      : { id: "partially-paid", label: "Partially Paid", rank: 5 };
-  }
   const sentCount = db.prepare(`
     SELECT COUNT(*) AS count
       FROM document_send_history
      WHERE document_kind = 'invoice'
        AND invoice_id = ?
   `).get(invoiceRow.id).count;
-  if (sentCount > 0) {
-    return { id: "unpaid", label: "Unpaid", rank: 3 };
-  }
-  return { id: "draft", label: "Draft", rank: 2 };
+  const { id, label, rank } = invoiceStatusFromAmounts({ total: financials.totalCents, balance: financials.balanceCents,
+    paid: financials.paidCents, paymentCount, sentCount, dueDate: invoiceRow.due_date });
+  return { id, label, rank };
 }
 
 function ensureJobExists(db, jobId) {

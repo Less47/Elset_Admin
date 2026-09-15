@@ -292,13 +292,15 @@ async function checkCustomerGrid(page) {
   await expect(page.locator(".customer-workspace-grid")).toBeVisible();
   await expect(page.getByRole("tab", { includeHidden: true })).toHaveCount(0);
   await expect(page.getByRole("tabpanel", { includeHidden: true })).toHaveCount(0);
-  await expect(page.locator('[data-customer-section]')).toHaveCount(4);
+  await expect(page.locator('[data-customer-section]')).toHaveCount(5);
   const boxes = {};
-  for (const name of ["details", "sites", "contacts", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
+  await expect(page.locator('[data-account-balance]')).toBeVisible();
+  for (const name of ["details", "sites", "contacts", "account", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
   expect(boxes.details.x).toBeCloseTo(boxes.contacts.x, 0);
   expect(boxes.sites.x).toBeCloseTo(boxes.jobs.x, 0);
-  expect(boxes.details.y).toBeCloseTo(boxes.sites.y, 0);
+  expect(boxes.details.y).toBeCloseTo(boxes.account.y, 0);
   expect(boxes.contacts.y - boxes.details.y - boxes.details.height).toBeCloseTo(12, 0);
+  expect(boxes.sites.y - boxes.account.y - boxes.account.height).toBeCloseTo(12, 0);
   expect(boxes.jobs.y - boxes.sites.y - boxes.sites.height).toBeCloseTo(12, 0);
   expect(boxes.sites.x - boxes.details.x - boxes.details.width).toBeCloseTo(12, 0);
   expect(boxes.details.width / boxes.sites.width).toBeCloseTo(2 / 3, 2);
@@ -310,7 +312,7 @@ async function checkCustomerGrid(page) {
   expect(grid.x + grid.width).toBeCloseTo(header.x + header.width, 0);
   const danger = await page.locator('[data-customer-danger-zone]').boundingBox();
   expect(danger.y - grid.y - grid.height).toBeCloseTo(12, 0);
-  await expect(page.locator('.customer-section-panel')).toHaveCount(4);
+  await expect(page.locator('.customer-section-panel')).toHaveCount(5);
   const styles = await page.locator('.customer-section-panel').evaluateAll((panels) => panels.map((panel) => {
     const style = getComputedStyle(panel);
     const header = panel.querySelector('.customer-section-header');

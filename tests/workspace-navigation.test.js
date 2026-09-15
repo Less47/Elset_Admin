@@ -2,6 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseWorkspacePath } from "../src/hooks/useWorkspaceNavigation.js";
 
+test("invoice Customer filters survive direct links, refresh and document return paths", () => {
+  const path = "/invoices?customerId=customer%20one%2Ftwo";
+  const route = parseWorkspacePath(path);
+  assert.equal(route.section, "invoices");
+  assert.equal(route.customerId, "customer one/two");
+  assert.equal(route.path, path);
+  assert.equal(parseWorkspacePath("/invoices", null, "?customerId=customer%20one%2Ftwo").customerId, route.customerId);
+  assert.equal(parseWorkspacePath("/jobs/job/invoice", { returnPath: path }).returnPath, path);
+  assert.equal(parseWorkspacePath("/invoices").customerId, "");
+});
+
 test("the production map route and record navigation use one map", () => {
   for (const path of ["/map", "/map/"]) {
     assert.equal(parseWorkspacePath(path).section, "map");

@@ -21,24 +21,11 @@ export const serviceBoardSortOptions = [
 
 export const serviceBoardIndicatorLegend = [
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
-  { id: "invoice-draft", label: "Invoice draft", dotClassName: "bg-orange-500" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
   { id: "invoice-attention", label: "Invoice needs attention", dotClassName: "bg-rose-500" },
-  { id: "maintenance", label: "Maintenance", dotClassName: "bg-teal-500" },
-  { id: "access", label: "Access notes", dotClassName: "bg-amber-500" },
+  { id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" },
 ];
-
-export function getSiteAccessNotePreview(notes) {
-  if (!notes) return "";
-
-  return (
-    String(notes)
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) || ""
-  );
-}
 
 export function getJobValueMeta(job) {
   if (job?.invoice) {
@@ -118,7 +105,7 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
   });
 }
 
-export function buildJobCardIndicators({ job, invoiceStatus, siteAccessPreview }) {
+export function buildJobCardIndicators({ job, invoiceStatus }) {
   const indicators = [];
   const quoteSent = Boolean(job.quote?.sentHistory?.length);
   const showInvoiceStatus = Boolean(job.invoice) || job.status === "Completed";
@@ -140,11 +127,7 @@ export function buildJobCardIndicators({ job, invoiceStatus, siteAccessPreview }
   }
 
   if (job.maintenancePlanName) {
-    indicators.push({ id: "maintenance", label: "Maintenance", dotClassName: "bg-teal-500" });
-  }
-
-  if (siteAccessPreview) {
-    indicators.push({ id: "access", label: "Access Notes", dotClassName: "bg-amber-500" });
+    indicators.push({ id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" });
   }
 
   return indicators;

@@ -189,7 +189,7 @@ export default function App() {
   const workspacePage = ["maintenance-details", "edit-maintenance", "create-maintenance"].includes(workspaceRoute.type)
     ? session.canManageBusiness ? <MaintenancePlanPage key={workspaceRoute.path} route={workspaceRoute} navigation={workspaceNavigation} actions={workspaceActions} data={data} backLabel={backLabel} /> : null
     : customerPageOpen
-    ? <CustomerPages route={workspaceRoute} navigation={workspaceNavigation} actions={workspaceActions} data={data} canManageBusiness={session.canManageBusiness} backLabel={backLabel} />
+    ? <CustomerPages route={workspaceRoute} navigation={workspaceNavigation} actions={workspaceActions} data={data} canManageBusiness={session.canManageBusiness} backLabel={backLabel} storageMode={session.workspaceStorageMode} />
     : workspaceRoute.type === "create-job"
     ? session.canManageBusiness
       ? (
@@ -291,6 +291,8 @@ export default function App() {
           activeSettingsTab: effectiveActiveSettingsTab,
           activeTemplateType,
           invoiceNotice,
+          invoiceCustomerId: workspaceRoute.section === "invoices" ? workspaceRoute.customerId || "" : "",
+          clearInvoiceCustomer: () => workspaceNavigation.navigateToSection("invoices"),
           dismissInvoiceNotice: () => setInvoiceNotice(""),
           officeSearch,
           serviceBoardColumnSorts,
