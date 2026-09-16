@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { siteAddressMetadata } from "./src/lib/site-location.js";
 import { insertInvoiceTree, insertQuoteTree } from "./server-workspace-documents.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
@@ -162,6 +163,7 @@ const jobKnownKeys = new Set([
   "maintenanceDueDate",
   "serviceBoardTomorrowDate",
   "serviceBoardTomorrowOrder",
+  "serviceBoardNote",
   "createdAt",
   "updatedAt",
   "notes",
@@ -716,6 +718,7 @@ function normalizeJobBase(input, customer, {
     maintenancePlanName: trimText(input.maintenancePlanName ?? existingJob?.maintenancePlanName),
     maintenanceDueDate: normalizeDateInput(input.maintenanceDueDate ?? existingJob?.maintenanceDueDate),
     serviceBoardTomorrowDate: normalizeDateInput(input.serviceBoardTomorrowDate ?? existingJob?.serviceBoardTomorrowDate),
+    serviceBoardNote: normalizeServiceBoardNote(input.serviceBoardNote === undefined ? existingJob?.serviceBoardNote : input.serviceBoardNote),
     serviceBoardTomorrowOrder:
       input.serviceBoardTomorrowOrder === null || input.serviceBoardTomorrowOrder === undefined
         ? existingJob?.serviceBoardTomorrowOrder ?? null
@@ -776,8 +779,8 @@ function insertJobCore(db, job) {
       assigned_technician_name, customer_id, customer_name, customer_email, customer_phone, job_address,
       oc_number, requester_contact_json, onsite_contact_json, billing_contact_json, maintenance_plan_id,
       maintenance_plan_name, maintenance_due_date, service_board_tomorrow_date, service_board_tomorrow_order,
-      created_at, updated_at, external_refs_json, extra_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, updated_at, external_refs_json, extra_json, service_board_note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.id,
     job.jobNumber,
@@ -807,7 +810,8 @@ function insertJobCore(db, job) {
     job.createdAt,
     job.updatedAt,
     objectJson(job.externalRefs),
-    objectJson(job.extra)
+    objectJson(job.extra),
+    normalizeServiceBoardNote(job.serviceBoardNote)
   );
 }
 
@@ -867,6 +871,7 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
     maintenanceDueDate: "maintenance_due_date",
     serviceBoardTomorrowDate: "service_board_tomorrow_date",
     serviceBoardTomorrowOrder: "service_board_tomorrow_order",
+    serviceBoardNote: "service_board_note",
   };
   const assignments = [];
   const values = [];
@@ -875,7 +880,9 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
     const column = allowedFields[key];
     if (!column) return;
     assignments.push(`${column} = ?`);
-    if (key.endsWith("Contact")) {
+    if (key === "serviceBoardNote") {
+      values.push(normalizeServiceBoardNote(value));
+    } else if (key.endsWith("Contact")) {
       values.push(value ? json(value) : null);
     } else if (key === "assignedTechnicianId" || key === "maintenancePlanId") {
       values.push(nullableText(value));
@@ -931,6 +938,7 @@ function normalizeDeletedJobPayload(payload) {
     maintenancePlanName: trimText(payload.maintenancePlanName),
     maintenanceDueDate: normalizeDateInput(payload.maintenanceDueDate),
     serviceBoardTomorrowDate: normalizeDateInput(payload.serviceBoardTomorrowDate),
+    serviceBoardNote: normalizeServiceBoardNote(payload.serviceBoardNote),
     serviceBoardTomorrowOrder: payload.serviceBoardTomorrowOrder === null || payload.serviceBoardTomorrowOrder === undefined
       ? null
       : Number(payload.serviceBoardTomorrowOrder),
@@ -1095,15 +1103,40 @@ function recordMaintenanceJobCompletion(db, job, updatedAt) {
   db.prepare("UPDATE maintenance_plans SET extra_json = json_set(extra_json, '$.maintenanceRevision', coalesce(json_extract(extra_json, '$.maintenanceRevision'), 0) + 1) WHERE id = ?").run(maintenancePlanId);
 }
 
-export function changeJobStatus(db, jobIdInput, statusInput) {
+function getJobStatusFields(db, jobId) {
+  return db.prepare(`SELECT id, status, updated_at AS updatedAt,
+    service_board_tomorrow_date AS serviceBoardTomorrowDate,
+    service_board_tomorrow_order AS serviceBoardTomorrowOrder,
+    maintenance_plan_id AS maintenancePlanId FROM jobs WHERE id = ?`).get(jobId);
+}
+
+function getMaintenanceCompletionFields(db, job) {
+  if (!job.maintenancePlanId) return null;
+  const plan = db.prepare(`SELECT id, last_completed_at AS lastCompletedAt, updated_at AS updatedAt,
+    coalesce(json_extract(extra_json, '$.maintenanceRevision'), 0) AS maintenanceRevision
+    FROM maintenance_plans WHERE id = ?`).get(job.maintenancePlanId);
+  if (!plan) return null;
+  return { ...plan, completedOccurrences: db.prepare(`SELECT occurrence_key AS key, completed_at AS completedAt
+    FROM maintenance_occurrence_exceptions WHERE job_id = ? OR generated_job_id = ?`).all(job.id, job.id) };
+}
+
+export function changeJobStatus(db, jobIdInput, statusInput, { returnDelta = false, expectedStatus } = {}) {
   const jobId = normalizeId(jobIdInput, "Job ID");
   const nextStatus = normalizeOption(statusInput, statusValues, "");
   if (!nextStatus) throw new WorkspaceJobError("Job status is invalid.");
+  if (expectedStatus !== undefined && !statusValues.has(expectedStatus)) throw new WorkspaceJobError("Previous job status is invalid.");
 
   return db.transaction(() => {
-    const job = getJobState(db, jobId);
+    const job = returnDelta ? getJobStatusFields(db, jobId) : getJobState(db, jobId);
     if (!job) throw new WorkspaceJobError("Job not found.", 404);
-    if (job.status === nextStatus) return job;
+    if (expectedStatus !== undefined && job.status !== expectedStatus && job.status !== nextStatus) {
+      const error = new WorkspaceJobError("This job's status changed in another session. The current status has been restored; please try again.", 409);
+      error.currentJob = getJobStatusFields(db, jobId);
+      throw error;
+    }
+    if (job.status === nextStatus) return returnDelta
+      ? { job, maintenancePlan: nextStatus === "Completed" ? getMaintenanceCompletionFields(db, job) : null }
+      : job;
 
     const updatedAt = nowIso();
     updateJobCore(db, jobId, { status: nextStatus }, updatedAt);
@@ -1113,7 +1146,9 @@ export function changeJobStatus(db, jobIdInput, statusInput) {
     }
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
-    return getJobState(db, jobId);
+    return returnDelta
+      ? { job: getJobStatusFields(db, jobId), maintenancePlan: nextStatus === "Completed" ? getMaintenanceCompletionFields(db, job) : null }
+      : getJobState(db, jobId);
   })();
 }
 

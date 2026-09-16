@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { writeMaintenanceException } from "./server-maintenance-occurrence-store.js";
 import { normalizeStoredData } from "./server-store.js";
 import {
@@ -400,8 +401,8 @@ function buildInsertStatements(db) {
         assigned_technician_name, customer_id, customer_name, customer_email, customer_phone, job_address,
         oc_number, requester_contact_json, onsite_contact_json, billing_contact_json, maintenance_plan_id,
         maintenance_plan_name, maintenance_due_date, service_board_tomorrow_date, service_board_tomorrow_order,
-        created_at, updated_at, external_refs_json, extra_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, updated_at, external_refs_json, extra_json, service_board_note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     jobNote: db.prepare(`
       INSERT INTO job_notes (id, job_id, author, text, created_at, extra_json)
@@ -474,7 +475,7 @@ const jobKeys = new Set([
   "assignedTechnicianName", "customerId", "customerName", "customerEmail", "customerPhone", "jobAddress",
   "ocNumber", "requesterContact", "onsiteContact", "billingContact", "maintenancePlanId", "maintenancePlanName",
   "maintenanceDueDate", "serviceBoardTomorrowDate", "serviceBoardTomorrowOrder", "createdAt", "updatedAt",
-  "notes", "photos", "quote", "invoice", "externalRefs",
+  "notes", "photos", "quote", "invoice", "externalRefs", "serviceBoardNote",
 ]);
 const noteKeys = new Set(["id", "author", "text", "createdAt"]);
 const attachmentKeys = new Set(["id", "name", "url", "path", "mimeType", "mime_type", "sizeBytes", "size_bytes", "createdAt", "kind"]);
@@ -773,7 +774,8 @@ function insertWorkspaceData(db, data, { sourceJsonSha256 = "" } = {}) {
       text(job.createdAt || importTime),
       text(job.updatedAt || job.createdAt || importTime),
       objectJson(job.externalRefs),
-      objectJson(pickExtra(job, jobKeys))
+      objectJson(pickExtra(job, jobKeys)),
+      normalizeServiceBoardNote(job.serviceBoardNote)
     );
     insertServiceM8Ref(statements, "job", job.id, job.externalRefs);
 

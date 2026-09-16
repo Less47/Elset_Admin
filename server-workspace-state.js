@@ -302,6 +302,7 @@ export function loadWorkspaceStateFromDb(db) {
       maintenanceDueDate: row.maintenance_due_date,
       serviceBoardTomorrowDate: row.service_board_tomorrow_date,
       serviceBoardTomorrowOrder: row.service_board_tomorrow_order,
+      serviceBoardNote: row.service_board_note,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       notes: (notesByJobId.get(row.id) || []).map((noteRow) => mergeExtra({

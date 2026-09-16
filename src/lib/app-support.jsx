@@ -1,4 +1,5 @@
 import { normalizeDeletedInvoices } from "./invoice-deletion.js";
+import { normalizeServiceBoardNote } from "./service-board-note.js";
 import { invoiceStatusFromAmounts } from "./invoice-account.js";
 import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 /* eslint-disable react-refresh/only-export-components */
@@ -937,6 +938,7 @@ export function normalizeJobRecord(job) {
     maintenanceOccurrenceKey: job?.maintenanceOccurrenceKey || "",
     serviceBoardTomorrowDate: toDateInputValue(job?.serviceBoardTomorrowDate),
     serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
+    serviceBoardNote: normalizeServiceBoardNote(job?.serviceBoardNote),
     ocNumber: String(job?.ocNumber || "").trim(),
     notes: Array.isArray(job.notes) ? job.notes : [],
     photos: Array.isArray(job.photos) ? job.photos : [],

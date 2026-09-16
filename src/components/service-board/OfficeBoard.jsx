@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStableCallback } from "@/hooks/useStableCallback";
 import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/components/shared/EmptyState";
 import { statuses, statusThemes } from "@/lib/job-status";
 import CompletedShowMore from "./CompletedShowMore";
+import JobNoteModeButton from "./JobNoteModeButton";
+import JobNotePill from "./JobNotePill";
 import { useCompletedJobLimit } from "./useCompletedJobLimit";
 import {
   buildJobCardIndicators,
@@ -87,6 +90,8 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
 }
 
 export function ServiceBoardTagLegend({
+  noteEditMode = false,
+  onToggleNoteEditMode,
   showTagLabels,
   onToggleShowTagLabels,
   tone = "default",
@@ -109,12 +114,13 @@ export function ServiceBoardTagLegend({
           <Checkbox checked={showTagLabels} onCheckedChange={(checked) => onToggleShowTagLabels(Boolean(checked))} />
           <span className={`text-[11px] ${isHeroTone ? "text-inherit" : "text-text-secondary"}`}>Show tag info</span>
         </div>
+        <JobNoteModeButton active={noteEditMode} onToggle={onToggleNoteEditMode} />
       </div>
     </div>
   );
 }
 
-function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob }) {
+const TomorrowJobCard = memo(function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob, noteEditMode, onEditNote }) {
   const urgencyTone = {
     Low: "bg-surface-raised text-text-secondary",
     Medium: "bg-status-warning-surface text-status-warning",
@@ -123,7 +129,20 @@ function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob }) {
   const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
 
   return (
-    <div className={`rounded-2xl border p-4 shadow-sm ${statusTheme.card}`}>
+    <div
+      className={`relative rounded-2xl border p-4 shadow-sm ${statusTheme.card}`}
+      data-note-edit-mode={noteEditMode || undefined}
+      data-tomorrow-job-id={job.id}
+      tabIndex={noteEditMode ? 0 : undefined}
+      onClick={(event) => { if (noteEditMode && !event.target.closest("button")) onEditNote(job, event); }}
+      onKeyDown={(event) => {
+        if (noteEditMode && event.target === event.currentTarget && ["Enter", " "].includes(event.key)) {
+          event.preventDefault();
+          onEditNote(job, event);
+        }
+      }}
+    >
+      <JobNotePill note={job.serviceBoardNote} />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
@@ -157,9 +176,11 @@ function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob }) {
       </div>
     </div>
   );
-}
+});
 
 export function ServiceBoardTomorrowPanel({
+  noteEditMode = false,
+  onEditNote,
   jobs,
   open,
   tomorrowDate,
@@ -170,6 +191,9 @@ export function ServiceBoardTomorrowPanel({
   formatDate,
 }) {
   const panelWidth = "min(92vw, 440px)";
+  const openJob = useStableCallback(onOpenJob);
+  const removeJob = useStableCallback(onRemoveJob);
+  const editNote = useStableCallback(onEditNote);
   const tabButtonRef = useRef(null);
   const [tabEdgeOffset, setTabEdgeOffset] = useState(0);
 
@@ -268,11 +292,13 @@ export function ServiceBoardTomorrowPanel({
               <div className="grid gap-3">
                 {jobs.map((job) => (
                   <TomorrowJobCard
+                    noteEditMode={noteEditMode}
+                    onEditNote={editNote}
                     key={job.id}
                     job={job}
                     formatDate={formatDate}
-                    onOpenJob={onOpenJob}
-                    onRemoveJob={onRemoveJob}
+                    onOpenJob={openJob}
+                    onRemoveJob={removeJob}
                   />
                 ))}
               </div>
@@ -312,8 +338,11 @@ function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
   );
 }
 
-function JobCard({
+// The statusDateKey prop also invalidates memoization when date-based invoice indicators change.
+const JobCard = memo(function JobCard({
   job,
+  noteEditMode = false,
+  onEditNote,
   onOpen,
   draggable = false,
   viewMode = "list",
@@ -336,9 +365,23 @@ function JobCard({
   const isGridView = viewMode === "grid";
   const isCompactView = viewMode === "compact";
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
+  const priceRef = useRef(null);
+  useEffect(() => {
+    const price = priceRef.current;
+    if (!price) return undefined;
+    const measure = () => price.closest("[data-service-board-job-id]").style.setProperty("--job-price-width", `${price.getBoundingClientRect().width}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(price);
+    return () => observer.disconnect();
+  }, [isGridView, isCompactView, jobValueMeta?.amount]);
   const cardClassName = `box-border w-full min-w-0 max-w-full ${isGridView ? "h-full overflow-visible rounded-2xl py-0" : isCompactView ? "rounded-xl py-2" : "rounded-2xl py-0"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
-  const cardContentClassName = isGridView ? `flex h-full flex-col p-2 ${jobValueMeta ? "pb-3" : ""}` : isCompactView ? "px-2.5 py-0" : "p-2.5";
-  const headerMetaClassName = `flex min-w-0 ${isCompactView ? "max-w-[min(100%,6rem)] shrink-0" : "max-w-1/2"} flex-col items-end`;
+  const cardContentClassName = isGridView ? "flex h-full flex-col p-2 pb-3" : isCompactView ? "px-2.5 py-0" : "p-2.5";
+  // Keep enough room for the full price, the gap, and a visible note ellipsis.
+  const headerMetaMinWidth = job.serviceBoardNote && jobValueMeta
+    ? "min-w-[calc(var(--job-price-width,5rem)+1.75rem)]"
+    : "min-w-0";
+  const headerMetaClassName = `flex ${headerMetaMinWidth} shrink-0 ${isCompactView ? (job.serviceBoardNote ? "max-w-[60%]" : "max-w-[min(100%,6rem)]") : "max-w-1/2"} flex-col items-end`;
   const urgencyClassName = `h-auto min-w-0 max-w-full whitespace-normal ${urgencyTone[job.urgency]}`;
   const descriptionClassName = `${isCompactView ? "line-clamp-1" : "line-clamp-2"} mt-1.5 text-sm leading-snug text-text-secondary`;
   const actionRowClassName = "mt-1.5 flex flex-wrap gap-2";
@@ -347,8 +390,41 @@ function JobCard({
     invoiceStatus,
   });
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
-  const handleCardDoubleClick = () => onOpen(job);
-  const shouldShowHeaderMeta = Boolean(jobValueMeta) || job.status !== "Completed";
+  const handleCardDoubleClick = () => {
+    if (noteEditMode) return;
+    onOpen(job);
+  };
+  const noteInteraction = {
+    "data-service-board-job-id": job.id,
+    "data-job-card-view": viewMode,
+    "data-note-edit-mode": noteEditMode || undefined,
+    tabIndex: noteEditMode ? 0 : undefined,
+    role: noteEditMode ? "group" : undefined,
+    "aria-label": noteEditMode ? `Edit note for Job #${job.jobNumber}` : undefined,
+    onClickCapture: (event) => {
+      if (!noteEditMode || event.target.closest("button:not([data-job-card-body]), a, input, select, textarea, [role='combobox']")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onEditNote(job, event);
+    },
+    onKeyDown: (event) => {
+      if (noteEditMode && event.target === event.currentTarget && ["Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        onEditNote(job, event);
+      }
+    },
+  };
+  const shouldShowHeaderMeta = Boolean(jobValueMeta || job.serviceBoardNote) || job.status !== "Completed";
+  const inlineNoteAndPrice = jobValueMeta || job.serviceBoardNote ? (
+    <div data-job-card-value-row className="flex min-w-0 max-w-full items-center justify-end gap-1">
+      <JobNotePill note={job.serviceBoardNote} variant="inline" />
+      {jobValueMeta ? (
+        <div ref={priceRef} className="shrink-0 whitespace-nowrap rounded-full bg-card/85 px-2 py-0.5 text-[11px] font-semibold text-foreground shadow-sm" title={`${jobValueMeta.label} value`}>
+          {jobValueMeta.amount}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
   const compactAddress = formatStreetAndSuburb(job.jobAddress);
   const tomorrowActionPositionClassName = "right-1.5 top-1.5";
   const tomorrowAction = isPlannedForTomorrow ? (
@@ -378,18 +454,20 @@ function JobCard({
   ) : null;
 
   const handleDragStart = (event) => {
+    if (noteEditMode || !draggable) { event.preventDefault(); return; }
     event.dataTransfer.setData("jobId", job.id);
   };
 
   if (isCompactView) {
     return (
       <div
+        {...noteInteraction}
         className="group relative box-border w-full min-w-0 max-w-full"
-        draggable={draggable}
+        draggable={draggable && !noteEditMode}
         onDragStart={handleDragStart}
         onDoubleClick={handleCardDoubleClick}
-        onTouchStart={onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
-        title="Double-click to open job"
+        onTouchStart={!noteEditMode && onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
+        title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
       >
         <JobCardIndicators
           indicators={cardIndicators}
@@ -401,6 +479,7 @@ function JobCard({
           <CardContent className={`min-w-0 max-w-full [overflow-wrap:anywhere] ${cardContentClassName}`}>
             <button
               type="button"
+              data-job-card-body
               className="flex w-full min-w-0 items-start justify-between gap-2 pr-12 text-left lg:pr-9"
               onClick={() => setIsCompactExpanded((prev) => !prev)}
               aria-expanded={isCompactExpanded}
@@ -414,11 +493,7 @@ function JobCard({
                   </div>
                   {shouldShowHeaderMeta ? (
                     <div className={`${headerMetaClassName} gap-1.5`}>
-                      {jobValueMeta ? (
-                        <div className="min-w-0 max-w-full rounded-full bg-card/85 px-2 py-0.5 text-[11px] font-semibold text-foreground shadow-sm" title={`${jobValueMeta.label} value`}>
-                          {jobValueMeta.amount}
-                        </div>
-                      ) : null}
+                      {inlineNoteAndPrice}
                       {job.status !== "Completed" ? <Badge className={urgencyClassName}>{job.urgency}</Badge> : null}
                     </div>
                   ) : null}
@@ -453,13 +528,15 @@ function JobCard({
 
   return (
     <div
+      {...noteInteraction}
       className={`group relative box-border w-full min-w-0 max-w-full ${isGridView ? "h-full" : ""}`}
-      draggable={draggable}
+      draggable={draggable && !noteEditMode}
       onDragStart={handleDragStart}
       onDoubleClick={handleCardDoubleClick}
-      onTouchStart={onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
-      title="Double-click to open job"
+      onTouchStart={!noteEditMode && onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
+      title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
     >
+      {isGridView ? <JobNotePill note={job.serviceBoardNote} variant="floating" withFloatingPrice={Boolean(jobValueMeta)} /> : null}
       {isGridView ? (
         <JobCardIndicators
           indicators={cardIndicators}
@@ -471,7 +548,8 @@ function JobCard({
       {isGridView && jobValueMeta ? (
         <div
           data-grid-job-value
-          className="absolute bottom-[6px] right-0 z-20 max-w-full translate-y-1/2 truncate rounded-full bg-card/95 px-2 py-0.5 text-[11px] font-semibold leading-4 tabular-nums text-foreground shadow-sm"
+          ref={priceRef}
+          className="service-board-floating-pill right-0 z-20 max-w-full truncate rounded-full bg-card/95 px-2 py-0.5 text-[11px] font-semibold leading-4 tabular-nums text-foreground shadow-sm"
           title={`${jobValueMeta.label} value: ${jobValueMeta.amount}`}
         >
           {jobValueMeta.amount}
@@ -482,8 +560,9 @@ function JobCard({
           {isGridView ? (
             <div className="flex h-full min-w-0 flex-col justify-between gap-2">
               <div className="space-y-1">
-                <p className="min-h-8 pr-10 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground max-lg:min-h-11 max-lg:pr-12">Job #{job.jobNumber}</p>
-                <p className="text-xs font-medium leading-4 text-foreground">{job.customerName}</p>
+                {tomorrowAction ? <span aria-hidden="true" className="float-right h-8 w-10 max-lg:h-11 max-lg:w-12" /> : null}
+                <p data-job-card-number className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
+                <p data-job-card-customer className="text-xs font-medium leading-4 text-foreground">{job.customerName}</p>
                 <p className="text-[11px] font-normal leading-4 text-foreground">{job.title}</p>
                 <p className="line-clamp-2 text-[11px] leading-4 text-text-secondary">{compactAddress}</p>
               </div>
@@ -491,23 +570,19 @@ function JobCard({
             </div>
           ) : (
             <>
-          <div className="mb-1 flex min-h-6 items-center pr-8 max-lg:min-h-10 max-lg:pr-12">
+          {cardIndicators.length > 0 ? <div data-job-card-indicators className="mb-1 flex min-h-6 items-center pr-8 max-lg:min-h-10 max-lg:pr-12">
             <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="" />
-          </div>
+          </div> : null}
 
-          <div className="flex items-start justify-between gap-2">
+          <div className={`flex items-start justify-between gap-2 ${cardIndicators.length === 0 && tomorrowAction ? "pr-10 max-lg:pr-12" : ""}`}>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
+              <p data-job-card-number className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
               <p className="font-semibold leading-5 text-foreground">{job.customerName}</p>
               <p className="text-xs text-text-secondary">{job.title}</p>
             </div>
             {shouldShowHeaderMeta ? (
               <div className={`${headerMetaClassName} gap-1.5`}>
-                {jobValueMeta ? (
-                  <div className="min-w-0 max-w-full rounded-full bg-card/85 px-2 py-0.5 text-[11px] font-semibold text-foreground shadow-sm" title={`${jobValueMeta.label} value`}>
-                    {jobValueMeta.amount}
-                  </div>
-                ) : null}
+                {inlineNoteAndPrice}
                 {job.status !== "Completed" ? <Badge className={urgencyClassName}>{job.urgency}</Badge> : null}
               </div>
             ) : null}
@@ -551,10 +626,12 @@ function JobCard({
       </Card>
     </div>
   );
-}
+});
 
 export function OfficeBoard({
   jobs,
+  noteEditMode = false,
+  onEditNote,
   onDropJob,
   onOpenJob,
   allowDragging = true,
@@ -575,6 +652,24 @@ export function OfficeBoard({
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
   const touchDragSessionRef = useRef(null);
   const touchDragHoldTimerRef = useRef(null);
+  const touchDragFrameRef = useRef(null);
+  const touchDragPreviewRef = useRef(null);
+  const openJob = useStableCallback(onOpenJob);
+  const editNote = useStableCallback(onEditNote);
+  const planForTomorrow = useStableCallback(onPlanJobForTomorrow);
+  const dropJob = useStableCallback(onDropJob);
+  const todoSort = columnSortModes["To Do"] || "recent";
+  const progressSort = columnSortModes["In Progress"] || "recent";
+  const completedSort = columnSortModes.Completed || "recent";
+  const sortedColumns = useMemo(() => {
+    const groups = Object.fromEntries(statuses.map((status) => [status, []]));
+    for (const job of jobs) groups[job.status]?.push(job);
+    return {
+      "To Do": sortJobsForColumn(groups["To Do"], todoSort),
+      "In Progress": sortJobsForColumn(groups["In Progress"], progressSort),
+      Completed: sortJobsForColumn(groups.Completed, completedSort),
+    };
+  }, [jobs, todoSort, progressSort, completedSort]);
 
   const clearTouchDragHoldTimer = useCallback(() => {
     if (touchDragHoldTimerRef.current) {
@@ -583,13 +678,10 @@ export function OfficeBoard({
     }
   }, []);
 
-  const syncTouchDrag = useCallback((nextSession) => {
-    touchDragSessionRef.current = nextSession;
-    setTouchDrag(nextSession);
-  }, []);
-
   const clearTouchDragSession = useCallback(() => {
     clearTouchDragHoldTimer();
+    window.cancelAnimationFrame(touchDragFrameRef.current);
+    touchDragFrameRef.current = null;
     touchDragSessionRef.current = null;
     setTouchDrag(null);
     setTouchDropTargetStatus("");
@@ -601,7 +693,7 @@ export function OfficeBoard({
   }, []);
 
   const handleTouchDragStart = useCallback((job, event) => {
-    if (!allowDragging || event.touches.length !== 1 || isInteractiveTouchTarget(event.target)) {
+    if (noteEditMode || !allowDragging || event.touches.length !== 1 || isInteractiveTouchTarget(event.target)) {
       return;
     }
 
@@ -621,7 +713,8 @@ export function OfficeBoard({
     };
 
     clearTouchDragHoldTimer();
-    syncTouchDrag(nextSession);
+    touchDragSessionRef.current = nextSession;
+    setTouchDrag({ ...nextSession });
     setTouchDropTargetStatus("");
 
     touchDragHoldTimerRef.current = window.setTimeout(() => {
@@ -630,15 +723,24 @@ export function OfficeBoard({
         return;
       }
 
-      syncTouchDrag({
-        ...currentSession,
-        isPrimed: true,
-      });
+      currentSession.isPrimed = true;
     }, TOUCH_DRAG_HOLD_MS);
-  }, [allowDragging, clearTouchDragHoldTimer, syncTouchDrag]);
+  }, [noteEditMode, allowDragging, clearTouchDragHoldTimer]);
 
+  const trackingTouch = Boolean(touchDrag);
   useEffect(() => {
-    if (!touchDrag) return undefined;
+    if (!trackingTouch || noteEditMode) return undefined;
+
+    const paintTouchPosition = () => {
+      touchDragFrameRef.current = null;
+      const session = touchDragSessionRef.current;
+      if (!session?.isActive) return;
+      if (touchDragPreviewRef.current) {
+        touchDragPreviewRef.current.style.transform = `translate3d(${session.clientX + 18}px, ${session.clientY}px, 0) translateY(-50%)`;
+      }
+      const target = getTouchDropStatus(session.clientX, session.clientY);
+      setTouchDropTargetStatus((previous) => previous === target ? previous : target);
+    };
 
     const handleTouchMove = (event) => {
       const currentSession = touchDragSessionRef.current;
@@ -656,18 +758,15 @@ export function OfficeBoard({
         return;
       }
 
-      const nextSession = {
-        ...currentSession,
-        clientX: touch.clientX,
-        clientY: touch.clientY,
-        isActive: currentSession.isActive || movement > TOUCH_DRAG_ACTIVATE_DISTANCE,
-      };
-
-      syncTouchDrag(nextSession);
-
-      if (nextSession.isActive) {
+      currentSession.clientX = touch.clientX;
+      currentSession.clientY = touch.clientY;
+      if (!currentSession.isActive && movement > TOUCH_DRAG_ACTIVATE_DISTANCE) {
+        currentSession.isActive = true;
+        setTouchDrag({ ...currentSession });
+      }
+      if (currentSession.isActive) {
         event.preventDefault();
-        setTouchDropTargetStatus(getTouchDropStatus(touch.clientX, touch.clientY));
+        if (touchDragFrameRef.current === null) touchDragFrameRef.current = window.requestAnimationFrame(paintTouchPosition);
       }
     };
 
@@ -683,7 +782,7 @@ export function OfficeBoard({
       clearTouchDragSession();
 
       if (currentSession.isActive && dropStatus) {
-        onDropJob(currentSession.jobId, dropStatus);
+        dropJob(currentSession.jobId, dropStatus);
       }
     };
 
@@ -700,23 +799,32 @@ export function OfficeBoard({
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("touchcancel", handleTouchCancel);
     };
-  }, [clearTouchDragSession, getTouchDropStatus, onDropJob, syncTouchDrag, touchDrag]);
+  }, [noteEditMode, clearTouchDragSession, getTouchDropStatus, dropJob, trackingTouch]);
+
+  useEffect(() => {
+    if (!noteEditMode) return undefined;
+    // Cancel any gesture already in progress on the next browser frame.
+    const frame = window.requestAnimationFrame(clearTouchDragSession);
+    return () => window.cancelAnimationFrame(frame);
+  }, [noteEditMode, clearTouchDragSession]);
 
   useEffect(() => {
     return () => {
       clearTouchDragHoldTimer();
+      window.cancelAnimationFrame(touchDragFrameRef.current);
     };
   }, [clearTouchDragHoldTimer]);
 
   return (
     <div className="relative grid gap-4">
-      {touchDrag?.isActive ? (
+      {!noteEditMode && touchDrag?.isActive ? (
         <div
+          ref={touchDragPreviewRef}
           className="pointer-events-none fixed z-[80] w-[200px] -translate-y-1/2 rounded-2xl border border-status-info-border bg-card/96 px-3 py-2 shadow-2xl backdrop-blur"
           style={{
-            left: touchDrag.clientX,
-            top: touchDrag.clientY,
-            transform: "translate(18px, -50%)",
+            left: 0,
+            top: 0,
+            transform: `translate3d(${touchDrag.clientX + 18}px, ${touchDrag.clientY}px, 0) translateY(-50%)`,
           }}
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Move Job #{touchDrag.jobNumber}</p>
@@ -726,8 +834,8 @@ export function OfficeBoard({
       ) : null}
       <div className="grid gap-3 md:grid-cols-3">
         {statuses.map((status) => {
-          const columnJobs = jobs.filter((job) => job.status === status);
-          const sortedColumnJobs = sortJobsForColumn(columnJobs, columnSortModes[status] || "recent");
+          const sortedColumnJobs = sortedColumns[status];
+          const columnJobs = sortedColumnJobs;
           const visibleJobs = status === "Completed" ? sortedColumnJobs.slice(0, visibleLimit) : sortedColumnJobs;
           const statusTheme = statusThemes[status] || statusThemes["To Do"];
           const sortMode = columnSortModes[status] || "recent";
@@ -742,10 +850,11 @@ export function OfficeBoard({
               key={status}
               data-service-board-status={status}
               className={`min-h-[520px] min-w-0 max-w-full gap-2 rounded-3xl py-2 backdrop-blur transition-shadow ${statusTheme.column} ${isTouchDropTarget ? "ring-4 ring-status-info-border/80 shadow-xl shadow-sky-200/60" : ""}`}
-              onDragOver={(event) => event.preventDefault()}
+              onDragOver={(event) => { if (allowDragging && !noteEditMode) event.preventDefault(); }}
               onDrop={(event) => {
+                if (!allowDragging || noteEditMode) return;
                 const jobId = event.dataTransfer.getData("jobId");
-                onDropJob(jobId, status);
+                dropJob(jobId, status);
               }}
             >
             <CardHeader className="@container gap-2 px-2" data-service-board-column-header>
@@ -770,22 +879,25 @@ export function OfficeBoard({
                 ) : (
                   visibleJobs.map((job) => (
                     <JobCard
+                      noteEditMode={noteEditMode}
+                      onEditNote={editNote}
                       key={`${job.id}-${viewMode}`}
                       job={job}
-                      onOpen={onOpenJob}
+                      onOpen={openJob}
                       draggable={allowDragging}
                       viewMode={viewMode}
                       showTagLabels={showTagLabels}
                       isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
-                      isTouchDragging={touchDrag?.isActive && touchDrag.jobId === job.id}
+                      isTouchDragging={Boolean(touchDrag?.isActive && touchDrag.jobId === job.id)}
                       onPlanForTomorrow={
                         onPlanJobForTomorrow && job.serviceBoardTomorrowDate !== tomorrowPlanningDate
-                          ? onPlanJobForTomorrow
+                          ? planForTomorrow
                           : null
                       }
                       onTouchDragStart={allowDragging ? handleTouchDragStart : null}
                       formatDate={formatDate}
                       getInvoiceStatus={getInvoiceStatus}
+                      statusDateKey={tomorrowPlanningDate}
                     />
                   ))
                 )}

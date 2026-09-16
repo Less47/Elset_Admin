@@ -5,7 +5,28 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Grid notes and prices share the existing price pill's edge alignment. */
+.service-board-floating-pill {
+  position: absolute;
+  bottom: 6px;
+  transform: translateY(50%);
+}
+
+[data-note-edit-mode] {
+  cursor: pointer;
+}
+[data-note-edit-mode]:hover,
+[data-note-edit-mode]:focus-visible {
+  outline: 2px solid var(--board-note-border);
+  outline-offset: 2px;
+  border-radius: var(--radius-xl);
+}
+
 @theme inline {
+    --color-board-note: var(--board-note-surface);
+    --color-board-note-foreground: var(--board-note-foreground);
+    --color-board-note-border: var(--board-note-border);
+    --color-board-note-hover: var(--board-note-hover);
     --color-surface-raised: var(--surface-raised);
     --color-surface-hover: var(--surface-hover);
     --color-surface-selected: var(--surface-selected);

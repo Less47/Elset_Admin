@@ -1,7 +1,9 @@
+import { memo } from "react";
 import { ArrowUpRight, CalendarPlus, ChevronRight, MoveRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { statusThemes } from "@/lib/job-status";
+import JobNotePill from "./JobNotePill";
 import {
   buildJobCardIndicators,
   formatStreetAndSuburb,
@@ -41,7 +43,10 @@ function MobileIndicatorList({ indicators, showLabels }) {
   );
 }
 
-export default function MobileJobCard({
+// statusDateKey keeps date-based invoice indicators fresh across day changes.
+const MobileJobCard = memo(function MobileJobCard({
+  noteEditMode = false,
+  onEditNote,
   canManageTomorrow,
   formatDate,
   getInvoiceStatus,
@@ -63,7 +68,7 @@ export default function MobileJobCard({
     invoiceStatus: getInvoiceStatus(job),
   });
   const openLabel = [
-    `Open Job #${job.jobNumber}`,
+    noteEditMode ? `Edit note for Job #${job.jobNumber}` : `Open Job #${job.jobNumber}`,
     job.customerName,
     job.title,
     job.status,
@@ -76,13 +81,15 @@ export default function MobileJobCard({
 
   return (
     <article
-      className={`mobile-job-card w-full min-w-0 max-w-full overflow-hidden rounded-2xl border shadow-sm ${statusTheme.card}`}
+      className={`mobile-job-card relative w-full min-w-0 max-w-full rounded-2xl border shadow-sm ${statusTheme.card}`}
       data-mobile-job-id={job.id}
+      data-note-edit-mode={noteEditMode || undefined}
     >
+      <JobNotePill note={job.serviceBoardNote} />
       <button
         type="button"
-        className="block w-full px-3 py-2.5 text-left outline-none transition hover:bg-current/20 focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-status-info-border/40"
-        onClick={() => onOpen(job)}
+        className="block w-full rounded-t-2xl px-3 py-2.5 text-left outline-none transition hover:bg-current/20 focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-status-info-border/40"
+        onClick={(event) => noteEditMode ? onEditNote(job, event) : onOpen(job)}
         aria-label={openLabel}
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
@@ -118,7 +125,7 @@ export default function MobileJobCard({
         </div>
       </button>
 
-      <div className="flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 bg-card/38 px-2.5 py-1">
+      <div className={`flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 rounded-b-2xl bg-card/38 px-2.5 pt-1 ${job.serviceBoardNote ? "pb-3" : "pb-1"}`}>
         {canManageTomorrow && onRemoveFromTomorrow ? (
           <Button
             type="button"
@@ -159,4 +166,6 @@ export default function MobileJobCard({
       </div>
     </article>
   );
-}
+});
+
+export default MobileJobCard;

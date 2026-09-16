@@ -78,7 +78,7 @@ test("both modes refuse missing, empty, foreign and outdated databases without c
   foreign.exec("CREATE TABLE unrelated (id INTEGER)");
   foreign.close();
   const old = new Database(dbPath);
-  old.exec("DELETE FROM workspace_schema_migrations WHERE version=6; UPDATE workspace_info SET schema_version=5; PRAGMA user_version=5;");
+  old.exec("DELETE FROM workspace_schema_migrations WHERE version>=6; UPDATE workspace_info SET schema_version=5; PRAGMA user_version=5;");
   old.close();
   for (const apply of [false, true]) {
     assert.throws(() => openExistingBackfillDb(missing, { apply }), /Refusing/);

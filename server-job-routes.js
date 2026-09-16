@@ -1,4 +1,5 @@
 import express from "express";
+import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import {
   addJobNote,
   addJobPhoto,
@@ -18,7 +19,7 @@ import {
   WorkspaceJobError,
 } from "./server-workspace-jobs.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState, getWorkspaceStorageMode, loadWorkspaceState, saveWorkspaceState } from "./server-workspace-storage.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -53,17 +54,22 @@ function sendSuccess(req, res, result, env) {
   });
 }
 
-function handleJobRoute(operation, env) {
+function handleJobRoute(operation, env, { delta = false } = {}) {
   return (req, res) => {
     let db = null;
     try {
       db = openSqliteWorkspaceDb(env);
       const result = operation(db, req);
+      if (delta && req.query.response === "delta") {
+        if (req.user?.role === "technician") result.maintenancePlan = null;
+        return res.json({ ok: true, result });
+      }
       return sendSuccess(req, res, result, env);
     } catch (error) {
       const statusCode = getStatusCode(error);
       return res.status(statusCode).json({
         error: getErrorMessage(error, "Unable to update the job records."),
+        ...(delta && error.currentJob ? { currentJob: error.currentJob } : {}),
       });
     } finally {
       db?.close();
@@ -109,9 +115,43 @@ export function createJobRouter({
   );
 
   router.patch(
+    "/api/jobs/:id/service-board-note",
+    ...limitedMiddleware,
+    (req, res) => {
+      let db;
+      try {
+        if (!Object.prototype.hasOwnProperty.call(req.body || {}, "serviceBoardNote")) {
+          throw new WorkspaceJobError("Job note is required (use null to remove it).");
+        }
+        const serviceBoardNote = normalizeServiceBoardNote(req.body.serviceBoardNote);
+        let result;
+        if (getWorkspaceStorageMode(env) === "sqlite") {
+          db = openSqliteWorkspaceDb(env);
+          result = updateJobDetails(db, req.params.id, { serviceBoardNote });
+        } else {
+          // Read/merge/write synchronously against current server state in legacy mode.
+          const state = loadWorkspaceState({ env });
+          const job = state.jobs.find((entry) => entry.id === req.params.id);
+          if (!job) throw new WorkspaceJobError("Job not found.", 404);
+          result = { ...job, serviceBoardNote, updatedAt: new Date().toISOString() };
+          saveWorkspaceState({ ...state, jobs: state.jobs.map((entry) => entry.id === job.id ? result : entry) }, { env });
+        }
+        return sendSuccess(req, res, { id: result.id, serviceBoardNote: result.serviceBoardNote }, env);
+      } catch (error) {
+        return res.status(getStatusCode(error)).json({ error: getErrorMessage(error, "Unable to save the job note.") });
+      } finally {
+        db?.close();
+      }
+    }
+  );
+
+  router.patch(
     "/api/jobs/:id/status",
     ...limitedMiddleware,
-    handleJobRoute((db, req) => changeJobStatus(db, req.params.id, req.body?.status), env)
+    handleJobRoute((db, req) => changeJobStatus(db, req.params.id, req.body?.status, {
+      returnDelta: req.query.response === "delta",
+      expectedStatus: req.body?.expectedStatus,
+    }), env, { delta: true })
   );
 
   router.patch(

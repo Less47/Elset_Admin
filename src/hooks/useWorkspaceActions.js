@@ -1,4 +1,6 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
+import { createJobStatusQueue, mergeJobStatusFields, requestJobStatusUpdate } from "./workspace-job-status";
+import { normalizeServiceBoardNote } from "@/lib/service-board-note";
 import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
 import { siteAddressMetadata, updatedSiteAddressMetadata } from "@/lib/site-location";
 import { canonicalMaintenancePlanInput, maintenancePlanIdentity } from "@/lib/maintenance-plan";
@@ -80,6 +82,8 @@ export function useWorkspaceActions({
   const useCustomerSqliteApi = useSqliteApi;
   const documentSendInFlightRef = useRef(false);
   const invoiceArchiveInFlightRef = useRef(false);
+  const boardNoteSavesRef = useRef(new Set());
+  const [queueJobStatus] = useState(() => createJobStatusQueue());
 
   function applyServerState(state) {
     if (typeof applyServerWorkspaceState === "function") {
@@ -1117,6 +1121,37 @@ export function useWorkspaceActions({
     }));
   }
 
+  async function handleSaveServiceBoardNote(jobId, value) {
+    const serviceBoardNote = normalizeServiceBoardNote(value);
+    if (boardNoteSavesRef.current.has(jobId)) throw new Error("This job note is still saving. Please try again shortly.");
+    const job = data.jobs.find((entry) => entry.id === jobId);
+    if (!job) throw new Error("Job no longer exists.");
+    const previousNote = job.serviceBoardNote ?? null;
+    boardNoteSavesRef.current.add(jobId);
+    const mergeNote = (note) => setData((previous) => ({
+      ...previous,
+      jobs: previous.jobs.map((entry) => entry.id === jobId ? { ...entry, serviceBoardNote: note } : entry),
+    }));
+    if (useSqliteApi) mergeNote(serviceBoardNote);
+    try {
+      const payload = await requestWorkspaceUpdate({
+        fetchWithAuth,
+        path: jobPath(jobId, "/service-board-note"),
+        method: "PATCH",
+        body: { serviceBoardNote },
+        errorMessage: "Unable to save the job note.",
+      });
+      // Merge only this field: another in-flight job update must keep its own fields.
+      if (useSqliteApi) mergeNote(payload.result.serviceBoardNote);
+      else applyServerState(payload.state); // Mark legacy state synced; do not trigger a broad autosave.
+    } catch (error) {
+      if (useSqliteApi) mergeNote(previousNote);
+      throw error;
+    } finally {
+      boardNoteSavesRef.current.delete(jobId);
+    }
+  }
+
   function confirmJobStatusChange(job, nextStatus) {
     if (job.status === "Completed" && nextStatus !== "Completed") {
       return window.confirm("Are you sure? This job has already been marked as completed.");
@@ -1131,13 +1166,23 @@ export function useWorkspaceActions({
     if (!confirmJobStatusChange(job, nextStatus)) return false;
 
     if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, "/status"),
-        method: "PATCH",
-        body: { status: nextStatus },
-        errorMessage: "Unable to update the job status.",
+      return queueJobStatus({
+        job, nextStatus,
+        save: (status, expectedStatus) => requestJobStatusUpdate({ fetchWithAuth, jobId, status, expectedStatus }),
+        merge: (fields, expected) => setData((previous) => mergeJobStatusFields(previous, jobId, fields, expected)),
+        onSaved: ({ maintenancePlan }) => {
+          if (!maintenancePlan) return;
+          setData((previous) => ({ ...previous, maintenancePlans: previous.maintenancePlans.map((plan) => {
+            if (plan.id !== maintenancePlan.id || (plan.maintenanceRevision || 0) > maintenancePlan.maintenanceRevision) return plan;
+            const { completedOccurrences, ...fields } = maintenancePlan;
+            const completed = new Map(completedOccurrences.map((entry) => [entry.key, entry.completedAt]));
+            return effectiveMaintenancePlan({ ...plan, ...fields,
+              occurrenceExceptions: (plan.occurrenceExceptions || []).map((entry) => completed.has(entry.key) ? { ...entry, completedAt: completed.get(entry.key) } : entry),
+            }, previous.jobs);
+          }) }));
+        },
+        onError: (error) => window.alert(error instanceof Error ? error.message : "Unable to update the job status."),
       });
-      return saved.ok;
     }
 
     const now = new Date().toISOString();
@@ -2331,5 +2376,6 @@ export function useWorkspaceActions({
     handleUpdateMaintenancePlan,
     handleUpdateStaff,
     updateJob,
+    handleSaveServiceBoardNote,
   };
 }

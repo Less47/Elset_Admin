@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 6;
+export const WORKSPACE_SCHEMA_VERSION = 7;
 
 const migrations = [
   {
@@ -485,6 +485,21 @@ const migrations = [
       UPDATE workspace_info SET schema_version = 6 WHERE id = 1;
     `,
   },
+  {
+    version: 7,
+    name: "service-board-job-note",
+    sql: `
+      ALTER TABLE jobs ADD COLUMN service_board_note TEXT DEFAULT NULL
+        CHECK (service_board_note IS NULL OR (
+          length(service_board_note) BETWEEN 1 AND 25
+          AND service_board_note = trim(service_board_note)
+          AND instr(service_board_note, char(0)) = 0
+          AND instr(service_board_note, char(10)) = 0
+          AND instr(service_board_note, char(13)) = 0
+        ));
+      UPDATE workspace_info SET schema_version = 7 WHERE id = 1;
+    `,
+  },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -528,6 +543,7 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 7) db.prepare("SELECT service_board_note FROM jobs LIMIT 0").all();
   const objects = new Set(db.prepare("SELECT type || ':' || name AS object FROM sqlite_schema").all().map((row) => row.object));
   for (const migration of migrations.filter((entry) => entry.version <= version)) {
     // The migration definitions remain the source of truth for required objects.

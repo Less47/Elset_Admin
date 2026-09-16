@@ -922,7 +922,7 @@ test("mobile navigation and one-status Service Board support the core workflow",
     );
     await moveSheet.getByRole("button", { name: "Move to To Do" }).click();
     const request = await moveRequest;
-    expect(request.postDataJSON()).toEqual({ status: "To Do" });
+    expect(request.postDataJSON()).toEqual({ status: "To Do", expectedStatus: "In Progress" });
     await waitForJobStatus(plannedJobId, "To Do");
     await expect(tabs.getByRole("tab", { name: /To Do\s+3/ })).toHaveAttribute("aria-selected", "true");
     const movedTrigger = page.getByRole("button", { name: `Move Job #${plannedJobNumber}` });
@@ -2121,7 +2121,11 @@ test("visual density preserves touch targets, focus, and card gutters at every r
         if (await arrow.count()) {
           const arrowBox = await arrow.boundingBox();
           const amountBox = await firstCard.locator('[title$=" value"]').first().boundingBox();
-          if (amountBox) expect(arrowBox.y + arrowBox.height).toBeLessThanOrEqual(amountBox.y);
+          if (amountBox) {
+            const overlaps = arrowBox.x < amountBox.x + amountBox.width && arrowBox.x + arrowBox.width > amountBox.x
+              && arrowBox.y < amountBox.y + amountBox.height && arrowBox.y + arrowBox.height > amountBox.y;
+            expect(overlaps, "price remains clear of the Tomorrow action").toBe(false);
+          }
         }
       }
       await assertNoHorizontalOverflow(page);
@@ -2397,7 +2401,7 @@ test("Job Details uses accessible tabs and preserves editing, status, and schedu
       request.method() === "PATCH" && new URL(request.url()).pathname === "/api/jobs/demo-job-1001/status"
     );
     await chooseSelectOption(page, "Update job status", "In Progress");
-    expect((await statusRequestPromise).postDataJSON()).toEqual({ status: "In Progress" });
+    expect((await statusRequestPromise).postDataJSON()).toEqual({ status: "In Progress", expectedStatus: "To Do" });
     await waitForJobStatus("demo-job-1001", "In Progress");
 
     await tablist.getByRole("tab", { name: "Overview" }).click();

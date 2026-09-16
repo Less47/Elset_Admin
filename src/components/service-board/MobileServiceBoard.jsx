@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useStableCallback } from "@/hooks/useStableCallback";
 import { ArrowDownUp, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { statuses, statusThemes } from "@/lib/job-status";
 import MobileJobCard from "./MobileJobCard";
+import JobNoteModeButton from "./JobNoteModeButton";
 import { MobileBoardFilters, MobileStatusChangeSheet } from "./MobileBoardSheets";
 import MobileStatusTabs from "./MobileStatusTabs";
 import CompletedShowMore from "./CompletedShowMore";
@@ -19,6 +21,9 @@ import {
 } from "./service-board-utils";
 
 export default function MobileServiceBoard({
+  noteEditMode = false,
+  onToggleNoteEditMode,
+  onEditNote,
   canManageTomorrow,
   columnSortModes,
   formatDate,
@@ -57,24 +62,27 @@ export default function MobileServiceBoard({
   }, [jobs, tomorrowJobs]);
   const isTomorrowView = selectedView === TOMORROW_VIEW;
   const sortMode = isTomorrowView ? "recent" : columnSortModes[selectedView] || "recent";
-  const selectedJobs = isTomorrowView
+  const selectedJobs = useMemo(() => isTomorrowView
     ? tomorrowJobs
-    : sortJobsForColumn(jobs.filter((job) => job.status === selectedView), sortMode);
+    : sortJobsForColumn(jobs.filter((job) => job.status === selectedView), sortMode),
+  [isTomorrowView, tomorrowJobs, jobs, selectedView, sortMode]);
   const selectedLabel = isTomorrowView ? "Tomorrow" : selectedView;
   const visibleJobs = selectedView === "Completed" ? selectedJobs.slice(0, visibleLimit) : selectedJobs;
   const activeFilterCount = showHighUrgencyOnly ? 1 : 0;
 
-  const handlePlanForTomorrow = async (jobId) => {
+  const openJob = useStableCallback(onOpenJob);
+  const editNote = useStableCallback(onEditNote);
+  const handlePlanForTomorrow = useStableCallback(async (jobId) => {
     const job = candidateJobs.find((entry) => entry.id === jobId);
     const saved = await onPlanJobForTomorrow(jobId);
     if (saved) setStatusMessage(`Job #${job?.jobNumber || ""} added to tomorrow.`);
-  };
+  });
 
-  const handleRemoveFromTomorrow = async (jobId) => {
+  const handleRemoveFromTomorrow = useStableCallback(async (jobId) => {
     const job = candidateJobs.find((entry) => entry.id === jobId);
     const saved = await onRemoveJobFromTomorrow(jobId);
     if (saved) setStatusMessage(`Job #${job?.jobNumber || ""} removed from tomorrow.`);
-  };
+  });
 
   const handleMoved = (job, nextStatus) => {
     setMoveJob(null);
@@ -131,6 +139,8 @@ export default function MobileServiceBoard({
             </Badge>
           ) : null}
         </Button>
+
+        <JobNoteModeButton active={noteEditMode} onToggle={onToggleNoteEditMode} mobile />
 
         {!isTomorrowView ? (
           <Select value={sortMode} onValueChange={(nextSortMode) => onColumnSortModeChange(selectedView, nextSortMode)}>
@@ -197,17 +207,20 @@ export default function MobileServiceBoard({
             </p>
           </div>
         ) : (
-          <div className="grid gap-2">
+          <div className={`grid ${visibleJobs.some((job) => job.serviceBoardNote) ? "gap-3 pb-2" : "gap-2"}`}>
             {visibleJobs.map((job) => (
               <MobileJobCard
+                noteEditMode={noteEditMode}
+                onEditNote={editNote}
                 key={job.id}
                 canManageTomorrow={canManageTomorrow}
                 formatDate={formatDate}
                 getInvoiceStatus={getInvoiceStatus}
+                statusDateKey={tomorrowPlanningDate}
                 isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
                 job={job}
                 onMove={setMoveJob}
-                onOpen={onOpenJob}
+                onOpen={openJob}
                 onPlanForTomorrow={!isTomorrowView ? handlePlanForTomorrow : null}
                 onRemoveFromTomorrow={isTomorrowView ? handleRemoveFromTomorrow : null}
                 showStatus={isTomorrowView}

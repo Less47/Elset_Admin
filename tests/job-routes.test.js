@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -15,6 +16,153 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const fixturePath = path.join(repoRoot, "fixtures", "demo-workspace.json");
+
+test("compact status updates return only changed fields and reject stale status changes", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const before = getDbState(dbPath), job = before.jobs[0];
+    const patch = (status, expectedStatus) => requestJson(baseUrl, `/api/jobs/${job.id}/status?response=delta`, {
+      method: "PATCH", body: JSON.stringify({ status, expectedStatus, title: "Ignore stale fields", serviceBoardNote: "Ignore" }),
+    });
+    const result = await patch("In Progress", job.status);
+    assert.equal(result.response.status, 200);
+    assert.equal(result.payload.state, undefined);
+    assert.ok(JSON.stringify(result.payload).length < 1000);
+    assert.equal(result.payload.result.job.status, "In Progress");
+    const after = getDbState(dbPath);
+    assert.deepEqual(after.jobs[0], { ...job, status: "In Progress", updatedAt: after.jobs[0].updatedAt });
+    assert.deepEqual(after.customers, before.customers);
+    const conflict = await patch("Completed", job.status);
+    assert.equal(conflict.response.status, 409);
+    assert.equal(conflict.payload.currentJob.status, "In Progress");
+    assert.deepEqual(getDbState(dbPath), after);
+    assert.equal((await patch("In Progress", job.status)).response.status, 200, "idempotent acknowledgement");
+  }));
+});
+
+test("compact completion preserves maintenance completion and Tomorrow side effects", async () => {
+  const fixture = readFixture();
+  const job = fixture.jobs[0];
+  fixture.maintenancePlans = [{ id: "status-plan", planName: "Annual service", customerId: job.customerId, customerName: job.customerName,
+    siteAddress: job.jobAddress, frequency: "yearly", nextDueDate: "2026-09-17", checklist: [], createdAt: job.createdAt }];
+  Object.assign(job, { maintenancePlanId: "status-plan", serviceBoardTomorrowDate: "2026-09-17", serviceBoardTomorrowOrder: 1 });
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const db = openWorkspaceDb({ dbPath });
+    try { db.prepare(`INSERT INTO maintenance_occurrence_exceptions
+      (occurrence_key, plan_id, series_id, original_date, job_id, generated_job_id, snapshot_json, created_at, updated_at)
+      VALUES ('status-occurrence', 'status-plan', 'series', '2026-09-17', ?, ?, '{}', '2026-09-16', '2026-09-16')`).run(job.id, job.id); }
+    finally { db.close(); }
+    const result = await requestJson(baseUrl, `/api/jobs/${job.id}/status?response=delta`, { method: "PATCH", body: JSON.stringify({ status: "Completed", expectedStatus: job.status }) });
+    assert.equal(result.response.status, 200, result.payload.error);
+    assert.equal(result.payload.result.job.serviceBoardTomorrowDate, "");
+    assert.equal(result.payload.result.job.serviceBoardTomorrowOrder, null);
+    const plan = getDbState(dbPath).maintenancePlans[0];
+    assert.equal(result.payload.result.maintenancePlan.lastCompletedAt, plan.lastCompletedAt);
+    assert.equal(result.payload.result.maintenancePlan.maintenanceRevision, plan.maintenanceRevision);
+    assert.equal(result.payload.result.maintenancePlan.completedOccurrences[0].completedAt, plan.lastCompletedAt);
+    assert.ok(plan.lastCompletedAt);
+    await withServer(env, async (technicianUrl) => {
+      const limited = await requestJson(technicianUrl, `/api/jobs/${job.id}/status?response=delta`, {
+        method: "PATCH", body: JSON.stringify({ status: "Completed", expectedStatus: "Completed" }),
+      });
+      assert.equal(limited.response.status, 200);
+      assert.equal(limited.payload.result.maintenancePlan, null, "maintenance records stay hidden from technicians");
+    }, { role: "technician" });
+  }), fixture);
+});
+
+test("board note create, edit, removal and reload preserve unrelated job data", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const id = readFixture().jobs[0].id;
+    const endpoint = `/api/jobs/${id}/service-board-note`;
+    const patch = (value, extra = {}) => requestJson(baseUrl, endpoint, { method: "PATCH", body: JSON.stringify({ serviceBoardNote: value, ...extra }) });
+    await requestJson(baseUrl, `/api/jobs/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: "In Progress" }) });
+    const before = getDbState(dbPath);
+    const previous = before.jobs.find((job) => job.id === id);
+    for (const [value, expected] of [["  Waiting on parts  ", "Waiting on parts"], ["x".repeat(25), "x".repeat(25)], ["Call customer", "Call customer"], [" \t\n ", null], ["Return Monday", "Return Monday"], [null, null]]) {
+      const { response, payload } = await patch(value, { status: "To Do", title: "Stale title ignored" });
+      assert.equal(response.status, 200, payload.error);
+      assert.equal(payload.result.serviceBoardNote, expected);
+      const stored = getDbState(dbPath).jobs.find((job) => job.id === id);
+      assert.equal(stored.serviceBoardNote, expected, "survives closing/reopening database");
+      const omitNote = ({ serviceBoardNote, updatedAt, ...rest }) => { assert.ok(updatedAt); assert.ok(serviceBoardNote === null || typeof serviceBoardNote === "string"); return rest; };
+      assert.deepEqual(omitNote(stored), omitNote(previous));
+      for (const key of ["customers", "staff", "maintenancePlans", "inventoryItems"]) assert.deepEqual(getDbState(dbPath)[key], before[key]);
+    }
+    await patch("Order sensor");
+    await requestJson(baseUrl, `/api/jobs/${id}`, { method: "PATCH", body: JSON.stringify({ title: "New title" }) });
+    assert.equal(getDbState(dbPath).jobs.find((job) => job.id === id).serviceBoardNote, "Order sensor");
+    await requestJson(baseUrl, `/api/jobs/${id}`, { method: "DELETE" });
+    await requestJson(baseUrl, `/api/jobs/${id}/restore`, { method: "POST" });
+    assert.equal(getDbState(dbPath).jobs.find((job) => job.id === id).serviceBoardNote, "Order sensor");
+  }));
+});
+
+test("board note validates every write path and database length constraints", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const fixture = readFixture();
+    const id = fixture.jobs[0].id;
+    const before = getDbState(dbPath);
+    for (const serviceBoardNote of ["x".repeat(26), "😀".repeat(13), 123, {}, ["note"], "bad\0note"]) {
+      for (const suffix of ["/service-board-note", ""]) {
+        const { response } = await requestJson(baseUrl, `/api/jobs/${id}${suffix}`, { method: "PATCH", body: JSON.stringify({ serviceBoardNote, title: "Must roll back" }) });
+        assert.equal(response.status, 400);
+      }
+    }
+    assert.deepEqual(getDbState(dbPath), before);
+    const missing = await requestJson(baseUrl, `/api/jobs/${id}/service-board-note`, { method: "PATCH", body: "{}" });
+    assert.equal(missing.response.status, 400);
+    const unknown = await requestJson(baseUrl, "/api/jobs/missing/service-board-note", { method: "PATCH", body: JSON.stringify({ serviceBoardNote: "hello" }) });
+    assert.equal(unknown.response.status, 404);
+    for (const [note, expectedStatus] of [["x".repeat(25), 200], ["x".repeat(26), 400]]) {
+      const created = await requestJson(baseUrl, "/api/jobs", { method: "POST", body: JSON.stringify({ customerMode: "existing", job: { ...fixture.jobs[0], id: `board-${expectedStatus}`, serviceBoardNote: note } }) });
+      assert.equal(created.response.status, expectedStatus, created.payload.error);
+      if (expectedStatus === 200) assert.equal(created.payload.result.serviceBoardNote, note);
+    }
+    const db = openWorkspaceDb({ dbPath });
+    try {
+      for (const note of ["x".repeat(26), "", "bad\0note", "not\none line"]) {
+        assert.throws(() => db.prepare("UPDATE jobs SET service_board_note = ? WHERE id = ?").run(note, id), /CHECK constraint/);
+      }
+    } finally { db.close(); }
+  }));
+});
+
+test("technicians can edit board notes without gaining general job edit privileges", async () => {
+  await withTempWorkspace(async ({ env }) => withServer(env, async (baseUrl) => {
+    const id = readFixture().jobs[0].id;
+    const saved = await requestJson(baseUrl, `/api/jobs/${id}/service-board-note`, { method: "PATCH", body: JSON.stringify({ serviceBoardNote: "Check photos" }) });
+    assert.equal(saved.response.status, 200, saved.payload.error);
+    assert.equal((await requestJson(baseUrl, `/api/jobs/${id}`, { method: "PATCH", body: JSON.stringify({ title: "Forbidden" }) })).response.status, 403);
+  }, { role: "technician" }));
+});
+
+test("legacy JSON note endpoint merges current server data and persists the dedicated field", () => {
+  const tempDir = makeTempDir();
+  try {
+    const fixture = readFixture();
+    fs.writeFileSync(path.join(tempDir, "app-data.json"), JSON.stringify(fixture));
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
+      import assert from 'node:assert/strict';
+      import express from 'express';
+      import { createJobRouter } from './server-job-routes.js';
+      import { loadData } from './server-store.js';
+      const app = express(); app.use(express.json());
+      app.use(createJobRouter({ requireAuth(req, res, next) { req.user = { role: 'admin' }; next(); } }));
+      const server = app.listen(0, '127.0.0.1');
+      await new Promise(resolve => server.once('listening', resolve));
+      try {
+        const before = loadData().jobs[0];
+        const response = await fetch('http://127.0.0.1:' + server.address().port + '/api/jobs/' + before.id + '/service-board-note', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ serviceBoardNote: '  Legacy note  ', status: 'Stale value' })
+        });
+        assert.equal(response.status, 200, await response.text());
+        const after = loadData().jobs[0];
+        assert.deepEqual(after, { ...before, serviceBoardNote: 'Legacy note', updatedAt: after.updatedAt });
+      } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+    `], { cwd: repoRoot, encoding: "utf8", windowsHide: true, env: { ...process.env, ELSET_DATA_DIR: tempDir, ELSET_WORKSPACE_STORAGE: "json", NODE_ENV: "test", FLY_APP_NAME: "" } });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  } finally { fs.rmSync(tempDir, { recursive: true, force: true }); }
+});
 
 function readFixture(overrides = {}) {
   const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));

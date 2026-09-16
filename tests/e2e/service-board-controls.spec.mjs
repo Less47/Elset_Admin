@@ -10,12 +10,464 @@ import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import Database from "better-sqlite3";
 import { insertJobTree } from "../../server-workspace-jobs.js";
+import { insertQuoteTree } from "../../server-workspace-documents.js";
 import { normalizeStoredData } from "../../server-store.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
+import { contrastRatio } from "../../src/lib/theme-tokens.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const screenshots = path.join(repoRoot, "test-results/service-board-controls");
 const password = "Board-controls-local-test-123";
+
+async function dropJob(page, id, status) {
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  try {
+    await transfer.evaluate((data, jobId) => data.setData("jobId", jobId), id);
+    await page.locator(`[data-service-board-job-id="${id}"]`).dispatchEvent("dragstart", { dataTransfer: transfer });
+    await column(page, status).dispatchEvent("dragover", { dataTransfer: transfer });
+    await column(page, status).dispatchEvent("drop", { dataTransfer: transfer });
+  } finally { await transfer.dispose(); }
+}
+
+test("status moves before the response and its acknowledgement preserves a concurrent note edit without refetching", async ({ browser }) => {
+  const { context, page } = await openBoard(browser);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  try {
+    await page.waitForLoadState("networkidle");
+    const reads = [];
+    page.on("request", (request) => { if (request.method() === "GET" && new URL(request.url()).pathname.startsWith("/api/")) reads.push(request.url()); });
+    await page.route("**/api/jobs/todo-30/status?response=delta", async (route) => { await gate; await route.continue(); });
+    await dropJob(page, "todo-30", "In Progress");
+    const target = column(page, "In Progress").locator('[data-service-board-job-id="todo-30"]');
+    await expect(target).toBeVisible();
+    expect(readWorkspace().jobs.find((job) => job.id === "todo-30").status).toBe("To Do");
+    await page.getByRole("button", { name: "Edit job notes" }).click();
+    await target.getByText("To Do service 30", { exact: true }).click();
+    const editor = page.getByRole("dialog", { name: "Job note for Job #3030" });
+    await editor.getByLabel("Job note", { exact: true }).fill("Keep concurrent note");
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(target.getByLabel("Job note: Keep concurrent note")).toBeVisible();
+    await expect.poll(() => readWorkspace().jobs.find((job) => job.id === "todo-30").serviceBoardNote).toBe("Keep concurrent note");
+    const response = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/jobs/todo-30/status");
+    release();
+    const payload = await (await response).json();
+    expect(payload.state).toBeUndefined();
+    expect(payload.result.job.status).toBe("In Progress");
+    await expect(target.getByLabel("Job note: Keep concurrent note")).toBeVisible();
+    expect(readWorkspace().jobs.find((job) => job.id === "todo-30").status).toBe("In Progress");
+    expect(reads).toEqual([]);
+    await expect(column(page).locator("[data-service-board-job-id]")).toHaveCount(25);
+  } finally { release(); await context.close(); }
+});
+
+for (const width of [1440, 820, 390]) test(`failed status saves restore the card and Tomorrow plan at ${width}px`, async ({ browser }) => {
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  db.prepare("UPDATE jobs SET created_at='2099-01-01T00:00:00.000Z' WHERE id='todo-30'").run(); db.close();
+  const { context, page } = await openBoard(browser, { width, height: 1180 });
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const dialogs = [];
+  page.on("dialog", async (dialog) => { dialogs.push(dialog.message()); await dialog.accept(); });
+  try {
+    const before = readWorkspace().jobs.find((job) => job.id === "todo-30");
+    await page.route("**/api/jobs/todo-30/status?response=delta", async (route) => { await gate; await route.fulfill({ status: 503, json: { error: "Status save unavailable" } }); });
+    if (width < 768) {
+      await page.getByRole("tab", { name: /^To Do / }).click();
+      await page.getByRole("button", { name: "Move Job #3030", exact: true }).click();
+      await page.getByRole("button", { name: "Move to Completed", exact: true }).click();
+      await expect(page.locator('[data-mobile-job-id="todo-30"]')).toHaveCount(0);
+    } else {
+      await dropJob(page, "todo-30", "Completed");
+      await expect(column(page, "Completed").locator('[data-service-board-job-id="todo-30"]')).toBeVisible();
+      await expect(cards(page)).toHaveCount(25);
+    }
+    expect(readWorkspace().jobs.find((job) => job.id === "todo-30")).toEqual(before);
+    release();
+    const target = page.locator(width < 768 ? '[data-mobile-job-id="todo-30"]' : '[data-service-board-status="To Do"] [data-service-board-job-id="todo-30"]');
+    await expect(target).toBeVisible();
+    if (width < 768) await expect(target.getByText("Tomorrow", { exact: true })).toBeVisible();
+    else await expect(target.getByLabel("Planned for tomorrow", { exact: true })).toBeVisible();
+    await expect.poll(() => dialogs).toEqual(["Status save unavailable"]);
+    expect(readWorkspace().jobs.find((job) => job.id === "todo-30")).toEqual(before);
+  } finally { release(); await context.close(); }
+});
+
+const layoutCases = [
+  { id: "todo-30", note: null, rate: null, indicator: false },
+  { id: "todo-29", note: "Call", rate: null, indicator: false },
+  { id: "todo-28", note: null, rate: 165, indicator: false },
+  { id: "todo-27", note: "Waiting parts", rate: 165, indicator: false },
+  { id: "todo-26", note: "W".repeat(25), rate: 422.5, indicator: true },
+  { id: "todo-25", note: "W".repeat(25), rate: 11223.34, indicator: false },
+];
+
+function seedNoteLayoutCases() {
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  try {
+    const originalQuote = JSON.parse(fs.readFileSync(path.join(repoRoot, "fixtures/demo-workspace.json"), "utf8")).jobs[0].quote;
+    for (const entry of layoutCases) {
+      db.prepare(`UPDATE jobs SET service_board_note = ?, maintenance_plan_name = ?, service_board_tomorrow_date = '',
+        customer_name = 'Northside Apartments', title = 'Gate service' WHERE id = ?`).run(entry.note, entry.indicator ? "Scheduled maintenance" : "", entry.id);
+      if (entry.rate !== null) insertQuoteTree(db, entry.id, {
+        ...originalQuote, id: `layout-quote-${entry.id}`, sentHistory: [],
+        items: [{ id: `layout-item-${entry.id}`, description: "Service", qty: 1, rate: entry.rate }],
+      });
+    }
+  } finally { db.close(); }
+}
+
+for (const width of [768, 1024, 1440]) test(`note layout handles all pill combinations and indicator spacing at ${width}px`, async ({ browser }, info) => {
+  seedNoteLayoutCases();
+  const measurements = [];
+  for (const preset of themePresets.filter((theme) => ["elset", "midnight-signal"].includes(theme.id))) {
+    const { context, page } = await openBoard(browser, { width, height: 1180 }, preset);
+    try {
+      for (const view of ["Grid", "List", "Compact"]) {
+        await page.getByRole("button", { name: `To Do ${view} view`, exact: true }).click();
+        for (const entry of layoutCases) {
+          const target = page.locator(`[data-service-board-job-id="${entry.id}"]`);
+          await expect(target).toHaveAttribute("data-job-card-view", view.toLowerCase());
+          await expect(target.locator("..")).toHaveCSS("row-gap", view === "Grid" ? "12px" : "8px");
+          await expect(target.locator("[data-service-board-note]")).toHaveCount(entry.note ? 1 : 0);
+          if (entry.note) await assertNoteGeometry(page, target);
+          const values = await target.evaluate((card) => {
+            const box = (element) => {
+              if (!element) return null;
+              const r = element.getBoundingClientRect();
+              return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, height: r.height };
+            };
+            const price = card.querySelector("[data-grid-job-value]") || card.querySelector('[title$=" value"]');
+            const content = card.querySelector('[data-slot="card-content"]');
+            const number = card.querySelector("[data-job-card-number]");
+            const customer = card.querySelector("[data-job-card-customer]");
+            const arrow = card.querySelector(".service-board-tomorrow-action");
+            const textRects = [...card.querySelectorAll("p")].flatMap((p) => {
+              const range = document.createRange(); range.selectNodeContents(p);
+              const clip = p.getBoundingClientRect();
+              return [...range.getClientRects()].map((r) => ({ left: Math.max(r.left, clip.left), right: Math.min(r.right, clip.right), top: Math.max(r.top, clip.top), bottom: Math.min(r.bottom, clip.bottom) }))
+                .filter((r) => r.right > r.left && r.bottom > r.top);
+            });
+            return {
+              card: box(card), price: box(price), priceText: price?.textContent.trim(), priceClipped: price ? price.scrollWidth > price.clientWidth : false,
+              number: box(number), customer: box(customer), indicator: box(card.querySelector("[data-job-card-indicators]")),
+              contentTop: content.getBoundingClientRect().top + parseFloat(getComputedStyle(content).paddingTop),
+              bottomPadding: getComputedStyle(card.querySelector('[data-slot="card"]')).paddingBottom,
+              rowGap: getComputedStyle(card.parentElement).rowGap, arrow: box(arrow), textRects,
+            };
+          });
+          const label = `${width} ${preset.id} ${view} ${entry.id}`;
+          measurements.push({ label, ...values });
+          expect(values.priceClipped, label).toBe(false);
+          expect(Boolean(values.price), label).toBe(entry.rate !== null);
+          if (values.price) {
+            expect(values.price.left, label).toBeGreaterThanOrEqual(values.card.left);
+            expect(values.price.right, label).toBeLessThanOrEqual(values.card.right);
+          }
+          if (view === "Grid") {
+            expect(values.customer.top - values.number.bottom, label).toBeCloseTo(4, 1);
+            expect(values.rowGap).toBe("12px");
+            if (values.price) expect((values.price.top + values.price.bottom) / 2, label).toBeCloseTo(values.card.bottom - 6, 1);
+          } else {
+            await expect(target.getByText("High", { exact: true })).toBeVisible();
+            expect(values.rowGap).toBe("8px");
+            if (view === "Compact") expect(values.bottomPadding).toBe("8px");
+            else if (entry.indicator) {
+              await expect(target.getByLabel("Maintenance", { exact: true })).toBeVisible();
+              expect(values.indicator).not.toBeNull();
+              expect(values.number.top - values.indicator.bottom, label).toBeCloseTo(4, 1);
+            } else {
+              expect(values.indicator, label).toBeNull();
+              expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);
+            }
+          }
+          const intersects = (a, b) => a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+          expect(intersects(values.price, values.arrow), label).toBeFalsy();
+          for (const text of values.textRects) expect(intersects(text, values.arrow), `${label} text/action overlap`).toBeFalsy();
+        }
+        await capture(page, info, `note-layout-${preset.id}-${width}-${view.toLowerCase()}`);
+      }
+    } finally { await context.close(); }
+  }
+  await info.attach("note-layout-measurements", { body: JSON.stringify(measurements, null, 2), contentType: "application/json" });
+});
+
+function seedBoardNotes() {
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  try {
+    db.prepare("UPDATE jobs SET service_board_note = ? WHERE id IN ('completed-175', 'completed-174')").run("Waiting on parts");
+    const quote = JSON.parse(fs.readFileSync(path.join(repoRoot, "fixtures/demo-workspace.json"), "utf8")).jobs[0].quote;
+    insertQuoteTree(db, "completed-175", quote);
+  } finally { db.close(); }
+}
+
+const noteCard = (page) => page.locator('[data-service-board-job-id="completed-175"], [data-mobile-job-id="completed-175"]');
+const noteDialog = (page) => page.getByRole("dialog", { name: "Job note for Job #2175" });
+const noteValue = () => readWorkspace().jobs.find((job) => job.id === "completed-175").serviceBoardNote;
+const openNote = (page) => noteCard(page).getByText("Completed service 175", { exact: true }).click();
+
+async function assertNoteGeometry(page, target = noteCard(page)) {
+  const result = await target.evaluate((card) => {
+    const rect = (element) => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, height: r.height }; };
+    const pill = card.querySelector("[data-service-board-note]");
+    const value = card.querySelector("[data-grid-job-value]") || card.querySelector('[title$=" value"]');
+    const style = getComputedStyle(pill);
+    const canvas = document.createElement("canvas").getContext("2d");
+    canvas.font = style.font;
+    return { mode: card.dataset.jobCardView || "mobile", card: rect(card), note: rect(pill), price: value ? rect(value) : null, whiteSpace: style.whiteSpace, overflow: style.overflow, textOverflow: style.textOverflow,
+      textWidth: pill.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), ellipsisWidth: canvas.measureText("…").width,
+      position: style.position, bottom: style.bottom, transform: style.transform,
+      priceStyle: value ? { bottom: getComputedStyle(value).bottom, transform: getComputedStyle(value).transform, clipped: value.scrollWidth > value.clientWidth } : null,
+      foreground: style.color, background: style.backgroundColor,
+      actions: [...card.querySelectorAll("button")].filter((button) => !button.hasAttribute("data-job-card-body") && !(card.matches("[data-mobile-job-id]") && button === card.querySelector("button"))).map(rect),
+      others: [...card.parentElement.children].filter((element) => element !== card).map(rect) };
+  });
+  const center = (rect) => (rect.top + rect.bottom) / 2;
+  if (result.mode === "grid") {
+    expect(result.note.left).toBeCloseTo(result.card.left, 1);
+    expect(center(result.note)).toBeCloseTo(result.card.bottom - 6, 1);
+    if (result.price) {
+      expect(result.note.top).toBeCloseTo(result.price.top, 1);
+      expect(result.note.bottom).toBeCloseTo(result.price.bottom, 1);
+      expect(result.bottom).toBe(result.priceStyle.bottom);
+      expect(result.transform).toBe(result.priceStyle.transform);
+      expect(result.card.right - result.price.right).toBeCloseTo(result.note.left - result.card.left, 1);
+    }
+  } else if (result.mode === "mobile") {
+    expect(result.note.left - result.card.left).toBeLessThanOrEqual(6);
+    expect(Math.abs(center(result.note) - result.card.bottom)).toBeLessThanOrEqual(2);
+  } else {
+    expect(result.position).toBe("static");
+    expect(result.note.right - result.note.left).toBeGreaterThanOrEqual(24);
+    expect(result.note.top).toBeGreaterThan(result.card.top);
+    expect(result.note.bottom).toBeLessThan(result.card.bottom);
+    if (result.price) {
+      expect(result.price.left - result.note.right).toBeCloseTo(4, 1);
+      expect(center(result.note)).toBeCloseTo(center(result.price), 1);
+    }
+  }
+  if (result.price) expect(result.priceStyle.clipped).toBe(false);
+  expect(result.textWidth).toBeGreaterThanOrEqual(result.ellipsisWidth - 1);
+  expect(result.note.right).toBeLessThan(result.card.right);
+  expect(result.note.height).toBeLessThanOrEqual(22);
+  expect([result.whiteSpace, result.overflow, result.textOverflow]).toEqual(["nowrap", "hidden", "ellipsis"]);
+  const toHex = (rgb) => "#" + rgb.match(/\d+/g).slice(0, 3).map((part) => Number(part).toString(16).padStart(2, "0")).join("");
+  expect(contrastRatio(toHex(result.foreground), toHex(result.background))).toBeGreaterThanOrEqual(4.5);
+  const [red, green, blue] = result.background.match(/\d+/g).map(Number);
+  expect(red).toBeGreaterThan(green); expect(green).toBeGreaterThan(blue); // Orange in every theme.
+  const intersects = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  if (result.price) expect(intersects(result.note, result.price)).toBe(false);
+  for (const other of [...result.actions, ...result.others]) expect(intersects(result.note, other)).toBe(false);
+}
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 820, height: 1180 }, { width: 390, height: 844 }]) {
+  test(`job notes edit, persist, remove and restore normal interactions at ${viewport.width}px`, async ({ browser }, info) => {
+    seedBoardNotes();
+    const { context, page } = await openBoard(browser, viewport);
+    try {
+      const mobile = viewport.width < 768;
+      if (!mobile) await page.getByRole("button", { name: "Completed Grid view", exact: true }).click();
+      const toggle = page.getByRole("button", { name: "Edit job notes", exact: true });
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(noteCard(page).getByLabel("Job note: Waiting on parts")).toBeVisible();
+      await assertNoteGeometry(page);
+      if (!mobile) {
+        const besideTagInfo = await toggle.evaluate((button) => button.previousElementSibling?.textContent.includes("Show tag info"));
+        expect(besideTagInfo).toBe(true);
+      }
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      if (!mobile) await expect(noteCard(page)).toHaveAttribute("draggable", "false");
+      await openNote(page);
+      await expect(page).not.toHaveURL(/\/jobs\//);
+      const input = noteDialog(page).getByLabel("Job note", { exact: true });
+      await expect(input).toBeFocused();
+      await expect(input).toHaveValue("Waiting on parts");
+      await expect(input).toHaveAttribute("maxlength", "25");
+      await capture(page, info, `job-note-editor-${viewport.width}`);
+      await input.fill("x".repeat(25));
+      await expect(noteDialog(page).getByText("25 / 25", { exact: true })).toBeVisible();
+      await input.press("End"); await input.pressSequentially("extra");
+      await expect(input).toHaveValue("x".repeat(25));
+      await input.press("Escape");
+      await expect(noteDialog(page)).toHaveCount(0);
+      expect(noteValue()).toBe("Waiting on parts");
+      await openNote(page);
+      await noteDialog(page).getByLabel("Job note", { exact: true }).fill("  Call customer  ");
+      await page.keyboard.press("Tab");
+      await expect(noteDialog(page).getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+      await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
+      await expect(noteDialog(page)).toHaveCount(0);
+      await expect(noteCard(page).getByLabel("Job note: Call customer")).toBeVisible();
+      await expect.poll(noteValue).toBe("Call customer");
+      if (!mobile) {
+        await noteCard(page).focus(); await page.keyboard.press("Enter");
+        await expect(noteDialog(page)).toBeVisible();
+        await noteDialog(page).getByRole("button", { name: "Cancel", exact: true }).click();
+        await page.getByText("Show tag info", { exact: true }).locator("..").getByRole("checkbox").check();
+        await expect(noteCard(page).getByLabel("Job note: Call customer")).toBeVisible();
+      }
+      await capture(page, info, `job-notes-${viewport.width}`);
+      await toggle.click();
+      if (!mobile) await expect(noteCard(page)).toHaveAttribute("draggable", "true");
+      await expect(noteCard(page).getByLabel("Job note: Call customer")).toBeVisible();
+      await page.reload();
+      if (mobile) await page.getByRole("tab", { name: /^Completed / }).click();
+      await expect(noteCard(page).getByLabel("Job note: Call customer")).toBeVisible();
+      await toggle.click(); await openNote(page);
+      await noteDialog(page).getByRole("button", { name: "Remove note", exact: true }).click();
+      await expect(noteCard(page).locator("[data-service-board-note]")).toHaveCount(0);
+      await expect.poll(noteValue).toBe(null);
+      await toggle.click();
+      if (mobile) await openNote(page);
+      else await noteCard(page).getByText("Completed service 175", { exact: true }).dblclick();
+      await expect(page).toHaveURL(/\/jobs\/completed-175$/);
+    } finally { await context.close(); }
+  });
+}
+
+test("job notes save optimistically, roll back failures and retain the draft for retry", async ({ browser }) => {
+  seedBoardNotes();
+  const { context, page } = await openBoard(browser);
+  try {
+    await page.getByRole("button", { name: "Edit job notes" }).click();
+    await openNote(page);
+    await noteDialog(page).getByLabel("Job note", { exact: true }).fill("Needs approval");
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let body;
+    await page.route("**/api/jobs/completed-175/service-board-note", async (route) => {
+      body = route.request().postDataJSON();
+      await gate;
+      await route.fulfill({ status: 503, json: { error: "Test connection failure" } });
+    });
+    await noteDialog(page).getByRole("button", { name: "Save", exact: true }).click();
+    await expect(noteDialog(page)).toHaveCount(0);
+    await expect(noteCard(page).getByLabel("Job note: Needs approval")).toBeVisible();
+    expect(noteValue()).toBe("Waiting on parts");
+    release();
+    await expect(page.getByRole("alert")).toContainText("Test connection failure");
+    await expect(noteCard(page).getByLabel("Job note: Waiting on parts")).toBeVisible();
+    expect(body).toEqual({ serviceBoardNote: "Needs approval" });
+    await page.unroute("**/api/jobs/completed-175/service-board-note");
+    await page.getByRole("button", { name: "Retry note" }).click();
+    await expect(noteDialog(page).getByLabel("Job note", { exact: true })).toHaveValue("Needs approval");
+    await noteDialog(page).getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(noteValue).toBe("Needs approval");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await page.route("**/api/jobs/completed-175/service-board-note", (route) => route.fulfill({ status: 503, json: { error: "Removal failed" } }));
+    await openNote(page);
+    await noteDialog(page).getByRole("button", { name: "Remove note", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Removal failed");
+    await expect(noteCard(page).getByLabel("Job note: Needs approval")).toBeVisible();
+    await page.unroute("**/api/jobs/completed-175/service-board-note");
+    await page.getByRole("button", { name: "Retry note" }).click();
+    await expect(noteDialog(page).getByLabel("Job note", { exact: true })).toHaveValue("");
+    await noteDialog(page).getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(noteValue).toBe(null);
+  } finally { await context.close(); }
+});
+
+test("job notes render in every theme and desktop view without overlapping price or adjacent cards", async ({ browser }, info) => {
+  seedBoardNotes();
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  try { db.prepare("UPDATE jobs SET service_board_note = ? WHERE service_board_note IS NOT NULL").run("W".repeat(25)); } finally { db.close(); }
+  for (const preset of themePresets) {
+    const { context, page } = await openBoard(browser, { width: 820, height: 1180 }, preset);
+    try {
+      for (const view of ["Grid", "List", "Compact"]) {
+        await page.getByRole("button", { name: `Completed ${view} view`, exact: true }).click();
+        await assertNoteGeometry(page);
+      }
+      await page.getByRole("button", { name: "Edit job notes" }).click();
+      await openNote(page);
+      await expect(noteDialog(page)).toBeVisible();
+      await noteDialog(page).getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(noteCard(page).locator("[data-job-card-body]")).toHaveAttribute("aria-expanded", "false");
+      await page.getByRole("button", { name: "Completed Grid view", exact: true }).click();
+      await capture(page, info, `job-notes-theme-${preset.id}`);
+      await page.setViewportSize({ width: 768, height: 1024 });
+      await assertNoteGeometry(page);
+      await page.setViewportSize({ width: 320, height: 740 });
+      await page.getByRole("tab", { name: /^Completed / }).click();
+      await assertNoteGeometry(page);
+      await expect(page.getByRole("button", { name: "Edit job notes" })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+      await capture(page, info, `job-notes-theme-mobile-${preset.id}`);
+    } finally { await context.close(); }
+  }
+});
+
+test("job notes do not overwrite another browser's status change", async ({ browser }) => {
+  seedBoardNotes();
+  const { context, page } = await openBoard(browser);
+  try {
+    await page.getByRole("button", { name: "Edit job notes" }).click();
+    await openNote(page);
+    const remote = await browser.newContext({ storageState });
+    try {
+      expect((await remote.request.patch(`${baseUrl}/api/jobs/completed-175/status`, { data: { status: "In Progress" } })).ok()).toBe(true);
+      await noteDialog(page).getByLabel("Job note", { exact: true }).fill("New note after status");
+      await noteDialog(page).getByRole("button", { name: "Save", exact: true }).click();
+      await expect.poll(noteValue).toBe("New note after status");
+      expect(readWorkspace().jobs.find((job) => job.id === "completed-175").status).toBe("In Progress");
+      const secondPage = await remote.newPage();
+      await secondPage.goto(baseUrl);
+      await expect(column(secondPage, "In Progress").getByLabel("Job note: New note after status")).toBeVisible();
+    } finally { await remote.close(); }
+  } finally { await context.close(); }
+});
+
+test("job notes leave dedicated Tomorrow and mobile Move controls available", async ({ browser }) => {
+  const { context, page } = await openBoard(browser);
+  try {
+    await page.getByRole("button", { name: "Edit job notes" }).click();
+    const source = page.locator('[data-service-board-job-id="progress-30"]');
+    await source.getByRole("button", { name: "Add Job #4030 to tomorrow" }).click();
+    await expect.poll(() => readWorkspace().jobs.find((job) => job.id === "progress-30").serviceBoardTomorrowDate).not.toBe("");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("tab", { name: /^In Progress / }).click();
+    await page.getByRole("button", { name: "Move Job #4030", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog")).not.toContainText("Job note");
+  } finally { await context.close(); }
+});
+
+for (const width of [1440, 820]) test(`job notes disable and restore ${width === 820 ? "touch" : "mouse"} dragging`, async ({ browser }) => {
+  const { context, page, writes } = await openBoard(browser, { width, height: 1180 });
+  try {
+    const source = page.locator('[data-service-board-job-id="todo-30"]');
+    const toggle = page.getByRole("button", { name: "Edit job notes" });
+    const drag = async () => {
+      if (width === 820) {
+        const start = await source.boundingBox(), target = await column(page, "In Progress").boundingBox();
+        const cdp = await context.newCDPSession(page);
+        try {
+          await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.x + 25, y: start.y + 65, id: 1 }] });
+          await page.waitForTimeout(230); // Real long-press activation threshold is 180ms.
+          await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: target.x + target.width / 2, y: start.y + 65, id: 1 }] });
+          await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        } finally { await cdp.detach(); }
+      } else {
+        const transfer = await page.evaluateHandle(() => new DataTransfer());
+        try {
+          await transfer.evaluate((value) => value.setData("jobId", "todo-30"));
+          await source.dispatchEvent("dragstart", { dataTransfer: transfer });
+          await column(page, "In Progress").dispatchEvent("dragover", { dataTransfer: transfer });
+          await column(page, "In Progress").dispatchEvent("drop", { dataTransfer: transfer });
+        } finally { await transfer.dispose(); }
+      }
+    };
+    await toggle.click(); await drag();
+    expect(writes.filter((request) => request.path.endsWith("/status"))).toEqual([]);
+    expect(readWorkspace().jobs.find((job) => job.id === "todo-30").status).toBe("To Do");
+    await toggle.click();
+    await expect(source).toHaveAttribute("draggable", "true");
+    await drag();
+    await expect.poll(() => readWorkspace().jobs.find((job) => job.id === "todo-30").status).toBe("In Progress");
+  } finally { await context.close(); }
+});
 const viewports = [
   { width: 1920, height: 1080 }, { width: 1440, height: 900 }, { width: 1280, height: 720 },
   { width: 1024, height: 768 }, { width: 820, height: 1180 }, { width: 390, height: 844 },
@@ -283,7 +735,7 @@ test("dragging an old job into Completed keeps creation order and the current vi
       await transfer.evaluate((value) => value.setData("jobId", "old-job"));
       const source = cards(page, "To Do").filter({ hasText: "#50" });
       await source.dispatchEvent("dragstart", { dataTransfer: transfer });
-      const saved = page.waitForResponse((response) => response.request().method() === "PATCH" && response.url().endsWith("/api/jobs/old-job/status"));
+      const saved = page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname === "/api/jobs/old-job/status");
       await column(page).dispatchEvent("dragover", { dataTransfer: transfer });
       await column(page).dispatchEvent("drop", { dataTransfer: transfer });
       expect((await saved).ok()).toBe(true);

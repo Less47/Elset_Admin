@@ -11,6 +11,8 @@ import JobHistoryManager from "@/components/jobs/JobHistoryManager";
 import MaintenanceManager from "@/components/maintenance/MaintenanceManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
 import MobileServiceBoard from "@/components/service-board/MobileServiceBoard";
+import JobNoteEditor from "@/components/service-board/JobNoteEditor";
+import { useJobNoteEditor } from "@/components/service-board/useJobNoteEditor";
 import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPanel } from "@/components/service-board/OfficeBoard";
 import { TOMORROW_VIEW } from "@/components/service-board/service-board-utils";
 import SettingsManager from "@/components/settings/SettingsManager";
@@ -123,6 +125,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const desktopServiceBoardFullScreen = isThreeColumnBoard && isServiceBoardFullScreen;
   const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
   const calendarWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "calendar";
+  const jobNotes = useJobNoteEditor({ jobs: data.jobs, onSave: actions.handleSaveServiceBoardNote });
 
   const handleMobileNavigate = (sectionId) => {
     const navigationStarted = setActiveSection(sectionId);
@@ -181,6 +184,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         </div>
 
         <ServiceBoardTagLegend
+          noteEditMode={jobNotes.active}
+          onToggleNoteEditMode={jobNotes.toggle}
           tone={isHeroTone ? "hero" : "default"}
           showTagLabels={showServiceBoardTagLabels}
           onToggleShowTagLabels={setShowServiceBoardTagLabels}
@@ -394,9 +399,25 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {activeSection === "service-board" ? (
           <div className="min-w-0">
+            {jobNotes.pendingCount > 0 ? <p role="status" className="mb-2 text-xs text-text-secondary">Saving job note…</p> : null}
+            {jobNotes.failures.map((failure) => (
+              <div key={failure.jobId} role="alert" className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">
+                <span>Job #{failure.jobNumber}: {failure.message} Your draft is kept for retry.</span>
+                <Button type="button" variant="outline" onClick={(event) => jobNotes.retry(failure, event)}>Retry note</Button>
+              </div>
+            ))}
+            {jobNotes.editor ? <JobNoteEditor
+              key={jobNotes.editor.jobId}
+              editor={jobNotes.editor}
+              existingNote={data.jobs.find((job) => job.id === jobNotes.editor.jobId)?.serviceBoardNote}
+              onClose={jobNotes.close}
+              onSave={jobNotes.save}
+            /> : null}
             {isThreeColumnBoard ? (
               <>
                 <ServiceBoardTomorrowPanel
+                  noteEditMode={jobNotes.active}
+                  onEditNote={jobNotes.open}
                   jobs={derived.tomorrowJobs}
                   open={serviceBoardTomorrowPanelOpen}
                   tomorrowDate={derived.tomorrowPlanningDate}
@@ -423,6 +444,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                   )}
 
                   <OfficeBoard
+                    noteEditMode={jobNotes.active}
+                    onEditNote={jobNotes.open}
                     jobs={filteredJobs}
                     onDropJob={handleStatusChange}
                     onOpenJob={handleOpenJob}
@@ -461,6 +484,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
               </>
             ) : (
               <MobileServiceBoard
+                noteEditMode={jobNotes.active}
+                onToggleNoteEditMode={jobNotes.toggle}
+                onEditNote={jobNotes.open}
                 canManageTomorrow={canManageBusiness}
                 columnSortModes={serviceBoardColumnSorts}
                 formatDate={formatDate}

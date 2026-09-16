@@ -1,4 +1,5 @@
 import { siteAddressMetadata } from "./src/lib/site-location.js";
+import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { normalizeDeletedInvoices } from "./src/lib/invoice-deletion.js";
 import fs from "fs";
 import path from "path";
@@ -766,6 +767,7 @@ function normalizeJobRecord(job) {
     maintenanceOccurrenceKey: job.maintenanceOccurrenceKey || "",
     serviceBoardTomorrowDate: toDateInputValue(job.serviceBoardTomorrowDate),
     serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
+    serviceBoardNote: normalizeServiceBoardNote(job.serviceBoardNote),
     createdAt: job.createdAt || new Date().toISOString(),
     updatedAt: job.updatedAt || new Date().toISOString(),
     notes: Array.isArray(job.notes) ? job.notes.map(normalizeNote).filter(Boolean) : [],

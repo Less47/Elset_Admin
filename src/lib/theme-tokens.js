@@ -65,6 +65,7 @@ export function buildSemanticTheme(settings) {
   const popupMuted = readable(mixColor(popupText, popup, 0.25), [popup]);
   const actionText = contrastText(settings.actionColor);
   const actionHover = mixColor(settings.actionColor, actionText === '#FFFFFF' ? '#000000' : '#FFFFFF', 0.10);
+  const boardNoteSurface = dark ? '#F7A94D' : '#F69320';
   const vars = {
     '--background': settings.pageBackgroundStart, '--foreground': text,
     '--card': surface, '--card-foreground': text, '--surface-raised': raised,
@@ -76,6 +77,9 @@ export function buildSemanticTheme(settings) {
     '--border': border, '--border-strong': strong, '--input': strong, '--ui-border-color': border,
     '--primary': settings.actionColor, '--primary-foreground': actionText,
     '--primary-hover': actionHover, '--ring': readable(settings.actionColor, [surface], 3),
+    '--board-note-surface': boardNoteSurface, '--board-note-foreground': contrastText(boardNoteSurface),
+    '--board-note-border': dark ? '#FCBD75' : '#AD4D0B',
+    '--board-note-hover': mixColor(boardNoteSurface, contrastText(boardNoteSurface), 0.08),
     '--link': readable(settings.actionColor, surfaces),
     '--page-gradient': `linear-gradient(135deg, ${settings.pageBackgroundStart}, ${settings.pageBackgroundEnd})`,
     '--workspace-hero-bg': settings.heroSurface, '--workspace-hero-text': contrastText(settings.heroSurface),
