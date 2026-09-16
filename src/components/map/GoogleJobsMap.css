@@ -1,18 +1,33 @@
 .google-map-test .google-test-pin {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 3px solid #faf5ff;
-  border-radius: 50%;
-  background: #7c3aed;
-  color: white;
-  font: 700 12px/1 system-ui, sans-serif;
-  box-shadow: 0 2px 8px #0005;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
 }
-.google-map-test .google-test-pin.is-completed { background: #047857; border-color: #ecfdf5; }
-.google-map-test .google-test-pin.is-urgent { background: #b91c1c; border-color: #fff1f2; }
-.google-map-test .google-test-pin.google-test-cluster { width: 36px; height: 36px; background: var(--primary); color: var(--primary-foreground); border-color: var(--card); }
+.google-map-test .google-job-dot {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--marker-fill);
+  color: #07111f;
+  font: 900 12px/1 system-ui, sans-serif;
+  box-shadow: 0 0 0 1px #172337, 0 2px 4px #0005;
+}
+.google-map-test [data-tone="warning"] { --marker-fill: var(--map-marker-warning); }
+.google-map-test [data-tone="info"] { --marker-fill: var(--map-marker-info); }
+.google-map-test [data-tone="success"] { --marker-fill: var(--map-marker-success); }
+.google-map-test [data-tone="unknown"] { --marker-fill: var(--map-marker-unknown); }
+.google-map-test [data-tone="unknown"] .google-job-dot { color: #fff; }
+.google-test-pin[data-selected="true"] .google-job-dot { outline: 2px solid var(--foreground); outline-offset: 3px; }
+.google-map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; margin-top: 0.375rem; }
+.google-map-legend li { display: flex; align-items: center; gap: 0.3rem; }
+.google-map-legend-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--marker-fill); box-shadow: 0 0 0 1px var(--border-strong); }
+.google-map-stack-actions { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .google-test-load-state { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 1rem; pointer-events: none; }
 .google-test-status { position: absolute; bottom: 2.25rem; left: 1rem; z-index: 6; max-width: calc(100% - 5rem); pointer-events: none; }
 .google-test-details { position: absolute; bottom: max(7rem, calc(3.25rem + var(--google-map-status-height, 3.75rem))); left: 1rem; z-index: 1001; display: flex; flex-direction: column; width: min(24rem, calc(100% - 2rem)); max-height: calc(100% - 13rem - var(--google-map-status-height, 3.75rem)); overflow: hidden; overflow-wrap: anywhere; }

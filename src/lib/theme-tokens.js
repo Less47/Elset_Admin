@@ -80,6 +80,8 @@ export function buildSemanticTheme(settings) {
     '--board-note-surface': boardNoteSurface, '--board-note-foreground': contrastText(boardNoteSurface),
     '--board-note-border': dark ? '#FCBD75' : '#AD4D0B',
     '--board-note-hover': mixColor(boardNoteSurface, contrastText(boardNoteSurface), 0.08),
+    '--map-marker-warning': '#F5B700', '--map-marker-info': '#0F90CD',
+    '--map-marker-success': '#149447', '--map-marker-unknown': '#64748B',
     '--link': readable(settings.actionColor, surfaces),
     '--page-gradient': `linear-gradient(135deg, ${settings.pageBackgroundStart}, ${settings.pageBackgroundEnd})`,
     '--workspace-hero-bg': settings.heroSurface, '--workspace-hero-text': contrastText(settings.heroSurface),

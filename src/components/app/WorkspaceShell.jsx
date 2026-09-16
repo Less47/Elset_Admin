@@ -553,7 +553,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {canManageBusiness && activeSection === "map" ? (
           <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground" role="status">Loading map...</div>}>
-            <GoogleJobsMap customers={data.customers} jobs={data.jobs} onOpenJob={handleOpenJob} onOpenSite={handleOpenSiteProfile} />
+            <GoogleJobsMap customers={data.customers} jobs={data.jobs} dark={themePalette.dark} onOpenJob={handleOpenJob} onOpenSite={handleOpenSiteProfile} />
           </Suspense>
         ) : null}
 

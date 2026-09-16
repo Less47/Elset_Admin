@@ -84,9 +84,15 @@ test("live production-shaped dataset shows 204 unmapped then 175 after only link
   customer.sites.slice(0, 122).forEach((site, index) => Object.assign(site, { latitude: -37.8136 + (index % 3) * 0.0001, longitude: 144.9631 + (index % 3) * 0.0001 }));
   await page.getByRole("button", { name: "Refresh coordinates", exact: true }).click();
   await expect(page.locator(".google-test-status")).toContainText("204 jobs · 175 mapped · 29 missing location");
-  await expect(page.locator(".google-test-cluster")).toHaveText("175");
-  await page.locator(".google-test-cluster").click();
-  await expect(page.getByRole("complementary", { name: "Map job details" }).locator("article")).toHaveCount(175);
+  await expect(page.locator(".google-test-pin")).toHaveCount(175);
+  await expect(page.locator(".google-test-cluster")).toHaveCount(0);
+  await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-zoom", "13");
+  const marker = page.locator(".google-test-pin").last().locator("..");
+  await marker.focus();
+  await expect(marker).toBeFocused();
+  await marker.press("Enter");
+  await expect(page.getByRole("complementary", { name: "Map job details" }).locator("article")).toHaveCount(1);
+  await page.getByRole("button", { name: "Next job here", exact: true }).click();
   expect(JSON.stringify(state.jobs)).toBe(beforeJobs);
   expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
   expect(calls.some((call) => call.includes("geocode"))).toBe(false);
@@ -114,9 +120,9 @@ function markerFixture() {
   const state = structuredClone(fixture);
   const source = { ...state.jobs[0], quote: null, invoice: null };
   state.jobs = [
-    { ...source, id: "google-one", jobNumber: 7001, title: "Google test first job", latitude: -37.8136, longitude: 144.9631 },
+    { ...source, id: "google-one", jobNumber: 7001, title: "Google test first job", status: "To Do", latitude: -37.8136, longitude: 144.9631 },
     { ...source, id: "google-two", jobNumber: 7002, title: "Google test second job", location: { lat: -37.8136, lon: 144.9631 }, urgency: "High", status: "Completed" },
-    { ...source, id: "google-nearby", jobAddress: "Nearby fixture Site", jobNumber: 7003, title: "Google test nearby job", lat: -37.814, lng: 144.964 },
+    { ...source, id: "google-nearby", jobAddress: "Nearby fixture Site", jobNumber: 7003, title: "Google test nearby job", status: "In Progress", lat: -37.814, lng: 144.964 },
     { ...source, id: "google-missing", jobAddress: "Missing fixture Site", jobNumber: 7004, title: "Google test missing coordinates" },
   ];
   saveFixtureCoordinates(state, state.jobs.map((job) => ({ jobId: job.id, location: readSavedPosition(job) })));
@@ -206,7 +212,7 @@ test("Google authentication failure is explained even after the loader starts", 
   await capture(page, "google-auth-error-1440x900.png");
 });
 
-test("live Google renders Melbourne, clusters all jobs, filters and opens records", async ({ page }) => {
+test("live Google renders individual jobs in Melbourne, filters and opens records", async ({ page }) => {
   test.skip(!live || !configuredKey, "Set ELSET_GOOGLE_MAPS_LIVE_TEST=1 with a configured development key");
   const calls = await mockWorkspace(page);
   let keyLogged = false;
@@ -224,13 +230,17 @@ test("live Google renders Melbourne, clusters all jobs, filters and opens record
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(canvas).toHaveAttribute("data-map-zoom", "13");
   await expect(page.locator(".google-test-status")).toContainText("4 jobs · 3 mapped");
-  await expect(page.locator(".google-test-cluster")).toBeVisible();
-  await expect(page.locator(".google-test-cluster")).toHaveText("3");
-  await capture(page, "google-melbourne-cluster-1440x900.png");
-  await page.locator(".google-test-cluster").click();
+  await expect(page.locator(".google-test-pin")).toHaveCount(3);
+  await expect(page.locator(".google-test-cluster")).toHaveCount(0);
+  await capture(page, "google-melbourne-pins-1440x900.png");
+  await page.locator('.google-test-pin[data-job-id="google-one"]').locator("..").press("Enter");
   await expect(page.getByRole("complementary", { name: "Map job details" })).toContainText("Google test first job");
-  await expect(page.getByRole("complementary", { name: "Map job details" }).locator("article")).toHaveCount(3);
-  await capture(page, "google-cluster-details-1440x900.png");
+  await expect(page.getByRole("complementary", { name: "Map job details" }).locator("article")).toHaveCount(1);
+  await capture(page, "google-pin-details-1440x900.png");
+  await page.locator('.google-test-pin[data-selected="true"]').click();
+  await expect(page.getByRole("complementary", { name: "Map job details" })).toContainText("Google test second job");
+  await page.locator('.google-test-pin[data-selected="true"]').click();
+  await expect(page.getByRole("complementary", { name: "Map job details" })).toContainText("Google test first job");
   await canvas.evaluate((element) => { window.retainedMapRoot = element.firstElementChild; });
   await page.getByRole("button", { name: "Open Job", exact: true }).first().click();
   await expect(page).toHaveURL(/\/jobs\/google-one$/);
@@ -355,12 +365,13 @@ test("live Google preserves record coverage for all search and keyboard filter s
     }
     await expect(page.locator(".google-test-status")).toHaveAttribute("data-eligible-count", String(scenario.count));
     await expect(page.locator(".google-test-status")).toHaveAttribute("data-site-coordinate-count", String(scenario.count));
+    await expect(page.locator(".google-test-pin")).toHaveCount(scenario.count);
   }
   expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
   expect(calls.some((call) => /\/api\/map\/(config|geocode)/.test(call))).toBe(false);
 });
 
-test("live dense clusters expose every job, retain viewport, and work with touch and dark theme", async ({ browser }) => {
+test("live dense individual pins expose every job, retain viewport, and work with touch and dark theme", async ({ browser }) => {
   test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
   const { state, results } = parityFixture(240);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -371,10 +382,14 @@ test("live dense clusters expose every job, retain viewport, and work with touch
     const canvas = page.locator("[data-google-map-canvas]");
     await expect(canvas).toHaveAttribute("data-map-ready", "true");
     await expect(canvas).toHaveAttribute("data-map-zoom", "13");
-    await expect(page.locator(".google-test-cluster")).toHaveText("240");
-    await page.locator(".google-test-cluster").tap();
+    await expect(page.locator(".google-test-pin")).toHaveCount(240);
+    await expect(page.locator(".google-test-cluster")).toHaveCount(0);
+    await page.locator(".google-test-pin").last().tap();
     const details = page.getByRole("complementary", { name: "Map job details" });
-    await expect(details.locator("article")).toHaveCount(240);
+    await expect(details.locator("article")).toHaveCount(1);
+    const firstTitle = await details.locator("h3").textContent();
+    await page.getByRole("button", { name: "Next job here", exact: true }).tap();
+    await expect(details.locator("h3")).not.toHaveText(firstTitle);
     await expect(page.locator("html")).toHaveAttribute("data-theme-mode", "dark");
     await expect(details).toHaveCSS("background-color", "rgb(22, 34, 53)");
     await capture(page, "parity-dense-dark-details-390x844.png");
@@ -456,7 +471,7 @@ test("live primary route supports the sidebar, direct load and refresh", async (
   expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
 });
 
-for (const themeId of ["elset", "evergreen-ledger", "midnight-signal"]) {
+for (const { id: themeId } of themePresets) {
   test(`live primary Map preserves ${themeId} overlays on desktop and mobile`, async ({ browser }) => {
     test.skip(!live || !configuredKey, "Requires live Maps JavaScript API");
     const { state, results } = parityFixture();
@@ -469,11 +484,14 @@ for (const themeId of ["elset", "evergreen-ledger", "midnight-signal"]) {
       const canvas = page.locator("[data-google-map-canvas]");
       await expect(canvas).toHaveAttribute("data-map-ready", "true");
       await expect(page.locator("html")).toHaveAttribute("data-theme-mode", themeId === "midnight-signal" ? "dark" : "light");
+      await expect(canvas).toHaveAttribute("data-map-scheme", themeId === "midnight-signal" ? "dark" : "light");
+      expect(await canvas.evaluate((node) => node.querySelector("gmp-advanced-marker").map.get("colorScheme"))).toBe(themeId === "midnight-signal" ? "DARK" : "LIGHT");
       await expect(page.locator(".google-test-status")).toHaveAttribute("data-eligible-count", "11");
       await capture(page, `primary-${themeId}-1440x900.png`);
-      await page.locator(".google-test-pin").filter({ hasText: /^4$/ }).first().click();
+      await page.locator('.google-test-pin[data-job-id="parity-0"]').locator("..").press("Enter");
       const details = page.getByRole("complementary", { name: "Map job details" });
-      await expect(details.locator("article")).toHaveCount(4);
+      await expect(details.locator("article")).toHaveCount(1);
+      await expect(page.getByRole("button", { name: "Next job here", exact: true })).toBeVisible();
       const hex = preset.values.dialogSurface.slice(1);
       const color = `rgb(${[0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16)).join(", ")})`;
       await expect(details).toHaveCSS("background-color", color);

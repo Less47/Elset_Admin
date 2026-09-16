@@ -1,5 +1,16 @@
 export const statuses = ["To Do", "In Progress", "Completed"];
 
+// Saturated map symbols share the Service Board's exact stored status values.
+const mapStatusSymbols = {
+  "To Do": { tone: "warning", glyph: "•" },
+  "In Progress": { tone: "info", glyph: "›" },
+  Completed: { tone: "success", glyph: "✓" },
+};
+const unknownMapStatus = { tone: "unknown", glyph: "?" };
+export function jobMapSymbol(status) {
+  return Object.hasOwn(mapStatusSymbols, status) ? mapStatusSymbols[status] : unknownMapStatus;
+}
+
 export const statusThemes = {
   "To Do": {
     card: "border-status-warning-border bg-status-warning-surface/85",

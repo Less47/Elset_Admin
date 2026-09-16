@@ -124,12 +124,15 @@ for (const theme of themePresets) {
       await page.goto(`${baseUrl}/map`);
       await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true", { timeout: 30_000 });
       await expect(page.locator(".google-test-status")).toContainText("2 jobs · 2 mapped");
-      await page.locator(".google-test-pin").click();
+      await expect(page.locator(".google-test-pin")).toHaveCount(2);
+      await page.locator(".google-test-pin").last().click();
       const panel = page.getByRole("complementary", { name: "Map job details" });
-      await expect(panel.locator("article")).toHaveCount(2);
-      await expect(panel.getByRole("button", { name: "Open Job", exact: true })).toHaveCount(2);
-      await expect(panel.getByRole("button", { name: "Open Site", exact: true })).toHaveCount(2);
+      await expect(panel.locator("article")).toHaveCount(1);
+      await expect(panel.getByRole("button", { name: "Open Job", exact: true })).toHaveCount(1);
+      await expect(panel.getByRole("button", { name: "Open Site", exact: true })).toHaveCount(1);
       await expect(navigationLinks(panel)).toHaveCount(1);
+      await panel.getByRole("button", { name: "Next job here", exact: true }).click();
+      await expect(page.locator('[data-job-id="navigation-job"]')).toHaveAttribute("data-selected", "true");
       await activate(context, page, navigationLinks(panel), "Google Maps", coords);
       await page.waitForTimeout(4000); // Allow map pan/zoom and replacement tiles to settle for the screenshot.
       await capture(page, `map-${theme.id}-desktop`);
@@ -222,7 +225,7 @@ for (const variant of ["structured", "formatted", "coordinates-only", "unavailab
   });
 }
 
-test("live cluster panel has one Navigate action per distinct coordinate pair", async ({ page, context }) => {
+test("live individual and stacked jobs retain their own Site navigation destination", async ({ page, context }) => {
   test.skip(!live, "Requires live Google Maps on an allowed local referrer");
   const { state, customer, job, site } = workspace();
   customer.sites.push({ ...site, id: "navigation-nearby-site", address: "Nearby fixture address", latitude: -37.7306, longitude: 144.7429 });
@@ -230,12 +233,20 @@ test("live cluster panel has one Navigate action per distinct coordinate pair", 
   const calls = await mockWorkspace(context, state);
   await page.goto(`${baseUrl}/map`);
   await expect(page.locator("[data-google-map-canvas]")).toHaveAttribute("data-map-ready", "true", { timeout: 30_000 });
-  await page.locator(".google-test-cluster").click();
+  await expect(page.locator(".google-test-pin")).toHaveCount(3);
+  await page.locator('[data-job-id="navigation-job"]').locator("..").press("Enter");
   const panel = page.getByRole("complementary", { name: "Map job details" });
-  await expect(panel.locator("article")).toHaveCount(3);
-  await expect(navigationLinks(panel)).toHaveCount(2);
-  const targets = await navigationLinks(panel).evaluateAll((links) => links.map((link) => new URL(link.href).searchParams.get("destination")));
-  expect(targets.sort()).toEqual([coords, "-37.7306,144.7429"].sort());
+  await expect(panel.locator("article")).toHaveCount(1);
+  await expect(navigationLinks(panel)).toHaveCount(1);
+  expect(new URL(await navigationLinks(panel).getAttribute("href")).searchParams.get("destination")).toBe(coords);
+  await panel.getByRole("button", { name: "Next job here", exact: true }).click();
+  expect(new URL(await navigationLinks(panel).getAttribute("href")).searchParams.get("destination")).toBe(coords);
+  const nearbyMarker = page.locator('[data-job-id="navigation-nearby"]').locator("..");
+  await nearbyMarker.focus();
+  await expect(nearbyMarker).toBeFocused();
+  await nearbyMarker.press("Enter");
+  await expect(page.locator('[data-job-id="navigation-nearby"]')).toHaveAttribute("data-selected", "true");
+  expect(new URL(await navigationLinks(panel).getAttribute("href")).searchParams.get("destination")).toBe("-37.7306,144.7429");
   assertReadOnly(calls);
 });
 

@@ -42,8 +42,8 @@ function configureGoogle() {
 export async function loadGoogleMaps() {
   configureGoogle();
   if (!state.librariesPromise) {
-    state.librariesPromise = Promise.all([importLibrary("maps"), importLibrary("marker")])
-      .then(([maps, marker]) => ({ ...maps, ...marker }));
+    state.librariesPromise = Promise.all([importLibrary("maps"), importLibrary("marker"), importLibrary("core")])
+      .then(([maps, marker, core]) => ({ ...maps, ...marker, ColorScheme: core.ColorScheme }));
   }
   return state.librariesPromise;
 }
