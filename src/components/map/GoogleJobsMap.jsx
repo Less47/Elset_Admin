@@ -111,7 +111,9 @@ export default function GoogleJobsMap({ customers, jobs, dark = false, onOpenJob
       setLoadState({ loading: true, error: "" });
       map = new libraries.Map(container, {
         center: savedViewportRef.current?.center || MELBOURNE,
-        zoom: savedViewportRef.current?.zoom ?? 10, mapId: "DEMO_MAP_ID",
+        zoom: savedViewportRef.current?.zoom ?? 10,
+        // Road-shield visibility comes from the light/dark cloud styles on this ID.
+        mapId: import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim() || "DEMO_MAP_ID",
         colorScheme: dark ? libraries.ColorScheme.DARK : libraries.ColorScheme.LIGHT,
         disableDefaultUI: true, zoomControl: true,
         gestureHandling: "greedy", clickableIcons: false,

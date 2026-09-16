@@ -189,9 +189,9 @@ test("CLI keeps normal output without logging its key or interpreting shell char
   assert.equal(`${result.stdout}${result.stderr}`.includes(googleMapsApiKey), false);
 });
 
-test("Docker makes the Google build argument available before the SHA-required Vite build", () => {
+test("Docker makes the Google key and Map ID available before the SHA-required Vite build", () => {
   const dockerfile = fs.readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
-  assert.match(dockerfile, /ARG ELSET_BUILD_SHA\r?\nARG ELSET_BUILD_TIME\r?\nARG VITE_GOOGLE_MAPS_API_KEY\r?\nENV VITE_GOOGLE_MAPS_API_KEY=\$VITE_GOOGLE_MAPS_API_KEY\r?\nRUN ELSET_REQUIRE_BUILD_SHA=true npm run build/);
+  assert.match(dockerfile, /ARG ELSET_BUILD_SHA\r?\nARG ELSET_BUILD_TIME\r?\nARG VITE_GOOGLE_MAPS_API_KEY\r?\nENV VITE_GOOGLE_MAPS_API_KEY=\$VITE_GOOGLE_MAPS_API_KEY\r?\nARG VITE_GOOGLE_MAPS_MAP_ID\r?\nENV VITE_GOOGLE_MAPS_MAP_ID=\$VITE_GOOGLE_MAPS_MAP_ID\r?\nRUN ELSET_REQUIRE_BUILD_SHA=true npm run build/);
   assert.equal(JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).scripts["deploy:fly"], "node scripts/deploy-fly.mjs");
 });
 
@@ -199,8 +199,9 @@ test("production Vite build embeds the supplied Google argument and preserves SH
   const repoRoot = fileURLToPath(new URL("../", import.meta.url));
   const outDir = path.join(repoRoot, "test-results/google-maps-build-env");
   let buildEnv;
+  const mapId = "elset-cloud-style-build-test";
   deployFly({
-    env: { ELSET_BUILD_SHA: sha, VITE_GOOGLE_MAPS_API_KEY: googleMapsApiKey },
+    env: { ELSET_BUILD_SHA: sha, VITE_GOOGLE_MAPS_API_KEY: googleMapsApiKey, VITE_GOOGLE_MAPS_MAP_ID: ` ${mapId} ` },
     now: () => new Date(buildTime),
     run(_command, args) {
       buildEnv = Object.fromEntries(args.flatMap((arg, index) => arg === "--build-arg" ? [args[index + 1].split(/=(.*)/s).slice(0, 2)] : []));
@@ -218,6 +219,7 @@ test("production Vite build embeds the supplied Google argument and preserves SH
   const assets = path.join(outDir, "assets");
   const bundle = fs.readdirSync(assets).filter((name) => name.endsWith(".js")).map((name) => fs.readFileSync(path.join(assets, name), "utf8")).join("\n");
   assert.equal(bundle.includes(googleMapsApiKey), true, "The browser bundle must contain the supplied test key");
+  assert.equal(bundle.includes(mapId), true, "The cloud Map ID must survive the launcher and Vite build");
   assert.equal(bundle.includes(sha), true);
   assert.equal(bundle.includes(buildTime), true);
   assert.equal(bundle.includes("non-public-build-test-token"), false);

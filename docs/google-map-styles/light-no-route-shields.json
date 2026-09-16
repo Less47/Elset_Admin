@@ -1,0 +1,9 @@
+{
+  "variant": "light",
+  "styles": [
+    {
+      "id": "infrastructure.roadNetwork.roadShield",
+      "label": { "visible": false }
+    }
+  ]
+}

@@ -6,6 +6,7 @@
   cursor: pointer;
 }
 .google-map-test .google-job-dot {
+  --marker-glow: color-mix(in srgb, var(--marker-fill) 80%, white);
   display: grid;
   place-items: center;
   box-sizing: border-box;
@@ -16,7 +17,8 @@
   background: var(--marker-fill);
   color: #07111f;
   font: 900 12px/1 system-ui, sans-serif;
-  box-shadow: 0 0 0 1px #172337, 0 2px 4px #0005;
+  box-shadow: 0 0 0 1px #172337,
+    0 0 8px 2px color-mix(in srgb, var(--marker-glow) 75%, transparent);
 }
 .google-map-test [data-tone="warning"] { --marker-fill: var(--map-marker-warning); }
 .google-map-test [data-tone="info"] { --marker-fill: var(--map-marker-info); }

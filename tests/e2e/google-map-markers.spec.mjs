@@ -18,7 +18,8 @@ test.beforeAll(async () => {
   const port = socket.address().port;
   await new Promise((resolve) => socket.close(resolve));
   server = await createServer({ root, cacheDir: "node_modules/.vite-map-markers-tests", logLevel: "error",
-    define: { "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify("map-test-placeholder") },
+    define: { "import.meta.env.VITE_GOOGLE_MAPS_API_KEY": JSON.stringify("map-test-placeholder"),
+      "import.meta.env.VITE_GOOGLE_MAPS_MAP_ID": JSON.stringify("elset-map-style-test") },
     server: { host: "localhost", port } });
   await server.listen(); origin = server.resolvedUrls.local[0].replace(/\/$/, "");
 });
@@ -57,6 +58,7 @@ async function open(page, { live = false, state = mapFixture() } = {}) {
 test("individual markers show status colours, stack selection, titles and unchanged counts", async ({ page }) => {
   const { calls, before } = await open(page);
   await expect(page.locator(".google-test-pin")).toHaveCount(5);
+  expect(await page.locator("gmp-advanced-marker").first().evaluate((marker) => marker.map.get("mapId"))).toBe("elset-map-style-test");
   await expect(page.locator(".google-test-cluster")).toHaveCount(0);
   await expect(page.locator(".google-test-status")).toContainText("6 jobs · 5 mapped · 1 missing location");
   for (const [tone, color] of [["warning", "rgb(245, 183, 0)"], ["info", "rgb(15, 144, 205)"], ["success", "rgb(20, 148, 71)"], ["unknown", "rgb(100, 116, 139)"]]) {

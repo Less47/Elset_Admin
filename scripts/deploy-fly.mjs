@@ -19,6 +19,7 @@ export function deployFly({ args = [], env = process.env, readGit, run = spawnSy
     "--build-arg", `ELSET_BUILD_SHA=${sha}`,
     "--build-arg", `ELSET_BUILD_TIME=${buildTime}`,
     "--build-arg", `VITE_GOOGLE_MAPS_API_KEY=${googleMapsApiKey}`,
+    ...(env.VITE_GOOGLE_MAPS_MAP_ID?.trim() ? ["--build-arg", `VITE_GOOGLE_MAPS_MAP_ID=${env.VITE_GOOGLE_MAPS_MAP_ID.trim()}`] : []),
   ], {
     cwd: fileURLToPath(new URL("../", import.meta.url)),
     env,
