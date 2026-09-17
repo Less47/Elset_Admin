@@ -103,7 +103,7 @@ export function createMaintenanceRouter({
   );
 
   router.patch("/api/maintenance-plans/:id/occurrences", ...middleware,
-    handleMaintenanceRoute((db, req) => scheduleMaintenancePlan(db, req.params.id, { ...req.body, scope: "occurrence" }), env));
+    handleMaintenanceRoute((db, req) => scheduleMaintenancePlan(db, req.params.id, { ...req.body, scope: "occurrence" }, { returnChange: req.query.response === "calendar" }), env));
 
   router.post(
     "/api/maintenance-plans/:id/complete-cycle",

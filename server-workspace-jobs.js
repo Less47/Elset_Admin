@@ -1155,24 +1155,33 @@ export function changeJobStatus(db, jobIdInput, statusInput, { returnDelta = fal
   })();
 }
 
-export function scheduleJob(db, jobIdInput, scheduledDateInput) {
+export function scheduleJob(db, jobIdInput, scheduledDateInput, { expectedScheduledDate, returnChange = false } = {}) {
   const jobId = normalizeId(jobIdInput, "Job ID");
   const scheduledDate = normalizeDateInput(scheduledDateInput);
+  if (expectedScheduledDate !== undefined && expectedScheduledDate !== "") requireCalendarDate(expectedScheduledDate);
 
   return db.transaction(() => {
-    ensureJobExists(db, jobId);
+    const before = getJobState(db, jobId);
+    if (!before) throw new WorkspaceJobError("Job not found.", 404);
+    if (expectedScheduledDate !== undefined && before.scheduledDate !== expectedScheduledDate) {
+      throw new WorkspaceJobError("This job's schedule has changed since your last action. Refresh and try again.", 409);
+    }
     const updatedAt = nowIso();
     updateJobCore(db, jobId, { scheduledDate }, updatedAt);
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
-    return getJobState(db, jobId);
-  })();
+    const job = getJobState(db, jobId);
+    return returnChange ? { job, change: before.scheduledDate === scheduledDate ? null : {
+      type: "job-reschedule", entityId: jobId, label: `Job #${job.jobNumber}`,
+      before: { scheduledDate: before.scheduledDate }, after: { scheduledDate },
+    } } : job;
+  }).immediate();
 }
 
 // A completed visit is a scheduling correction, never a recurrence edit.
-export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input) {
+export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input, { returnChange = false } = {}) {
   assertPlainObject(input);
-  const allowed = ["scheduledDate", "expectedScheduledDate", "completedMaintenanceCorrection"];
+  const allowed = ["scheduledDate", "expectedScheduledDate", "completedMaintenanceCorrection", "occurrenceRestore"];
   if (Object.keys(input).some((key) => !allowed.includes(key)) || input.completedMaintenanceCorrection !== true) {
     throw new WorkspaceJobError("Only the completed maintenance job's scheduled date can be corrected.");
   }
@@ -1194,7 +1203,22 @@ export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input) {
     const occurrence = plan && expandMaintenanceOccurrences({ ...plan, active: true }, occurrenceDate, occurrenceDate, state.jobs)
       .find((entry) => entry.jobId === jobId);
     if (!occurrence) throw new WorkspaceJobError("The linked maintenance occurrence is unavailable. Refresh and try again.", 409);
-    if (job.scheduledDate === input.scheduledDate) return job;
+    let overrideDate = input.scheduledDate;
+    if (input.occurrenceRestore !== undefined) {
+      const restore = input.occurrenceRestore;
+      assertPlainObject(restore, "Occurrence restoration");
+      if (Object.keys(restore).some((key) => !["key", "expectedDate", "date", "overrideDate"].includes(key))
+        || !isMaintenanceDate(restore.date) || !isMaintenanceDate(restore.expectedDate)
+        || (restore.overrideDate !== "" && !isMaintenanceDate(restore.overrideDate))) {
+        throw new WorkspaceJobError("Invalid occurrence scheduling fields.");
+      }
+      if (restore.key !== occurrence.key || restore.expectedDate !== occurrence.date
+        || (restore.overrideDate || prior?.snapshot?.date || occurrence.date) !== restore.date) {
+        throw new WorkspaceJobError("This maintenance occurrence's schedule has changed since your last action.", 409);
+      }
+      overrideDate = restore.overrideDate;
+    }
+    if (job.scheduledDate === input.scheduledDate && !input.occurrenceRestore) return returnChange ? { job, change: null } : job;
 
     const updatedAt = nowIso();
     const snapshot = prior?.snapshot || occurrence;
@@ -1202,7 +1226,7 @@ export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input) {
     // and append corrections, rather than rewriting the completion/move entries.
     writeMaintenanceException(db, plan.id, {
       ...prior, ...occurrence,
-      overrideDate: input.scheduledDate,
+      overrideDate,
       completedAt: prior?.completedAt || job.completedAt || occurrence.completedAt,
       snapshot: {
         ...snapshot,
@@ -1218,8 +1242,14 @@ export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input) {
     // Do not rewrite the plan, its revision/next due cache, or completion fields.
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
-    return getJobState(db, jobId);
-  })();
+    const updated = getJobState(db, jobId);
+    return returnChange ? { job: updated, change: {
+      type: "completed-maintenance-reschedule", entityId: jobId, label: `Job #${job.jobNumber}`,
+      occurrenceKey: occurrence.key, planId: plan.id,
+      before: { scheduledDate: job.scheduledDate, occurrenceDate: occurrence.date, occurrenceOverrideDate: prior?.overrideDate || "" },
+      after: { scheduledDate: input.scheduledDate, occurrenceDate: input.occurrenceRestore?.date || input.scheduledDate },
+    } } : updated;
+  }).immediate();
 }
 
 function requireCalendarDate(value) {
@@ -1270,10 +1300,14 @@ export function rescheduleDayJobs(db, input) {
   const seen = new Set();
   const entries = input.jobs.map((entry) => {
     assertPlainObject(entry, "Job selection");
-    if (Object.keys(entry).some((key) => !["id", "revision"].includes(key))) throw new WorkspaceJobError("Job selections accept only an ID and revision token.");
+    if (Object.keys(entry).some((key) => !["id", "revision", "expectedScheduledDate"].includes(key))) throw new WorkspaceJobError("Job selections accept only an ID and scheduling guard.");
     const id = normalizeId(entry.id, "Job ID");
     if (seen.has(id)) throw new WorkspaceJobError("Select each job only once.");
     seen.add(id);
+    if (entry.expectedScheduledDate !== undefined) {
+      if (entry.revision !== undefined || requireCalendarDate(entry.expectedScheduledDate) !== sourceDate) throw new WorkspaceJobError("The expected scheduling date must match the source date.");
+      return { id, expectedScheduledDate: entry.expectedScheduledDate };
+    }
     if (typeof entry.revision !== "string" || !/^[a-f0-9]{64}$/.test(entry.revision)) throw new WorkspaceJobError("Reload the day before rescheduling its jobs.");
     return { id, revision: entry.revision };
   });
@@ -1289,8 +1323,8 @@ export function rescheduleDayJobs(db, input) {
       const job = current.get(entry.id);
       let error = "";
       if (!job) error = "This job was deleted or archived.";
-      else if (!isActiveCalendarJob(job)) error = "This job is no longer active.";
-      else if (job.scheduledDate !== sourceDate || schedulingRevision(job) !== entry.revision) error = "This job was changed elsewhere. Review it before trying again.";
+      else if (entry.revision && !isActiveCalendarJob(job)) error = "This job is no longer active.";
+      else if (job.scheduledDate !== sourceDate || (entry.revision && schedulingRevision(job) !== entry.revision)) error = "This job was changed elsewhere. Review it before trying again.";
       if (error) {
         failed.push({ id: entry.id, jobNumber: job?.jobNumber, error });
         continue;

@@ -11,6 +11,7 @@ import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import { insertJobTree } from "../../server-workspace-jobs.js";
 import { normalizeStoredData } from "../../server-store.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
+import { COST_CATEGORIES } from "../../src/lib/job-costing.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const screenshots = path.join(root, "test-results/job-costing");
@@ -142,6 +143,113 @@ async function capture(page, info, name) {
   await info.attach(name, { path: file, contentType: "image/png" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 }
+
+const costEntries = (page) => page.getByRole("region", { name: /^Cost entries/ });
+const costFilter = (page, label) => page.getByRole("group", { name: "Filter cost entries by category" })
+  .getByRole("button", { name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(\\d+\\)$`) });
+
+for (const width of [390, 820, 1440]) {
+  test(`category filters show ordered entries and subtotals without changing job totals or fetching at ${width}px`, async ({ browser }, info) => {
+    const { context, page } = await open(browser, { width, enabled: true });
+    try {
+      const seeds = COST_CATEGORIES.filter((category) => category.key !== "other").map((category, index) => ({
+        category: category.key, description: `${category.label} example`, quantity: "1.5", unitCostCents: (index + 1) * 1001,
+        costDate: `2026-09-${String(20 - index).padStart(2, "0")}`,
+      }));
+      seeds.push({ category: "materials", description: "Earlier material", quantity: "2", unitCostCents: 125, costDate: "2026-09-01" });
+      for (const data of seeds) expect((await context.request.post(`${baseUrl}/api/jobs/costing-job/costs`, { data })).ok()).toBeTruthy();
+      const summary = (await (await context.request.get(`${baseUrl}/api/jobs/costing-job/costing`)).json()).result;
+      await page.getByRole("button", { name: "Refresh costing", exact: true }).click();
+      const section = costEntries(page);
+      const filters = page.getByRole("group", { name: "Filter cost entries by category" });
+      await expect(section.getByRole("heading")).toHaveText("Cost entries (7)");
+      await expect(costFilter(page, "All")).toHaveAttribute("aria-pressed", "true");
+      await expect(filters.getByRole("button")).toHaveCount(8);
+      const summaries = page.locator('[data-costing-metric], [aria-labelledby="cost-breakdown-title"], [aria-labelledby="profit-summary-title"]');
+      const beforeSummary = await summaries.allTextContents();
+      const requests = [];
+      page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/jobs/")) requests.push(request.url()); });
+      const money = (cents) => new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(cents / 100);
+      const rows = width < 768 ? section.locator("ul > li") : section.locator("tbody > tr");
+      for (const category of [{ key: "all", label: "All" }, ...COST_CATEGORIES]) {
+        const matching = summary.entries.filter((entry) => category.key === "all" || entry.category === category.key);
+        const button = costFilter(page, category.label);
+        await expect(button).toHaveText(`${category.label}(${matching.length})`);
+        await button.click();
+        await expect(button).toHaveAttribute("aria-pressed", "true");
+        await expect(filters.locator('[aria-pressed="true"]')).toHaveCount(1);
+        await expect(rows).toHaveCount(matching.length);
+        for (let index = 0; index < matching.length; index++) await expect(rows.nth(index)).toContainText(matching[index].description);
+        await expect(section.getByRole("heading")).toHaveText(`Cost entries (${category.key === "all" ? 7 : `${matching.length} of 7`})`);
+        await expect(page.getByTestId("cost-entries-subtotal")).toHaveText(`${category.key === "all" ? "Total costs" : `${category.label} subtotal`} ex GST${money(matching.reduce((sum, entry) => sum + entry.totalCostCents, 0))}`);
+        if (!matching.length) await expect(section).toContainText(`No ${category.label} cost entries.`);
+        expect(await summaries.allTextContents()).toEqual(beforeSummary);
+      }
+      // Native button keyboard activation works even for initially off-screen pills.
+      await costFilter(page, "Travel").focus();
+      await page.keyboard.press("Enter");
+      await expect(costFilter(page, "Travel")).toHaveAttribute("aria-pressed", "true");
+      await page.keyboard.press("Tab");
+      await expect(costFilter(page, "Other")).toBeFocused();
+      await page.keyboard.press("Space");
+      await expect(costFilter(page, "Other")).toHaveAttribute("aria-pressed", "true");
+      expect(requests).toEqual([]);
+      await addCost(page, { category: "Other", description: "Other direct cost", quantity: "1", unitCost: "12.34" });
+      await expect(costFilter(page, "Other")).toHaveAttribute("aria-pressed", "true");
+      await expect(costFilter(page, "Other")).toHaveText("Other(1)");
+      await expect(rows).toHaveCount(1);
+      await expect(rows.first()).toContainText("Other direct cost");
+      await expect(page.getByTestId("cost-entries-subtotal")).toContainText("$12.34");
+      await costFilter(page, "Materials").click();
+      await capture(page, info, `category-filters-${width}`);
+    } finally { await context.close(); }
+  });
+}
+
+test("active category survives add, category edit and delete with immediate counts and subtotals", async ({ browser }) => {
+  const { context, page } = await open(browser, { enabled: true });
+  try {
+    const section = costEntries(page);
+    await costFilter(page, "Materials").click();
+    await expect(section).toContainText("No Materials cost entries.");
+    const expectMaterials = async (count, total, allCount) => {
+      await expect(costFilter(page, "Materials")).toHaveAttribute("aria-pressed", "true");
+      await expect(costFilter(page, "Materials")).toHaveText(`Materials(${count})`);
+      await expect(costFilter(page, "All")).toHaveText(`All(${allCount})`);
+      await expect(section.locator("tbody tr")).toHaveCount(count);
+      await expect(page.getByTestId("cost-entries-subtotal")).toHaveText(`Materials subtotal ex GST${total}`);
+    };
+    await addCost(page, { description: "Motor", quantity: "2", unitCost: "10.25" });
+    await expectMaterials(1, "$20.50", 1);
+    await addCost(page, { description: "Consumables", category: "Sundries", quantity: "1", unitCost: "5.25" });
+    await expectMaterials(1, "$20.50", 2);
+    await expect(section).not.toContainText("Consumables");
+    await expect(costFilter(page, "Sundries")).toHaveText("Sundries(1)");
+    await addCost(page, { description: "Bolts", quantity: "2", unitCost: "1.25" });
+    await expectMaterials(2, "$23.00", 3);
+    await expect(metric(page, "total-costs")).toHaveText("$28.25");
+    await section.getByRole("button", { name: "Edit cost: Motor", exact: true }).click();
+    const edit = page.getByRole("dialog", { name: "Edit cost", exact: true });
+    await edit.getByLabel("Category *", { exact: true }).click();
+    await page.getByRole("option", { name: "Sundries", exact: true }).click();
+    await edit.getByRole("button", { name: "Save cost", exact: true }).click();
+    await expect(edit).toHaveCount(0);
+    await expectMaterials(1, "$2.50", 3);
+    await expect(section).not.toContainText("Motor");
+    await expect(costFilter(page, "Sundries")).toHaveText("Sundries(2)");
+    await expect(metric(page, "total-costs")).toHaveText("$28.25");
+    await section.getByRole("button", { name: "Delete cost: Bolts", exact: true }).click();
+    await page.getByRole("dialog", { name: "Delete cost?", exact: true }).getByRole("button", { name: "Delete cost", exact: true }).click();
+    await expectMaterials(0, "$0.00", 2);
+    await expect(section).toContainText("No Materials cost entries.");
+    await expect(metric(page, "total-costs")).toHaveText("$25.75");
+    await costFilter(page, "Sundries").click();
+    await expect(section.locator("tbody tr")).toHaveCount(2);
+    await expect(page.getByTestId("cost-entries-subtotal")).toHaveText("Sundries subtotal ex GST$25.75");
+    await costFilter(page, "All").click();
+    await expect(page.getByTestId("cost-entries-subtotal")).toHaveText("Total costs ex GST$25.75");
+  } finally { await context.close(); }
+});
 
 test("workspace enablement, exact costs, edit/delete and disable preserve records across sessions", async ({ browser }, info) => {
   const beforeJob = withDb(loadWorkspaceStateFromDb).jobs.find((job) => job.id === "costing-job");
@@ -399,6 +507,28 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 820, height: 1180 
       try {
         await addCost(page, { description: "Replacement safety beams and mounting hardware" });
         await expect(metric(page, "total-costs")).toContainText("$190.00");
+        const section = costEntries(page);
+        const filters = page.getByRole("group", { name: "Filter cost entries by category" });
+        await costFilter(page, "Other").click();
+        await expect(section).toContainText("No Other cost entries.");
+        await costFilter(page, "Materials").click();
+        await expect(costFilter(page, "Materials")).toHaveAttribute("aria-pressed", "true");
+        await expect(page.getByTestId("cost-entries-subtotal")).toHaveText("Materials subtotal ex GST$190.00");
+        const titleBox = await section.getByRole("heading").boundingBox();
+        const filterBox = await filters.boundingBox();
+        const addBox = await section.getByRole("button", { name: "Add Cost", exact: true }).boundingBox();
+        expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(addBox.x);
+        expect(filterBox.width).toBeGreaterThan(150);
+        if (viewport.width >= 1024) {
+          expect(filterBox.x).toBeGreaterThanOrEqual(titleBox.x + titleBox.width);
+          expect(filterBox.x + filterBox.width).toBeLessThanOrEqual(addBox.x);
+          expect(Math.abs(filterBox.y + filterBox.height / 2 - addBox.y - addBox.height / 2)).toBeLessThan(2);
+        } else {
+          expect(filterBox.y).toBeGreaterThanOrEqual(Math.max(titleBox.y + titleBox.height, addBox.y + addBox.height));
+        }
+        const activeColor = await costFilter(page, "Materials").evaluate((element) => getComputedStyle(element).backgroundColor);
+        const inactiveColor = await costFilter(page, "All").evaluate((element) => getComputedStyle(element).backgroundColor);
+        expect(activeColor).not.toBe(inactiveColor);
         if (viewport.width >= 768) {
           const row = page.getByTestId("job-costing").locator("tbody tr").first();
           const totalCell = await row.locator("td").nth(5).boundingBox();

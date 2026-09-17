@@ -568,6 +568,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             onScheduleJob={handleScheduleJob}
             onPreviewDayReschedule={handlePreviewDayReschedule}
             onRescheduleDayJobs={handleRescheduleDayJobs}
+            onUndoCalendarChange={actions.handleUndoCalendarChange}
             addMonths={addMonths}
             getCalendarDays={getCalendarDays}
             parseDateInputValue={parseDateInputValue}

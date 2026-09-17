@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays, ChevronLeft, ChevronRight, ListFilter, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, ListFilter, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -15,9 +15,10 @@ import CompletedMaintenanceMoveDialog from "./CompletedMaintenanceMoveDialog";
 import MaintenanceDateChoice from "@/components/maintenance/MaintenanceDateChoice";
 import { canMoveMaintenanceOccurrence, filterQueueJobs, formatCalendarDate, groupCalendarJobs, isCalendarDate, isCompletedMaintenanceJob, queueStatuses } from "./calendar-utils";
 import { useCalendarDrag } from "./useCalendarDrag";
+import { CALENDAR_UNDO_LIMIT, calendarUndoProjection } from "./calendar-undo";
 import "./Calendar.css";
 
-export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPreviewDayReschedule, onRescheduleDayJobs, onLoadMaintenanceOccurrences, onRescheduleMaintenance, onGenerateMaintenanceJob, onOpenPlan, addMonths, getCalendarDays, parseDateInputValue, toDateInputValue }) {
+export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPreviewDayReschedule, onRescheduleDayJobs, onUndoCalendarChange, onLoadMaintenanceOccurrences, onRescheduleMaintenance, onGenerateMaintenanceJob, onOpenPlan, addMonths, getCalendarDays, parseDateInputValue, toDateInputValue }) {
   // The selected date is also the single source of truth for both displayed months.
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
   const [search, setSearch] = useState("");
@@ -30,6 +31,13 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const [announcement, setAnnouncement] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkNotice, setBulkNotice] = useState(null);
+  const [undoHistory, setUndoHistory] = useState([]);
+  const [undoPending, setUndoPending] = useState(null);
+  const latestUndo = undoHistory.at(-1);
+  const undoProjection = useMemo(() => calendarUndoProjection(undoPending), [undoPending]);
+  const rememberChange = useCallback((change) => {
+    if (change) setUndoHistory((history) => [...history, change].slice(-CALENDAR_UNDO_LIMIT));
+  }, []);
   const [hasMiniColumn, setHasMiniColumn] = useState(false);
   const [maintenanceRange, setMaintenanceRange] = useState({ from: "", to: "", items: [] });
   const [maintenanceMove, setMaintenanceMove] = useState(null);
@@ -38,6 +46,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const [maintenanceRefresh, setMaintenanceRefresh] = useState(0);
   const [maintenanceLoadError, setMaintenanceLoadError] = useState("");
   const bulkPreviewRef = useRef(null);
+  const rangeKeyRef = useRef("");
   const savingRef = useRef(false);
   const returnFocusRef = useRef(null);
   const suppressSheetRestoreRef = useRef(false);
@@ -66,6 +75,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   useEffect(() => {
     const controller = new AbortController();
     let current = true;
+    rangeKeyRef.current = `${rangeFrom}:${rangeTo}`;
     onLoadMaintenanceOccurrences(rangeFrom, rangeTo, controller.signal).then((items) => {
       if (!current) return;
       setMaintenanceRange({ from: rangeFrom, to: rangeTo, items });
@@ -77,11 +87,14 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   }, [rangeFrom, rangeTo, onLoadMaintenanceOccurrences, maintenanceRefresh]);
   const occurrences = useMemo(() => maintenanceRange.from === rangeFrom && maintenanceRange.to === rangeTo ? maintenanceRange.items : [], [maintenanceRange, rangeFrom, rangeTo]);
   const displayedOccurrences = useMemo(() => occurrences.map((entry) => {
-    const date = entry.key === maintenanceMove?.occurrence.key ? maintenanceMove.date
+    const date = entry.key === undoProjection.occurrence?.key ? undoProjection.occurrence.date
+      : entry.key === maintenanceMove?.occurrence.key ? maintenanceMove.date
       : completedMove && pending?.jobId === completedMove.jobId && entry.jobId === completedMove.jobId ? completedMove.date : null;
     return date ? { ...entry, date, scheduledDate: date } : entry;
-  }), [occurrences, maintenanceMove, completedMove, pending]);
-  const displayedJobs = useMemo(() => pending ? jobs.map((job) => job.id === pending.jobId ? { ...job, scheduledDate: pending.date } : job) : jobs, [jobs, pending]);
+  }), [occurrences, maintenanceMove, completedMove, pending, undoProjection]);
+  const displayedJobs = useMemo(() => jobs.map((job) => undoProjection.jobs.has(job.id)
+    ? { ...job, scheduledDate: undoProjection.jobs.get(job.id) }
+    : job.id === pending?.jobId ? { ...job, scheduledDate: pending.date } : job), [jobs, pending, undoProjection]);
   // Co-located linked work has one chip. A job moved to another day remains an
   // ordinary, independently scheduled job and retains its maintenance label.
   const jobsByDate = useMemo(() => groupCalendarJobs([
@@ -125,8 +138,9 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
         onError: (failure) => { failureMessage = failure.message || failureMessage; },
       });
       if (!saved) throw new Error(failureMessage);
-      const items = await onLoadMaintenanceOccurrences(rangeFrom, rangeTo);
-      setMaintenanceRange({ from: rangeFrom, to: rangeTo, items });
+      rememberChange(saved.change);
+      updateCachedOccurrence(saved.change?.occurrenceKey, completedMove.date);
+      await refreshMaintenanceRange();
       setPanel((current) => ["maintenance", "schedule"].includes(current?.type) ? null : current);
       setAnnouncement(`Scheduled date corrected for completed Job #${completedMove.jobNumber}.`);
     } catch (failure) {
@@ -143,12 +157,14 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
     try {
       const saved = await onRescheduleMaintenance(maintenanceMove.occurrence, maintenanceMove.date, scope);
       if (!saved) throw new Error("Unable to save the maintenance date.");
+      rememberChange(saved.change);
+      updateCachedOccurrence(maintenanceMove.occurrence.key, maintenanceMove.date);
+      if (scope === "schedule") setUndoHistory((history) => history.filter((entry) => entry.type !== "maintenance-occurrence-reschedule" || entry.planId !== maintenanceMove.occurrence.planId));
       // Keep the tentative chip until the saved range arrives, avoiding a flash
       // back to its old date when the workspace response updates the parent.
-      const items = await onLoadMaintenanceOccurrences(rangeFrom, rangeTo);
-      setMaintenanceRange({ from: rangeFrom, to: rangeTo, items });
+      await refreshMaintenanceRange();
       setPanel((current) => current?.type === "maintenance" ? null : current);
-      setAnnouncement("Maintenance date updated.");
+      setAnnouncement(scope === "schedule" ? "Maintenance schedule updated. Recurrence schedule changes cannot be undone here." : "Maintenance date updated.");
     } catch (failure) {
       setError(`${failure.message || "Unable to update maintenance."} The original view has been restored; refresh to confirm the saved schedule.`);
       setMaintenanceRefresh((value) => value + 1);
@@ -177,7 +193,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
     let failureMessage = "Unable to update the job schedule. The original date has been restored. Try again.";
     try {
       const saved = await onScheduleJob(jobId, date, {
-        recordOnly: true,
+        recordOnly: true, expectedScheduledDate: toDateInputValue(job.scheduledDate),
         onError: (failure) => { failureMessage = failure instanceof Error ? failure.message : String(failure); },
       });
       if (!saved) {
@@ -185,6 +201,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
         setAnnouncement(`Schedule unchanged for Job #${job.jobNumber}.`);
         return false;
       }
+      rememberChange(saved.change);
       setAnnouncement(date ? `Job #${job.jobNumber} scheduled for ${formatCalendarDate(date)}.` : `Scheduled date removed from Job #${job.jobNumber}.`);
       setPanel((current) => current?.type === "schedule" && current.jobId === jobId ? (current.fromDay ? { type: "day" } : null) : current);
       return true;
@@ -196,15 +213,9 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
       savingRef.current = false;
       setPending(null);
     }
-  }, [jobs, onScheduleJob, toDateInputValue, occurrences, proposeMaintenanceMove, completedMove, maintenanceMove, proposeCompletedMove]);
+  }, [jobs, onScheduleJob, toDateInputValue, occurrences, proposeMaintenanceMove, completedMove, maintenanceMove, proposeCompletedMove, rememberChange]);
 
-  const dragApi = useCalendarDrag({ enabled: !pending && !bulkBusy && !maintenanceMove && !completedMove && !maintenanceBusy, onDrop: saveSchedule });
-
-  useEffect(() => {
-    if (!bulkNotice?.undo) return;
-    const timer = window.setTimeout(() => setBulkNotice((current) => current === bulkNotice ? { ...current, undo: null } : current), 15_000);
-    return () => window.clearTimeout(timer);
-  }, [bulkNotice]);
+  const dragApi = useCalendarDrag({ enabled: !pending && !bulkBusy && !maintenanceMove && !completedMove && !maintenanceBusy && !undoPending, onDrop: saveSchedule });
 
   useEffect(() => () => { bulkPreviewRef.current = null; }, []);
 
@@ -260,7 +271,8 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
       const result = await onRescheduleDayJobs({ sourceDate, scheduledDate: destination, jobs: entries.map(({ job, revision }) => ({ id: job.id, revision })) });
       const count = result.succeeded.length;
       const message = result.failed.length ? `${count} of ${entries.length} jobs moved to ${formatCalendarDate(destination)}.` : `${count} ${count === 1 ? "job" : "jobs"} moved to ${formatCalendarDate(destination, { weekday: "long", day: "numeric", month: "long" })}.`;
-      setBulkNotice({ message, undo: count ? { sourceDate: destination, scheduledDate: sourceDate, jobs: result.succeeded.map(({ id, revision }) => ({ id, revision })) } : null });
+      setBulkNotice({ message });
+      if (count) rememberChange({ type: "day-reschedule", label: `${count} jobs`, before: { scheduledDate: sourceDate }, after: { scheduledDate: destination }, jobs: result.succeeded.map(({ id, jobNumber }) => ({ id, jobNumber })) });
       if (result.failed.length) setPanel((current) => ({ ...current, result }));
       else backToDay(sourceDate);
     } catch (failure) {
@@ -271,22 +283,51 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
     }
   }
 
-  async function undoDayMove() {
-    if (savingRef.current || !bulkNotice?.undo) return;
-    const operation = bulkNotice.undo;
+  function updateCachedOccurrence(key, date) {
+    setMaintenanceRange((range) => ({ ...range, items: range.items.map((entry) => entry.key === key ? { ...entry, date, scheduledDate: date } : entry) }));
+  }
+
+  async function refreshMaintenanceRange() {
+    try {
+      const items = await onLoadMaintenanceOccurrences(rangeFrom, rangeTo);
+      if (rangeKeyRef.current !== `${rangeFrom}:${rangeTo}`) return;
+      setMaintenanceRange({ from: rangeFrom, to: rangeTo, items });
+      setMaintenanceLoadError("");
+    } catch (failure) {
+      setMaintenanceLoadError(failure.message || "Unable to refresh maintenance dates. Try again.");
+    }
+  }
+
+  async function undoCalendarChange() {
+    if (savingRef.current || !latestUndo || maintenanceMove || completedMove) return;
+    const operation = latestUndo;
     bulkPreviewRef.current = null;
     savingRef.current = true;
-    setBulkBusy(true);
-    setBulkNotice({ message: "Restoring original dates…", undo: null });
+    setUndoPending(operation);
+    setError("");
+    setAnnouncement(`Restoring the schedule for ${operation.label}…`);
+    dragApi.cancelDrag();
     try {
-      const result = await onRescheduleDayJobs(operation);
-      setBulkNotice({ message: `${result.succeeded.length} of ${operation.jobs.length} jobs restored to ${formatCalendarDate(operation.scheduledDate)}.`, failed: result.failed, undo: null });
-      if (panel?.type === "bulk") backToDay(operation.scheduledDate);
+      const result = await onUndoCalendarChange(operation);
+      setUndoHistory((history) => history.filter((entry) => entry !== operation));
+      if (operation.type === "day-reschedule") {
+        setBulkNotice({ message: `${result.succeeded.length} of ${operation.jobs.length} jobs restored to ${formatCalendarDate(operation.before.scheduledDate)}.`, failed: result.failed });
+        if (result.failed.length) setError("Some jobs could not be undone because their schedules changed or they were removed. Their current dates were kept; see Jobs not restored.");
+      }
+      if (operation.occurrenceKey) {
+        updateCachedOccurrence(operation.occurrenceKey, operation.before.occurrenceDate || operation.before.date);
+        await refreshMaintenanceRange();
+      }
+      setAnnouncement(operation.type === "day-reschedule" && result.failed.length ? "Calendar Undo completed with schedule conflicts." : `Calendar change undone: ${operation.label}.`);
     } catch (failure) {
-      setBulkNotice({ message: failure.message || "Unable to confirm Undo. Review the day to check the saved dates.", undo: null });
+      const conflict = [404, 409].includes(failure.status);
+      if (conflict) setUndoHistory((history) => history.filter((entry) => entry !== operation));
+      setError(conflict ? `Unable to undo: ${failure.message} This stale undo entry has been removed.` : failure.message || "Unable to undo. The saved dates have been restored; try again.");
+      setAnnouncement("Calendar change was not undone.");
+      if (operation.occurrenceKey) await refreshMaintenanceRange();
     } finally {
       savingRef.current = false;
-      setBulkBusy(false);
+      setUndoPending(null);
     }
   }
 
@@ -328,7 +369,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const queueProps = {
     jobs: queueJobs, search, onSearch: setSearch, filters, onFilters: setFilters,
     onOpenJob: openJob, onSchedule: openSchedule,
-    onUnschedule: (job) => saveSchedule(job.id, ""), dragApi, busy: Boolean(pending) || bulkBusy,
+    onUnschedule: (job) => saveSchedule(job.id, ""), dragApi, busy: Boolean(pending) || bulkBusy || Boolean(undoPending),
   };
   const maintenanceActions = {
     openPlan: (occurrence) => { setPanel(null); onOpenPlan(occurrence.planId); },
@@ -350,12 +391,12 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const inspectorOpen = hasMiniColumn && (dayPanelOpen || panel?.fromDay || panel?.type === "bulk");
   const dayPanelContent = (
     <div className="grid gap-3" data-calendar-day-detail>
-      {eligibleJobs.length ? <Button type="button" variant="outline" className="h-11 text-xs text-status-info" disabled={Boolean(pending) || bulkBusy} onClick={() => openBulk()}>Reschedule day</Button> : <p className="text-xs text-text-secondary">No active jobs available to reschedule.</p>}
-      {selectedJobs.length ? selectedJobs.map((job) => job.kind === "maintenance" ? <CalendarMaintenanceItem key={job.id} occurrence={job} actions={maintenanceActions} dragApi={dragApi} busy={maintenanceBusy} /> : <CalendarJobCard key={job.id} job={job} onOpenJob={openJob} onSchedule={openSchedule} onUnschedule={() => saveSchedule(job.id, "")} dragApi={dragApi} draggable={false} busy={Boolean(pending)} />) : <p className="py-2 text-sm text-text-secondary">No jobs scheduled.</p>}
+      {eligibleJobs.length ? <Button type="button" variant="outline" className="h-11 text-xs text-status-info" disabled={Boolean(pending) || bulkBusy || Boolean(undoPending)} onClick={() => openBulk()}>Reschedule day</Button> : <p className="text-xs text-text-secondary">No active jobs available to reschedule.</p>}
+      {selectedJobs.length ? selectedJobs.map((job) => job.kind === "maintenance" ? <CalendarMaintenanceItem key={job.id} occurrence={job} actions={maintenanceActions} dragApi={dragApi} busy={maintenanceBusy || Boolean(undoPending)} /> : <CalendarJobCard key={job.id} job={job} onOpenJob={openJob} onSchedule={openSchedule} onUnschedule={() => saveSchedule(job.id, "")} dragApi={dragApi} draggable={false} busy={Boolean(pending) || Boolean(undoPending)} />) : <p className="py-2 text-sm text-text-secondary">No jobs scheduled.</p>}
     </div>
   );
   const notice = bulkNotice ? <div className="shrink-0 space-y-1 rounded-lg border border-status-info-border bg-status-info-surface p-3 text-xs text-status-info" data-bulk-notice>
-    <div className="flex items-center justify-between gap-2"><p role="status">{bulkNotice.message}</p>{bulkNotice.undo ? <Button type="button" variant="outline" className="h-11 shrink-0 text-xs" disabled={bulkBusy || Boolean(pending)} onClick={undoDayMove}>Undo</Button> : null}</div>
+    <p role="status">{bulkNotice.message}</p>
     {bulkNotice.failed?.length ? <ul aria-label="Jobs not restored">{bulkNotice.failed.map((entry) => <li key={entry.id}>Job #{entry.jobNumber || entry.id}: {entry.error}</li>)}</ul> : null}
   </div> : null;
 
@@ -364,7 +405,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
       {maintenanceLoadError ? <div role="alert" className="flex items-center gap-2 rounded-lg bg-status-danger-surface p-2 text-xs text-status-danger">{maintenanceLoadError}<Button size="sm" variant="outline" onClick={() => setMaintenanceRefresh((value) => value + 1)}>Retry</Button></div> : null}
       <div className="calendar-layout">
         <div ref={miniPaneRef} className="calendar-mini-pane">
-          {inspectorOpen ? <CalendarDayInspector date={selectedDate} jobs={selectedJobs} eligibleCount={eligibleJobs.length} dragApi={dragApi} busy={Boolean(pending) || bulkBusy || maintenanceBusy} active={dayPanelOpen} headingRef={inspectorHeadingRef} notice={dayPanelOpen ? notice : null} onClose={closeInspector} onOpenJob={openJob} onSchedule={openSchedule} onRescheduleDay={() => openBulk()} maintenanceActions={maintenanceActions} /> : <MiniCalendar {...miniProps} />}
+          {inspectorOpen ? <CalendarDayInspector date={selectedDate} jobs={selectedJobs} eligibleCount={eligibleJobs.length} dragApi={dragApi} busy={Boolean(pending) || bulkBusy || maintenanceBusy || Boolean(undoPending)} active={dayPanelOpen} headingRef={inspectorHeadingRef} notice={dayPanelOpen ? notice : null} onClose={closeInspector} onOpenJob={openJob} onSchedule={openSchedule} onRescheduleDay={() => openBulk()} maintenanceActions={maintenanceActions} /> : <MiniCalendar {...miniProps} />}
         </div>
         <div className="calendar-center">
           <header className="calendar-toolbar min-w-0" data-calendar-toolbar>
@@ -375,6 +416,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
               <Button type="button" variant="outline" className="calendar-nav-arrow h-11 w-11 bg-card/95 p-0" aria-label="Next month" title="Next month" onClick={() => miniProps.onMonthChange(1)}><ChevronRight className="h-4 w-4" /></Button>
             </div>
             <div className="calendar-toolbar-actions flex items-center gap-2">
+              <Button type="button" variant="outline" className="calendar-undo-button bg-card/95 text-xs" aria-label="Undo last calendar change" title={latestUndo ? `Undo: ${latestUndo.label}` : "Undo last calendar change"} data-calendar-undo-count={undoHistory.length} disabled={!latestUndo || Boolean(pending) || bulkBusy || maintenanceBusy || Boolean(undoPending) || Boolean(maintenanceMove) || Boolean(completedMove)} aria-busy={Boolean(undoPending)} onClick={undoCalendarChange}><Undo2 className="h-4 w-4" /><span className="calendar-undo-label">Undo</span></Button>
               {workspaceDayPanel ? <Button type="button" variant="outline" className="calendar-navigator-toggle h-11 bg-card/95 px-2 text-xs" aria-expanded={navigatorOpen} aria-controls="calendar-expanded-navigator" onClick={() => setNavigatorOpen((value) => !value)}><CalendarDays className="h-4 w-4" /> Dates</Button> : null}
               <Button type="button" ref={jobsTrigger} className="calendar-jobs-toggle h-11 px-3 text-xs" aria-label={`Jobs ${queueJobs.length}`} onClick={() => { returnFocusRef.current = jobsTrigger.current; setPanel({ type: "jobs" }); }}><ListFilter className="calendar-jobs-icon h-4 w-4" /> Jobs <span className="calendar-jobs-count rounded-full bg-current/25 px-1.5">{queueJobs.length}</span></Button>
             </div>

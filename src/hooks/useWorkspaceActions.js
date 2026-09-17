@@ -4,6 +4,7 @@ import { normalizeServiceBoardNote } from "@/lib/service-board-note";
 import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
 import { siteAddressMetadata, updatedSiteAddressMetadata } from "@/lib/site-location";
 import { canonicalMaintenancePlanInput, maintenancePlanIdentity } from "@/lib/maintenance-plan";
+import { calendarUndoRequest } from "@/components/calendar/calendar-undo";
 import {
   addDaysToDateInput,
   buildContactSnapshot,
@@ -779,11 +780,11 @@ export function useWorkspaceActions({
   async function handleRescheduleMaintenance(occurrence, date, scope) {
     if (!useSqliteApi) throw new Error("Recurring date changes require SQLite workspace mode.");
     const saved = await saveMaintenanceApiRequest({
-      path: maintenancePath(occurrence.planId, scope === "occurrence" ? "/occurrences" : "/schedule"),
+      path: maintenancePath(occurrence.planId, scope === "occurrence" ? "/occurrences?response=calendar" : "/schedule"),
       method: "PATCH", throwOnError: true,
       body: { occurrenceKey: occurrence.key, nextDueDate: date, scope, revision: occurrence.revision },
     });
-    return saved.ok;
+    return saved.ok ? { change: saved.result?.change || null } : false;
   }
 
   function handleOpenMaintenancePlan(planId, options) { return onNavigateToMaintenance?.(planId, options); }
@@ -798,13 +799,13 @@ export function useWorkspaceActions({
 
     if (useSqliteApi) {
       const saved = await saveJobApiRequest({
-        path: jobPath(jobId, "/schedule"),
+        path: jobPath(jobId, recordOnly ? "/schedule?response=calendar" : "/schedule"),
         method: "PATCH",
-        body: { scheduledDate: toDateInputValue(scheduledDate), ...(completedMaintenanceCorrection ? { completedMaintenanceCorrection: true, expectedScheduledDate } : {}) },
+        body: { scheduledDate: toDateInputValue(scheduledDate), ...(expectedScheduledDate !== undefined ? { expectedScheduledDate } : {}), ...(completedMaintenanceCorrection ? { completedMaintenanceCorrection: true } : {}) },
         errorMessage: "Unable to update the job schedule.",
         onError,
       });
-      return saved.ok;
+      return saved.ok ? (recordOnly ? saved.result : true) : false;
     }
 
     updateJob(jobId, { scheduledDate: toDateInputValue(scheduledDate) });
@@ -851,6 +852,25 @@ export function useWorkspaceActions({
 
   function handleRescheduleDayJobs(operation) {
     return calendarRescheduleRequest(operation);
+  }
+
+  async function handleUndoCalendarChange(entry) {
+    if (!canManageBusiness || !useSqliteApi) throw new Error("Calendar Undo requires access to the job scheduling API.");
+    try {
+      const payload = await requestWorkspaceUpdate({ fetchWithAuth, ...calendarUndoRequest(entry), errorMessage: "Unable to undo the Calendar change. Try again." });
+      applyServerState(payload.state);
+      return payload.result;
+    } catch (error) {
+      // A conflict or a lost acknowledgement may leave different saved dates.
+      // Re-read authoritative state on failure, without issuing another write.
+      try {
+        const payload = await requestWorkspaceUpdate({ fetchWithAuth, path: "/api/app-state", method: "GET" });
+        applyServerState(payload.state);
+      } catch {
+        error.message += " Unable to refresh the saved schedule; check your connection and refresh before trying again.";
+      }
+      throw error;
+    }
   }
 
   function getPaymentComparable(payment) {
@@ -2365,6 +2385,7 @@ export function useWorkspaceActions({
     handleScheduleJob,
     handlePreviewDayReschedule,
     handleRescheduleDayJobs,
+    handleUndoCalendarChange,
     handleSendDocument,
     handleStatusChange,
     handleThemeSettingChange,

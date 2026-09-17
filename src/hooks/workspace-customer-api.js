@@ -28,7 +28,9 @@ export async function requestWorkspaceUpdate({
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || !payload?.state) {
-    throw new Error(payload?.error || errorMessage);
+    const error = new Error(payload?.error || errorMessage);
+    error.status = response.status;
+    throw error;
   }
 
   return payload;

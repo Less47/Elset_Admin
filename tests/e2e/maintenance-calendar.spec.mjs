@@ -118,6 +118,77 @@ function seedCompletedMaintenanceJob() {
   });
 }
 
+test("Calendar Undo restores a maintenance occurrence, its override and truthful activity without changing future visits", async ({ browser }) => {
+  const beforeDates = withDb((db) => getMaintenanceOccurrences(db, "2027-01-01", "2028-12-31").map(({ key, date }) => ({ key, date })));
+  const recurrence = savedPlan().recurrence;
+  const { page, context } = await open(browser, 1920, 1080);
+  try {
+    const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+    await expect(undo).toBeDisabled();
+    const choice = await propose(page, "2027-09-16");
+    await choice.getByRole("button", { name: "This occurrence only", exact: true }).click();
+    await expect(chip(page, "2027-09-16")).toBeVisible();
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect(chip(page, "2027-09-09")).toBeVisible();
+    await expect(undo).toBeDisabled();
+    expect(withDb((db) => getMaintenanceOccurrences(db, "2027-01-01", "2028-12-31").map(({ key, date }) => ({ key, date })))).toEqual(beforeDates);
+    expect(savedPlan().recurrence).toEqual(recurrence);
+    expect(savedPlan().occurrenceExceptions).toHaveLength(1);
+    expect(savedPlan().occurrenceExceptions[0].overrideDate).toBe("");
+    expect(savedPlan().occurrenceExceptions[0].snapshot.occurrenceMoves.map(({ from, to }) => [from, to])).toEqual([["2027-09-09", "2027-09-16"], ["2027-09-16", "2027-09-09"]]);
+    await chip(page, "2027-09-09").click();
+    await page.getByRole("button", { name: "Open Plan", exact: true }).click();
+    await expect(page.getByText("Moved visit: 09/09/2027 → 16/09/2027", { exact: true })).toBeVisible();
+    await expect(page.getByText("Moved visit: 16/09/2027 → 09/09/2027", { exact: true })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test("Calendar Undo restores completed maintenance dates and leaves completion and invoice history intact", async ({ browser }) => {
+  const { job, occurrence } = seedCompletedMaintenanceJob();
+  const planBefore = withDb((db) => db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(basePlan.id));
+  const { page, context } = await open(browser, 1920, 1080);
+  try {
+    await chip(page, "2027-09-09").dragTo(day(page, "2027-09-16"));
+    await page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true }).getByRole("button", { name: "Move job", exact: true }).click();
+    const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+    await expect(undo).toBeEnabled();
+    await undo.click();
+    await expect(chip(page, "2027-09-09")).toBeVisible();
+    await expect(undo).toBeDisabled();
+    const after = state().jobs.find((entry) => entry.id === job.id);
+    expect({ ...after, updatedAt: job.updatedAt }).toEqual(job);
+    expect(after.status).toBe("Completed");
+    expect(after.completedAt).toBe("2027-09-10T02:30:00.000Z");
+    expect(withDb((db) => db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(basePlan.id))).toEqual(planBefore);
+    const exception = savedPlan().occurrenceExceptions.find((entry) => entry.key === occurrence.key);
+    expect(exception.completedAt).toBe("2027-09-10T02:30:00.000Z");
+    expect(exception.snapshot.scheduleCorrections.map(({ from, to }) => [from, to])).toEqual([["2027-09-09", "2027-09-16"], ["2027-09-16", "2027-09-09"]]);
+  } finally { await context.close(); }
+});
+
+test("Calendar Undo records a saved occurrence even if range refresh fails and excludes recurrence replacement", async ({ browser }) => {
+  const { page, context } = await open(browser, 1920, 1080);
+  try {
+    const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+    await expect(chip(page, "2027-09-09")).toBeVisible();
+    await page.route("**/api/maintenance-occurrences?*", (route) => route.fulfill({ status: 503, json: { error: "Temporary range refresh failure" } }));
+    const choice = await propose(page, "2027-09-16");
+    await choice.getByRole("button", { name: "This occurrence only", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Temporary range refresh failure");
+    await expect(undo).toBeEnabled();
+    await page.unroute("**/api/maintenance-occurrences?*");
+    await undo.click();
+    await expect(chip(page, "2027-09-09")).toBeVisible();
+    await expect(undo).toBeDisabled();
+    const next = await propose(page, "2027-09-17");
+    await next.getByRole("button", { name: "Change maintenance schedule", exact: true }).click();
+    await expect(chip(page, "2027-09-17")).toBeVisible();
+    await expect(undo).toBeDisabled();
+    await expect(page.locator(".calendar-announcement")).toContainText("cannot be undone");
+  } finally { await context.close(); }
+});
+
 test("completed maintenance drag confirms, cancels without writes, and corrects past/future dates only", async ({ browser }, info) => {
   const { job, occurrence } = seedCompletedMaintenanceJob();
   const planBefore = withDb((db) => db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(basePlan.id));
@@ -208,7 +279,7 @@ test("completed maintenance failed correction restores the card and leaves recor
   const before = state();
   const { page, context } = await open(browser);
   try {
-    await page.route("**/api/jobs/*/schedule", (route) => route.fulfill({ status: 409, json: { error: "This job's scheduled date has changed." } }));
+    await page.route("**/api/jobs/*/schedule*", (route) => route.fulfill({ status: 409, json: { error: "This job's scheduled date has changed." } }));
     await chip(page, "2027-09-09").dragTo(day(page, "2027-09-16"));
     const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
     await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
@@ -540,7 +611,7 @@ test("schedule choice updates future cadence while retaining earlier months", as
 
 test("failed maintenance write restores the original date and shows a compact error", async ({ browser }) => {
   const { page, context } = await open(browser);
-  await page.route("**/api/maintenance-plans/calendar-plan/occurrences", (route) => route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "This maintenance plan has changed. Refresh and try again." }) }));
+  await page.route("**/api/maintenance-plans/calendar-plan/occurrences*", (route) => route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "This maintenance plan has changed. Refresh and try again." }) }));
   const choice = await propose(page, "2027-09-16");
   await choice.getByRole("button", { name: "This occurrence only", exact: true }).click();
   await expect(choice).toBeHidden();

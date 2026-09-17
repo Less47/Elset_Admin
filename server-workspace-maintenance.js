@@ -478,16 +478,46 @@ function resolveOccurrence(db, plan, input = {}) {
   return protectedDate ? { ...occurrence, segmentId: protectedSegment.id, baseDate: protectedDate } : occurrence;
 }
 
+function occurrenceScheduleToken(plan, occurrence) {
+  // Guard recurrence and lifecycle facts, not unrelated plan notes or other visits.
+  return crypto.createHash("sha256").update(JSON.stringify({ recurrence: maintenanceSchedule(plan), active: plan.active,
+    jobId: occurrence.jobId, generatedJobId: occurrence.generatedJobId, completedAt: occurrence.completedAt })).digest("hex");
+}
+
 function applyOccurrenceChange(db, plan, input, frequency = plan.frequency) {
   const date = normalizeDateInput(input.nextDueDate, "Maintenance date", { allowEmpty: false });
   const occurrence = resolveOccurrence(db, plan, input);
-  if (date === occurrence.date && frequency === plan.frequency) return plan;
-  assertMaintenanceRevision(plan, input.revision);
-  if (!["occurrence", "schedule"].includes(input.scope)) throw new WorkspaceMaintenanceError("Choose This occurrence only or Change maintenance schedule before saving.");
-  if (occurrence.locked) throw new WorkspaceMaintenanceError("Historical or completed maintenance cannot be moved.", 409);
   const prior = plan.occurrenceExceptions?.find((entry) => entry.key === occurrence.key);
+  if (input.restore !== undefined) {
+    assertPlainObject(input.restore, "Occurrence restoration");
+    const restore = input.restore;
+    if (input.scope !== "occurrence" || Object.keys(restore).some((key) => !["expectedDate", "scheduleToken", "overrideDate"].includes(key))
+      || !isMaintenanceDate(restore.expectedDate) || typeof restore.scheduleToken !== "string"
+      || (restore.overrideDate !== "" && !isMaintenanceDate(restore.overrideDate))) {
+      throw new WorkspaceMaintenanceError("Invalid occurrence scheduling fields.");
+    }
+    const restoredDate = restore.overrideDate || (occurrence.generated ? prior?.snapshot?.date : occurrence.baseDate);
+    if (restore.expectedDate !== occurrence.date || restore.scheduleToken !== occurrenceScheduleToken(plan, occurrence)
+      || restoredDate !== date || occurrence.completedAt || !occurrence.active) {
+      throw new WorkspaceMaintenanceError("This maintenance occurrence's schedule or completion has changed since your last action.", 409);
+    }
+  }
+  if (date === occurrence.date && frequency === plan.frequency) return plan;
+  if (!input.restore) assertMaintenanceRevision(plan, input.revision);
+  if (!["occurrence", "schedule"].includes(input.scope)) throw new WorkspaceMaintenanceError("Choose This occurrence only or Change maintenance schedule before saving.");
+  // A guarded inverse may return a still-active generated visit moved into the
+  // past. Completion, generation/link changes and recurrence changes still block it.
+  if (occurrence.locked && !input.restore) throw new WorkspaceMaintenanceError("Historical or completed maintenance cannot be moved.", 409);
   if (input.scope === "occurrence") {
-    writeMaintenanceException(db, plan.id, { ...prior, ...occurrence, overrideDate: date, snapshot: prior?.snapshot || occurrence });
+    const snapshot = prior?.snapshot || occurrence;
+    const fallbackDate = occurrence.generated ? snapshot.date : occurrence.baseDate;
+    writeMaintenanceException(db, plan.id, { ...prior, ...occurrence,
+      overrideDate: input.restore ? input.restore.overrideDate : date === fallbackDate ? "" : date,
+      snapshot: { ...snapshot,
+        occurrenceMoveBaseline: snapshot.occurrenceMoveBaseline || { overrideDate: prior?.overrideDate || "", updatedAt: prior?.updatedAt || "" },
+        occurrenceMoves: [...(snapshot.occurrenceMoves || []), { from: occurrence.date, to: date, changedAt: nowIso() }],
+      },
+    });
     return plan;
   }
   let updated;
@@ -520,7 +550,7 @@ function applyOccurrenceChange(db, plan, input, frequency = plan.frequency) {
   return updated;
 }
 
-export function scheduleMaintenancePlan(db, planIdInput, input = {}) {
+export function scheduleMaintenancePlan(db, planIdInput, input = {}, { returnChange = false } = {}) {
   const planId = normalizeId(planIdInput, "Maintenance plan ID");
   normalizeDateInput(input.nextDueDate, "Next service date", { allowEmpty: false });
 
@@ -528,14 +558,19 @@ export function scheduleMaintenancePlan(db, planIdInput, input = {}) {
     const existing = getPlanState(db, planId);
     if (!existing) throw new WorkspaceMaintenanceError("Maintenance plan not found.", 404);
     const occurrence = resolveOccurrence(db, existing, input);
-    if (occurrence.date === input.nextDueDate) return existing;
     const updated = applyOccurrenceChange(db, existing, input);
+    if (occurrence.date === input.nextDueDate) return returnChange ? { plan: existing, change: null } : existing;
     const plan = normalizeMaintenancePlanInput(updated, updated);
     insertOrReplaceMaintenancePlan(db, plan);
     touchWorkspaceInfo(db, plan.updatedAt);
     runForeignKeyCheck(db);
-    return getPlanState(db, plan.id);
-  })();
+    const saved = getPlanState(db, plan.id);
+    return returnChange ? { plan: saved, change: input.scope === "occurrence" ? {
+      type: "maintenance-occurrence-reschedule", planId, occurrenceKey: occurrence.key, label: existing.planName,
+      before: { date: occurrence.date, overrideDate: existing.occurrenceExceptions?.find((entry) => entry.key === occurrence.key)?.overrideDate || "" },
+      after: { date: input.nextDueDate }, scheduleToken: occurrenceScheduleToken(saved, resolveOccurrence(db, saved, input)),
+    } : null } : saved;
+  }).immediate();
 }
 
 export function completeMaintenanceCycle(db, planIdInput, input = {}) {

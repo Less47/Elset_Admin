@@ -11,6 +11,8 @@
 .calendar-toolbar .calendar-jobs-toggle { min-width: 0; height: 40px; min-height: 40px; gap: 3px; padding-inline: 6px; }
 .calendar-jobs-icon { display: none; }
 .calendar-jobs-count { padding-inline: 4px; }
+.calendar-toolbar .calendar-undo-button { width: 36px; min-width: 36px; height: 40px; min-height: 40px; padding: 0; }
+.calendar-undo-label { display: none; }
 @media (max-width: 359px) {
   .calendar-workspace .calendar-toolbar { gap: 2px; padding-inline: 5px; }
   .calendar-toolbar-title { font-size: 0.68rem; }
@@ -117,6 +119,8 @@
   .calendar-toolbar .calendar-today-button, .calendar-toolbar .calendar-jobs-toggle, .calendar-toolbar .calendar-navigator-toggle { height: 32px; min-height: 32px; padding-inline: 8px; }
   .calendar-mini-expanded { top: 41px; }
   .calendar-jobs-icon { display: block; }
+  .calendar-toolbar .calendar-undo-button { width: auto; height: 32px; min-height: 32px; padding-inline: 8px; }
+  .calendar-undo-label { display: inline; }
 }
 
 @media (min-width: 1200px) {
@@ -147,6 +151,7 @@
   .calendar-main { --calendar-event-height: 24px; }
   .calendar-job-chip, .calendar-more { padding-block: 5px; }
   .calendar-toolbar .calendar-nav-arrow, .calendar-toolbar .calendar-today-button, .calendar-toolbar .calendar-jobs-toggle, .calendar-toolbar .calendar-navigator-toggle { height: 40px; min-height: 40px; }
+  .calendar-toolbar .calendar-undo-button { height: 40px; min-height: 40px; }
   .calendar-toolbar .calendar-nav-arrow { width: 40px; min-width: 40px; }
   .calendar-mini .calendar-mini-arrow, .calendar-mini .calendar-mini-today { height: 40px; min-height: 40px; }
   .calendar-mini-date { min-height: 28px; }

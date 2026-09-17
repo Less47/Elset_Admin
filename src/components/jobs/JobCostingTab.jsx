@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { invoiceToday } from "@/lib/invoice-account";
 
 const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const dateFormatter = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
+const COST_FILTERS = [{ key: "all", label: "All" }, ...COST_CATEGORIES];
 
 function money(cents) {
   if (!Number.isSafeInteger(cents)) return "—";
@@ -167,7 +168,16 @@ export default function JobCostingTab({ jobId, canEdit, fetchWithAuth, onAddonDi
   const [deleting, setDeleting] = useState(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const basePath = `/api/jobs/${encodeURIComponent(jobId)}`;
+  const { visibleEntries, categoryCounts, visibleTotalCents } = useMemo(() => {
+    const entries = summary?.entries || [];
+    const counts = { all: entries.length };
+    for (const entry of entries) counts[entry.category] = (counts[entry.category] || 0) + 1;
+    const visible = categoryFilter === "all" ? entries : entries.filter((entry) => entry.category === categoryFilter);
+    return { visibleEntries: visible, categoryCounts: counts,
+      visibleTotalCents: visible.reduce((total, entry) => total + entry.totalCostCents, 0) };
+  }, [summary?.entries, categoryFilter]);
 
   useEffect(() => {
     let current = true;
@@ -266,14 +276,25 @@ export default function JobCostingTab({ jobId, canEdit, fetchWithAuth, onAddonDi
         </div>
 
         <section aria-labelledby="cost-entries-title" className="border-t pt-3">
-          <div className="mb-2 flex items-center justify-between gap-3"><h3 id="cost-entries-title" className="text-sm font-semibold">Cost entries <span className="ml-1 font-normal text-muted-foreground">({summary.entries.length})</span></h3>{summary.entries.length ? addButton : null}</div>
-          {summary.entries.length ? <>
+          <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+            <h3 id="cost-entries-title" className="whitespace-nowrap text-sm font-semibold">Cost entries <span className="ml-1 font-normal text-muted-foreground">({categoryFilter === "all" ? summary.entries.length : `${visibleEntries.length} of ${summary.entries.length}`})</span></h3>
+            <div role="group" aria-label="Filter cost entries by category" className="col-span-2 row-start-2 flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain p-0.5 [scrollbar-width:thin] lg:col-span-1 lg:col-start-2 lg:row-start-1">
+              {COST_FILTERS.map((category) => <Button key={category.key} type="button" size="xs"
+                variant={categoryFilter === category.key ? "default" : "ghost"}
+                className="h-7 gap-1 rounded-full max-lg:min-h-8 max-lg:min-w-8"
+                aria-pressed={categoryFilter === category.key} onClick={() => setCategoryFilter(category.key)}>
+                {category.label}<span className="text-[10px] tabular-nums">({categoryCounts[category.key] || 0})</span>
+              </Button>)}
+            </div>
+            {canEdit ? <div className="col-start-2 row-start-1 justify-self-end lg:col-start-3">{addButton}</div> : null}
+          </div>
+          {visibleEntries.length ? <>
             <table className="hidden w-full table-fixed text-sm md:table">
               <thead className="border-b text-left text-xs text-muted-foreground"><tr>
                 <th className="w-[14%] py-2 font-medium">Date</th><th className="w-[16%] py-2 font-medium">Category</th><th className="py-2 font-medium">Description</th>
                 <th className="w-[7%] py-2 text-right font-medium">Qty</th><th className="w-[13%] py-2 text-right font-medium">Unit cost</th><th className="w-[14%] py-2 text-right font-medium">Total</th>{canEdit ? <th className="w-[6.25rem] lg:w-[5rem]"><span className="sr-only">Actions</span></th> : null}
               </tr></thead>
-              <tbody>{summary.entries.map((entry) => <tr key={entry.id} className="border-b align-top last:border-0">
+              <tbody>{visibleEntries.map((entry) => <tr key={entry.id} className="border-b align-top last:border-0">
                 <td className="py-2 pr-2 text-xs text-muted-foreground">{costDate(entry.costDate)}</td>
                 <td className="break-words py-2 pr-2 text-xs">{categoryLabel(entry.category)}</td>
                 <td className="break-words py-2 pr-2"><span className="font-medium">{entry.description}</span>{entry.supplier ? <span className="mt-0.5 block text-xs text-muted-foreground">{entry.supplier}</span> : null}</td>
@@ -283,14 +304,16 @@ export default function JobCostingTab({ jobId, canEdit, fetchWithAuth, onAddonDi
                 {canEdit ? <td className="py-1 pl-2"><EntryActions entry={entry} disabled={loading || busy} onEdit={openEditor} onDelete={openDelete} /></td> : null}
               </tr>)}</tbody>
             </table>
-            <ul className="divide-y md:hidden">{summary.entries.map((entry) => <li key={entry.id} className="py-3 first:pt-1">
+            <ul className="divide-y md:hidden">{visibleEntries.map((entry) => <li key={entry.id} className="py-3 first:pt-1">
               <div className="flex items-start justify-between gap-3"><p className="min-w-0 break-words font-medium">{entry.description}</p><strong className="shrink-0 text-sm tabular-nums">{money(entry.totalCostCents)}</strong></div>
               <p className="mt-1 text-xs text-muted-foreground">{categoryLabel(entry.category)} · {costDate(entry.costDate)}</p>
               {entry.supplier ? <p className="mt-1 break-words text-xs text-muted-foreground">{entry.supplier}</p> : null}
               <div className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground tabular-nums">{entry.quantity} × {money(entry.unitCostCents)} ex GST</p>{canEdit ? <EntryActions entry={entry} disabled={loading || busy} onEdit={openEditor} onDelete={openDelete} /> : null}</div>
             </li>)}</ul>
-            <div className="flex justify-between gap-3 border-t pt-2 text-sm font-semibold"><span>Total costs <span className="font-normal text-muted-foreground">ex GST</span></span><span className="tabular-nums">{money(summary.totalCostCents)}</span></div>
-          </> : <WorkspaceMessage>No costs recorded yet.{canEdit ? " Add materials, labour or another direct job cost." : ""}</WorkspaceMessage>}
+          </> : <WorkspaceMessage>{categoryFilter === "all"
+            ? `No costs recorded yet.${canEdit ? " Add materials, labour or another direct job cost." : ""}`
+            : `No ${categoryLabel(categoryFilter)} cost entries.`}</WorkspaceMessage>}
+          <div className="flex justify-between gap-3 border-t pt-2 text-sm font-semibold" data-testid="cost-entries-subtotal"><span>{categoryFilter === "all" ? "Total costs" : `${categoryLabel(categoryFilter)} subtotal`} <span className="font-normal text-muted-foreground">ex GST</span></span><span className="tabular-nums">{money(visibleTotalCents)}</span></div>
         </section>
       </> : null}
     </div>

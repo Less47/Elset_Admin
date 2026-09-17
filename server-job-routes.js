@@ -159,8 +159,8 @@ export function createJobRouter({
     "/api/jobs/:id/schedule",
     ...manageMiddleware,
     handleJobRoute((db, req) => req.body?.completedMaintenanceCorrection === true
-      ? correctCompletedMaintenanceJobSchedule(db, req.params.id, req.body)
-      : scheduleJob(db, req.params.id, req.body?.scheduledDate), env)
+      ? correctCompletedMaintenanceJobSchedule(db, req.params.id, req.body, { returnChange: req.query.response === "calendar" })
+      : scheduleJob(db, req.params.id, req.body?.scheduledDate, { expectedScheduledDate: req.body?.expectedScheduledDate, returnChange: req.query.response === "calendar" }), env)
   );
 
   router.post(

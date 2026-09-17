@@ -10,6 +10,7 @@ import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 
 import { insertJobTree, scheduleJob, updateJobDetails } from "../../server-workspace-jobs.js";
+import { themePresets } from "../../src/lib/theme-presets.js";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturePath = path.join(repoRoot, "fixtures/demo-workspace.json");
 const screenshotDir = path.join(repoRoot, "test-results/calendar");
@@ -198,9 +199,13 @@ test.afterEach(async ({}, info) => {
   if (info.status !== info.expectedStatus) await info.attach("calendar-server-output", { body: serverOutput, contentType: "text/plain" });
 });
 
-async function openCalendar(browser, width = 1440, height = 900, timezoneId = "Australia/Sydney") {
+async function openCalendar(browser, width = 1440, height = 900, timezoneId = "Australia/Sydney", preset) {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: width < 1280, isMobile: width < 768, locale: "en-AU", timezoneId, reducedMotion: "reduce" });
   const page = await context.newPage();
+  if (preset) await page.route("**/api/user-preferences", async (route) => {
+    const response = await route.fetch(), body = await response.json();
+    await route.fulfill({ response, json: { ...body, preferences: { ...body.preferences, ...preset.values } } });
+  });
   await page.clock.setFixedTime("2026-09-07T02:00:00Z");
   await page.goto(baseUrl);
   await page.getByPlaceholder("Enter your username").fill("mobileadmin");
@@ -209,6 +214,10 @@ async function openCalendar(browser, width = 1440, height = 900, timezoneId = "A
   if (width < 1024) await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Calendar", exact: true }).click();
   await expect(page.locator("[data-calendar-month]")).toHaveText("September 2026");
+  // Navigation first renders the Calendar content, then switches the outer
+  // workspace shell. Measure only after that existing transition has settled.
+  await expect(page.locator(".calendar-workspace-app")).toBeVisible();
+  await expect(page.locator(".calendar-workspace-shell")).toHaveCSS("padding-top", "0px");
   // Finish the navigation drawer's exit before tests enable animations or send
   // raw coordinate taps (which do not perform Playwright actionability checks).
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
@@ -227,6 +236,17 @@ const dayJobCards = "[data-calendar-inspector-job], [data-calendar-queue-job]";
 const inspectorJob = (page, id) => page.locator(`[data-calendar-inspector-job="${id}"]`);
 const dbJob = (id) => readWorkspaceState().jobs.find((job) => job.id === id);
 function unchangedFields(job) { const { scheduledDate, updatedAt, ...rest } = job; return rest; }
+function expectScheduleWrites(writes, expected) {
+  // Existing scheduling regressions still reject full job payloads; the new
+  // conditional-date field is asserted separately from each original target.
+  const mutations = writes.map(({ body, ...request }) => {
+    expect(body).toHaveProperty("expectedScheduledDate");
+    expect(body.expectedScheduledDate).toMatch(/^(\d{4}-\d{2}-\d{2})?$/);
+    const { expectedScheduledDate, ...schedule } = body;
+    return { ...request, body: schedule };
+  });
+  expect(mutations).toEqual(expected);
+}
 async function noOverflow(page) {
   const sizes = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(sizes.scroll).toBeLessThanOrEqual(sizes.width + 1);
@@ -427,14 +447,14 @@ test("bulk day partial conflict reports exact outcomes and requires review befor
   }
 });
 
-test("bulk day Undo restores dates, expires and refuses concurrent edits", async ({ browser }) => {
+test("bulk day Undo persists for the Calendar session, preserves unrelated edits and reports date conflicts", async ({ browser }) => {
   const { context, page, writes } = await openCalendar(browser);
   const original = dbJob("calendar-progress");
   try {
     let panel = await openBulkDay(page);
     await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
     await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
-    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await page.getByRole("button", { name: "Undo last calendar change", exact: true }).click();
     await expect(page.locator("[data-bulk-notice]")).toContainText("6 of 6 jobs restored");
     expect(dbJob(original.id).scheduledDate).toBe("2026-09-15");
     expect(unchangedFields(dbJob(original.id))).toEqual(unchangedFields(original));
@@ -442,21 +462,26 @@ test("bulk day Undo restores dates, expires and refuses concurrent edits", async
     panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
     await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-16");
     await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Undo last calendar change", exact: true })).toBeEnabled();
     const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
     try { updateJobDetails(db, original.id, { title: "Edited after move" }); } finally { db.close(); }
-    await page.getByRole("button", { name: "Undo", exact: true }).click();
-    await expect(page.locator("[data-bulk-notice]")).toContainText("5 of 6 jobs restored");
-    await expect(page.getByRole("list", { name: "Jobs not restored" })).toContainText("Job #205");
-    expect(dbJob(original.id).scheduledDate).toBe("2026-09-16");
+    await page.getByRole("button", { name: "Undo last calendar change", exact: true }).click();
+    await expect(page.locator("[data-bulk-notice]")).toContainText("6 of 6 jobs restored");
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-15");
     expect(dbJob(original.id).title).toBe("Edited after move");
     await page.getByRole("button", { name: "Reschedule day", exact: true }).click();
     panel = page.getByRole("dialog", { name: "Reschedule jobs", exact: true });
     await panel.getByLabel("Move selected jobs to", { exact: true }).fill("2026-09-17");
-    await panel.getByRole("button", { name: "Move 5 jobs", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await panel.getByRole("button", { name: "Move 6 jobs", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Undo last calendar change", exact: true })).toBeEnabled();
     await page.clock.runFor(15_001);
-    await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Undo last calendar change", exact: true })).toBeEnabled();
+    const changed = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { scheduleJob(changed, original.id, "2026-09-18"); } finally { changed.close(); }
+    await page.getByRole("button", { name: "Undo last calendar change", exact: true }).click();
+    await expect(page.locator("[data-bulk-notice]")).toContainText("5 of 6 jobs restored");
+    await expect(page.getByRole("list", { name: "Jobs not restored" })).toContainText("Job #205");
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-18");
     expect(writes.filter((request) => request.path === "/api/app-state")).toHaveLength(0);
   } finally {
     const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
@@ -464,6 +489,131 @@ test("bulk day Undo restores dates, expires and refuses concurrent edits", async
     await context.close();
   }
 });
+
+test("Calendar Undo reverses three successful moves in order and reload clears history", async ({ browser }) => {
+  const { context, page, writes } = await openCalendar(browser);
+  const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+  try {
+    await expect(undo).toBeDisabled();
+    await queueJob(page, "calendar-todo").dragTo(day(page, "2026-09-16"));
+    await expect.poll(() => dbJob("calendar-todo").scheduledDate).toBe("2026-09-16");
+    await chooseQueueDate(page, "calendar-queue-0", "2026-09-17");
+    await chooseQueueDate(page, "calendar-queue-1", "2026-09-18");
+    await expect(undo).toHaveAttribute("data-calendar-undo-count", "3");
+    for (const id of ["calendar-queue-1", "calendar-queue-0", "calendar-todo"]) {
+      await undo.click();
+      await expect.poll(() => dbJob(id).scheduledDate).toBe("");
+    }
+    await expect(undo).toBeDisabled();
+    expect(writes.filter(({ path }) => path === "/api/app-state")).toHaveLength(0);
+    await chooseQueueDate(page, "calendar-todo", "2026-09-19");
+    await page.reload();
+    await expect(undo).toBeDisabled();
+    expect(dbJob("calendar-todo").scheduledDate).toBe("2026-09-19");
+  } finally { await context.close(); }
+});
+
+test("Calendar Undo is optimistic, prevents duplicate requests and retries a failed inverse", async ({ browser }) => {
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try { scheduleJob(db, "calendar-progress", "2026-09-14"); } finally { db.close(); }
+  const { context, page } = await openCalendar(browser);
+  let release; const gate = new Promise((resolve) => { release = resolve; });
+  try {
+    await chooseQueueDate(page, "calendar-progress", "2026-09-16");
+    const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+    let inverseRequests = 0;
+    await page.route("**/api/jobs/calendar-progress/schedule*", async (route) => {
+      inverseRequests += 1;
+      await gate;
+      await route.fulfill({ status: 503, json: { error: "Temporary inverse failure" } });
+    });
+    await undo.evaluate((button) => { button.click(); button.click(); });
+    await expect(undo).toBeDisabled();
+    await expect(undo).toHaveAttribute("aria-busy", "true");
+    await expect(calendarJob(page, "2026-09-14", "calendar-progress")).toBeVisible();
+    expect(dbJob("calendar-progress").scheduledDate).toBe("2026-09-16");
+    expect(inverseRequests).toBe(1);
+    release();
+    await expect(page.getByRole("alert")).toContainText("Temporary inverse failure");
+    await expect(calendarJob(page, "2026-09-16", "calendar-progress")).toBeVisible();
+    await expect(undo).toBeEnabled();
+    await expect(undo).toHaveAttribute("data-calendar-undo-count", "1");
+    await page.unroute("**/api/jobs/calendar-progress/schedule*");
+    await undo.click();
+    await expect.poll(() => dbJob("calendar-progress").scheduledDate).toBe("2026-09-14");
+    await expect(undo).toBeDisabled();
+  } finally { release(); await context.close(); }
+});
+
+test("Calendar Undo ignores failed original moves and protects newer server dates and unrelated edits", async ({ browser }) => {
+  const { context, page } = await openCalendar(browser);
+  const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+  const edit = (run) => { const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") }); try { run(db); } finally { db.close(); } };
+  const original = dbJob("calendar-progress");
+  try {
+    await page.route("**/api/jobs/calendar-progress/schedule*", (route) => route.fulfill({ status: 503, json: { error: "Original move failed" } }));
+    await queueJob(page, original.id).dragTo(day(page, "2026-09-16"));
+    await expect(page.getByRole("alert")).toContainText("Original move failed");
+    await expect(undo).toBeDisabled();
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-15");
+    await page.unroute("**/api/jobs/calendar-progress/schedule*");
+    await chooseQueueDate(page, original.id, "2026-09-16");
+    edit((db) => updateJobDetails(db, original.id, { description: "Concurrent office description", serviceBoardNote: "Retain latest note", status: "To Do" }));
+    const latest = unchangedFields(dbJob(original.id));
+    await undo.click();
+    await expect.poll(() => dbJob(original.id).scheduledDate).toBe("2026-09-15");
+    expect(unchangedFields(dbJob(original.id))).toEqual(latest);
+    await chooseQueueDate(page, original.id, "2026-09-16");
+    edit((db) => scheduleJob(db, original.id, "2026-09-18"));
+    await undo.click();
+    await expect(page.getByRole("alert")).toContainText("schedule has changed");
+    await expect(calendarJob(page, "2026-09-18", original.id)).toBeVisible();
+    expect(dbJob(original.id).scheduledDate).toBe("2026-09-18");
+    await expect(undo).toBeDisabled();
+  } finally {
+    edit((db) => updateJobDetails(db, original.id, { description: original.description, serviceBoardNote: original.serviceBoardNote, status: original.status }));
+    await context.close();
+  }
+});
+
+test("Calendar Undo keeps only the ten newest actions", async ({ browser }) => {
+  const { context, page } = await openCalendar(browser);
+  try {
+    const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+    for (let index = 0; index < 11; index += 1) await chooseQueueDate(page, "calendar-todo", index % 2 ? "2026-09-17" : "2026-09-16");
+    await expect(undo).toHaveAttribute("data-calendar-undo-count", "10");
+    for (let remaining = 9; remaining >= 0; remaining -= 1) {
+      await undo.click();
+      await expect(undo).toHaveAttribute("data-calendar-undo-count", String(remaining));
+    }
+    await expect(undo).toBeDisabled();
+    expect(dbJob("calendar-todo").scheduledDate).toBe("2026-09-16");
+  } finally { await context.close(); }
+});
+
+for (const width of [390, 820, 1440]) for (const preset of themePresets) {
+  test(`Calendar Undo toolbar ${preset.label} at ${width}px`, async ({ browser }, info) => {
+    const { context, page } = await openCalendar(browser, width, 1000, "Australia/Sydney", preset);
+    try {
+      const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+      await expect(undo).toBeVisible();
+      await expect(undo).toBeDisabled();
+      if (width < 1024) await page.getByRole("button", { name: /^Jobs \d+$/ }).click();
+      await chooseQueueDate(page, "calendar-todo", "2026-09-16");
+      await expect(undo).toBeEnabled();
+      const box = await undo.boundingBox();
+      expect(box.width).toBeGreaterThanOrEqual(32); expect(box.height).toBeGreaterThanOrEqual(32);
+      const toolbar = page.locator("[data-calendar-toolbar]");
+      const file = path.join(screenshotDir, `undo-${preset.id}-${width}.png`);
+      await toolbar.screenshot({ path: file });
+      await info.attach("Undo toolbar", { path: file, contentType: "image/png" });
+      await noOverflow(page);
+      await undo.click();
+      await expect(undo).toBeDisabled();
+      expect(dbJob("calendar-todo").scheduledDate).toBe("");
+    } finally { await context.close(); }
+  });
+}
 
 test("bulk day lost response reconciles through review without claiming success or duplicating the move", async ({ browser }) => {
   const { context, page, writes } = await openCalendar(browser);
@@ -723,7 +873,7 @@ test("date-cell touch activation recovers immediately after drop, pointercancel,
       await tapAfterDrag();
       expect(dbJob(id).scheduledDate).toBe("2026-09-09");
     }
-    expect(writes).toEqual([{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-09" } }]);
+    expectScheduleWrites(writes, [{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-09" } }]);
     await noOverflow(page);
   } finally { await context.close(); }
 });
@@ -804,7 +954,7 @@ test("mouse dragging schedules, reschedules and unschedules using only the date 
     await day(page, "2026-09-11").locator('[data-calendar-job="calendar-todo"]').dragTo(page.locator("[data-calendar-unscheduled]"));
     await expect.poll(() => dbJob("calendar-todo").scheduledDate).toBe("");
     expect(unchangedFields(dbJob("calendar-todo"))).toEqual(unchangedFields(original));
-    expect(writes).toEqual(["2026-09-09", "2026-09-11", ""].map((scheduledDate) => ({ path: "/api/jobs/calendar-todo/schedule", method: "PATCH", body: { scheduledDate } })));
+    expectScheduleWrites(writes, ["2026-09-09", "2026-09-11", ""].map((scheduledDate) => ({ path: "/api/jobs/calendar-todo/schedule", method: "PATCH", body: { scheduledDate } })));
   } finally { await context.close(); }
 });
 
@@ -844,7 +994,7 @@ test("existing calendar chips support same-date drops, shared dates and persiste
     await expect(calendarJob(page, "2026-09-18", first)).toHaveCount(1);
     await expect(calendarJob(page, "2026-09-17", first)).toHaveCount(0);
     await expect(calendarJob(page, "2026-09-17", second)).toHaveCount(1);
-    expect(writes).toEqual([[first, "2026-09-17"], [second, "2026-09-17"], [first, "2026-09-18"]].map(([id, scheduledDate]) => ({ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate } })));
+    expectScheduleWrites(writes, [[first, "2026-09-17"], [second, "2026-09-17"], [first, "2026-09-18"]].map(([id, scheduledDate]) => ({ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate } })));
   } finally { await context.close(); }
 });
 
@@ -864,7 +1014,7 @@ test("adjacent-month calendar drops preserve their date across refresh and timez
       await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Calendar", exact: true }).click();
       await expect(calendarJob(page, "2026-10-01", id)).toHaveCount(1);
       await expect(queueJob(page, id)).toContainText("1 Oct 2026");
-      expect(writes).toEqual([{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-10-01" } }]);
+      expectScheduleWrites(writes, [{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-10-01" } }]);
       if (index === 0) await screenshot(page, info, "reschedule-adjacent-month");
     } finally { await context.close(); }
   }
@@ -879,7 +1029,7 @@ for (const responseStatus of [500, 409]) {
     const gate = new Promise((resolve) => { release = resolve; });
     const message = responseStatus === 409 ? "This job changed elsewhere. Refresh and try again." : "Unable to reschedule this job. Try again.";
     try {
-      await page.route(`**/api/jobs/${id}/schedule`, async (route) => {
+      await page.route(`**/api/jobs/${id}/schedule*`, async (route) => {
         await gate;
         await route.fulfill({ status: responseStatus, json: { error: message } });
       });
@@ -892,7 +1042,7 @@ for (const responseStatus of [500, 409]) {
       await expect(calendarJob(page, "2026-09-17", id)).toHaveCount(0);
       await expect(calendarJob(page, "2026-09-15", id)).toHaveCount(1);
       expect(readWorkspaceState().jobs).toEqual(originalJobs);
-      expect(writes).toEqual([{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-17" } }]);
+      expectScheduleWrites(writes, [{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-17" } }]);
     } finally { release(); await context.close(); }
   });
 }
@@ -904,7 +1054,7 @@ test("unschedule drop restores the original calendar job when the API fails", as
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   try {
-    await page.route(`**/api/jobs/${id}/schedule`, async (route) => {
+    await page.route(`**/api/jobs/${id}/schedule*`, async (route) => {
       await gate;
       await route.fulfill({ status: 500, json: { error: "Unable to remove the scheduled date." } });
     });
@@ -916,7 +1066,7 @@ test("unschedule drop restores the original calendar job when the API fails", as
     await expect(page.getByRole("alert")).toContainText("Unable to remove the scheduled date");
     await expect(calendarJob(page, "2026-09-15", id)).toHaveCount(1);
     expect(readWorkspaceState().jobs).toEqual(originalJobs);
-    expect(writes).toEqual([{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "" } }]);
+    expectScheduleWrites(writes, [{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "" } }]);
   } finally { release(); await context.close(); }
 });
 
@@ -927,7 +1077,7 @@ test("a pending date-only reschedule preserves newer edits from another session"
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   try {
-    await page.route(`**/api/jobs/${id}/schedule`, async (route) => { await gate; await route.continue(); });
+    await page.route(`**/api/jobs/${id}/schedule*`, async (route) => { await gate; await route.continue(); });
     await calendarJob(page, "2026-09-15", id).dragTo(day(page, "2026-09-17"));
     await expect(calendarJob(page, "2026-09-17", id)).toHaveCount(1);
     const externalEdit = await context.request.patch(`${baseUrl}/api/jobs/${id}`, { data: { title: "Edited in another session", urgency: "High" } });
@@ -939,7 +1089,7 @@ test("a pending date-only reschedule preserves newer edits from another session"
     await expect.poll(() => dbJob(id).scheduledDate).toBe("2026-09-17");
     await expect(queueJob(page, id)).toContainText("Edited in another session");
     expect(unchangedFields(dbJob(id))).toEqual(unchangedFields(latestJob));
-    expect(writes).toEqual([{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-17" } }]);
+    expectScheduleWrites(writes, [{ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate: "2026-09-17" } }]);
   } finally {
     release();
     const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
@@ -986,7 +1136,7 @@ test("failed scheduling restores the original date after an optimistic preview",
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   try {
-    await page.route("**/api/jobs/calendar-progress/schedule", async (route) => {
+    await page.route("**/api/jobs/calendar-progress/schedule*", async (route) => {
       await gate;
       await route.fulfill({ status: 500, json: { error: "Synthetic scheduling failure. Try again." } });
     });
@@ -1167,7 +1317,7 @@ test("Day Inspector drags redistribute the source day with date-only persistence
       await expect(calendarJob(page, "2026-09-15", id)).toHaveCount(0);
       await expect(calendarJob(page, destination, id)).toHaveCount(1);
     }
-    expect(writes).toEqual(moves.map(([id, scheduledDate]) => ({ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate } })));
+    expectScheduleWrites(writes, moves.map(([id, scheduledDate]) => ({ path: `/api/jobs/${id}/schedule`, method: "PATCH", body: { scheduledDate } })));
     await screenshot(page, info, "inspector-redistributed");
     await page.reload();
     await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Calendar", exact: true }).click();
@@ -1185,7 +1335,7 @@ for (const status of [500, 409]) {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     try {
-      await page.route(`**/api/jobs/${id}/schedule`, async (route) => {
+      await page.route(`**/api/jobs/${id}/schedule*`, async (route) => {
         await gate;
         await route.fulfill({ status, json: { error: "Inspector move failed; original date restored." } });
       });
@@ -1210,6 +1360,38 @@ for (const status of [500, 409]) {
     } finally { release(); await context.close(); }
   });
 }
+
+test("Calendar Undo reverses Day Inspector drag and date controls without adding cancelled or unchanged dates", async ({ browser }) => {
+  const { context, page } = await openCalendar(browser);
+  try {
+    await clickDateArea(page, "2026-09-15", "number");
+    const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
+    const inspector = page.locator("[data-calendar-day-inspector]");
+    await inspectorJob(page, "calendar-crowded-0").dragTo(day(page, "2026-09-19"));
+    await expect.poll(() => dbJob("calendar-crowded-0").scheduledDate).toBe("2026-09-19");
+    await inspector.getByRole("button", { name: "Reschedule Job #301" }).click();
+    const sheet = page.getByRole("dialog", { name: "Reschedule Job #301", exact: true });
+    await sheet.getByLabel("Scheduled date", { exact: true }).fill("2026-09-20");
+    await sheet.getByRole("button", { name: "Save date", exact: true }).click();
+    await expect(sheet).toBeHidden();
+    await expect(undo).toHaveAttribute("data-calendar-undo-count", "2");
+    for (const id of ["calendar-crowded-1", "calendar-crowded-0"]) {
+      await undo.click();
+      await expect.poll(() => dbJob(id).scheduledDate).toBe("2026-09-15");
+      await expect(inspectorJob(page, id)).toBeVisible();
+    }
+    await expect(undo).toBeDisabled();
+    await inspector.getByRole("button", { name: "Reschedule Job #301" }).click();
+    await sheet.getByRole("button", { name: "Save date", exact: true }).click();
+    await expect(sheet).toBeHidden();
+    await expect(undo).toBeDisabled();
+    await inspector.getByRole("button", { name: "Reschedule Job #301" }).click();
+    await sheet.getByLabel("Scheduled date", { exact: true }).fill("2026-09-21");
+    await page.keyboard.press("Escape");
+    await expect(undo).toBeDisabled();
+    expect(dbJob("calendar-crowded-1").scheduledDate).toBe("2026-09-15");
+  } finally { await context.close(); }
+});
 
 test("Day Inspector keyboard rescheduling and job clicks coexist with bulk actions", async ({ browser }) => {
   const { context, page, writes } = await openCalendar(browser);
@@ -1240,7 +1422,7 @@ test("Day Inspector keyboard rescheduling and job clicks coexist with bulk actio
     await expect(page).toHaveURL(/\/jobs\/calendar-crowded-1$/);
     await page.getByRole("button", { name: "Back to Calendar", exact: true }).click();
     await expect(page.locator(".calendar-mini-pane > .calendar-mini")).toBeVisible();
-    expect(writes).toEqual([{ path: "/api/jobs/calendar-crowded-0/schedule", method: "PATCH", body: { scheduledDate: "2026-09-19" } }]);
+    expectScheduleWrites(writes, [{ path: "/api/jobs/calendar-crowded-0/schedule", method: "PATCH", body: { scheduledDate: "2026-09-19" } }]);
   } finally { await context.close(); }
 });
 
@@ -1307,7 +1489,7 @@ test("Day Inspector touch scrolling, dragging and cancellation keep a long sourc
     await expect(inspectorJob(page, "inspector-extra-12")).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(820);
     await screenshot(page, info, "inspector-long-day-scroll");
-    expect(writes).toEqual([{ path: "/api/jobs/calendar-crowded-0/schedule", method: "PATCH", body: { scheduledDate: "2026-09-17" } }]);
+    expectScheduleWrites(writes, [{ path: "/api/jobs/calendar-crowded-0/schedule", method: "PATCH", body: { scheduledDate: "2026-09-17" } }]);
   } finally { await context.close(); updateExtraJobs(true); }
 });
 
@@ -1318,6 +1500,7 @@ test("Calendar density fits five jobs, expands with height and keeps all columns
     for (const [width, height] of [[1280, 720], [1366, 768], [1440, 900], [1920, 1080], [1440, 900]]) {
       await page.setViewportSize({ width, height });
       await expect(page.locator(".calendar-workspace")).toHaveCSS("height", `${height}px`);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight)).toBe(height);
       const crowded = day(page, "2026-09-15");
       await expect(crowded.locator(".calendar-job-chip")).toHaveCount(width === 1920 ? 7 : 5);
       const measured = await page.evaluate(() => {
@@ -1401,6 +1584,7 @@ test("mobile Calendar toolbar stays in one row from 320px through 430px", async 
 test("responsive Calendar matrix keeps scheduling usable in ten layouts", async ({ browser }, info) => {
   const viewports = [[390, 844], [430, 932], [768, 1024], [820, 1180], [1024, 768], [1180, 820], [1280, 720], [1366, 768], [1440, 900], [1920, 1080]];
   for (const [index, [width, height]] of viewports.entries()) {
+    const expectedScheduledDate = dbJob("calendar-progress").scheduledDate;
     const { context, page, writes } = await openCalendar(browser, width, height);
     try {
       await noOverflow(page);
@@ -1449,7 +1633,7 @@ test("responsive Calendar matrix keeps scheduling usable in ten layouts", async 
       expect(dbJob("calendar-progress").assignedTechnicianId).toBe("demo-staff-admin");
       if (width < 1024) await expect(page.getByRole("button", { name: /^Jobs / })).toBeFocused();
       expect(writes).toHaveLength(1);
-      expect(writes[0].body).toEqual({ scheduledDate: date });
+      expect(writes[0].body).toEqual({ scheduledDate: date, expectedScheduledDate });
       await noOverflow(page);
     } finally { await context.close(); }
   }
@@ -1484,14 +1668,14 @@ test("mobile queue filters retain focus and failed removal remains visible in th
     await expect(queueJob(page, "calendar-todo")).toHaveCount(0);
     await expect(queueJob(page, "calendar-completed")).toHaveCount(0);
     await expect(queueJob(page, "calendar-progress")).toBeVisible();
-    await page.route("**/api/jobs/calendar-progress/schedule", (route) => route.fulfill({ status: 500, json: { error: "Unable to remove the date. Try again." } }));
+    await page.route("**/api/jobs/calendar-progress/schedule*", (route) => route.fulfill({ status: 500, json: { error: "Unable to remove the date. Try again." } }));
     await queueJob(page, "calendar-progress").getByRole("button", { name: "Remove scheduled date for Job #205" }).click();
     const drawer = page.getByRole("dialog", { name: "Scheduling jobs", exact: true });
     await expect(drawer.getByRole("alert")).toContainText("Unable to remove the date");
     await expect(drawer.getByRole("alert")).toBeInViewport();
     await expect(queueJob(page, "calendar-progress")).toContainText("15 Sept 2026");
     expect(dbJob("calendar-progress")).toEqual(original);
-    expect(writes).toEqual([{ path: "/api/jobs/calendar-progress/schedule", method: "PATCH", body: { scheduledDate: "" } }]);
+    expectScheduleWrites(writes, [{ path: "/api/jobs/calendar-progress/schedule", method: "PATCH", body: { scheduledDate: "" } }]);
     await noOverflow(page);
   } finally { await context.close(); }
 });
