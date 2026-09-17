@@ -648,6 +648,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {isAuthenticated && activeSection === "settings" ? (
           <SettingsManager
+            fetchWithAuth={auth.fetchWithAuth}
             workspaceAddons={workspaceAddons}
             canManageWorkspaceSettings={canManageBusiness}
             activeSettingsTab={activeSettingsTab}

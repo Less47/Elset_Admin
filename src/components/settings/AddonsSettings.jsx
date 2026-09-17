@@ -1,10 +1,11 @@
 import { useState } from "react";
+import XeroSettings from "./XeroSettings";
 import { ADDON_LIST, isAddonEnabled } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export default function AddonsSettings({ workspaceAddons, available }) {
+export default function AddonsSettings({ workspaceAddons, available, fetchWithAuth }) {
   const [disableAddon, setDisableAddon] = useState(null);
   const [notice, setNotice] = useState("");
   const { addons, loading, saving, error, change, refresh } = workspaceAddons;
@@ -34,6 +35,7 @@ export default function AddonsSettings({ workspaceAddons, available }) {
           </div>
         </div>
         {addon.includes?.length ? <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-secondary">{addon.includes.map((item) => <li key={item}>• {item}</li>)}</ul> : null}
+        {addon.key === "xero" ? <XeroSettings enabled={enabled} available={available} fetchWithAuth={fetchWithAuth} /> : null}
       </article>;
     })}
     {!available ? <p id="addon-storage-requirement" className="text-sm text-text-secondary">Add-ons require SQLite workspace storage. This workspace is using legacy JSON storage.</p> : null}

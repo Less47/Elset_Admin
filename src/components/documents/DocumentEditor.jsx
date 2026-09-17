@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
+import InvoiceAccounting from "@/components/invoices/InvoiceAccounting";
+import { isAddonEnabled } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +26,11 @@ function draftSnapshot(document) {
   return JSON.stringify(document, (key, value) => ["qty", "rate", "amount"].includes(key) ? String(value ?? "") : value);
 }
 
-export default function DocumentEditor({ job, type, backLabel, onBack, registerNavigationBlocker, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, onDeleteInvoice, onInvoiceDeleted, isSendingDocument = false }) {
+export default function DocumentEditor({ job, type, backLabel, onBack, registerNavigationBlocker, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, onDeleteInvoice, onInvoiceDeleted, isSendingDocument = false, addons, fetchWithAuth }) {
   const [docState, setDocState] = useState(() => normalizeDocument(type, job[type] || buildDefaultDoc(job, type)));
   const [baseline, setBaseline] = useState(() => draftSnapshot(docState));
   const [isSaving, setIsSaving] = useState(false);
+  const [accountingBusy, setAccountingBusy] = useState(false);
   const [isPreviewingDocument, setIsPreviewingDocument] = useState(false);
   const [sendPreview, setSendPreview] = useState(null);
   const [sendStatus, setSendStatus] = useState(null);
@@ -43,7 +46,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
   const mountedRef = useRef(true);
   const dirty = draftSnapshot(docState) !== baseline;
   const sending = isSendingDocument || sendStatus?.phase === "sending";
-  const busy = isSaving || sending || isDeleting;
+  const busy = isSaving || sending || isDeleting || accountingBusy;
   const previewOpen = Boolean(sendPreview);
   const deleteRestriction = type === "invoice" ? invoiceDeletionRestriction(job.invoice) || invoiceDeletionRestriction(docState) : "";
   const deletingSentInvoice = confirmSentRequired || invoiceHasBeenSent(job.invoice) || sendStatus?.phase === "success";
@@ -245,6 +248,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
           <h2 id="document-email-title">Email</h2><dl className="document-email-details"><Detail label="Recipient">{recipientName}</Detail><Detail label="Send to">{recipientEmail || "No email saved"}</Detail><Detail label="Send from">{ADMIN_EMAIL}</Detail><Detail label="Previous attempts">{sentCount}</Detail></dl>
           <div className="mt-3 flex flex-wrap gap-2">{sentCount > 0 && onOpenSentDocument ? <Button type="button" variant="outline" onClick={onOpenSentDocument}>Open {documentLabel}</Button> : null}<Button type="button" variant="secondary" disabled={!recipientEmail || isPreviewingDocument} onClick={() => previewDocument(sendActionOptions)}>Preview &amp; Send {sendActionLabel}</Button></div>
         </section>
+        {type === "invoice" && isAddonEnabled(addons, "xero") ? <InvoiceAccounting jobId={job.id} invoice={job.invoice} fetchWithAuth={fetchWithAuth} blocked={dirty || busy || isPreviewingDocument} onBusyChange={setAccountingBusy} /> : null}
         {type === "invoice" && job.invoice && onDeleteInvoice ? <section className="document-section" aria-labelledby="document-delete-title">
           <h2 id="document-delete-title">Delete invoice</h2>
           <p id="document-delete-help" className="mb-3 text-sm text-text-secondary">{deleteRestriction || "Move this invoice to Recycle Bin. Its linked job will stay in place."}</p>
