@@ -40,6 +40,7 @@ import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
 import { registerAddonRoutes } from "./server-addon-routes.js";
 import { registerJobCostingRoutes } from "./server-job-costing-routes.js";
+import { registerAccountingRoutes } from "./server-accounting-routes.js";
 import { createMapLocationsRouter } from "./server-map-locations-routes.js";
 import { createWorkspaceLogoRouter } from "./server-workspace-logo-routes.js";
 import { createUserPreferencesRouter } from "./server-user-preferences-routes.js";
@@ -168,7 +169,7 @@ function prepareWorkspaceBackupImportData(backupInput) {
   };
 }
 
-export function createServerApp() {
+export function createServerApp({ accountingFetch } = {}) {
   const app = express();
   const shouldServeStatic = process.env.ELSET_DISABLE_STATIC !== "true";
   const frontendUrl = String(process.env.ELSET_FRONTEND_URL || "").trim();
@@ -334,6 +335,7 @@ export function createServerApp() {
   registerSettingsRoutes(app, { requireAuth, requireRole });
   registerAddonRoutes(app, { requireAuth, requireRole });
   registerJobCostingRoutes(app, { requireAuth, requireRole });
+  registerAccountingRoutes(app, { requireAuth, requireRole, fetchImpl: accountingFetch });
   app.use(createWorkspaceLogoRouter({ requireAuth, requireRole }));
   app.use(createUserPreferencesRouter({ requireAuth }));
   registerServiceM8ImportRoutes(app, {

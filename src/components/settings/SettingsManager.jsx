@@ -269,6 +269,7 @@ export default function SettingsManager({
   workspaceStorageMode = "json",
   canManageWorkspaceSettings = true,
   workspaceAddons,
+  fetchWithAuth,
 }) {
   const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
@@ -477,7 +478,7 @@ export default function SettingsManager({
         </div>
       </div>
 
-      {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available={isSqliteBackupMode} /> : null}
+      {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available={isSqliteBackupMode} fetchWithAuth={fetchWithAuth} /> : null}
 
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">

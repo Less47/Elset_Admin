@@ -12,6 +12,7 @@ export function parseWorkspacePath(pathname, state = null, search = "") {
     historyIndex: Number(state?.historyIndex || 0),
     tab: state?.tab || "overview",
   };
+  if (/^\/settings\/?$/.test(pathname)) return { ...context, type: "section", path: pathname, section: "settings" };
   if (/^\/invoices\/?$/.test(pathname)) {
     const customerId = new URLSearchParams(search || inlineSearch).get("customerId") || "";
     return { ...context, type: "section", section: "invoices", customerId,

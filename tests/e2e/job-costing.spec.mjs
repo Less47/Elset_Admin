@@ -385,12 +385,12 @@ for (const failInitialLoad of [false, true]) {
       const toggle = page.getByRole("switch", { name: "Job Costing enabled" });
       await expect(toggle).toBeDisabled();
       await expect(toggle).toHaveCSS("cursor", "not-allowed");
-      await expect(page.getByRole("status")).toContainText("Loading add-ons");
+      await expect(page.getByRole("status").filter({ hasText: "Loading add-ons" })).toBeVisible();
       responseGate.resolve();
       if (failInitialLoad) await expect(page.getByRole("alert")).toContainText("Temporary add-on load failure");
       await expect(toggle).toBeEnabled();
       await expect(toggle).toHaveCSS("cursor", "pointer");
-      await expect(page.getByRole("status")).not.toContainText("Loading add-ons");
+      await expect(page.getByRole("status").filter({ hasText: "Loading add-ons" })).toHaveCount(0);
       // A failed GET must not require a separate Retry before a valid PATCH.
       await page.unroute("**/api/settings/addons");
       await toggle.click();
@@ -424,7 +424,7 @@ for (const role of ["admin", "office"]) {
         await expect(toggle).toBeDisabled();
         await expect(toggle).toHaveCSS("cursor", "not-allowed");
         await expect(toggle).toHaveAttribute("aria-checked", String(!enabled));
-        await expect(page.locator('[aria-label="Workspace add-ons"] [role="status"]')).toContainText("Saving add-ons");
+        await expect(page.locator('[aria-label="Workspace add-ons"] > [role="status"]')).toContainText("Saving add-ons");
         gate.resolve();
         await expect(toggle).toBeEnabled();
         await expect(toggle).toHaveCSS("cursor", "pointer");
@@ -477,7 +477,7 @@ test("legacy JSON add-on restriction explains its storage requirement beside the
   try {
     await settings(page, { expectEnabled: false });
     const toggle = page.getByRole("switch", { name: "Job Costing enabled" });
-    await expect(page.getByRole("status")).not.toContainText("Loading add-ons");
+    await expect(page.getByRole("status").filter({ hasText: "Loading add-ons" })).toHaveCount(0);
     await expect(toggle).toBeDisabled();
     await expect(toggle).toHaveCSS("cursor", "not-allowed");
     await expect(page.getByText("Add-ons require SQLite workspace storage. This workspace is using legacy JSON storage.", { exact: true })).toBeVisible();

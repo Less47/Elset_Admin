@@ -3,12 +3,13 @@ import path from "path";
 import Database from "better-sqlite3";
 import { fileURLToPath } from "url";
 import { assertWorkspaceWritable } from "./server-workspace-restore-lock.js";
+import { accountingSchemaSql } from "./server-accounting-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 8;
+export const WORKSPACE_SCHEMA_VERSION = 9;
 
 const migrations = [
   {
@@ -524,6 +525,7 @@ const migrations = [
       UPDATE workspace_info SET schema_version = 8 WHERE id = 1;
     `,
   },
+  { version: 9, name: "provider-neutral-accounting-integrations", sql: accountingSchemaSql },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {

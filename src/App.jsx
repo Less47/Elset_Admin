@@ -27,7 +27,7 @@ export default function App() {
   const [invoiceNotice, setInvoiceNotice] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
   const [activeSection, setActiveSection] = useState("service-board");
-  const [activeSettingsTab, setActiveSettingsTab] = useState("preferences");
+  const [activeSettingsTab, setActiveSettingsTab] = useState(() => window.location.pathname === "/settings" && new URLSearchParams(window.location.search).get("accounting") === "xero" ? "addons" : "preferences");
   const [officeSearch, setOfficeSearch] = useState("");
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
   const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);
@@ -268,6 +268,8 @@ export default function App() {
       : workspaceRoute.type === "document"
         ? session.canManageBusiness && routeSelectedJob
           ? <DocumentEditor
+              addons={workspaceAddons.addons}
+              fetchWithAuth={session.fetchWithAuth}
               key={`${workspaceRoute.jobId}-${workspaceRoute.documentType}`}
               job={routeSelectedJob}
               type={workspaceRoute.documentType}

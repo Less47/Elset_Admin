@@ -224,7 +224,7 @@ test("a cost write rolls back when its aggregate would exceed safe integer cents
 
 test("add-ons default disabled, preserve cost rows through disable and survive unrelated settings resets", (t) => {
   const db = setup(t);
-  assert.deepEqual(getWorkspaceAddons(db), { jobCosting: false });
+  assert.deepEqual(getWorkspaceAddons(db), { xero: false, jobCosting: false });
   assert.throws(() => getJobCostingSummary(db, "job"), /disabled/i);
   enable(db); const entry = created(db);
   const before = entries(db);
@@ -262,7 +262,7 @@ test("authoritative SQLite backup and restore retain enabled state and all cost 
   const materialized = materializeWorkspaceSqliteBackup(bundle, path.join(dir, "restored"));
   const restored = openWorkspaceDb({ dbPath: materialized.tempDbPath });
   try {
-    assert.deepEqual(getWorkspaceAddons(restored), { jobCosting: true });
+    assert.deepEqual(getWorkspaceAddons(restored), { xero: false, jobCosting: true });
     assert.deepEqual(getJobCostingSummary(restored, "job"), summary);
   } finally {
     restored.close(); source.close();
@@ -330,7 +330,7 @@ test("authenticated targeted APIs share persisted enablement and enforce roles, 
   assert.equal((await request("/api/settings/addons", { role: "" })).status, 401);
   assert.equal((await request(route)).body.code, "ADDON_DISABLED");
   const initial = await request("/api/settings/addons");
-  assert.deepEqual(initial.body.result, { jobCosting: false });
+  assert.deepEqual(initial.body.result, { xero: false, jobCosting: false });
   assert.match(initial.cache, /no-store/);
   assert.equal((await request("/api/settings/addons", { method: "PATCH", role: "technician", body: { jobCosting: true } })).status, 403);
   assert.equal((await request("/api/settings/addons", { method: "PATCH", body: { jobCosting: true } })).status, 200);

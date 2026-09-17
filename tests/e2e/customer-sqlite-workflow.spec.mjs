@@ -258,7 +258,7 @@ async function openSites(page) {
 
 async function openRecycleBin(page) {
   await page.getByRole("button", { name: "Recycle Bin" }).click();
-  await expect(page.getByRole("tab", { name: "Deleted Customers" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Customers", exact: true })).toBeVisible();
 }
 
 async function openCustomerProfile(page, customerName) {
@@ -310,7 +310,7 @@ async function deleteCustomer(page) {
 
 async function restoreCustomer(page) {
   await openRecycleBin(page);
-  await page.getByRole("tab", { name: "Deleted Customers" }).click();
+  await page.getByRole("tab", { name: "Customers", exact: true }).click();
   await expect(page.getByText(editedCustomerName)).toBeVisible();
   await page.getByRole("button", { name: "Restore Customer" }).click();
   await expect(page.getByText(editedCustomerName)).toBeHidden();
@@ -622,7 +622,7 @@ async function deleteAndRestoreJob(page, jobId) {
   await waitForDeletedJob(jobId);
 
   await openRecycleBin(page);
-  await page.getByRole("tab", { name: "Deleted Jobs" }).click();
+  await page.getByRole("tab", { name: "Jobs", exact: true }).click();
   await expect(page.getByText(jobEditedTitle)).toBeVisible();
   await page.getByRole("button", { name: "Restore Job" }).click();
   await waitForActiveJob(jobId, (job) => job.title === jobEditedTitle);
@@ -745,7 +745,7 @@ test("SQLite customer workflow persists through browser refreshes", async ({ pag
 
     await deleteCustomer(page);
     await openRecycleBin(page);
-    await page.getByRole("tab", { name: "Deleted Customers" }).click();
+    await page.getByRole("tab", { name: "Customers", exact: true }).click();
     await expect(page.getByText(editedCustomerName)).toBeVisible();
 
     await restoreCustomer(page);

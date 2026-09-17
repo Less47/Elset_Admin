@@ -1,5 +1,12 @@
 // Built-in optional modules. Enablement belongs to the shared workspace.
 export const ADDONS = Object.freeze({
+  xero: Object.freeze({
+    key: "xero", name: "Xero", category: "Accounting",
+    description: "Connect your jobs and invoices with Xero accounting. Sync customers and issued invoices from this workspace to Xero.",
+    includes: ["Manual invoice sync", "Customers synced as needed"],
+    disableDescription: "Xero controls and syncing will be disabled. The connection, configuration, mappings and history will be preserved. Use Disconnect to remove the connection.",
+    defaultEnabled: false,
+  }),
   jobCosting: Object.freeze({
     key: "jobCosting",
     name: "Job Costing",
