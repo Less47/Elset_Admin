@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 7;
+export const WORKSPACE_SCHEMA_VERSION = 8;
 
 const migrations = [
   {
@@ -498,6 +498,30 @@ const migrations = [
           AND instr(service_board_note, char(13)) = 0
         ));
       UPDATE workspace_info SET schema_version = 7 WHERE id = 1;
+    `,
+  },
+  {
+    version: 8,
+    name: "optional-job-costing",
+    sql: `
+      CREATE TABLE job_cost_entries (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        category TEXT NOT NULL CHECK (category IN ('materials', 'labour', 'subcontractors', 'sundries', 'plantEquipment', 'travel', 'other')),
+        description TEXT NOT NULL CHECK (length(trim(description)) > 0),
+        quantity_micros INTEGER NOT NULL CHECK (quantity_micros > 0 AND quantity_micros <= 9007199254740991),
+        unit_cost_cents INTEGER NOT NULL CHECK (unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991),
+        total_cost_cents INTEGER NOT NULL CHECK (total_cost_cents >= 0 AND total_cost_cents <= 9007199254740991),
+        supplier TEXT NOT NULL DEFAULT '',
+        cost_date TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_job_cost_job_date ON job_cost_entries(job_id, cost_date);
+      CREATE INDEX idx_job_cost_category_date ON job_cost_entries(category, cost_date);
+      UPDATE workspace_info SET schema_version = 8 WHERE id = 1;
     `,
   },
 ];

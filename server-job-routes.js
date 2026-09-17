@@ -13,6 +13,7 @@ import {
   removeJobFromTomorrow,
   restoreDeletedJob,
   scheduleJob,
+  correctCompletedMaintenanceJobSchedule,
   previewDayReschedule,
   rescheduleDayJobs,
   updateJobDetails,
@@ -157,7 +158,9 @@ export function createJobRouter({
   router.patch(
     "/api/jobs/:id/schedule",
     ...manageMiddleware,
-    handleJobRoute((db, req) => scheduleJob(db, req.params.id, req.body?.scheduledDate), env)
+    handleJobRoute((db, req) => req.body?.completedMaintenanceCorrection === true
+      ? correctCompletedMaintenanceJobSchedule(db, req.params.id, req.body)
+      : scheduleJob(db, req.params.id, req.body?.scheduledDate), env)
   );
 
   router.post(

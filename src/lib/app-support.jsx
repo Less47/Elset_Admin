@@ -126,10 +126,16 @@ export const settingsTabs = [
   { value: "preferences", label: "Preferences" },
   { value: "templates", label: "Document Templates" },
   { value: "ui", label: "UI Settings" },
+  { value: "addons", label: "Add-ons" },
   { value: "backup", label: "Data Backup" },
 ];
 
 export const settingsTabMeta = {
+  addons: {
+    eyebrow: "Workspace Modules",
+    title: "Add-ons",
+    description: "Choose the optional modules available to your company.",
+  },
   preferences: {
     eyebrow: "Company Preferences",
     title: "Preferences",

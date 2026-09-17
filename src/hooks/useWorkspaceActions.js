@@ -788,7 +788,7 @@ export function useWorkspaceActions({
 
   function handleOpenMaintenancePlan(planId, options) { return onNavigateToMaintenance?.(planId, options); }
 
-  async function handleScheduleJob(jobId, scheduledDate, { onError, recordOnly = false } = {}) {
+  async function handleScheduleJob(jobId, scheduledDate, { onError, recordOnly = false, completedMaintenanceCorrection = false, expectedScheduledDate } = {}) {
     if (!canManageBusiness) return false;
 
     if (recordOnly && !useSqliteApi) {
@@ -800,7 +800,7 @@ export function useWorkspaceActions({
       const saved = await saveJobApiRequest({
         path: jobPath(jobId, "/schedule"),
         method: "PATCH",
-        body: { scheduledDate: toDateInputValue(scheduledDate) },
+        body: { scheduledDate: toDateInputValue(scheduledDate), ...(completedMaintenanceCorrection ? { completedMaintenanceCorrection: true, expectedScheduledDate } : {}) },
         errorMessage: "Unable to update the job schedule.",
         onError,
       });

@@ -9,6 +9,7 @@ import JobDetailsPage from "@/components/jobs/JobDetailsPage";
 import DocumentEditor from "@/components/documents/DocumentEditor";
 import { RecordWorkspace, UnsavedChangesDialog, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
 import { useAppSession } from "@/hooks/useAppSession";
+import { useWorkspaceAddons } from "@/hooks/useWorkspaceAddons";
 import { useThemePalette } from "@/hooks/useThemePalette";
 import { useThemeSettingsSave } from "@/hooks/useThemeSettingsSave";
 import { UserUiPreferencesContext, useUserUiPreferences } from "@/hooks/useUserUiPreferences";
@@ -80,6 +81,11 @@ export default function App() {
     fetchWithAuth: session.fetchWithAuth,
     sessionKey: session.isAuthenticated ? session.authUser.id : "",
     legacySettings: data.settings,
+  });
+  const workspaceAddons = useWorkspaceAddons({
+    fetchWithAuth: session.fetchWithAuth,
+    sessionKey: session.isAuthenticated ? session.authUser.id : "",
+    refreshKey: `${workspaceNavigation.route.type}:${workspaceNavigation.route.jobId || ""}:${effectiveActiveSection}:${effectiveActiveSettingsTab}`,
   });
   const boardValues = (kind, preferences = personalPreferences.preferences) => Object.fromEntries(
     statuses.map((status) => [status, preferences[boardPreferenceKeys[status][kind]]])
@@ -215,6 +221,9 @@ export default function App() {
     : workspaceRoute.type === "job-details"
       ? (
           <JobDetailsPage
+            addons={workspaceAddons.addons}
+            fetchWithAuth={session.fetchWithAuth}
+            onAddonDisabled={workspaceAddons.refresh}
             key={workspaceViewModel.selectedFreshJob?.id || `missing-${workspaceRoute.jobId}`}
             backLabel={backLabel}
             canDeleteJob={session.canManageBusiness}
@@ -326,6 +335,7 @@ export default function App() {
         }}
         workspacePage={workspacePageOpen ? workspacePage : null}
         personalPreferences={personalPreferences}
+        workspaceAddons={workspaceAddons}
       />
 
       <UnsavedChangesDialog

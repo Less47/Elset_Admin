@@ -150,6 +150,35 @@ function buildApp(env, user = {}) {
   return app;
 }
 
+test("completed maintenance schedule API is targeted, conflict-aware and restricted to office/admin", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    const db = openWorkspaceDb({ dbPath });
+    try { db.prepare("UPDATE jobs SET extra_json = json_set(extra_json, '$.completedAt', ?) WHERE id = 'demo-maintenance-job'").run("2026-02-02T03:00:00.000Z"); }
+    finally { db.close(); }
+    const before = getDbState(dbPath);
+    await withServer(env, async (baseUrl) => {
+      const body = { scheduledDate: "2026-02-04", expectedScheduledDate: "2026-02-01", completedMaintenanceCorrection: true };
+      const extra = await requestJson(baseUrl, "/api/jobs/demo-maintenance-job/schedule", { method: "PATCH", body: JSON.stringify({ ...body, completedAt: "2026-02-04" }) });
+      assert.equal(extra.response.status, 400);
+      assert.deepEqual(getDbState(dbPath), before);
+      const result = await requestJson(baseUrl, "/api/jobs/demo-maintenance-job/schedule", { method: "PATCH", body: JSON.stringify(body) });
+      assert.equal(result.response.status, 200, result.payload.error);
+      assert.equal(result.payload.result.scheduledDate, "2026-02-04");
+      assert.equal(result.payload.result.status, "Completed");
+      assert.equal(result.payload.result.completedAt, "2026-02-02T03:00:00.000Z");
+      const stale = await requestJson(baseUrl, "/api/jobs/demo-maintenance-job/schedule", { method: "PATCH", body: JSON.stringify({ ...body, scheduledDate: "2026-02-06" }) });
+      assert.equal(stale.response.status, 409);
+      assert.equal(getDbState(dbPath).jobs.find((job) => job.id === "demo-maintenance-job").scheduledDate, "2026-02-04");
+    }, { role: "office" });
+    const after = getDbState(dbPath);
+    await withServer(env, async (baseUrl) => {
+      const result = await requestJson(baseUrl, "/api/jobs/demo-maintenance-job/schedule", { method: "PATCH", body: JSON.stringify({ scheduledDate: "2026-02-06", expectedScheduledDate: "2026-02-04", completedMaintenanceCorrection: true }) });
+      assert.equal(result.response.status, 403);
+    }, { role: "technician" });
+    assert.deepEqual(getDbState(dbPath), after);
+  }, fixtureWithMaintenance({ includeJob: true, jobOverrides: { status: "Completed", scheduledDate: "2026-02-01", completedAt: "2026-02-02T03:00:00.000Z" } }));
+});
+
 async function withServer(env, callback, user = {}) {
   const app = buildApp(env, user);
   const server = http.createServer(app);

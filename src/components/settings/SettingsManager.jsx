@@ -2,6 +2,7 @@ import { buildSemanticTheme } from "@/lib/theme-tokens";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import ThemeColourField from "./ThemeColourField";
 import WorkspaceBranding from "./WorkspaceBranding";
+import AddonsSettings from "./AddonsSettings";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -267,6 +268,7 @@ export default function SettingsManager({
   backupSummary,
   workspaceStorageMode = "json",
   canManageWorkspaceSettings = true,
+  workspaceAddons,
 }) {
   const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
@@ -474,6 +476,8 @@ export default function SettingsManager({
           })}
         </div>
       </div>
+
+      {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available={isSqliteBackupMode} /> : null}
 
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">

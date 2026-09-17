@@ -203,6 +203,9 @@ function normalizeUnknownSetting(key, value) {
 
 function normalizeSettingValue(key, value) {
   validateSafeWorkspaceSettingKey(key);
+  if (key === "addons") {
+    throw new WorkspaceSettingsError("Use the Add-ons settings endpoint to change optional modules.");
+  }
   if (key === "workspaceLogo" || key === "workspaceLogoUrl") {
     throw new WorkspaceSettingsError("Use the Workspace Branding upload/remove control to change the workspace logo.");
   }

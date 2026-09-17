@@ -31,6 +31,7 @@ const expectedWorkspaceTables = [
   "jobs",
   "job_notes",
   "job_attachments",
+  "job_cost_entries",
   "quotes",
   "quote_line_items",
   "invoices",

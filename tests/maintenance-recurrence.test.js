@@ -7,7 +7,7 @@ import { migrateWorkspaceSchema } from "../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
 import { createMaintenancePlan, scheduleMaintenancePlan, generateMaintenanceJob, completeMaintenanceCycle, deleteMaintenancePlan, restoreDeletedMaintenancePlan, updateMaintenancePlan, getMaintenanceOccurrences } from "../server-workspace-maintenance.js";
-import { changeJobStatus, deleteJob, restoreDeletedJob, scheduleJob } from "../server-workspace-jobs.js";
+import { changeJobStatus, correctCompletedMaintenanceJobSchedule, deleteJob, restoreDeletedJob, scheduleJob, updateJobDetails } from "../server-workspace-jobs.js";
 import { advanceMaintenanceDate, expandMaintenanceOccurrences } from "../src/lib/maintenance-recurrence.js";
 
 const planInput = { id: "recurring-plan", customerId: "demo-customer-arcadia", siteId: "demo-site-front-entry", planName: "5 Connor St", siteAddress: "5 Connor Street, Brighton East", frequency: "six-monthly", nextDueDate: "2027-03-09", checklist: ["Inspect gate", "Test safety edge"], estimatedDurationHours: 2, contractPrice: 350 };
@@ -22,6 +22,83 @@ const plan = (db) => loadWorkspaceStateFromDb(db).maintenancePlans.find((entry) 
 const range = (db, from = "2027-01-01", to = "2028-12-31") => getMaintenanceOccurrences(db, from, to).filter((entry) => entry.planId === planInput.id);
 const move = (db, occurrence, nextDueDate, scope = "occurrence") => scheduleMaintenancePlan(db, planInput.id, { occurrenceKey: occurrence.key, revision: occurrence.revision, nextDueDate, scope });
 const generate = (db, occurrence) => generateMaintenanceJob(db, planInput.id, { occurrenceKey: occurrence.key, revision: occurrence.revision });
+
+test("completed job corrections move one occurrence, preserve completion/history and never rewrite the plan", () => withDb((db) => {
+  const correctionPlan = createMaintenancePlan(db, { ...planInput, id: "completion-correction", nextDueDate: "2026-09-14" });
+  const occurrence = getMaintenanceOccurrences(db, "2026-09-01", "2026-09-30").find((entry) => entry.planId === correctionPlan.id);
+  const generated = generateMaintenanceJob(db, correctionPlan.id, { occurrenceKey: occurrence.key, revision: occurrence.revision });
+  changeJobStatus(db, generated.job.id, "Completed");
+  const completedAt = "2026-09-15T02:34:00.000Z";
+  db.prepare("UPDATE maintenance_occurrence_exceptions SET completed_at = ? WHERE job_id = ?").run(completedAt, generated.job.id);
+  db.prepare("UPDATE jobs SET extra_json = json_set(extra_json, '$.completedAt', ?, '$.completionHistory', json(?), '$.technicianCompletion', json(?)) WHERE id = ?")
+    .run(completedAt, JSON.stringify([{ completedAt, note: "Actual completion" }]), JSON.stringify({ technicianId: "demo-staff-admin", completedAt }), generated.job.id);
+  const getJob = () => loadWorkspaceStateFromDb(db).jobs.find((entry) => entry.id === generated.job.id);
+  const getOccurrence = () => getMaintenanceOccurrences(db, "2026-01-01", "2027-12-31").find((entry) => entry.key === occurrence.key);
+  const before = getJob();
+  const planRow = db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(correctionPlan.id);
+  const otherDates = () => getMaintenanceOccurrences(db, "2026-01-01", "2027-12-31").filter((entry) => entry.key !== occurrence.key).map(({ key, date }) => ({ key, date }));
+  const futureBefore = otherDates();
+  const beforeException = db.prepare("SELECT * FROM maintenance_occurrence_exceptions WHERE occurrence_key = ?").get(occurrence.key);
+  // Edits made after the user opens confirmation must survive the targeted write.
+  updateJobDetails(db, before.id, { description: "Concurrent office edit" });
+  let from = before.scheduledDate;
+  for (const to of ["2026-09-16", "2026-09-01", "2027-10-20"]) {
+    const latest = getJob();
+    const result = correctCompletedMaintenanceJobSchedule(db, before.id, { scheduledDate: to, expectedScheduledDate: from, completedMaintenanceCorrection: true });
+    assert.deepEqual({ ...result, scheduledDate: latest.scheduledDate, updatedAt: latest.updatedAt }, latest);
+    assert.equal(result.completedAt, completedAt);
+    assert.equal(result.status, "Completed");
+    assert.equal(getOccurrence().completedAt, completedAt);
+    assert.equal(getOccurrence().date, to);
+    assert.equal(getOccurrence().jobScheduledDate, to);
+    assert.equal(getOccurrence().key, occurrence.key);
+    assert.equal(getOccurrence().locked, true, "Normal recurrence editing must remain locked");
+    assert.deepEqual(db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(correctionPlan.id), planRow);
+    assert.deepEqual(otherDates(), futureBefore);
+    from = to;
+  }
+  const afterException = db.prepare("SELECT * FROM maintenance_occurrence_exceptions WHERE occurrence_key = ?").get(occurrence.key);
+  assert.deepEqual({ ...afterException, override_date: beforeException.override_date, snapshot_json: beforeException.snapshot_json, updated_at: beforeException.updated_at }, beforeException);
+  const snapshot = JSON.parse(afterException.snapshot_json);
+  assert.equal(snapshot.scheduleCorrectionBaseline.date, "2026-09-14");
+  assert.deepEqual(snapshot.scheduleCorrections.map(({ from, to }) => ({ from, to })), [
+    { from: "2026-09-14", to: "2026-09-16" }, { from: "2026-09-16", to: "2026-09-01" }, { from: "2026-09-01", to: "2027-10-20" },
+  ]);
+  assert.equal(getJob().description, "Concurrent office edit");
+  assert.throws(() => scheduleMaintenancePlan(db, correctionPlan.id, { occurrenceKey: occurrence.key, revision: getOccurrence().revision, nextDueDate: "2027-10-21", scope: "schedule" }), /Historical or completed/);
+}));
+
+test("completed correction rejects stale dates, protected fields and changed status without partial writes", () => withDb((db) => {
+  const generated = generate(db, range(db)[0]);
+  changeJobStatus(db, generated.job.id, "Completed");
+  const body = { scheduledDate: "2027-03-10", expectedScheduledDate: "2027-03-09", completedMaintenanceCorrection: true };
+  const before = loadWorkspaceStateFromDb(db);
+  for (const input of [{ ...body, expectedScheduledDate: "2027-03-08" }, { ...body, status: "To Do" }, { ...body, completedAt: "2027-03-10" }, { ...body, invoice: {} }, { ...body, scheduledDate: "2027-02-30" }, { ...body, scope: "schedule" }]) {
+    assert.throws(() => correctCompletedMaintenanceJobSchedule(db, generated.job.id, input));
+    assert.deepEqual(loadWorkspaceStateFromDb(db), before);
+  }
+  // A failure after the occurrence write must roll back both sides atomically.
+  db.exec("CREATE TRIGGER fail_correction BEFORE UPDATE OF scheduled_date ON jobs BEGIN SELECT RAISE(ABORT, 'synthetic schedule failure'); END");
+  assert.throws(() => correctCompletedMaintenanceJobSchedule(db, generated.job.id, body), /synthetic schedule failure/);
+  assert.deepEqual(loadWorkspaceStateFromDb(db), before);
+  db.exec("DROP TRIGGER fail_correction");
+  changeJobStatus(db, generated.job.id, "In Progress");
+  assert.throws(() => correctCompletedMaintenanceJobSchedule(db, generated.job.id, body), /no longer completed/);
+}));
+
+test("legacy completed maintenance retains its completion timestamp and occurrence identity after correction", () => withDb((db) => {
+  const generated = generate(db, range(db)[0]);
+  changeJobStatus(db, generated.job.id, "Completed");
+  db.prepare("DELETE FROM maintenance_occurrence_exceptions WHERE job_id = ?").run(generated.job.id);
+  db.prepare("UPDATE jobs SET updated_at = '2027-03-10T02:00:00.000Z' WHERE id = ?").run(generated.job.id);
+  const before = range(db).find((entry) => entry.jobId === generated.job.id);
+  correctCompletedMaintenanceJobSchedule(db, generated.job.id, { scheduledDate: "2027-03-11", expectedScheduledDate: "2027-03-09", completedMaintenanceCorrection: true });
+  const after = range(db).find((entry) => entry.jobId === generated.job.id);
+  assert.equal(after.completedAt, "2027-03-10T02:00:00.000Z");
+  assert.equal(after.key, before.key);
+  assert.equal(after.originalDate, before.originalDate);
+  assert.equal(after.date, "2027-03-11");
+}));
 
 test("six-monthly range expansion is automatic, bounded and does not insert jobs or occurrence rows", () => withDb((db) => {
   const before = db.prepare("SELECT count(*) n FROM jobs").get().n;
@@ -205,7 +282,7 @@ test("a failed date transaction rolls back the exception, anchor, revision and n
 test("migration from v4 is additive and idempotent with existing plans and jobs", () => withDb((db) => {
   const plansBefore = db.prepare("SELECT * FROM maintenance_plans").all();
   const jobsBefore = db.prepare("SELECT * FROM jobs").all();
-  db.exec("ALTER TABLE jobs DROP COLUMN service_board_note; DROP TABLE deleted_invoices; DROP TABLE maintenance_occurrence_exceptions; DELETE FROM workspace_schema_migrations WHERE version >= 5; UPDATE workspace_info SET schema_version = 4; PRAGMA user_version = 4;");
+  db.exec("DROP TABLE job_cost_entries; ALTER TABLE jobs DROP COLUMN service_board_note; DROP TABLE deleted_invoices; DROP TABLE maintenance_occurrence_exceptions; DELETE FROM workspace_schema_migrations WHERE version >= 5; UPDATE workspace_info SET schema_version = 4; PRAGMA user_version = 4;");
   migrateWorkspaceSchema(db); migrateWorkspaceSchema(db);
   assert.deepEqual(db.prepare("SELECT * FROM maintenance_plans").all(), plansBefore);
   assert.deepEqual(db.prepare("SELECT * FROM jobs").all(), jobsBefore);

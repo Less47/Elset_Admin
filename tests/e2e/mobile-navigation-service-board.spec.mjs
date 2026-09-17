@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
 const fixturePath = path.join(repoRoot, "fixtures", "demo-workspace.json");
-const screenshotDir = path.join(repoRoot, "test-results", "mobile-service-board");
+const screenshotDir = process.env.ELSET_MOBILE_E2E_SCREENSHOT_DIR || path.join(repoRoot, "test-results", "mobile-service-board");
 const screenshotNames = [
   "mobile-navigation-open-390x844.png",
   "mobile-to-do-390x844.png",
@@ -763,7 +763,7 @@ test("build indicator identifies desktop and mobile assets without obstructing n
       const buildLabel = metadata.buildTime ? `${metadata.commit}-${metadata.buildTime.replaceAll(":", "-")}` : "local";
       await capture(page, testInfo, `build-indicator-${buildLabel}-${viewport.width}x${viewport.height}.png`, "build indicator and navigation");
       await recycleBin.click();
-      await expect(page.getByRole("tab", { name: "Deleted Jobs" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Jobs", exact: true })).toBeVisible();
       if (mobile) await expect(surface).toBeHidden();
       await navigateToWorkspaceSection(page, "Service Board", viewport.width);
       await assertNoHorizontalOverflow(page);
@@ -1193,8 +1193,8 @@ test("mobile page controls keep records primary and preserve live filter state",
     await assertNoHorizontalOverflow(page);
 
     await navigateToWorkspaceSection(page, "Recycle Bin", width);
-    await expect(page.getByRole("tab", { name: "Deleted Jobs" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Deleted Customers" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Jobs", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Customers", exact: true })).toBeVisible();
     await expect(page.locator("[data-responsive-page-controls]")).toHaveCount(0);
 
     await navigateToWorkspaceSection(page, "Service Board", width);
@@ -1251,11 +1251,11 @@ test("phone database pages use contained record cards with visible identities, s
     {
       section: "Maintenance",
       recordSelector: '[data-record-id="mobile-maintenance-plan"]',
-      identity: "Quarterly gate safety inspection",
-      status: "Active job",
+      identity: "10 Example Lane SAMPLETON",
+      status: "Overdue",
       statusIsBadge: true,
-      action: "View Active Job",
-      expectedTexts: ["Quarterly", "Arcadia Example Apartments", "10 Example Lane", "Job #1003 open", "15/09/2026", "2 hrs", "$450.00", "Edit Plan", "Delete"],
+      action: "Open Plan",
+      expectedTexts: ["Quarterly", "Arcadia Example Apartments", "10 Example Lane", "1 active job", "15/09/2026", "2 hrs", "$450.00", "Generate Job", "Edit"],
       longRecordSelector: '[data-record-id="mobile-maintenance-long"]',
     },
     {
@@ -1287,6 +1287,7 @@ test("phone database pages use contained record cards with visible identities, s
   ]) {
     const context = await browser.newContext(mobileContextOptions(viewport.width, viewport.height));
     const page = await context.newPage();
+    await page.clock.setFixedTime(new Date("2026-09-17T02:00:00Z"));
     const fixture = readMobileRecordFixture();
     await page.route("**/api/app-state", (route) => route.request().method() === "GET"
       ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
@@ -1360,9 +1361,9 @@ test("phone database pages use contained record cards with visible identities, s
         const openProfile = customerCard.getByRole("button", { name: "Open profile for Arcadia Example Apartments" });
         await expect(openProfile).toHaveCount(1);
         await openProfile.click();
-        await expect(page.getByRole("dialog", { name: "Arcadia Example Apartments" })).toHaveCount(1);
-        await page.keyboard.press("Escape");
-        await expect(page.getByRole("dialog", { name: "Arcadia Example Apartments" })).toHaveCount(0);
+        await expect(page.getByRole("heading", { name: "Arcadia Example Apartments", level: 1 })).toBeVisible();
+        await expect(page).toHaveURL(baseUrl + "/customers/demo-customer-arcadia");
+        await page.getByRole("button", { name: "Back to Customers", exact: true }).click();
         await expect(page.getByRole("button", { name: "List view" })).toHaveCount(0);
         await expect(page.getByRole("button", { name: "Grid view" })).toHaveCount(0);
 
@@ -1371,8 +1372,9 @@ test("phone database pages use contained record cards with visible identities, s
         const openSite = siteCard.getByRole("button", { name: "Open site 10 Example Lane, Sampleton VIC 3000" });
         await expect(openSite).toHaveCount(1);
         await openSite.click();
-        await expect(page.getByRole("dialog", { name: "10 Example Lane, Sampleton VIC 3000" })).toHaveCount(1);
-        await page.keyboard.press("Escape");
+        await expect(page.getByRole("heading", { name: "10 Example Lane, Sampleton VIC 3000", level: 1 })).toBeVisible();
+        await expect(page).toHaveURL(/\/customers\/demo-customer-arcadia\/sites\//);
+        await page.getByRole("button", { name: "Back to Sites", exact: true }).click();
         await expect(page.getByRole("dialog")).toHaveCount(0);
 
         await navigateToWorkspaceSection(page, "Job History", viewport.width);
@@ -1409,9 +1411,9 @@ test("phone database pages use contained record cards with visible identities, s
 
         await navigateToWorkspaceSection(page, "Maintenance", viewport.width);
         const maintenanceCard = page.locator('[data-mobile-record-card][data-record-id="mobile-maintenance-plan"]');
-        await expect(maintenanceCard.getByRole("button", { name: "View active job for Quarterly gate safety inspection" })).toHaveCount(1);
-        await expect(maintenanceCard.getByRole("button", { name: "Edit plan Quarterly gate safety inspection" })).toHaveCount(1);
-        await expect(maintenanceCard.getByRole("button", { name: "Delete plan Quarterly gate safety inspection" })).toHaveCount(1);
+        await expect(maintenanceCard.getByRole("button", { name: "Open Plan", exact: true })).toHaveCount(1);
+        await expect(maintenanceCard.getByRole("button", { name: "Generate Job", exact: true })).toHaveCount(1);
+        await expect(maintenanceCard.getByRole("button", { name: "Edit", exact: true })).toHaveCount(1);
         const maintenanceFilter = page.locator('[data-responsive-page-controls] button[aria-haspopup="dialog"]');
         await maintenanceFilter.click();
         await chooseSelectOption(page, "Status", "Upcoming");
@@ -1448,7 +1450,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
     { section: "Sites", action: "Open", headers: ["Site", "Customer", "Activity", "Work"] },
     { section: "Job History", action: "Open", headers: ["Job", "Customer", "Status", "Open"] },
     { section: "Invoices", action: "Job", headers: ["Job", "Invoice", "Payment", "Actions"] },
-    { section: "Maintenance", action: "View Active Job" },
+    { section: "Maintenance", action: "Open Plan" },
     { section: "Staff", action: "Edit", headers: ["Staff", "Contact", "Action"] },
     { section: "Parts Inventory", action: "Edit", headers: ["Part", "Stock", "Value", "Action"] },
   ];
@@ -1490,9 +1492,10 @@ test("tablet and desktop database pages retain their existing fitted result grid
           }));
           expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
         } else {
-          for (const text of ["Checklist", "Recent activity", "Due Queue", "Active Maintenance Jobs"]) {
+          for (const text of ["Next due", "Estimated time", "Contract price", "1 active job"]) {
             await expect(desktopResults.getByText(text, { exact: true }).first()).toBeVisible();
           }
+          await expect(page.getByRole("complementary", { name: "Due Queue" })).toBeVisible();
         }
         await assertNoHorizontalOverflow(page);
       }
@@ -2045,6 +2048,12 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
     try {
       await loginAs(page, "mobileadmin", viewport.width < 1024);
       await page.locator(viewport.width < 768 ? "[data-mobile-job-id]" : '[draggable="true"]').first().waitFor();
+      // Each viewport reuses this account's saved column preferences.
+      if (viewport.width >= 768) {
+        for (const status of ["To Do", "In Progress", "Completed"]) {
+          await page.getByRole("button", { name: `${status} List view`, exact: true }).click();
+        }
+      }
       await page.evaluate(() => document.fonts.ready);
       await checkContainment(page, viewport, "normal");
       if (viewport.width === 820 || viewport.width === 1024) {

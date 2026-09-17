@@ -5,6 +5,7 @@ import {
 } from "./server-workspace-maintenance.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 import { siteAddressMetadata, updatedSiteAddressMetadata } from "./src/lib/site-location.js";
+import { archiveJobCostEntries } from "./server-workspace-job-costing.js";
 
 const customerTypeValues = new Set(["homeowner", "strata", "property-manager", "builder", "business", "government", "other", ""]);
 const siteTypeValues = new Set(["residential", "commercial", "industrial", "mixed-use", "other", ""]);
@@ -596,6 +597,7 @@ export function deleteCustomer(db, customerIdInput) {
     `);
     relatedJobs.forEach((job) => {
       insertDeletedJob.run(`deleted-job:${job.id}`, job.id, deletedAt, json(job));
+      archiveJobCostEntries(db, job.id);
     });
 
     const deletedMaintenancePlanCount = archiveMaintenancePlansForCustomer(db, customerId, deletedAt);

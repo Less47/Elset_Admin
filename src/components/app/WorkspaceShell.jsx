@@ -45,7 +45,7 @@ import {
 
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences }) {
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -647,6 +647,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {isAuthenticated && activeSection === "settings" ? (
           <SettingsManager
+            workspaceAddons={workspaceAddons}
             canManageWorkspaceSettings={canManageBusiness}
             activeSettingsTab={activeSettingsTab}
             onActiveSettingsTabChange={setActiveSettingsTab}

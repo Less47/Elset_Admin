@@ -74,7 +74,7 @@ export function expandMaintenanceOccurrences(plan, from, to, jobs = [], today = 
     const job = linkedJobs.find((entry) => entry.id === exception?.jobId || entry.maintenanceOccurrenceKey === base.key)
       || linkedJobs.find((entry) => !entry.maintenanceOccurrenceKey && entry.maintenanceDueDate === base.originalDate);
     if (plan.active === false && date >= today) return;
-    const completedAt = exception?.completedAt || (job?.status === "Completed" ? job.updatedAt : "");
+    const completedAt = exception?.completedAt || (job?.status === "Completed" ? job.completedAt || job.updatedAt : "");
     results.set(base.key, { ...base, date, scheduledDate: date, jobId: job?.id || exception?.jobId || "",
       jobNumber: job?.jobNumber, jobStatus: job?.status, jobScheduledDate: job?.scheduledDate || "",
       completedAt, generated: Boolean(job || exception?.jobId || exception?.generatedJobId), generatedJobId: exception?.generatedJobId || job?.id || "",

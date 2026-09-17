@@ -8,7 +8,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
-import { createMaintenancePlan } from "../../server-workspace-maintenance.js";
+import { createMaintenancePlan, generateMaintenanceJob, getMaintenanceOccurrences } from "../../server-workspace-maintenance.js";
+import { changeJobStatus, scheduleJob, updateJobDetails } from "../../server-workspace-jobs.js";
+import { replaceInvoiceForJob, replaceQuoteForJob } from "../../server-workspace-documents.js";
 import { updateCustomer } from "../../server-workspace-customers.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -101,6 +103,215 @@ async function propose(page, date) {
   await sheet.getByRole("button", { name: "Change date", exact: true }).last().click();
   return page.getByRole("dialog", { name: "Change maintenance date", exact: true });
 }
+
+function seedCompletedMaintenanceJob() {
+  return withDb((db) => {
+    const occurrence = getMaintenanceOccurrences(db, "2027-09-01", "2027-09-30").find((entry) => entry.planId === basePlan.id);
+    const { job } = generateMaintenanceJob(db, basePlan.id, { occurrenceKey: occurrence.key, revision: occurrence.revision });
+    replaceQuoteForJob(db, job.id, { issueDate: "2027-09-09", items: [{ id: "quote-line", description: "Preserved quote", qty: 1, rate: 250 }], sentHistory: [] });
+    replaceInvoiceForJob(db, job.id, { issueDate: "2027-09-09", dueDate: "2027-09-16", items: [{ id: "invoice-line", description: "Preserved invoice", qty: 1, rate: 250 }], payments: [{ id: "payment", amount: 50, date: "2027-09-10" }], sentHistory: [] });
+    changeJobStatus(db, job.id, "Completed");
+    db.prepare("UPDATE jobs SET extra_json = json_set(extra_json, '$.completedAt', ?, '$.completionHistory', json(?)) WHERE id = ?")
+      .run("2027-09-10T02:30:00.000Z", JSON.stringify([{ completedAt: "2027-09-10T02:30:00.000Z", note: "Technician completed the visit" }]), job.id);
+    db.prepare("UPDATE maintenance_occurrence_exceptions SET completed_at = ? WHERE job_id = ?").run("2027-09-10T02:30:00.000Z", job.id);
+    return { job: loadWorkspaceStateFromDb(db).jobs.find((entry) => entry.id === job.id), occurrence };
+  });
+}
+
+test("completed maintenance drag confirms, cancels without writes, and corrects past/future dates only", async ({ browser }, info) => {
+  const { job, occurrence } = seedCompletedMaintenanceJob();
+  const planBefore = withDb((db) => db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(basePlan.id));
+  const { page, context } = await open(browser, 1920, 1080);
+  try {
+    const writes = [];
+    page.on("request", (request) => { if (["PATCH", "POST", "PUT", "DELETE"].includes(request.method()) && request.url().includes("/api/")) writes.push(request); });
+    const original = state();
+    const originalClass = await chip(page, "2027-09-09").getAttribute("class");
+    await expect(chip(page, "2027-09-09")).toHaveAttribute("draggable", "true");
+    await chip(page, "2027-09-09").dragTo(day(page, "2027-09-16"));
+    const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText(`Job #${job.jobNumber}`);
+    await expect(confirmation).toContainText("9 Sept 2027");
+    await expect(confirmation).toContainText("16 Sept 2027");
+    await expect(confirmation.getByRole("button", { name: "Change maintenance schedule" })).toHaveCount(0);
+    expect(writes).toHaveLength(0);
+    expect(state()).toEqual(original);
+    await capture(page, info, "completed-maintenance-confirm-desktop");
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(chip(page, "2027-09-09")).toBeVisible();
+    await expect(chip(page, "2027-09-16")).toHaveCount(0);
+    expect(writes).toHaveLength(0); expect(state()).toEqual(original);
+
+    let from = "2027-09-09";
+    for (const to of ["2027-09-16", "2027-08-31", "2027-10-02"]) {
+      await chip(page, from).dragTo(day(page, to));
+      await expect(confirmation).toBeVisible();
+      // A concurrent office edit must not be overwritten by the old UI record.
+      withDb((db) => updateJobDetails(db, job.id, { description: "Concurrent office description" }));
+      const latest = state().jobs.find((entry) => entry.id === job.id);
+      await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
+      await expect(confirmation).toBeHidden();
+      await expect(chip(page, to)).toBeVisible();
+      await expect(chip(page, from)).toHaveCount(0);
+      expect(await chip(page, to).getAttribute("class")).toBe(originalClass);
+      const after = state().jobs.find((entry) => entry.id === job.id);
+      expect({ ...after, scheduledDate: latest.scheduledDate, updatedAt: latest.updatedAt }).toEqual(latest);
+      expect(after.status).toBe("Completed"); expect(after.completedAt).toBe(job.completedAt);
+      expect(withDb((db) => db.prepare("SELECT * FROM maintenance_plans WHERE id = ?").get(basePlan.id))).toEqual(planBefore);
+      expect(writes.at(-1).postDataJSON()).toEqual({ scheduledDate: to, completedMaintenanceCorrection: true, expectedScheduledDate: from });
+      expect(new URL(writes.at(-1).url()).pathname).toBe(`/api/jobs/${job.id}/schedule`);
+      from = to;
+    }
+    expect(writes).toHaveLength(3);
+    const dates = await (await page.request.get(`${url}/api/maintenance-occurrences?from=2027-01-01&to=2028-12-31`)).json();
+    expect(dates.occurrences.filter((entry) => entry.planId === basePlan.id).map((entry) => entry.date)).toEqual(["2027-03-09", "2027-10-02", "2028-03-09", "2028-09-09"]);
+    expect(dates.occurrences.find((entry) => entry.key === occurrence.key).completedAt).toBe(job.completedAt);
+    await page.reload(); await expect(chip(page, "2027-10-02")).toBeVisible();
+    await chip(page, "2027-10-02").click();
+    const details = page.getByRole("dialog", { name: "Scheduled maintenance", exact: true });
+    await expect(details).toContainText("Completed");
+    await details.getByRole("button", { name: "Open Plan", exact: true }).click();
+    await expect(page.getByText("Completed maintenance for 09/09/2027", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Schedule corrected from/)).toHaveCount(3);
+    await page.goto(`${url}/jobs/${job.id}`);
+    await expect(page.locator("body")).toContainText("Concurrent office description");
+  } finally { await context.close(); }
+});
+
+for (const [name, width, height] of [["tablet", 1024, 768], ["phone", 390, 844]]) test(`completed maintenance ${name} date action confirms and preserves completion`, async ({ browser }, info) => {
+  const { job } = seedCompletedMaintenanceJob();
+  const { page, context } = await open(browser, width, height);
+  try {
+    await chip(page, "2027-09-09").click();
+    const sheet = page.getByRole("dialog", { name: "Scheduled maintenance", exact: true });
+    await expect(sheet).toContainText("Completed");
+    await sheet.getByLabel("Maintenance date", { exact: true }).fill("2027-09-16");
+    await sheet.getByRole("button", { name: "Change date", exact: true }).last().click();
+    const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
+    await expect(confirmation).toBeVisible();
+    await capture(page, info, `completed-maintenance-confirm-${name}`);
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(state().jobs.find((entry) => entry.id === job.id)).toEqual(job);
+    await expect(sheet.getByLabel("Maintenance date", { exact: true })).toHaveValue("2027-09-09");
+    await sheet.getByLabel("Maintenance date", { exact: true }).fill("2027-09-16");
+    await sheet.getByRole("button", { name: "Change date", exact: true }).last().click();
+    await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
+    await expect(confirmation).toBeHidden(); await expect(chip(page, "2027-09-16")).toBeVisible();
+    const saved = state().jobs.find((entry) => entry.id === job.id);
+    expect({ ...saved, scheduledDate: job.scheduledDate, updatedAt: job.updatedAt }).toEqual(job);
+  } finally { await context.close(); }
+});
+
+test("completed maintenance failed correction restores the card and leaves records untouched", async ({ browser }) => {
+  seedCompletedMaintenanceJob();
+  const before = state();
+  const { page, context } = await open(browser);
+  try {
+    await page.route("**/api/jobs/*/schedule", (route) => route.fulfill({ status: 409, json: { error: "This job's scheduled date has changed." } }));
+    await chip(page, "2027-09-09").dragTo(day(page, "2027-09-16"));
+    const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
+    await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
+    await expect(confirmation).toBeHidden();
+    await expect(page.getByRole("alert").first()).toContainText("scheduled date has changed");
+    await expect(chip(page, "2027-09-09")).toBeVisible();
+    await expect(chip(page, "2027-09-16")).toHaveCount(0);
+    expect(state()).toEqual(before);
+  } finally { await context.close(); }
+});
+
+test("completed maintenance tablet touch drag keeps completion feedback and confirms after drop", async ({ browser }, info) => {
+  const { job } = seedCompletedMaintenanceJob();
+  const before = state();
+  const { page, context } = await open(browser, 1024, 768);
+  const cdp = await context.newCDPSession(page);
+  const touch = (type, point) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: point ? [{ ...point, id: 1 }] : [] });
+  try {
+    const start = await chip(page, "2027-09-09").boundingBox();
+    const target = await day(page, "2027-09-16").boundingBox();
+    const from = { x: start.x + start.width / 2, y: start.y + start.height / 2 };
+    await touch("touchStart", from);
+    await page.waitForTimeout(220);
+    await touch("touchMove", { x: from.x - 12, y: from.y });
+    await touch("touchMove", { x: target.x + target.width / 2, y: target.y + 15 });
+    await expect(day(page, "2027-09-16")).toHaveAttribute("data-drop-active", "true");
+    await expect(page.locator(".calendar-drag-preview")).toContainText("Completed");
+    await capture(page, info, "completed-maintenance-touch-drag");
+    expect(state()).toEqual(before);
+    await touch("touchEnd");
+    const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
+    await expect(confirmation).toBeVisible(); expect(state()).toEqual(before);
+    await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
+    await expect(confirmation).toBeHidden(); await expect(chip(page, "2027-09-16")).toBeVisible();
+    expect(state().jobs.find((entry) => entry.id === job.id).completedAt).toBe(job.completedAt);
+  } finally { await cdp.detach(); await context.close(); }
+});
+
+test("completed maintenance Day Inspector uses the same confirmation and retains its completed label", async ({ browser }) => {
+  const { job } = seedCompletedMaintenanceJob();
+  const { page, context } = await open(browser, 1920, 1080);
+  try {
+    await day(page, "2027-09-09").locator(".calendar-day-open").click({ position: { x: 3, y: 3 } });
+    const inspector = page.locator("[data-calendar-day-inspector]");
+    const card = inspector.locator("[data-calendar-inspector-maintenance]");
+    await expect(card).toContainText("Completed"); await expect(card).toHaveAttribute("draggable", "true");
+    await card.dragTo(day(page, "2027-09-16"));
+    const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(state().jobs.find((entry) => entry.id === job.id)).toEqual(job);
+    await expect(card).toContainText("Completed");
+    await card.dragTo(day(page, "2027-09-16"));
+    await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
+    await expect(confirmation).toBeHidden(); await expect(chip(page, "2027-09-16")).toBeVisible();
+    await expect(card).toHaveCount(0);
+    await day(page, "2027-09-16").locator(".calendar-day-open").click({ position: { x: 3, y: 3 } });
+    await expect(inspector.locator("[data-calendar-inspector-maintenance]")).toContainText("Completed");
+  } finally { await context.close(); }
+});
+
+test("active generated maintenance keeps the existing recurring date choices and independent job schedule", async ({ browser }) => {
+  const generated = withDb((db) => {
+    const occurrence = getMaintenanceOccurrences(db, "2027-09-01", "2027-09-30").find((entry) => entry.planId === basePlan.id);
+    return generateMaintenanceJob(db, basePlan.id, { occurrenceKey: occurrence.key, revision: occurrence.revision });
+  });
+  const { page, context } = await open(browser);
+  try {
+    await chip(page, "2027-09-09").dragTo(day(page, "2027-09-16"));
+    const choice = page.getByRole("dialog", { name: "Change maintenance date", exact: true });
+    await expect(choice).toBeVisible();
+    await expect(choice.getByRole("button", { name: "Change maintenance schedule", exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true })).toHaveCount(0);
+    await choice.getByRole("button", { name: "This occurrence only", exact: true }).click();
+    await expect(choice).toBeHidden(); await expect(chip(page, "2027-09-16")).toBeVisible();
+    expect(state().jobs.find((entry) => entry.id === generated.job.id)).toEqual(generated.job);
+    expect(savedPlan().recurrence).toEqual(generated.plan.recurrence);
+    expect(savedPlan().nextDueDate).toBe(generated.plan.nextDueDate);
+  } finally { await context.close(); }
+});
+
+test("separately scheduled completed maintenance job also confirms and retains its occurrence link", async ({ browser }) => {
+  const { job, occurrence } = seedCompletedMaintenanceJob();
+  withDb((db) => scheduleJob(db, job.id, "2027-09-12"));
+  const before = state().jobs.find((entry) => entry.id === job.id);
+  const { page, context } = await open(browser);
+  try {
+    const separate = day(page, "2027-09-12").locator(`[data-calendar-job="${job.id}"]`);
+    await separate.dragTo(day(page, "2027-09-16"));
+    const confirmation = page.getByRole("dialog", { name: "Move completed maintenance job?", exact: true });
+    await expect(confirmation).toContainText("12 Sept 2027");
+    await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
+    expect(state().jobs.find((entry) => entry.id === job.id)).toEqual(before);
+    await expect(separate).toBeVisible();
+    await separate.dragTo(day(page, "2027-09-16"));
+    await confirmation.getByRole("button", { name: "Move job", exact: true }).click();
+    await expect(confirmation).toBeHidden(); await expect(chip(page, "2027-09-16")).toBeVisible();
+    await expect(chip(page, "2027-09-09")).toHaveCount(0); await expect(separate).toHaveCount(0);
+    const after = state().jobs.find((entry) => entry.id === job.id);
+    expect({ ...after, scheduledDate: before.scheduledDate, updatedAt: before.updatedAt }).toEqual(before);
+    expect(after.maintenanceOccurrenceKey).toBe(occurrence.key);
+  } finally { await context.close(); }
+});
 
 async function selectRecord(page, label, query, name) {
   await page.getByRole("combobox", { name: label, exact: true }).fill(query);

@@ -3,6 +3,7 @@ import { Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, Us
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import SiteNavigationLink from "@/components/shared/SiteNavigationLink";
+import JobCostingTab from "@/components/jobs/JobCostingTab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +30,7 @@ import {
 import { statuses, statusThemes } from "@/lib/job-status";
 import { jobNavigationDestination } from "@/lib/site-navigation";
 import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
+import { isAddonEnabled } from "@/lib/addons";
 
 const UNASSIGNED_VALUE = "unassigned";
 
@@ -90,12 +92,15 @@ function urgencyClassName(urgency) {
 }
 
 export default function JobDetailsPage({
+  addons,
   backLabel,
   canDeleteJob,
   canEditJob,
   customer,
   customerJobs,
+  fetchWithAuth,
   job,
+  onAddonDisabled,
   onAddNote,
   onAddPhotos,
   onBack,
@@ -182,10 +187,12 @@ export default function JobDetailsPage({
   const canSaveOverview = Boolean(
     !addressPending && overviewDraft.title.trim() && overviewDraft.description.trim() && normalizeSiteAddress(overviewDraft.jobAddress)
   );
+  const showCosting = showCommercialDocuments && isAddonEnabled(addons, "jobCosting");
   const visibleTabs = [
     { value: "overview", label: "Overview" },
     { value: "schedule", label: "Schedule" },
     ...(showCommercialDocuments ? [{ value: "documents", label: "Documents" }] : []),
+    ...(showCosting ? [{ value: "costing", label: "Costing" }] : []),
     { value: "notes", label: "Notes & photos" },
   ];
 
@@ -279,7 +286,7 @@ export default function JobDetailsPage({
           </aside>
 
           <div className="record-major-panel min-w-0 rounded-xl border">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="record-workspace-tabs min-w-0 gap-0">
+            <Tabs value={visibleTabs.some((tab) => tab.value === activeTab) ? activeTab : "overview"} onValueChange={setActiveTab} className="record-workspace-tabs min-w-0 gap-0">
               <div className="record-tab-strip rounded-t-lg bg-[var(--data-view-header-start)] px-panel py-1.5">
                 <TabsList
                   aria-label="Job details sections"
@@ -489,6 +496,10 @@ export default function JobDetailsPage({
                     </WorkspaceSection>
                   </TabsContent>
                 ) : null}
+
+                {showCosting ? <TabsContent value="costing" className="mt-0">
+                  <JobCostingTab key={job.id} jobId={job.id} canEdit={canEditJob} fetchWithAuth={fetchWithAuth} onAddonDisabled={onAddonDisabled} />
+                </TabsContent> : null}
 
                 <TabsContent value="notes" className="mt-0">
                   <WorkspaceSection title="Job notes" description="Add field notes, faults found, and parts needed.">

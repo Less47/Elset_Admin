@@ -38,6 +38,10 @@ export function isInactiveInvoice(invoice) {
     || ["voided", "cancelled", "canceled", "deleted"].some((key) => invoice[key] === true);
 }
 
+export function isQualifyingActualInvoice(record) {
+  return !isInactiveInvoice(record?.metadata) && (record.sentCount > 0 || record.paidCents > 0);
+}
+
 function safeCents(value) {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error("Invoice amount cannot be represented safely in cents.");
   return value;
@@ -47,8 +51,7 @@ export function summarizeInvoiceAccount(customerId, records, { today = invoiceTo
   const invoices = [];
   for (const record of records) {
     // Only actual invoice projections enter this function; never Job/Quote values.
-    if (record.customerId !== customerId || isInactiveInvoice(record.metadata)
-      || !(record.sentCount > 0 || record.paidCents > 0) || !(record.balanceCents > 0)) continue;
+    if (record.customerId !== customerId || !isQualifyingActualInvoice(record) || !(record.balanceCents > 0)) continue;
     const totalCents = safeCents(record.totalCents), paidCents = safeCents(record.paidCents), balanceCents = safeCents(record.balanceCents);
     const dueDate = invoiceDate(record.dueDate), issueDate = invoiceDate(record.issueDate);
     const overdueDays = invoiceOverdueDays(balanceCents, dueDate, today);

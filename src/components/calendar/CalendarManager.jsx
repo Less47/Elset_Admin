@@ -11,8 +11,9 @@ import CalendarSheet from "./CalendarSheet";
 import CalendarBulkReschedule from "./CalendarBulkReschedule";
 import CalendarDayInspector from "./CalendarDayInspector";
 import CalendarMaintenanceItem from "./CalendarMaintenanceItem";
+import CompletedMaintenanceMoveDialog from "./CompletedMaintenanceMoveDialog";
 import MaintenanceDateChoice from "@/components/maintenance/MaintenanceDateChoice";
-import { filterQueueJobs, formatCalendarDate, groupCalendarJobs, isCalendarDate, queueStatuses } from "./calendar-utils";
+import { canMoveMaintenanceOccurrence, filterQueueJobs, formatCalendarDate, groupCalendarJobs, isCalendarDate, isCompletedMaintenanceJob, queueStatuses } from "./calendar-utils";
 import { useCalendarDrag } from "./useCalendarDrag";
 import "./Calendar.css";
 
@@ -32,6 +33,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const [hasMiniColumn, setHasMiniColumn] = useState(false);
   const [maintenanceRange, setMaintenanceRange] = useState({ from: "", to: "", items: [] });
   const [maintenanceMove, setMaintenanceMove] = useState(null);
+  const [completedMove, setCompletedMove] = useState(null);
   const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const [maintenanceRefresh, setMaintenanceRefresh] = useState(0);
   const [maintenanceLoadError, setMaintenanceLoadError] = useState("");
@@ -74,7 +76,11 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
     return () => { current = false; controller.abort(); };
   }, [rangeFrom, rangeTo, onLoadMaintenanceOccurrences, maintenanceRefresh]);
   const occurrences = useMemo(() => maintenanceRange.from === rangeFrom && maintenanceRange.to === rangeTo ? maintenanceRange.items : [], [maintenanceRange, rangeFrom, rangeTo]);
-  const displayedOccurrences = useMemo(() => occurrences.map((entry) => entry.key === maintenanceMove?.occurrence.key ? { ...entry, date: maintenanceMove.date, scheduledDate: maintenanceMove.date } : entry), [occurrences, maintenanceMove]);
+  const displayedOccurrences = useMemo(() => occurrences.map((entry) => {
+    const date = entry.key === maintenanceMove?.occurrence.key ? maintenanceMove.date
+      : completedMove && pending?.jobId === completedMove.jobId && entry.jobId === completedMove.jobId ? completedMove.date : null;
+    return date ? { ...entry, date, scheduledDate: date } : entry;
+  }), [occurrences, maintenanceMove, completedMove, pending]);
   const displayedJobs = useMemo(() => pending ? jobs.map((job) => job.id === pending.jobId ? { ...job, scheduledDate: pending.date } : job) : jobs, [jobs, pending]);
   // Co-located linked work has one chip. A job moved to another day remains an
   // ordinary, independently scheduled job and retains its maintenance label.
@@ -89,12 +95,47 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const scheduleJob = panel?.type === "schedule" ? displayedJobs.find((job) => job.id === panel.jobId) : null;
   const selectedOccurrence = panel?.type === "maintenance" ? displayedOccurrences.find((entry) => entry.key === panel.occurrenceKey) : null;
 
+  const proposeCompletedMove = useCallback((job, date) => {
+    if (!job || savingRef.current || completedMove || maintenanceMove || toDateInputValue(job.scheduledDate) === date) return;
+    if (!isCalendarDate(date)) { setError("Choose a valid calendar date."); return; }
+    setError("");
+    // Keep the original position until confirmation. Cancel needs no rollback.
+    setCompletedMove({ jobId: job.id, jobNumber: job.jobNumber, from: toDateInputValue(job.scheduledDate), date });
+  }, [completedMove, maintenanceMove, toDateInputValue]);
+
   const proposeMaintenanceMove = useCallback((occurrence, date) => {
-    if (savingRef.current || maintenanceMove || occurrence.date === date) return;
+    if (savingRef.current || maintenanceMove || completedMove || occurrence.date === date) return;
     if (!isCalendarDate(date)) { setError("Choose a valid maintenance date."); return; }
+    if (occurrence.jobStatus === "Completed" && occurrence.jobId) {
+      proposeCompletedMove(jobs.find((job) => job.id === occurrence.jobId), date);
+      return;
+    }
     if (occurrence.locked || !occurrence.active) { setError("Historical or completed maintenance cannot be moved."); return; }
     setError(""); setMaintenanceMove({ occurrence, date });
-  }, [maintenanceMove]);
+  }, [maintenanceMove, completedMove, jobs, proposeCompletedMove]);
+
+  async function commitCompletedMove() {
+    if (!completedMove || savingRef.current) return;
+    savingRef.current = true; setMaintenanceBusy(true);
+    setPending({ jobId: completedMove.jobId, date: completedMove.date });
+    let failureMessage = "Unable to correct the completed job's schedule.";
+    try {
+      const saved = await onScheduleJob(completedMove.jobId, completedMove.date, {
+        recordOnly: true, completedMaintenanceCorrection: true, expectedScheduledDate: completedMove.from,
+        onError: (failure) => { failureMessage = failure.message || failureMessage; },
+      });
+      if (!saved) throw new Error(failureMessage);
+      const items = await onLoadMaintenanceOccurrences(rangeFrom, rangeTo);
+      setMaintenanceRange({ from: rangeFrom, to: rangeTo, items });
+      setPanel((current) => ["maintenance", "schedule"].includes(current?.type) ? null : current);
+      setAnnouncement(`Scheduled date corrected for completed Job #${completedMove.jobNumber}.`);
+    } catch (failure) {
+      setError(`${failure.message || failureMessage} Refresh to confirm the current schedule.`);
+      setMaintenanceRefresh((value) => value + 1);
+    } finally {
+      savingRef.current = false; setMaintenanceBusy(false); setPending(null); setCompletedMove(null);
+    }
+  }
 
   async function commitMaintenanceMove(scope) {
     if (!maintenanceMove || savingRef.current) return;
@@ -115,7 +156,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   }
 
   const saveSchedule = useCallback(async (jobId, date) => {
-    if (savingRef.current) return false;
+    if (savingRef.current || completedMove || maintenanceMove) return false;
     const occurrence = occurrences.find((entry) => entry.id === jobId);
     if (occurrence) { proposeMaintenanceMove(occurrence, date); return false; }
     if (date !== "" && !isCalendarDate(date)) {
@@ -124,6 +165,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
     }
     const job = jobs.find((entry) => entry.id === jobId);
     if (!job) return false;
+    if (date && isCompletedMaintenanceJob(job)) { proposeCompletedMove(job, date); return false; }
     setError("");
     if (toDateInputValue(job.scheduledDate) === date) {
       setPanel((current) => current?.type === "schedule" ? (current.fromDay ? { type: "day" } : null) : current);
@@ -154,9 +196,9 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
       savingRef.current = false;
       setPending(null);
     }
-  }, [jobs, onScheduleJob, toDateInputValue, occurrences, proposeMaintenanceMove]);
+  }, [jobs, onScheduleJob, toDateInputValue, occurrences, proposeMaintenanceMove, completedMove, maintenanceMove, proposeCompletedMove]);
 
-  const dragApi = useCalendarDrag({ enabled: !pending && !bulkBusy && !maintenanceMove && !maintenanceBusy, onDrop: saveSchedule });
+  const dragApi = useCalendarDrag({ enabled: !pending && !bulkBusy && !maintenanceMove && !completedMove && !maintenanceBusy, onDrop: saveSchedule });
 
   useEffect(() => {
     if (!bulkNotice?.undo) return;
@@ -356,7 +398,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
         {panel?.type === "jobs" ? <CalendarQueue {...queueProps} inSheet /> : null}
         {selectedOccurrence ? <div className="grid gap-4">
           <CalendarMaintenanceItem occurrence={selectedOccurrence} actions={maintenanceActions} dragApi={dragApi} busy={maintenanceBusy} />
-          {!selectedOccurrence.locked && selectedOccurrence.active ? <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); proposeMaintenanceMove(selectedOccurrence, scheduleDraft); }}>
+          {canMoveMaintenanceOccurrence(selectedOccurrence) ? <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); proposeMaintenanceMove(selectedOccurrence, scheduleDraft); }}>
             <label className="grid gap-2 text-xs font-semibold">Maintenance date<Input type="date" value={scheduleDraft} onChange={(event) => setScheduleDraft(event.target.value)} required disabled={maintenanceBusy} /></label>
             <Button type="submit" disabled={maintenanceBusy || scheduleDraft === selectedOccurrence.date}>Change date</Button>
           </form> : null}
@@ -375,7 +417,11 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
         ) : null}
       </CalendarSheet>
       <MaintenanceDateChoice open={Boolean(maintenanceMove)} from={maintenanceMove?.occurrence.date} to={maintenanceMove?.date} busy={maintenanceBusy} onChoose={commitMaintenanceMove} onCancel={() => { setMaintenanceMove(null); setAnnouncement("Maintenance date unchanged."); }} />
-      {dragApi.drag?.touch ? createPortal(<div className="calendar-drag-preview" style={{ left: Math.min(Math.max(8, dragApi.drag.x + 12), window.innerWidth - 202), top: Math.max(8, dragApi.drag.y - 80) }} aria-hidden="true"><p className="text-xs font-semibold text-foreground">Moving {dragApi.drag.job.kind === "maintenance" ? "maintenance" : `Job #${dragApi.drag.job.jobNumber}`}</p><p className="truncate text-xs text-text-secondary">{dragApi.drag.job.customerName}</p><p className="mt-1 text-xs font-medium text-status-info">{dragApi.drag.target === null ? "Choose a destination" : dragApi.drag.target === "" ? "Remove scheduled date" : `Drop on ${formatCalendarDate(dragApi.drag.target)}`}</p></div>, document.body) : null}
+      <CompletedMaintenanceMoveDialog move={completedMove} busy={maintenanceBusy} onConfirm={commitCompletedMove} onCancel={() => {
+        if (maintenanceBusy) return;
+        setScheduleDraft(completedMove?.from || ""); setCompletedMove(null); setAnnouncement("Completed job date unchanged.");
+      }} />
+      {dragApi.drag?.touch ? createPortal(<div className="calendar-drag-preview" style={{ left: Math.min(Math.max(8, dragApi.drag.x + 12), window.innerWidth - 202), top: Math.max(8, dragApi.drag.y - 80) }} aria-hidden="true"><p className="text-xs font-semibold text-foreground">Moving {dragApi.drag.job.kind === "maintenance" ? "maintenance" : `Job #${dragApi.drag.job.jobNumber}`}</p><p className="truncate text-xs text-text-secondary">{dragApi.drag.job.customerName}</p>{(dragApi.drag.job.jobStatus === "Completed" || dragApi.drag.job.status === "Completed") ? <p className="text-xs text-text-secondary">Completed</p> : null}<p className="mt-1 text-xs font-medium text-status-info">{dragApi.drag.target === null ? "Choose a destination" : dragApi.drag.target === "" ? "Remove scheduled date" : `Drop on ${formatCalendarDate(dragApi.drag.target)}`}</p></div>, document.body) : null}
     </div>
   );
 }

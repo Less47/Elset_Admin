@@ -3,6 +3,14 @@ import { statuses } from "../../lib/job-status.js";
 export const queueStatuses = statuses.filter((status) => status !== "Completed");
 export const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+export function isCompletedMaintenanceJob(job) {
+  return Boolean(job?.maintenancePlanId && job.status === "Completed");
+}
+
+export function canMoveMaintenanceOccurrence(occurrence) {
+  return Boolean((occurrence.jobId && occurrence.jobStatus === "Completed") || (!occurrence.locked && occurrence.active));
+}
+
 export function isCalendarDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
   const [year, month, day] = value.split("-").map(Number);

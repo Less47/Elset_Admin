@@ -612,7 +612,7 @@ test("Invoices create and edit actions keep their origin through refresh and his
         await page.getByRole("button", { name: "Open navigation", exact: true }).click();
       }
       await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Invoices", exact: true }).click();
-      await expect(page).toHaveURL(baseUrl + "/");
+      await expect(page).toHaveURL(baseUrl + "/invoices");
       const row = width < 768 ? page.locator(`[data-mobile-record-card][data-record-id="${NEW_JOB}"]`) : page.locator(".data-grid-row", { hasText: "Job #1200" });
       const exists = Boolean(dbJob(NEW_JOB).invoice);
       await row.getByRole("button", { name: width < 768 ? `${exists ? "Open invoice editor" : "Create invoice"} for Job #1200` : exists ? "Editor" : "Create", exact: true }).click();
@@ -620,7 +620,7 @@ test("Invoices create and edit actions keep their origin through refresh and his
       await save(page, "invoice");
       await page.reload();
       await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
-      await expect(page).toHaveURL(baseUrl + "/");
+      await expect(page).toHaveURL(baseUrl + "/invoices");
       await expect(row).toBeVisible();
       await page.goForward();
       await expect(editor(page)).toHaveAttribute("data-document-mode", "edit");
@@ -628,7 +628,7 @@ test("Invoices create and edit actions keep their origin through refresh and his
       if (width < 1024) await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
       else await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Customers", exact: true }).click();
       await page.getByRole("dialog", { name: "Discard unsaved changes?" }).getByRole("button", { name: "Discard", exact: true }).click();
-      await expect(page).toHaveURL(baseUrl + (width < 1024 ? "/" : "/customers"));
+      await expect(page).toHaveURL(baseUrl + (width < 1024 ? "/invoices" : "/customers"));
       if (width < 1024) await expect(row).toBeVisible();
       else {
         await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();

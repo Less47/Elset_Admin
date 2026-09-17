@@ -6,6 +6,7 @@ import {
 import { insertJobTree } from "./server-workspace-jobs.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { snapshotJobCostEntries, restoreJobCostSnapshot } from "./server-workspace-job-costing.js";
 
 const MAX_IMPORT_CUSTOMERS = 5000;
 const MAX_IMPORT_JOBS = 15000;
@@ -515,8 +516,10 @@ function applyJobPlans(db, plan, state, summary) {
       extra: {},
     };
 
+    const costEntries = snapshotJobCostEntries(db, jobId);
     deleteJobBeforeImport(db, jobId);
     insertJobTree(db, job);
+    restoreJobCostSnapshot(db, jobId, costEntries);
     upsertServiceM8Ref(db, "job", job.id, job.externalRefs);
     countDocumentChanges(summary, job, existingDocuments);
     if (existingJob) summary.jobs.updated += 1;

@@ -113,8 +113,9 @@ export default function MaintenancePlanPage({ route, navigation, actions, data, 
   const status = getMaintenancePlanStatus(plan, data.jobs);
   const activity = [
     ...jobs.map((job) => ({ key: `generated-${job.id}`, date: job.createdAt, text: `Generated Job #${job.jobNumber}` })),
-    ...(plan.occurrenceExceptions || []).filter((entry) => entry.completedAt).map((entry) => ({ key: `completed-${entry.key}`, date: entry.completedAt, text: `Completed maintenance for ${formatDate(entry.overrideDate || entry.snapshot?.date || entry.originalDate)}` })),
-    ...(plan.occurrenceExceptions || []).filter((entry) => entry.overrideDate).map((entry) => ({ key: `moved-${entry.key}`, date: entry.updatedAt, text: `Moved visit: ${formatDate(entry.originalDate)} → ${formatDate(entry.overrideDate)}` })),
+    ...(plan.occurrenceExceptions || []).filter((entry) => entry.completedAt).map((entry) => ({ key: `completed-${entry.key}`, date: entry.completedAt, text: `Completed maintenance for ${formatDate(entry.snapshot?.scheduleCorrectionBaseline?.date || entry.overrideDate || entry.snapshot?.date || entry.originalDate)}` })),
+    ...(plan.occurrenceExceptions || []).map((entry) => ({ ...entry, ...(entry.snapshot?.scheduleCorrectionBaseline || {}) })).filter((entry) => entry.overrideDate).map((entry) => ({ key: `moved-${entry.key}`, date: entry.updatedAt, text: `Moved visit: ${formatDate(entry.originalDate)} → ${formatDate(entry.overrideDate)}` })),
+    ...(plan.occurrenceExceptions || []).flatMap((entry) => (entry.snapshot?.scheduleCorrections || []).map((correction, index) => ({ key: `corrected-${entry.key}-${index}`, date: correction.changedAt, text: `Job #${correction.jobNumber}: Schedule corrected from ${formatDate(correction.from)} to ${formatDate(correction.to)}.` }))),
   ].sort((a, b) => b.date.localeCompare(a.date));
   async function generate() {
     if (saving.current) return;

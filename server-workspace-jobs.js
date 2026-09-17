@@ -3,6 +3,9 @@ import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { siteAddressMetadata } from "./src/lib/site-location.js";
 import { insertInvoiceTree, insertQuoteTree } from "./server-workspace-documents.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { expandMaintenanceOccurrences, isMaintenanceDate } from "./src/lib/maintenance-recurrence.js";
+import { writeMaintenanceException } from "./server-maintenance-occurrence-store.js";
+import { archiveJobCostEntries, restoreJobCostEntries } from "./server-workspace-job-costing.js";
 
 const statusValues = new Set(["To Do", "In Progress", "Completed"]);
 const urgencyValues = new Set(["Low", "Medium", "High"]);
@@ -1166,6 +1169,59 @@ export function scheduleJob(db, jobIdInput, scheduledDateInput) {
   })();
 }
 
+// A completed visit is a scheduling correction, never a recurrence edit.
+export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input) {
+  assertPlainObject(input);
+  const allowed = ["scheduledDate", "expectedScheduledDate", "completedMaintenanceCorrection"];
+  if (Object.keys(input).some((key) => !allowed.includes(key)) || input.completedMaintenanceCorrection !== true) {
+    throw new WorkspaceJobError("Only the completed maintenance job's scheduled date can be corrected.");
+  }
+  if (!isMaintenanceDate(input.scheduledDate)) throw new WorkspaceJobError("Choose a valid calendar date.");
+  const jobId = normalizeId(jobIdInput, "Job ID");
+  return db.transaction(() => {
+    const state = loadWorkspaceStateFromDb(db);
+    const job = state.jobs.find((entry) => entry.id === jobId);
+    if (!job) throw new WorkspaceJobError("Job not found.", 404);
+    if (job.status !== "Completed" || !job.maintenancePlanId) {
+      throw new WorkspaceJobError("This job is no longer completed maintenance. Refresh and try again.", 409);
+    }
+    if (input.expectedScheduledDate !== job.scheduledDate) {
+      throw new WorkspaceJobError("This job's scheduled date has changed. Refresh and try again.", 409);
+    }
+    const plan = state.maintenancePlans.find((entry) => entry.id === job.maintenancePlanId);
+    const prior = plan?.occurrenceExceptions?.find((entry) => entry.jobId === jobId || entry.generatedJobId === jobId);
+    const occurrenceDate = prior?.overrideDate || prior?.snapshot?.date || job.maintenanceDueDate;
+    const occurrence = plan && expandMaintenanceOccurrences({ ...plan, active: true }, occurrenceDate, occurrenceDate, state.jobs)
+      .find((entry) => entry.jobId === jobId);
+    if (!occurrence) throw new WorkspaceJobError("The linked maintenance occurrence is unavailable. Refresh and try again.", 409);
+    if (job.scheduledDate === input.scheduledDate) return job;
+
+    const updatedAt = nowIso();
+    const snapshot = prior?.snapshot || occurrence;
+    // Activity is derived from the exception. Retain its pre-correction labels
+    // and append corrections, rather than rewriting the completion/move entries.
+    writeMaintenanceException(db, plan.id, {
+      ...prior, ...occurrence,
+      overrideDate: input.scheduledDate,
+      completedAt: prior?.completedAt || job.completedAt || occurrence.completedAt,
+      snapshot: {
+        ...snapshot,
+        scheduleCorrectionBaseline: snapshot.scheduleCorrectionBaseline || {
+          date: occurrence.date, overrideDate: prior?.overrideDate || "", updatedAt: prior?.updatedAt || "",
+        },
+        scheduleCorrections: [...(snapshot.scheduleCorrections || []), {
+          from: job.scheduledDate, to: input.scheduledDate, changedAt: updatedAt, jobNumber: job.jobNumber,
+        }],
+      },
+    });
+    updateJobCore(db, jobId, { scheduledDate: input.scheduledDate }, updatedAt);
+    // Do not rewrite the plan, its revision/next due cache, or completion fields.
+    touchWorkspaceInfo(db, updatedAt);
+    runForeignKeyCheck(db);
+    return getJobState(db, jobId);
+  })();
+}
+
 function requireCalendarDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new WorkspaceJobError("Choose a valid calendar date.");
@@ -1325,6 +1381,7 @@ export function deleteJob(db, jobIdInput) {
       INSERT OR REPLACE INTO deleted_records (id, kind, record_id, deleted_at, payload_json, extra_json)
       VALUES (?, 'job', ?, ?, ?, '{}')
     `).run(`deleted-job:${jobId}`, jobId, deletedAt, json(job));
+    archiveJobCostEntries(db, jobId);
     db.prepare("DELETE FROM jobs WHERE id = ?").run(jobId);
     touchWorkspaceInfo(db, deletedAt);
     runForeignKeyCheck(db);
@@ -1386,6 +1443,7 @@ export function restoreDeletedJob(db, jobIdInput) {
     job.updatedAt = nowIso();
     ensureStaffExists(db, job.assignedTechnicianId);
     insertJobTree(db, job);
+    restoreJobCostEntries(db, jobId);
     db.prepare("DELETE FROM deleted_records WHERE kind = 'job' AND record_id = ?").run(jobId);
     touchWorkspaceInfo(db, job.updatedAt);
     runForeignKeyCheck(db);
