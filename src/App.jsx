@@ -277,6 +277,7 @@ export default function App() {
               onBack={workspaceNavigation.closeWorkspace}
               registerNavigationBlocker={workspaceNavigation.registerBlocker}
               onSave={(doc) => workspaceActions.handleSaveDocument(routeSelectedJob.id, workspaceRoute.documentType, doc)}
+              onInvoiceReconciled={(invoice) => setData((current) => ({ ...current, jobs: current.jobs.map((job) => job.id === routeSelectedJob.id ? { ...job, invoice } : job) }))}
               onPreviewDocument={workspaceActions.handlePreviewDocument}
               onSendDocument={workspaceActions.handleSendDocument}
               onOpenSentDocument={() => workspaceActions.handleOpenSentDocumentCopy(routeSelectedJob, workspaceRoute.documentType)}

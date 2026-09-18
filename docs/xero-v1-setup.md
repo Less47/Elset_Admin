@@ -1,5 +1,7 @@
 # Xero V1 setup
 
+For the current payment scope, invoice webhooks, schema 9 → 10 upgrade and payment ownership rules, use the [Xero V2 setup guide](xero-v2-setup.md). This document records V1's invoice-only baseline; its scope list, schema version and V2 boundary describe that earlier version.
+
 Customers connect through **Settings → Add-ons → Xero → Enable → Connect to Xero → Xero authorisation → Connected**. They never generate, enter or configure encryption keys or application credentials. Workspace admins and office users use the existing shared business-settings permission.
 
 Application infrastructure is configured once by the software operator. Developer/deployment instructions below are separate from the customer connection steps. No Fly secrets, deployment, real Xero connection or production data changes were made during implementation. Complete the Demo Company checks before approving production use.

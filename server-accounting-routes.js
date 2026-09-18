@@ -18,6 +18,7 @@ export function createAccountingRouter({ requireAuth, requireRole, env = process
       db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false });
       const service = new AccountingService(db, { providerId: req.params.provider, env, fetchImpl });
       const result = await operation(service, req);
+      if (mutation || callback) req.app.locals.xeroInboxWorker?.wake();
       if (callback) return res.redirect(303, returnUrl("connected"));
       return res.json({ ok: true, result });
     } catch (cause) {
@@ -44,6 +45,7 @@ export function createAccountingRouter({ requireAuth, requireRole, env = process
   const invoiceRoute = "/api/jobs/:id/invoice/integrations/:provider";
   router.get(`${invoiceRoute}/status`, auth, manage, handle((service, req) => service.invoiceStatus(req.params.id)));
   router.post(`${invoiceRoute}/sync`, auth, manage, handle((service, req) => service.syncInvoice(req.params.id), { mutation: true }));
+  router.post(`${invoiceRoute}/sync-payments`, auth, manage, handle((service, req) => service.syncPayments(req.params.id), { mutation: true }));
   return router;
 }
 export function registerAccountingRoutes(app, options = {}) { app.use(createAccountingRouter(options)); }

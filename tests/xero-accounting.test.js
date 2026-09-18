@@ -46,7 +46,7 @@ test("OAuth requests exact granular scopes and binds expiring single-use state t
   const { service, db, mock } = fixture(t);
   const { url } = await service.connect("admin", "session-a"), parsed = new URL(url), state = parsed.searchParams.get("state");
   assert.equal(parsed.origin, "https://login.xero.com");
-  assert.equal(parsed.searchParams.get("scope"), "offline_access accounting.contacts accounting.invoices accounting.settings.read");
+  assert.equal(parsed.searchParams.get("scope"), "offline_access accounting.contacts accounting.invoices accounting.settings.read accounting.payments.read");
   assert.equal(parsed.searchParams.get("redirect_uri"), "http://localhost:3101/api/integrations/xero/callback");
   assert.ok(state.length >= 40);
   const stored = db.prepare("SELECT * FROM integration_oauth_states").get();
@@ -217,7 +217,8 @@ test("manual sync preserves numbering, dates, lines and exact GST totals; shared
   assert.deepEqual([invoice.SubTotal, invoice.TotalTax, invoice.Total], [15.05, 1.51, 16.56]);
   assert.equal(mock.contacts[0].Addresses[0].AddressLine1, "Customer postal address");
   assert.doesNotMatch(JSON.stringify(mock.contacts), /Site A address|Site B address/);
-  assert.equal(JSON.stringify(loadWorkspaceStateFromDb(db)), before);
+  const expected = JSON.parse(before); expected.jobs.find((job) => job.id === "job").invoice.paymentManagement = "xero";
+  assert.deepEqual(JSON.parse(JSON.stringify(loadWorkspaceStateFromDb(db))), expected);
   await service.syncInvoice("job"); assert.equal(writes(mock, "/Invoices").length, 1);
   await addInvoicePayment(db, "job-b", { id: "payment-b", amount: 1, date: "2026-09-17" });
   await service.syncInvoice("job-b"); assert.equal(mock.contacts.length, 1); assert.equal(mock.invoices.length, 2);
@@ -415,7 +416,7 @@ test("version 8 to 9 migration is additive, transactional and runs once", (t) =>
   assert.equal(db.pragma("user_version", { simple: true }), 8);
   assert.equal(db.prepare("SELECT 1 FROM sqlite_master WHERE name='workspace_integrations'").get(), undefined);
   db.exec("DROP TABLE integration_operations"); migrateWorkspaceSchema(db);
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 9); assert.equal(db.pragma("user_version", { simple: true }), 9);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 10); assert.equal(db.pragma("user_version", { simple: true }), 10);
   assert.deepEqual(db.prepare("SELECT * FROM customers").all(), before);
   const identity = db.prepare("SELECT * FROM integration_workspace").get(); migrateWorkspaceSchema(db);
   assert.deepEqual(db.prepare("SELECT * FROM integration_workspace").get(), identity);

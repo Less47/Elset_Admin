@@ -3,7 +3,9 @@ import { digest } from "../server-accounting-crypto.js";
 import process from "node:process";
 import { Buffer } from "node:buffer";
 
-export const XERO_SCOPES = Object.freeze(["offline_access", "accounting.contacts", "accounting.invoices", "accounting.settings.read"]);
+export const XERO_INVOICE_SCOPES = Object.freeze(["offline_access", "accounting.contacts", "accounting.invoices", "accounting.settings.read"]);
+export const XERO_PAYMENT_SCOPE = "accounting.payments.read";
+export const XERO_SCOPES = Object.freeze([...XERO_INVOICE_SCOPES, XERO_PAYMENT_SCOPE]);
 const API = "https://api.xero.com/api.xro/2.0/";
 const IDENTITY = "https://identity.xero.com/connect/";
 const cents = (value) => Math.round(Number(value) * 100);
@@ -24,7 +26,8 @@ export class XeroAccountingProvider {
   constructor({ env = process.env, fetchImpl = fetch } = {}) {
     this.id = "xero";
     this.name = "Xero";
-    this.requiredScopes = XERO_SCOPES;
+    this.requiredScopes = XERO_INVOICE_SCOPES;
+    this.paymentScope = XERO_PAYMENT_SCOPE;
     this.env = env;
     this.fetch = fetchImpl;
   }
@@ -56,6 +59,9 @@ export class XeroAccountingProvider {
       const raw = response.headers.get("retry-after");
       const seconds = /^\d+$/.test(raw || "") ? Number(raw) : Math.ceil((Date.parse(raw) - Date.now()) / 1000);
       throw new AccountingError("RATE_LIMITED", "Xero is limiting requests. Retry after the displayed waiting period.", 429, Number.isFinite(seconds) ? Math.max(1, seconds) : 60);
+    }
+    if (response.status === 403 && (String(response.headers.get("www-authenticate") || "").includes("insufficient_scope") || body?.error === "insufficient_scope")) {
+      throw new AccountingError("INSUFFICIENT_SCOPE", "Additional Xero permission is required.", 409);
     }
     if (response.status === 401 || response.status === 403 || (token && body?.error === "invalid_grant")) {
       throw new AccountingError("NEEDS_REAUTHORIZATION", "Xero access needs to be renewed. Reconnect Xero from Settings → Add-ons and approve the required permissions.", 409);
@@ -144,6 +150,18 @@ export class XeroAccountingProvider {
     const body = await this.request(context, `Invoices/${encodeURIComponent(id)}`);
     if (!body?.Invoices?.[0] || body.Invoices[0].InvoiceID !== id) throw new AccountingError("EXTERNAL_NOT_FOUND", "The mapped Xero invoice could not be found.", 409);
     return body.Invoices[0];
+  }
+  async getPayment(context, id) {
+    let body;
+    try { body = await this.request(context, `Payments/${encodeURIComponent(id)}`); }
+    catch (error) {
+      if (error.code === "INSUFFICIENT_SCOPE") throw new AccountingError("PAYMENT_PERMISSION_REQUIRED", "Xero needs additional permission to sync payments.", 409);
+      throw error;
+    }
+    const payment = body?.Payments?.[0];
+    if (!payment || payment.PaymentID !== id) throw new AccountingError("PAYMENT_STATE_CONFLICT", "Xero payment details are incomplete. Review the invoice and sync again.", 409);
+    return { id: payment.PaymentID, invoiceId: payment.Invoice?.InvoiceID, amountCents: cents(payment.Amount),
+      date: day(payment.DateString || payment.Date), status: payment.Status, updatedAt: String(payment.UpdatedDateUTC || "") };
   }
   describeInvoice(record) {
     return { id: record.InvoiceID, number: record.InvoiceNumber, fingerprint: digest(JSON.stringify(comparable(record))),

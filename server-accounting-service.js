@@ -5,6 +5,8 @@ import { accountingKey, decryptCredential, digest, encryptCredential } from "./s
 import { getAccountingProvider } from "./server-accounting-providers.js";
 import { readAccountingInvoice, workspaceAccountingModel } from "./server-accounting-workspace.js";
 import { getWorkspaceAddons, requireWorkspaceAddon } from "./server-workspace-addons.js";
+import { paymentSyncStatus, reconcileInvoicePayments } from "./server-accounting-payments.js";
+import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 
 export class AccountingService {
   constructor(db, { providerId = "xero", env = process.env, fetchImpl, provider } = {}) {
@@ -25,7 +27,8 @@ export class AccountingService {
       lastSuccessAt: row?.last_success_at || null, lastErrorAt: row?.last_error_at || null,
       error: customerAccountingMessage(row?.safe_error_message || ""), retryAt: row?.retry_after || 0,
       serverConfigured: !setupMessage, setupMessage, taxTreatments: workspaceAccountingModel.taxTreatments,
-      syncBehaviour: "Manual" };
+      paymentSync: row?.status !== "CONNECTED" ? "NOT_CONNECTED" : JSON.parse(row.granted_scopes).includes(this.provider.paymentScope) ? "CONNECTED" : "PAYMENT_PERMISSION_REQUIRED",
+      syncBehaviour: "Manual invoices; webhook and manual payment reconciliation" };
   }
   async work(action, { allowDisabled = false } = {}) {
     if (!allowDisabled) requireWorkspaceAddon(this.db, this.provider.id);
@@ -95,7 +98,9 @@ export class AccountingService {
       this.store.update({ organisations_json: JSON.stringify(organisations) });
       if (!organisations.length) throw new AccountingError("NO_ORGANISATION", "No eligible Xero organisation was returned. Reconnect and select an organisation.", 409);
       const row = this.store.integration();
-      if (organisations.length === 1 && (!row.external_tenant_id || row.external_tenant_id === organisations[0].id)) this.selectOrganisation(organisations[0]);
+      const previousOrganisation = organisations.find((organisation) => organisation.id === row.external_tenant_id);
+      if (previousOrganisation) this.selectOrganisation(previousOrganisation);
+      else if (organisations.length === 1 && !row.external_tenant_id) this.selectOrganisation(organisations[0]);
       return this.status();
     });
   }
@@ -176,7 +181,8 @@ export class AccountingService {
     const mapping = this.store.mapping(tenant, "invoice", invoice.id), latest = this.store.latest(tenant, "invoice", invoice.id);
     const locked = this.store.isLocked();
     const status = latest?.status === "SYNCING" && !locked ? "FAILED" : latest?.status || "NOT_SYNCED";
-    return { connection, eligible: invoice.eligible, reason: invoice.reason, status,
+    return { connection, eligible: invoice.eligible, reason: invoice.reason, status, paymentSync: paymentSyncStatus(this, invoice.id),
+      invoice: loadWorkspaceStateFromDb(this.db).jobs.find((job) => job.id === jobId).invoice,
       externalId: mapping?.external_entity_id || "", externalReference: mapping?.external_reference || "",
       lastSyncedAt: this.db.prepare("SELECT created_at FROM integration_sync_log WHERE workspace_id=? AND provider=? AND external_tenant_id=? AND entity_type='invoice' AND entity_id=? AND status='SYNCED' ORDER BY id DESC LIMIT 1")
         .get(this.store.workspaceId, this.provider.id, tenant, invoice.id)?.created_at || null,
@@ -246,4 +252,5 @@ export class AccountingService {
       }
     });
   }
+  syncPayments(jobId, options) { return reconcileInvoicePayments(this, jobId, options); }
 }
