@@ -10,6 +10,7 @@ import { DocumentEmailError, submitDocumentEmail } from "./server-document-email
 import { documentSendErrorMessage } from "./src/lib/document-send-status.js";
 import {
   auth,
+  authorizeAccountingOAuthInitiator,
   getAuthBackupUsers,
   getManagedUserAccounts,
   getRequestAuthSession,
@@ -337,7 +338,7 @@ export function createServerApp({ accountingFetch } = {}) {
   registerSettingsRoutes(app, { requireAuth, requireRole });
   registerAddonRoutes(app, { requireAuth, requireRole });
   registerJobCostingRoutes(app, { requireAuth, requireRole });
-  registerAccountingRoutes(app, { requireAuth, requireRole, fetchImpl: accountingFetch });
+  registerAccountingRoutes(app, { requireAuth, requireRole, getOptionalAuthSession: getRequestAuthSession, authorizeOAuthInitiator: authorizeAccountingOAuthInitiator, fetchImpl: accountingFetch });
   app.use(createWorkspaceLogoRouter({ requireAuth, requireRole }));
   app.use(createUserPreferencesRouter({ requireAuth }));
   registerServiceM8ImportRoutes(app, {
