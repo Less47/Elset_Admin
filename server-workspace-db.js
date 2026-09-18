@@ -4,12 +4,13 @@ import Database from "better-sqlite3";
 import { fileURLToPath } from "url";
 import { assertWorkspaceWritable } from "./server-workspace-restore-lock.js";
 import { accountingSchemaSql } from "./server-accounting-schema.js";
+import { accountingPaymentSchemaSql } from "./server-accounting-payment-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 9;
+export const WORKSPACE_SCHEMA_VERSION = 10;
 
 const migrations = [
   {
@@ -526,6 +527,7 @@ const migrations = [
     `,
   },
   { version: 9, name: "provider-neutral-accounting-integrations", sql: accountingSchemaSql },
+  { version: 10, name: "accounting-payment-reconciliation", sql: accountingPaymentSchemaSql },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -569,6 +571,7 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 10) db.prepare("SELECT source FROM payments LIMIT 0").all();
   if (version >= 7) db.prepare("SELECT service_board_note FROM jobs LIMIT 0").all();
   const objects = new Set(db.prepare("SELECT type || ':' || name AS object FROM sqlite_schema").all().map((row) => row.object));
   for (const migration of migrations.filter((entry) => entry.version <= version)) {

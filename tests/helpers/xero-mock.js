@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 // Synthetic HTTP boundary: never forwards requests to Xero or another network.
 export function createXeroMock() {
-  const mock = { calls: [], contacts: [], invoices: [], refreshes: 0, failNext: null, loseNextInvoiceResponse: false,
+  const mock = { calls: [], contacts: [], invoices: [], payments: [], scopes: "offline_access accounting.contacts accounting.invoices accounting.settings.read accounting.payments.read", refreshes: 0, failNext: null, loseNextInvoiceResponse: false,
     organisations: [{ id: "connection-demo", tenantId: "tenant-demo", tenantName: "Demo Company (AU)", tenantType: "ORGANISATION" }],
     accounts: [{ AccountID: "sales-id", Code: "410", Name: "Service sales", Type: "REVENUE", Status: "ACTIVE" }, { AccountID: "bank-id", Code: "090", Name: "Bank", Type: "BANK", Status: "ACTIVE" }],
     taxRates: [{ TaxType: "OUTPUT", Name: "GST on Income", EffectiveRate: 10, CanApplyToRevenue: true, Status: "ACTIVE" }, { TaxType: "EXEMPTOUTPUT", Name: "GST Free Income", EffectiveRate: 0, CanApplyToRevenue: true, Status: "ACTIVE" }, { TaxType: "INPUT", Name: "Expense GST", EffectiveRate: 10, CanApplyToRevenue: false, Status: "ACTIVE" }] };
@@ -21,7 +21,7 @@ export function createXeroMock() {
       const input = new URLSearchParams(body);
       if (input.get("grant_type") === "refresh_token") mock.refreshes++;
       return json({ access_token: `fixture-access-${mock.refreshes}`, refresh_token: `fixture-refresh-${mock.refreshes}`, expires_in: 1800,
-        scope: "offline_access accounting.contacts accounting.invoices accounting.settings.read" });
+        scope: mock.scopes });
     }
     if (url.pathname === "/connections") return json(mock.organisations);
     if (url.pathname.startsWith("/connections/") && method === "DELETE") return new Response(null, { status: 204 });
@@ -31,6 +31,7 @@ export function createXeroMock() {
     if (endpoint === "Organisation") return json({ Organisations: [{ OrganisationID: options.headers["xero-tenant-id"], Name: "Demo Company (AU)", BaseCurrency: "AUD" }] });
     if (endpoint === "Accounts") return json({ Accounts: mock.accounts });
     if (endpoint === "TaxRates") return json({ TaxRates: mock.taxRates });
+    if (endpoint.startsWith("Payments/") && method === "GET") return json({ Payments: mock.payments.filter((payment) => payment.PaymentID === endpoint.split("/")[1]) });
     if (endpoint.startsWith("Contacts")) {
       if (method === "GET") {
         const id = endpoint.split("/")[1];
@@ -51,7 +52,7 @@ export function createXeroMock() {
       if (!id && mock.invoices.some((item) => item.InvoiceNumber === data.InvoiceNumber)) return json({ error: "number already exists" }, 400);
       const subtotal = data.LineItems.reduce((sum, item) => sum + Math.round(item.LineAmount * 100), 0) / 100;
       const tax = data.LineItems.reduce((sum, item) => sum + Math.round(item.TaxAmount * 100), 0) / 100;
-      const record = { ...data, InvoiceID: id || crypto.randomUUID(), SubTotal: subtotal, TotalTax: tax, Total: Math.round((subtotal + tax) * 100) / 100, AmountPaid: 0, AmountCredited: 0 };
+      const record = { ...data, InvoiceID: id || crypto.randomUUID(), SubTotal: subtotal, TotalTax: tax, Total: Math.round((subtotal + tax) * 100) / 100, AmountPaid: 0, AmountDue: Math.round((subtotal + tax) * 100) / 100, Payments: [], AmountCredited: 0 };
       if (id) mock.invoices[mock.invoices.findIndex((item) => item.InvoiceID === id)] = record;
       else mock.invoices.push(record);
       if (mock.loseNextInvoiceResponse) { mock.loseNextInvoiceResponse = false; throw new Error("Response lost after accepted write"); }

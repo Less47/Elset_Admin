@@ -9,6 +9,7 @@ await ensureAuthReady();
 const app = createServerApp();
 
 app.listen(port, () => {
+  app.locals.xeroInboxWorker?.start();
   console.log(`Elset quote API listening on http://localhost:${port}`);
   if (frontendUrl) {
     console.log(`Open the app at ${frontendUrl}`);

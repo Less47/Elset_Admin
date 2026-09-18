@@ -41,6 +41,7 @@ import { registerSettingsRoutes } from "./server-settings-routes.js";
 import { registerAddonRoutes } from "./server-addon-routes.js";
 import { registerJobCostingRoutes } from "./server-job-costing-routes.js";
 import { registerAccountingRoutes } from "./server-accounting-routes.js";
+import { registerXeroWebhook } from "./server-xero-webhooks.js";
 import { createMapLocationsRouter } from "./server-map-locations-routes.js";
 import { createWorkspaceLogoRouter } from "./server-workspace-logo-routes.js";
 import { createUserPreferencesRouter } from "./server-user-preferences-routes.js";
@@ -279,6 +280,7 @@ export function createServerApp({ accountingFetch } = {}) {
   app.post("/api/quotes/send", ...documentMiddleware, sendDocumentEmail);
   app.post("/api/documents/send", ...documentMiddleware, sendDocumentEmail);
 
+  registerXeroWebhook(app, { fetchImpl: accountingFetch });
   app.use("/api/admin/workspace-restore", express.json({ limit: MAX_SQLITE_BACKUP_PAYLOAD_BYTES }));
   app.use(express.json({ limit: "15mb" }));
   app.use(createMapLocationsRouter({

@@ -56,6 +56,10 @@ export default function XeroSettings({ enabled, available, fetchWithAuth }) {
         {status && status.status !== "DISCONNECTED" ? <Button size="sm" variant="outline" disabled={disabled} onClick={() => setConfirm("disconnect")}>Disconnect</Button> : null}
       </div>
     </div>
+    {enabled && connected ? <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <p>Invoice sync: Available · Payment synchronisation: {status.paymentSync === "CONNECTED" ? "Connected" : "Additional Xero permission required"}</p>
+      {status.paymentSync === "PAYMENT_PERMISSION_REQUIRED" ? <Button size="sm" variant="outline" disabled={disabled} onClick={() => void run("connect", "POST", {})}>Update Xero Permissions</Button> : null}
+    </div> : null}
     {enabled && status?.serverConfigured === false ? <p className="text-sm text-text-secondary">Xero integration is temporarily unavailable. Please contact support.</p> : null}
     {enabled && status?.organisations?.length > 0 ? <div className="flex flex-wrap items-end gap-2">
       <div className="min-w-0 flex-1 space-y-1"><Label htmlFor="xero-organisation">Connected organisation</Label><select id="xero-organisation" className={selectClass} value={tenantId} disabled={disabled} onChange={(event) => setTenantId(event.target.value)}>
@@ -73,7 +77,7 @@ export default function XeroSettings({ enabled, available, fetchWithAuth }) {
           <option value="" disabled>Select matching tax rate</option>{options.taxRates.filter((tax) => tax.rate === treatment.rate).map((tax) => <option key={tax.id} value={tax.id}>{tax.name} ({tax.rate}%)</option>)}
         </select></div>)}
       </div>
-      <p className="text-xs text-text-secondary">Invoice sync: Manual. This workspace currently invoices in AUD with 10% GST on all lines. Payments are not synced.</p>
+      <p className="text-xs text-text-secondary">Invoice sync is manual. Xero manages payments on mapped invoices. This workspace invoices in AUD with 10% GST on all lines.</p>
       <Button type="submit" size="sm" disabled={disabled}>Save Xero configuration</Button>
     </form> : null}
     {status?.lastSuccessAt ? <p className="text-xs text-text-secondary">Last successful sync: {new Date(status.lastSuccessAt).toLocaleString()}</p> : null}

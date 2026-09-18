@@ -14,7 +14,7 @@ import { themePresets } from "../../src/lib/theme-presets.js";
 import crypto from "node:crypto";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const screenshots = path.join(root, "test-results/xero-v1");
+const screenshots = path.join(root, "test-results/xero-v2");
 const password = "Costing-fixture-login-123";
 let dataDir, baseUrl, server, serverOutput = "";
 const sessions = {};
@@ -55,7 +55,7 @@ test.beforeAll(async ({ browser }) => {
     ELSET_DATA_DIR: dataDir, ELSET_AUTH_DB_PATH: path.join(dataDir, "auth.db"),
     ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"), ELSET_WORKSPACE_STORAGE: "sqlite",
     BETTER_AUTH_URL: baseUrl, ELSET_FRONTEND_URL: baseUrl, ELSET_API_PORT: String(port), PORT: String(port),
-    ELSET_TEST_XERO: "1", XERO_CLIENT_ID: "fixture-client", XERO_CLIENT_SECRET: "fixture-secret", XERO_REDIRECT_URI: `http://localhost:${port}/api/integrations/xero/callback`, ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex"), SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "" };
+    ELSET_TEST_XERO: "1", XERO_WEBHOOK_KEY: "xero-e2e-signature-only", XERO_CLIENT_ID: "fixture-client", XERO_CLIENT_SECRET: "fixture-secret", XERO_REDIRECT_URI: `http://localhost:${port}/api/integrations/xero/callback`, ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex"), SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "" };
   const seed = spawnSync(process.execPath, ["--input-type=module", "-e", `
     const { auth, ensureAuthReady } = await import(${JSON.stringify(pathToFileURL(path.join(root, "server-auth.js")).href)});
     await ensureAuthReady(); const context = await auth.$context;
@@ -87,7 +87,7 @@ test.beforeAll(async ({ browser }) => {
 test.beforeEach(async ({ request }) => {
   await request.post(`${baseUrl}/__xero-fixture`, { data: { reset: true } });
   withDb((db) => {
-  for (const table of ["integration_operations", "integration_locks", "integration_oauth_states", "integration_sync_log", "integration_entity_mappings", "workspace_integrations"]) db.prepare(`DELETE FROM ${table}`).run();
+  for (const table of ["integration_webhook_events", "integration_external_payments", "integration_invoice_payment_sync", "integration_operations", "integration_locks", "integration_oauth_states", "integration_sync_log", "integration_entity_mappings", "workspace_integrations"]) db.prepare(`DELETE FROM ${table}`).run();
   db.prepare("DELETE FROM jobs").run();
   for (const job of normalizeStoredData(fixture()).jobs) insertJobTree(db, job);
   db.prepare("INSERT INTO settings(key,value_json,updated_at) VALUES('addons',?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at")
@@ -132,7 +132,10 @@ async function connectApi(context) {
 }
 async function capture(page, info, name, locator) {
   const screenshot = path.join(screenshots, `${name}.png`);
-  if (locator) await locator.screenshot({ path: screenshot, animations: "disabled" });
+  if (locator) {
+    await locator.evaluate((element) => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
+    await locator.screenshot({ path: screenshot, animations: "disabled" });
+  }
   else await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" });
   await info.attach(name, { path: screenshot, contentType: "image/png" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
@@ -247,7 +250,7 @@ test("invoice controls follow enablement and eligibility; lost-response retry re
     await expect(card(page).getByRole("status")).toHaveText("Synced");
     const remote = await (await context.request.post(`${baseUrl}/__xero-fixture`, { data: {} })).json();
     expect(remote.invoices).toHaveLength(1); expect(remote.contacts).toHaveLength(1);
-    expect(withDb(loadWorkspaceStateFromDb).jobs.find((job) => job.id === "costing-job")).toEqual(originalJob);
+    expect(withDb(loadWorkspaceStateFromDb).jobs.find((job) => job.id === "costing-job")).toEqual({ ...originalJob, invoice: { ...originalJob.invoice, paymentManagement: "xero" } });
     await context.request.patch(`${baseUrl}/api/settings/addons`, { data: { xero: false } });
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(card(page)).toHaveCount(0);
@@ -318,18 +321,121 @@ test("office users share the connection, sync is disabled while saving, and fail
   } finally { release?.(); await admin.context.close(); await office.context.close(); }
 });
 
+test("payment permissions update through OAuth preserves tenant, mappings and configuration", async ({ browser }) => {
+  const { context, page } = await open(browser);
+  try {
+    await connectApi(context);
+    await page.goto(`${baseUrl}/jobs/other-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to Xero" }).click();
+    await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const before = withDb((db) => ({ mapping: db.prepare("SELECT * FROM integration_entity_mappings ORDER BY id").all(), config: db.prepare("SELECT config_json,external_tenant_id FROM workspace_integrations").get() }));
+    withDb((db) => db.prepare("UPDATE workspace_integrations SET granted_scopes=?").run(JSON.stringify(["offline_access", "accounting.contacts", "accounting.invoices", "accounting.settings.read"])));
+    await page.goto(`${baseUrl}/settings?accounting=xero`);
+    const settings = page.getByLabel("Xero connection", { exact: true });
+    await expect(settings).toContainText("Additional Xero permission required");
+    await page.route("https://login.xero.com/**", (route) => {
+      const url = new URL(route.request().url());
+      expect(url.searchParams.get("scope")).toContain("accounting.payments.read");
+      expect(url.searchParams.get("scope")).not.toMatch(/accounting\.transactions|accounting\.payments(?:\s|$)/);
+      return route.fulfill({ contentType: "text/html", body: `<a href="${baseUrl}/api/integrations/xero/callback?state=${url.searchParams.get("state")}&code=fixture">Approve payments</a>` });
+    });
+    await settings.getByRole("button", { name: "Update Xero Permissions", exact: true }).click();
+    await page.getByRole("link", { name: "Approve payments" }).click();
+    await expect(settings).toContainText("Payment synchronisation: Connected");
+    expect(withDb((db) => ({ mapping: db.prepare("SELECT * FROM integration_entity_mappings ORDER BY id").all(), config: db.prepare("SELECT config_json,external_tenant_id FROM workspace_integrations").get() }))).toEqual(before);
+  } finally { await context.close(); }
+});
+
+test("partial, full, reversed and conflicting Xero payments update invoice and customer account", async ({ browser }, info) => {
+  const { context, page } = await open(browser, { width: 390, preset: themePresets.find((preset) => preset.id === "midnight-signal") });
+  try {
+    await connectApi(context);
+    withDb((db) => db.prepare("UPDATE invoice_line_items SET rate_cents=100000 WHERE invoice_id=(SELECT id FROM invoices WHERE job_id='other-job')").run());
+    await page.goto(`${baseUrl}/jobs/other-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to Xero" }).click();
+    await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const balance = page.locator(".document-detail").filter({ has: page.getByText("Balance", { exact: true }) });
+    for (const [entries, expected] of [[[["one", 500]], "$600.00"], [[["one", 500], ["two", 600]], "$0.00"], [[["one", 500, "DELETED"], ["two", 600]], "$500.00"]]) {
+      await context.request.post(`${baseUrl}/__xero-fixture`, { data: { payments: entries } });
+      await card(page).getByRole("button", { name: "Sync from Xero" }).click();
+      await expect(balance).toContainText(expected);
+      if (expected === "$0.00") await expect(page.locator(".document-detail").filter({ has: page.getByText("Status", { exact: true }) })).toContainText("Paid");
+      await expect(card(page)).toContainText("Payment sync: Up to date");
+      const customerId = withDb((db) => db.prepare("SELECT customer_id FROM jobs WHERE id='other-job'").get().customer_id);
+      const account = await (await context.request.get(`${baseUrl}/api/customers/${customerId}/account-summary`)).json();
+      if (expected === "$0.00") expect(account.invoices.some((invoice) => invoice.jobId === "other-job")).toBe(false);
+      else expect(account.invoices.find((invoice) => invoice.jobId === "other-job").balanceCents).toBe(expected === "$600.00" ? 60000 : 50000);
+    }
+    const count = withDb((db) => db.prepare("SELECT count(*) n FROM integration_sync_log WHERE entity_type='invoice-payment'").get().n);
+    await card(page).getByRole("button", { name: "Sync from Xero" }).click();
+    await expect(card(page).getByRole("button", { name: "Sync from Xero" })).toBeEnabled();
+    expect(withDb((db) => db.prepare("SELECT count(*) n FROM integration_sync_log WHERE entity_type='invoice-payment'").get().n)).toBe(count);
+    await context.request.post(`${baseUrl}/__xero-fixture`, { data: { invoicePatch: { Status: "VOIDED" } } });
+    await card(page).getByRole("button", { name: "Sync from Xero" }).click();
+    await expect(card(page)).toContainText("Payment sync: Review required");
+    await expect(balance).toContainText("$500.00");
+    await capture(page, info, "midnight-payment-review-mobile", card(page));
+    await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to Xero" }).click();
+    await expect(card(page).getByRole("status")).toHaveText("Synced");
+    await card(page).getByRole("button", { name: "Sync from Xero" }).click();
+    await expect(card(page)).toContainText("Existing manual payments require accounting review");
+    await expect(page.locator(".document-payment")).toContainText("Historical manual payment");
+  } finally { await context.close(); }
+});
+
+test("actual server preserves raw webhook bytes, refreshes clean invoices and protects unsaved drafts", async ({ browser }) => {
+  const { context, page } = await open(browser);
+  try {
+    await connectApi(context); await page.goto(`${baseUrl}/jobs/other-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to Xero" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const mock = await (await context.request.post(`${baseUrl}/__xero-fixture`, { data: { payments: [["webhook-payment", 500]] } })).json();
+    const raw = JSON.stringify({ events: [{ eventType: "UPDATE", eventCategory: "INVOICE", resourceId: mock.invoices[0].InvoiceID, tenantId: "tenant-demo", tenantType: "ORGANISATION", eventDateUtc: "2026-09-18T00:00:00Z" }], firstEventSequence: 1, lastEventSequence: 1, entropy: "demo" }, null, 3);
+    const signature = crypto.createHmac("sha256", "xero-e2e-signature-only").update(raw).digest("base64");
+    const response = await fetch(`${baseUrl}/api/integrations/xero/webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-xero-signature": signature }, body: raw });
+    expect(response.status).toBe(200); expect(response.headers.get("set-cookie")).toBeNull();
+    await expect.poll(() => withDb((db) => db.prepare("SELECT status FROM integration_webhook_events").get().status)).toBe("PROCESSED");
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.locator(".document-payment")).toContainText("Xero payment");
+    await expect(card(page)).toContainText("Payment sync: Up to date");
+    await page.getByLabel("Item 1 rate", { exact: true }).fill("99001");
+    await context.request.post(`${baseUrl}/__xero-fixture`, { data: { payments: [["webhook-payment", 700]] } });
+    const second = JSON.stringify({ ...JSON.parse(raw), firstEventSequence: 2, lastEventSequence: 2 });
+    const secondSignature = crypto.createHmac("sha256", "xero-e2e-signature-only").update(second).digest("base64");
+    expect((await fetch(`${baseUrl}/api/integrations/xero/webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-xero-signature": secondSignature }, body: second })).status).toBe(200);
+    await expect.poll(() => withDb((db) => db.prepare("SELECT count(*) n FROM integration_webhook_events WHERE status='PROCESSED'").get().n)).toBe(2);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(card(page).getByRole("button", { name: "Sync from Xero" })).toBeDisabled();
+    await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("99001");
+    await expect(page.locator(".document-payment")).toContainText("$500.00");
+    await page.getByLabel("Item 1 rate", { exact: true }).fill("99000");
+    await expect(card(page).getByRole("button", { name: "Sync from Xero" })).toBeEnabled();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.locator(".document-payment")).toContainText("$700.00");
+  } finally { await context.close(); }
+});
+
 for (const width of [390, 820, 1440]) for (const preset of themePresets) {
-  test(`${preset.label}: Xero settings and invoice card fit ${width}px`, async ({ browser }, info) => {
+  test(`${preset.label}: Xero settings and payment reconciliation fit ${width}px`, async ({ browser }, info) => {
     const { context, page } = await open(browser, { width, preset });
     try {
       await connectApi(context); await page.reload();
       await page.getByRole("button", { name: "Configure", exact: true }).click();
       await expect(page.getByLabel("Sales account", { exact: true })).toHaveValue("sales-id");
       await capture(page, info, `${preset.id}-settings-${width}`, page.locator('[data-addon="xero"]'));
-      await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
+      withDb((db) => db.prepare("UPDATE invoice_line_items SET rate_cents=100000 WHERE invoice_id=(SELECT id FROM invoices WHERE job_id='other-job')").run());
+      await page.goto(`${baseUrl}/jobs/other-job/invoice`);
       await card(page).getByRole("button", { name: "Send to Xero" }).click();
       await expect(card(page).getByRole("status")).toHaveText("Synced");
+      await expect(page.getByRole("button", { name: "Add Payment", exact: true })).toHaveCount(0);
+      await context.request.post(`${baseUrl}/__xero-fixture`, { data: { payments: [["payment-one", 500]] } });
+      await card(page).getByRole("button", { name: "Sync from Xero", exact: true }).click();
+      await expect(card(page)).toContainText("Payment sync: Up to date");
+      await expect(page.locator(".document-payment")).toContainText("Xero payment");
+      await expect(page.locator(".document-payment input, .document-payment button")).toHaveCount(0);
+      await expect(page.locator(".document-detail").filter({ has: page.getByText("Balance", { exact: true }) })).toContainText("$600.00");
       await capture(page, info, `${preset.id}-invoice-${width}`, card(page));
+      await capture(page, info, `${preset.id}-payments-${width}`, page.locator('section[aria-labelledby="document-payments-title"]'));
     } finally { await context.close(); }
   });
 }

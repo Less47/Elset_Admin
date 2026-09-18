@@ -9,6 +9,7 @@ import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 import { invoiceDeletionRestriction, invoiceHasBeenSent } from "./src/lib/invoice-deletion.js";
 import { buildDocumentReference } from "./src/lib/quote-template.js";
 import { invoiceStatusFromAmounts } from "./src/lib/invoice-account.js";
+import { assertLocalPaymentAllowed } from "./server-accounting-payment-policy.js";
 
 const QUANTITY_SCALE = 1_000_000;
 
@@ -42,9 +43,10 @@ const documentKnownKeys = new Set([
   "status",
   "paymentStatus",
   "paidAt",
+  "paymentManagement",
 ]);
 const lineItemKnownKeys = new Set(["id", "description", "qty", "quantity", "rate", "unitPrice", "total"]);
-const paymentKnownKeys = new Set(["id", "amount", "date", "paidAt", "method", "reference", "notes", "createdAt"]);
+const paymentKnownKeys = new Set(["id", "amount", "date", "paidAt", "method", "reference", "notes", "createdAt", "source"]);
 const historyKnownKeys = new Set([
   "id",
   "sentAt",
@@ -572,6 +574,9 @@ function writeInvoiceTree(
   insertLineItems(db, "invoice_line_items", "invoice_id", invoiceId, lineItems);
 
   if (includePayments) {
+    if (input.payments?.length || db.prepare("SELECT 1 FROM payments WHERE invoice_id=? LIMIT 1").get(invoiceId)) {
+      assertLocalPaymentAllowed(db, invoiceId);
+    }
     db.prepare("DELETE FROM payments WHERE invoice_id = ?").run(invoiceId);
     const paymentStatement = db.prepare(`
       INSERT INTO payments (id, invoice_id, amount_cents, date, method, reference, notes, created_at, extra_json)
@@ -761,6 +766,7 @@ export function addInvoicePayment(db, jobIdInput, input) {
     ensureJobExists(db, jobId);
     const invoiceRow = getInvoiceRowForJob(db, jobId);
     if (!invoiceRow) throw new WorkspaceDocumentError("Invoice not found.", 404);
+    assertLocalPaymentAllowed(db, invoiceRow.id);
     const paymentId = normalizeId(input.id, "Payment ID");
     const existingPayment = db.prepare("SELECT * FROM payments WHERE id = ?").get(paymentId);
     if (existingPayment) {
@@ -809,7 +815,9 @@ export function updateInvoicePayment(db, jobIdInput, paymentIdInput, input) {
     ensureJobExists(db, jobId);
     const invoiceRow = getInvoiceRowForJob(db, jobId);
     if (!invoiceRow) throw new WorkspaceDocumentError("Invoice not found.", 404);
+    assertLocalPaymentAllowed(db, invoiceRow.id);
     const existing = ensurePaymentBelongsToInvoice(db, invoiceRow.id, paymentId);
+    if (existing.source !== "manual") throw new WorkspaceDocumentError("Payments synced from Xero are managed in Xero.", 409);
     const payment = normalizePayment({ ...input, id: paymentId }, invoiceRow.id, { existing, requireId: true });
     db.prepare(`
       UPDATE payments
@@ -847,6 +855,8 @@ export function deleteInvoicePayment(db, jobIdInput, paymentIdInput) {
     ensureJobExists(db, jobId);
     const invoiceRow = getInvoiceRowForJob(db, jobId);
     if (!invoiceRow) throw new WorkspaceDocumentError("Invoice not found.", 404);
+    assertLocalPaymentAllowed(db, invoiceRow.id);
+    if (ensurePaymentBelongsToInvoice(db, invoiceRow.id, paymentId).source !== "manual") throw new WorkspaceDocumentError("Payments synced from Xero are managed in Xero.", 409);
     const result = db.prepare("DELETE FROM payments WHERE invoice_id = ? AND id = ?").run(invoiceRow.id, paymentId);
     if (result.changes === 0) throw new WorkspaceDocumentError("Payment not found.", 404);
     const updatedAt = nowIso();
