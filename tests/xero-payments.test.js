@@ -28,7 +28,7 @@ async function fixture(t, { manual = 0, total = 1100, file = false } = {}) {
   updateWorkspaceAddons(db, { xero: true });
   const mock = createXeroMock();
   const env = { NODE_ENV: "test", ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath, XERO_CLIENT_ID: "fixture", XERO_CLIENT_SECRET: "fixture-secret", XERO_REDIRECT_URI: "http://localhost:3101/api/integrations/xero/callback", XERO_WEBHOOK_KEY: "fixture-signing-key", ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };
-  const service = new AccountingService(db, { env, fetchImpl: mock.fetch });
+  const service = new AccountingService(db, { env, fetchImpl: mock.fetch, authorizeOAuthInitiator: async () => true });
   await consent(service);
   await service.configure({ salesAccountId: "sales-id", taxMappings: { taxable: "OUTPUT" } });
   await service.syncInvoice("job");
@@ -258,7 +258,7 @@ test("payment sync browser endpoint enforces auth, roles and origin", async (t) 
   assert.equal(paid(db), 50000);
 });
 
-test("genuine V1 schema 9 to 10 preserves all records, rolls back atomically and only runs once", (t) => {
+test("genuine V1 schema 9 through 10 to latest preserves all records, rolls back atomically and only runs once", (t) => {
   const db = new Database(":memory:"); t.after(() => db.close());
   db.exec(fs.readFileSync(new URL("../fixtures/workspace-schema-v7.sql", import.meta.url), "utf8"));
   db.exec(fs.readFileSync(new URL("../server-workspace-db.js", import.meta.url), "utf8").match(/version: 8,[\s\S]*?sql: `([\s\S]*?)`/)[1]);
@@ -272,5 +272,5 @@ test("genuine V1 schema 9 to 10 preserves all records, rolls back atomically and
   db.exec("DROP TABLE integration_external_payments"); migrateWorkspaceSchema(db);
   for (const table of tables) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), table === "payments" ? before[table].map((row) => ({ ...row, source: "manual" })) : before[table]);
   migrateWorkspaceSchema(db); assert.equal(db.prepare("SELECT COUNT(*) n FROM workspace_schema_migrations WHERE version=10").get().n, 1);
-  assert.equal(db.pragma("user_version", { simple: true }), 10);
+  assert.equal(db.pragma("user_version", { simple: true }), 12);
 });

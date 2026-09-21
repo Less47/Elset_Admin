@@ -1,5 +1,12 @@
 // Built-in optional modules. Enablement belongs to the shared workspace.
 export const ADDONS = Object.freeze({
+  quickbooks: Object.freeze({
+    key: "quickbooks", name: "QuickBooks Online", category: "Accounting",
+    description: "Sync customers and issued invoices with QuickBooks Online. Receive invoice payments from QuickBooks.",
+    includes: ["Manual invoice sync", "Incoming payment sync"],
+    disableDescription: "QuickBooks controls and syncing will stop. The connection, configuration, mappings and history will be preserved. Use Disconnect to remove the connection.",
+    defaultEnabled: false,
+  }),
   xero: Object.freeze({
     key: "xero", name: "Xero", category: "Accounting",
     description: "Connect your jobs and invoices with Xero accounting. Sync customers and issued invoices from this workspace to Xero.",
@@ -19,6 +26,9 @@ export const ADDONS = Object.freeze({
 });
 
 export const ADDON_LIST = Object.freeze(Object.values(ADDONS));
+export const ACCOUNTING_PROVIDERS = Object.freeze(["xero", "quickbooks"]);
+export const accountingProviderName = (id) => id === "quickbooks" ? "QuickBooks" : id === "xero" ? "Xero" : "Accounting";
+export const activeAccountingProvider = (addons) => ACCOUNTING_PROVIDERS.find((id) => addons?.[id] === true) || "";
 
 export function normalizeAddonState(source) {
   const values = source && typeof source === "object" && !Array.isArray(source) ? source : {};

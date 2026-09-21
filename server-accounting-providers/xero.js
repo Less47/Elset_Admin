@@ -2,6 +2,7 @@ import { AccountingError, accountingInfrastructureError } from "../server-accoun
 import { digest } from "../server-accounting-crypto.js";
 import process from "node:process";
 import { Buffer } from "node:buffer";
+import { xeroPaymentSnapshot } from "./xero-payments.js";
 
 export const XERO_INVOICE_SCOPES = Object.freeze(["offline_access", "accounting.contacts", "accounting.invoices", "accounting.settings.read"]);
 export const XERO_PAYMENT_SCOPE = "accounting.payments.read";
@@ -162,6 +163,9 @@ export class XeroAccountingProvider {
     if (!payment || payment.PaymentID !== id) throw new AccountingError("PAYMENT_STATE_CONFLICT", "Xero payment details are incomplete. Review the invoice and sync again.", 409);
     return { id: payment.PaymentID, invoiceId: payment.Invoice?.InvoiceID, amountCents: cents(payment.Amount),
       date: day(payment.DateString || payment.Date), status: payment.Status, updatedAt: String(payment.UpdatedDateUTC || "") };
+  }
+  paymentSnapshot(context, external, source, mapping, contact) {
+    return xeroPaymentSnapshot(this, context, external, source, mapping, contact);
   }
   describeInvoice(record) {
     return { id: record.InvoiceID, number: record.InvoiceNumber, fingerprint: digest(JSON.stringify(comparable(record))),

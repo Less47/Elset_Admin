@@ -17,7 +17,7 @@ export function accountingInfrastructureError(diagnostic, code = "SERVER_CONFIGU
 
 export function customerAccountingMessage(message = "") {
   // Older versions may have persisted infrastructure instructions in safe_error_message.
-  return /ACCOUNTING_INTEGRATION_ENCRYPTION_KEY|XERO_CLIENT_(?:ID|SECRET)|XERO_REDIRECT_URI|XERO_WEBHOOK_KEY|encryption key|Xero client ID, secret/i.test(message)
+  return /ACCOUNTING_INTEGRATION_ENCRYPTION_KEY|(?:XERO|QUICKBOOKS)_CLIENT_(?:ID|SECRET)|(?:XERO|QUICKBOOKS)_REDIRECT_URI|XERO_WEBHOOK_KEY|QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN|encryption key|Xero client ID, secret/i.test(message)
     ? ACCOUNTING_UNAVAILABLE_MESSAGE : message;
 }
 

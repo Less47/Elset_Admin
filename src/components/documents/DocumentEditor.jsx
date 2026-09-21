@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import InvoiceAccounting from "@/components/invoices/InvoiceAccounting";
-import { isAddonEnabled } from "@/lib/addons";
+import { activeAccountingProvider, accountingProviderName } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,7 +97,9 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
   const gst = calculateQuoteGst(docState.items);
   const total = calculateQuoteTotal(docState.items);
   const paymentSummary = type === "invoice" ? getInvoicePaymentSummary(docState) : null;
-  const paymentsManaged = job.invoice?.paymentManagement === "xero";
+  const accountingProvider = activeAccountingProvider(addons);
+  const paymentsManaged = ["xero", "quickbooks"].includes(job.invoice?.paymentManagement);
+  const paymentProviderName = accountingProviderName(job.invoice?.paymentManagement);
   const invoiceStatus = type === "invoice" ? getInvoiceStatus({ ...job, invoice: docState }) : null;
   const sentCount = docState.sentHistory?.length || 0;
   const documentLabel = type === "quote" ? "Quote" : "Invoice";
@@ -233,11 +235,11 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
         </div>
         {type === "invoice" ? <section className="document-section" aria-labelledby="document-payments-title">
           <div className="document-section-heading"><h2 id="document-payments-title">Payments received</h2>{!paymentsManaged ? <Button type="button" variant="outline" onClick={() => setDocState((prev) => ({ ...prev, payments: [...(prev.payments || []), { id: crypto.randomUUID(), amount: "", date: slugDate(), method: "", reference: "", notes: "" }] }))}><Plus className="h-4 w-4" /> Add Payment</Button> : null}</div>
-          {paymentsManaged ? <p className="mb-3 text-sm text-text-secondary">Payments are managed in Xero. Historical manual payments require accounting review before synchronisation.</p> : null}
+          {paymentsManaged ? <p className="mb-3 text-sm text-text-secondary">Payments are managed in {paymentProviderName}. Historical manual payments require accounting review before synchronisation.</p> : null}
           {(docState.payments || []).length === 0 ? <p className="text-sm text-text-secondary">No payments recorded yet.</p> : (docState.payments || []).map((payment, index) => <div className="document-payment" key={payment.id}>
-            {payment.source === "xero" || paymentsManaged ? <>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{formatDate(payment.date)} · {payment.source === "xero" ? "Xero payment" : "Historical manual payment"}</span><strong>{money(payment.amount)}</strong></div>
-              {payment.source !== "xero" && [payment.method, payment.reference, payment.notes].filter(Boolean).length ? <p className="mt-1 break-words text-sm text-text-secondary">{[payment.method, payment.reference, payment.notes].filter(Boolean).join(" · ")}</p> : null}
+            {["xero", "quickbooks"].includes(payment.source) || paymentsManaged ? <>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{formatDate(payment.date)} · {["xero", "quickbooks"].includes(payment.source) ? `${accountingProviderName(payment.source)} payment` : "Historical manual payment"}</span><strong>{money(payment.amount)}</strong></div>
+              {!["xero", "quickbooks"].includes(payment.source) && [payment.method, payment.reference, payment.notes].filter(Boolean).length ? <p className="mt-1 break-words text-sm text-text-secondary">{[payment.method, payment.reference, payment.notes].filter(Boolean).join(" · ")}</p> : null}
             </> : <>
             <div className="document-payment-fields">
               <Field id={`payment-${payment.id}-amount`} label={`Payment ${index + 1} amount`}><Input id={`payment-${payment.id}-amount`} type="number" step="0.01" placeholder="Amount" value={payment.amount} onChange={(e) => updatePayment(payment.id, "amount", e.target.value)} /></Field>
@@ -255,7 +257,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
           <h2 id="document-email-title">Email</h2><dl className="document-email-details"><Detail label="Recipient">{recipientName}</Detail><Detail label="Send to">{recipientEmail || "No email saved"}</Detail><Detail label="Send from">{ADMIN_EMAIL}</Detail><Detail label="Previous attempts">{sentCount}</Detail></dl>
           <div className="mt-3 flex flex-wrap gap-2">{sentCount > 0 && onOpenSentDocument ? <Button type="button" variant="outline" onClick={onOpenSentDocument}>Open {documentLabel}</Button> : null}<Button type="button" variant="secondary" disabled={!recipientEmail || isPreviewingDocument} onClick={() => previewDocument(sendActionOptions)}>Preview &amp; Send {sendActionLabel}</Button></div>
         </section>
-        {type === "invoice" && isAddonEnabled(addons, "xero") ? <InvoiceAccounting jobId={job.id} invoice={job.invoice} fetchWithAuth={fetchWithAuth} blocked={dirty || busy || isPreviewingDocument} onBusyChange={setAccountingBusy} onReconciled={onInvoiceReconciled} /> : null}
+        {type === "invoice" && accountingProvider ? <InvoiceAccounting provider={accountingProvider} jobId={job.id} invoice={job.invoice} fetchWithAuth={fetchWithAuth} blocked={dirty || busy || isPreviewingDocument} onBusyChange={setAccountingBusy} onReconciled={onInvoiceReconciled} /> : null}
         {type === "invoice" && job.invoice && onDeleteInvoice ? <section className="document-section" aria-labelledby="document-delete-title">
           <h2 id="document-delete-title">Delete invoice</h2>
           <p id="document-delete-help" className="mb-3 text-sm text-text-secondary">{deleteRestriction || "Move this invoice to Recycle Bin. Its linked job will stay in place."}</p>

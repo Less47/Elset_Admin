@@ -29,7 +29,7 @@ function fixture(t, dbPath = ":memory:") {
   updateWorkspaceAddons(db, { xero: true });
   const mock = createXeroMock();
   const env = { XERO_CLIENT_ID: "fixture-client", XERO_CLIENT_SECRET: "fixture-client-secret", XERO_REDIRECT_URI: "http://localhost:3101/api/integrations/xero/callback", ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };
-  const service = new AccountingService(db, { env, fetchImpl: mock.fetch });
+  const service = new AccountingService(db, { env, fetchImpl: mock.fetch, authorizeOAuthInitiator: async () => true });
   return { db, mock, env, service, invoice };
 }
 async function connect(service) {
@@ -159,7 +159,7 @@ test("decryption failures and previously stored infrastructure errors never ask 
 test("rotating refresh is persisted atomically and concurrent requests cannot use the same token", async (t) => {
   const { service, mock, db, env } = fixture(t); await ready(service);
   service.store.update({ token_expires_at: 0 });
-  const other = new AccountingService(db, { env, fetchImpl: mock.fetch });
+  const other = new AccountingService(db, { env, fetchImpl: mock.fetch, authorizeOAuthInitiator: async () => true });
   const results = await Promise.allSettled([service.testConnection(), other.testConnection()]);
   assert.equal(results.filter((item) => item.status === "fulfilled").length, 1);
   assert.equal(results.find((item) => item.status === "rejected").reason.code, "INTEGRATION_BUSY");
@@ -416,7 +416,7 @@ test("version 8 to 9 migration is additive, transactional and runs once", (t) =>
   assert.equal(db.pragma("user_version", { simple: true }), 8);
   assert.equal(db.prepare("SELECT 1 FROM sqlite_master WHERE name='workspace_integrations'").get(), undefined);
   db.exec("DROP TABLE integration_operations"); migrateWorkspaceSchema(db);
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 10); assert.equal(db.pragma("user_version", { simple: true }), 10);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 12); assert.equal(db.pragma("user_version", { simple: true }), 12);
   assert.deepEqual(db.prepare("SELECT * FROM customers").all(), before);
   const identity = db.prepare("SELECT * FROM integration_workspace").get(); migrateWorkspaceSchema(db);
   assert.deepEqual(db.prepare("SELECT * FROM integration_workspace").get(), identity);

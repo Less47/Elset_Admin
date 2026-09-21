@@ -86,7 +86,7 @@ function snapshot(db) {
   return Object.fromEntries(tables.map(({ name }) => [name, db.prepare(`SELECT * FROM ${quoteIdentifier(name)} ORDER BY rowid`).all()]));
 }
 
-test("production schema 7 upgrades through 8, 9 and 10 exactly once without rebuilding existing tables, and rejects downgrade", (t) => {
+test("production schema 7 upgrades through 8, 9, 10, 11 and 12 exactly once preserving business rows, and rejects downgrade", (t) => {
   const { dbPath, env } = withFixture(t, { version: 7 });
   const before = inspect(dbPath, snapshot);
   const roots = inspect(dbPath, (db) => db.prepare("SELECT name, rootpage FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all());
@@ -98,24 +98,24 @@ test("production schema 7 upgrades through 8, 9 and 10 exactly once without rebu
   inspect(dbPath, (db) => db.exec("DROP TRIGGER fail_v8"), false);
   const logs = [];
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
-  assert.deepEqual(logs, ["Workspace database schema: 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Workspace schema migration complete: 10"]);
+  assert.deepEqual(logs, ["Workspace database schema: 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Migrating workspace schema 10 -> 11", "Migrating workspace schema 11 -> 12", "Workspace schema migration complete: 12"]);
   const after = inspect(dbPath, snapshot);
   for (const [table, rows] of Object.entries(before)) {
-    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 10 })));
+    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 12 })));
     else if (table === "payments") assert.deepEqual(after[table], rows.map((row) => ({ ...row, source: "manual" })));
     else if (table === "workspace_schema_migrations") assert.deepEqual(after[table].slice(0, 7), rows);
     else assert.deepEqual(after[table], rows, `Existing ${table} rows must be preserved`);
   }
   assert.deepEqual(after.job_cost_entries, []);
-  assert.equal(after.workspace_schema_migrations.length, 10);
-  assert.deepEqual(inspect(dbPath, (db) => db.prepare("SELECT name, rootpage FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'job_cost_entries' ORDER BY name").all()).filter((row) => roots.some((root) => root.name === row.name)), roots);
+  assert.equal(after.workspace_schema_migrations.length, 12);
+  assert.deepEqual(inspect(dbPath, (db) => db.prepare("SELECT name, rootpage FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'job_cost_entries' ORDER BY name").all()).filter((row) => roots.some((root) => root.name === row.name && root.name !== "payments")), roots.filter((row) => row.name !== "payments"));
   const costingIndexes = inspect(dbPath, (db) => db.prepare("SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name='job_cost_entries' AND sql IS NOT NULL").all());
   assert.ok(costingIndexes.some((row) => /job_id/i.test(row.sql)));
   assert.ok(costingIndexes.some((row) => /category/i.test(row.sql)));
   assert.ok(costingIndexes.some((row) => /cost_date/i.test(row.sql)));
   initializeWorkspaceStorage(env, { log() { assert.fail("Restart must not migrate again"); } });
   assert.deepEqual(inspect(dbPath, snapshot), after);
-  inspect(dbPath, (db) => db.exec("UPDATE workspace_info SET schema_version=11; PRAGMA user_version=11; INSERT INTO workspace_schema_migrations VALUES(11,'future','2026-09-17');"), false);
+  inspect(dbPath, (db) => db.exec("UPDATE workspace_info SET schema_version=13; PRAGMA user_version=13; INSERT INTO workspace_schema_migrations VALUES(13,'future','2026-09-17');"), false);
   const future = inspect(dbPath, snapshot);
   assert.throws(() => initializeWorkspaceStorage(env, { log() {} }), /refusing to downgrade/);
   assert.deepEqual(inspect(dbPath, snapshot), future);
@@ -139,10 +139,10 @@ test("v6 note migration is forward-only, transactional, additive and applied exa
   inspect(dbPath, (db) => db.exec("DROP TRIGGER fail_v7"), false);
   const logs = [];
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
-  assert.deepEqual(logs, ["Workspace database schema: 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Workspace schema migration complete: 10"]);
+  assert.deepEqual(logs, ["Workspace database schema: 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Migrating workspace schema 10 -> 11", "Migrating workspace schema 11 -> 12", "Workspace schema migration complete: 12"]);
   const after = inspect(dbPath, snapshot);
   for (const [table, rows] of Object.entries(before)) {
-    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 10 })));
+    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 12 })));
     else if (table === "jobs") assert.deepEqual(after[table], rows.map((row) => ({ ...row, service_board_note: null })));
     else if (table === "payments") assert.deepEqual(after[table], rows.map((row) => ({ ...row, source: "manual" })));
     else if (table === "workspace_schema_migrations") assert.deepEqual(after[table].slice(0, 6), rows);
@@ -179,10 +179,10 @@ test("v5 invoice archive migration rolls back safely, preserves existing records
   inspect(dbPath, (db) => db.exec("DROP TRIGGER fail_v6"), false);
   const logs = [];
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
-  assert.deepEqual(logs, ["Workspace database schema: 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Workspace schema migration complete: 10"]);
+  assert.deepEqual(logs, ["Workspace database schema: 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Migrating workspace schema 10 -> 11", "Migrating workspace schema 11 -> 12", "Workspace schema migration complete: 12"]);
   const after = inspect(dbPath, snapshot);
   for (const [table, rows] of Object.entries(before)) {
-    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 10 })));
+    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 12 })));
     else if (table === "jobs") assert.deepEqual(after[table], rows.map((row) => ({ ...row, service_board_note: null })));
     else if (table === "payments") assert.deepEqual(after[table], rows.map((row) => ({ ...row, source: "manual" })));
     else if (table === "workspace_schema_migrations") assert.deepEqual(after[table].slice(0, 5), rows);
@@ -203,23 +203,23 @@ test("production initialization upgrades genuine v4, preserves all existing rows
   const before = inspect(dbPath, snapshot);
   assert.equal(before.workspace_info[0].schema_version, 4);
   assert.equal(before.maintenance_occurrence_exceptions, undefined);
-  assert.throws(() => assertSqliteWorkspaceReady(dbPath), /schema version 4 is not compatible with required version 10/);
+  assert.throws(() => assertSqliteWorkspaceReady(dbPath), /schema version 4 is not compatible with required version 12/);
   assert.equal(getWorkspaceReadinessStatus(env).ok, false);
   assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 4, "health checks must not migrate");
   const logs = [];
   assert.equal(initializeWorkspaceStorage(env, { log: (line) => logs.push(line) }).mode, "sqlite");
-  assert.deepEqual(logs, ["Workspace database schema: 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Workspace schema migration complete: 10"]);
-  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 10 });
+  assert.deepEqual(logs, ["Workspace database schema: 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Migrating workspace schema 10 -> 11", "Migrating workspace schema 11 -> 12", "Workspace schema migration complete: 12"]);
+  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 12 });
   assert.equal(getWorkspaceReadinessStatus(env).ok, true);
   const after = inspect(dbPath, snapshot);
   for (const [table, rows] of Object.entries(before)) {
-    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 10 })));
+    if (table === "workspace_info") assert.deepEqual(after[table], rows.map((row) => ({ ...row, schema_version: 12 })));
     else if (table === "jobs") assert.deepEqual(after[table], rows.map((row) => ({ ...row, service_board_note: null })));
     else if (table === "payments") assert.deepEqual(after[table], rows.map((row) => ({ ...row, source: "manual" })));
     else if (table === "workspace_schema_migrations") assert.deepEqual(after[table].slice(0, 4), rows);
     else assert.deepEqual(after[table], rows, `unchanged ${table}`);
   }
-  assert.equal(after.workspace_schema_migrations.length, 10);
+  assert.equal(after.workspace_schema_migrations.length, 12);
   assert.deepEqual(after.maintenance_occurrence_exceptions, []);
   logs.length = 0;
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
@@ -228,12 +228,12 @@ test("production initialization upgrades genuine v4, preserves all existing rows
   assert.deepEqual(fs.readFileSync(authPath), authBefore);
 });
 
-test("supported v3 applies 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 in order", (t) => {
+test("supported v3 applies 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11 -> 12 in order", (t) => {
   const { dbPath, env } = withFixture(t, { version: 3 });
   const logs = [];
   initializeWorkspaceStorage(env, { log: (line) => logs.push(line) });
-  assert.deepEqual(logs, ["Workspace database schema: 3", "Migrating workspace schema 3 -> 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Workspace schema migration complete: 10"]);
-  assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 10);
+  assert.deepEqual(logs, ["Workspace database schema: 3", "Migrating workspace schema 3 -> 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Migrating workspace schema 10 -> 11", "Migrating workspace schema 11 -> 12", "Workspace schema migration complete: 12"]);
+  assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 12);
 });
 
 for (const version of [3, 4]) test(`failed v${version} upgrade rolls back DDL and all metadata; retry succeeds`, (t) => {
@@ -251,13 +251,13 @@ for (const version of [3, 4]) test(`failed v${version} upgrade rolls back DDL an
     db.exec("DROP TRIGGER fail_v5");
   }, false);
   initializeWorkspaceStorage(env, { log() {} });
-  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 10 });
+  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 12 });
 });
 
 const invalidSchemas = [
-  ["newer metadata", "UPDATE workspace_info SET schema_version = 11", /newer than required version 10/],
-  ["newer user_version", "PRAGMA user_version = 11", /refusing to downgrade/],
-  ["newer migration ledger", "INSERT INTO workspace_schema_migrations VALUES (11, 'future', '2026-01-01')", /refusing to downgrade/],
+  ["newer metadata", "UPDATE workspace_info SET schema_version = 13", /newer than required version 12/],
+  ["newer user_version", "PRAGMA user_version = 13", /refusing to downgrade/],
+  ["newer migration ledger", "INSERT INTO workspace_schema_migrations VALUES (13, 'future', '2026-01-01')", /refusing to downgrade/],
   ["missing intermediate migration", "DELETE FROM workspace_schema_migrations WHERE version = 2", /metadata is inconsistent/],
   ["mismatched metadata", "UPDATE workspace_info SET schema_version = 3", /metadata is inconsistent/],
   ["missing metadata row", "DELETE FROM workspace_info", /metadata is inconsistent/],
@@ -294,14 +294,14 @@ test("foreign-key failures prevent migration without changing the schema version
   assert.deepEqual(inspect(dbPath, snapshot), before);
 });
 
-test("fresh databases bootstrap to complete v10 metadata; missing production storage is not created", (t) => {
+test("fresh databases bootstrap to complete v12 metadata; missing production storage is not created", (t) => {
   const { tempDir, env } = withFixture(t);
   const freshPath = path.join(tempDir, "fresh.db");
   const fresh = openWorkspaceDb({ dbPath: freshPath });
-  assert.equal(readWorkspaceSchemaVersion(fresh), 10);
+  assert.equal(readWorkspaceSchemaVersion(fresh), 12);
   migrateWorkspaceSchema(fresh);
   fresh.close();
-  assert.deepEqual(assertSqliteWorkspaceReady(freshPath), { schemaVersion: 10 });
+  assert.deepEqual(assertSqliteWorkspaceReady(freshPath), { schemaVersion: 12 });
   const missingPath = path.join(tempDir, "missing.db");
   assert.throws(() => initializeWorkspaceStorage({ ...env, ELSET_WORKSPACE_DB_PATH: missingPath }, { log() {} }), /database does not exist/);
   assert.equal(fs.existsSync(missingPath), false);
@@ -342,7 +342,7 @@ test("concurrent initializers apply the migration only once", async (t) => {
     return output();
   }));
   assert.equal(results.join("\n").match(/Migrating workspace schema 4 -> 5/g)?.length, 1);
-  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 10 });
+  assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 12 });
 });
 
 test("normal production server startup upgrades v4 before listening and serves healthy storage", { timeout: 20000 }, async (t) => {
@@ -366,9 +366,9 @@ test("normal production server startup upgrades v4 before listening and serves h
       await delay(50);
     }
     assert.ok(healthy, output());
-    assert.match(output(), /Workspace schema migration complete: 10/);
-    assert.ok(output().indexOf("Workspace schema migration complete: 10") < output().indexOf("Elset quote API listening"), output());
-    assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 10 });
+    assert.match(output(), /Workspace schema migration complete: 12/);
+    assert.ok(output().indexOf("Workspace schema migration complete: 12") < output().indexOf("Elset quote API listening"), output());
+    assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 12 });
     for (const [method, route] of [["GET", "/api/address/autocomplete?q=example"], ["GET", "/api/map/config"], ["POST", "/api/map/geocode"]]) {
       const response = await fetch(url + route, { method });
       assert.equal(response.status, 404, `${method} ${route} must be retired`);

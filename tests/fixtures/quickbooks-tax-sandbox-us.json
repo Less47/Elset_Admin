@@ -1,0 +1,90 @@
+{
+  "_provenance": "Sanitized real local QuickBooks Sandbox reads on 2026-09-18. This company is US/USD, not AU. Only tax configuration fields retained.",
+  "CompanyInfo": {
+    "Country": "US"
+  },
+  "Preferences": {
+    "CurrencyPrefs": {
+      "HomeCurrency": {
+        "value": "USD"
+      }
+    },
+    "TaxPrefs": {
+      "UsingSalesTax": true
+    }
+  },
+  "TaxCode": [
+    {
+      "Id": "2",
+      "Name": "California",
+      "Active": true,
+      "Taxable": true,
+      "TaxGroup": true,
+      "SalesTaxRateList": {
+        "TaxRateDetail": [
+          {
+            "TaxRateRef": {
+              "value": "3",
+              "name": "California"
+            },
+            "TaxTypeApplicable": "TaxOnAmount",
+            "TaxOrder": 0
+          }
+        ]
+      },
+      "PurchaseTaxRateList": {
+        "TaxRateDetail": []
+      }
+    },
+    {
+      "Id": "3",
+      "Name": "Tucson",
+      "Active": true,
+      "Taxable": true,
+      "TaxGroup": true,
+      "SalesTaxRateList": {
+        "TaxRateDetail": [
+          {
+            "TaxRateRef": {
+              "value": "1",
+              "name": "AZ State tax"
+            },
+            "TaxTypeApplicable": "TaxOnAmount",
+            "TaxOrder": 0
+          },
+          {
+            "TaxRateRef": {
+              "value": "2",
+              "name": "Tucson City"
+            },
+            "TaxTypeApplicable": "TaxOnAmount",
+            "TaxOrder": 0
+          }
+        ]
+      },
+      "PurchaseTaxRateList": {
+        "TaxRateDetail": []
+      }
+    }
+  ],
+  "TaxRate": [
+    {
+      "Id": "1",
+      "Name": "AZ State tax",
+      "Active": true,
+      "RateValue": 7.1
+    },
+    {
+      "Id": "3",
+      "Name": "California",
+      "Active": true,
+      "RateValue": 8
+    },
+    {
+      "Id": "2",
+      "Name": "Tucson City",
+      "Active": true,
+      "RateValue": 2
+    }
+  ]
+}
