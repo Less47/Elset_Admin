@@ -48,6 +48,10 @@ export function LoginScreen({ loginForm, onFieldChange, onSubmit, error, isLoadi
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
+            <nav aria-label="Legal" className="mt-6 flex justify-center gap-5 text-xs text-text-secondary">
+              <a href="/legal/terms" className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4">Terms</a>
+              <a href="/legal/privacy" className="rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4">Privacy</a>
+            </nav>
           </CardContent>
         </Card>
       </div>
