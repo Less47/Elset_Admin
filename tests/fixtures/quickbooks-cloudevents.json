@@ -1,0 +1,68 @@
+[
+  {
+    "specversion": "1.0",
+    "id": "fixture-payment-created",
+    "source": "intuit.synthetic-fixture-source",
+    "type": "qbo.payment.created.v1",
+    "datacontenttype": "application/json",
+    "time": "2026-09-21T00:01:02.123456789Z",
+    "intuitentityid": "900",
+    "intuitaccountid": "123456789",
+    "data": {}
+  },
+  {
+    "specversion": "1.0",
+    "id": "fixture-payment-updated",
+    "source": "intuit.synthetic-fixture-source",
+    "type": "qbo.payment.updated.v1",
+    "datacontenttype": "application/json",
+    "time": "2026-09-21T10:02:03+10:00",
+    "intuitentityid": "900",
+    "intuitaccountid": "123456789",
+    "data": {}
+  },
+  {
+    "specversion": "1.0",
+    "id": "fixture-payment-deleted",
+    "source": "intuit.synthetic-fixture-source",
+    "type": "qbo.payment.deleted.v1",
+    "datacontenttype": "application/json",
+    "time": "2026-09-21T00:03:04Z",
+    "intuitentityid": "900",
+    "intuitaccountid": "123456789",
+    "data": {}
+  },
+  {
+    "specversion": "1.0",
+    "id": "fixture-invoice-updated",
+    "source": "intuit.synthetic-fixture-source",
+    "type": "qbo.invoice.updated.v1",
+    "datacontenttype": "application/json",
+    "time": "2026-09-21T00:04:05Z",
+    "intuitentityid": "101",
+    "intuitaccountid": "123456789",
+    "data": {}
+  },
+  {
+    "specversion": "1.0",
+    "id": "fixture-customer-updated",
+    "source": "intuit.synthetic-fixture-source",
+    "type": "qbo.customer.updated.v1",
+    "datacontenttype": "application/json",
+    "time": "2026-09-21T00:05:06Z",
+    "intuitentityid": "100",
+    "intuitaccountid": "123456789",
+    "data": {}
+  },
+  {
+    "specversion": "1.0",
+    "id": "fixture-payment-created",
+    "source": "intuit.synthetic-fixture-source",
+    "type": "qbo.payment.created.v1",
+    "datacontenttype": "application/json",
+    "time": "2026-09-21T00:06:07Z",
+    "intuitentityid": "900",
+    "intuitaccountid": "987654321",
+    "data": {}
+  }
+]

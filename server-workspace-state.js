@@ -123,7 +123,7 @@ function mapInvoice(row, lineItemsByInvoiceId, paymentsByInvoiceId, sendHistoryB
 }
 
 export function loadWorkspaceStateFromDb(db) {
-  const accountingInvoices = new Set(db.prepare("SELECT local_entity_id FROM integration_entity_mappings WHERE provider='xero' AND local_entity_type='invoice'").all().map((row) => row.local_entity_id));
+  const accountingInvoices = new Map(db.prepare("SELECT local_entity_id,provider FROM integration_entity_mappings WHERE local_entity_type='invoice' ORDER BY created_at DESC").all().map((row) => [row.local_entity_id, row.provider]));
   const info = db.prepare("SELECT * FROM workspace_info WHERE id = 1").get() || null;
   const settingsRows = db.prepare("SELECT * FROM settings ORDER BY key").all();
   const templateRows = db.prepare("SELECT * FROM document_templates ORDER BY type").all();
@@ -323,7 +323,7 @@ export function loadWorkspaceStateFromDb(db) {
         createdAt: attachmentRow.created_at || undefined,
       }, attachmentRow.extra_json)),
       quote: quoteRow ? mapQuote(quoteRow, quoteItemsByQuoteId, quoteSendHistoryByQuoteId) : null,
-      invoice: invoiceRow ? { ...mapInvoice(invoiceRow, invoiceItemsByInvoiceId, paymentsByInvoiceId, invoiceSendHistoryByInvoiceId), paymentManagement: accountingInvoices.has(invoiceRow.id) ? "xero" : "manual" } : null,
+      invoice: invoiceRow ? { ...mapInvoice(invoiceRow, invoiceItemsByInvoiceId, paymentsByInvoiceId, invoiceSendHistoryByInvoiceId), paymentManagement: accountingInvoices.get(invoiceRow.id) || "manual" } : null,
       externalRefs: parseJson(row.external_refs_json, {}),
     }, row.extra_json);
   });

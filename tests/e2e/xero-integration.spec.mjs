@@ -18,10 +18,12 @@ const screenshots = path.join(root, "test-results/xero-v2");
 const password = "Costing-fixture-login-123";
 let dataDir, baseUrl, server, serverOutput = "";
 const sessions = {};
-function withDb(callback) {
-  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+function withDb(callback, options = {}) {
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db"), ...options });
   try { return callback(db); } finally { db.close(); }
 }
+// Polling must not acquire the migration writer lock while the worker reconciles.
+const readDb = (callback) => withDb(callback, { readonly: true, migrate: false });
 function fixture() {
   const data = JSON.parse(fs.readFileSync(path.join(root, "fixtures/demo-workspace.json"), "utf8"));
   const job = data.jobs[0];
@@ -94,7 +96,13 @@ test.beforeEach(async ({ request }) => {
     .run(JSON.stringify({ jobCosting: false, xero: false }), new Date().toISOString());
   });
 });
-test.afterEach(async ({}, info) => { if (info.status !== info.expectedStatus) await info.attach("server-output", { body: serverOutput, contentType: "text/plain" }); });
+test.afterEach(async ({}, info) => {
+  if (info.status !== info.expectedStatus) {
+    await info.attach("server-output", { body: serverOutput, contentType: "text/plain" });
+    const inbox = readDb((db) => db.prepare("SELECT status,attempt_count,safe_error_message FROM integration_webhook_events").all());
+    await info.attach("webhook-status", { body: JSON.stringify(inbox), contentType: "application/json" });
+  }
+});
 test.afterAll(async () => {
   if (server?.exitCode === null) {
     server.kill("SIGTERM");
@@ -124,9 +132,10 @@ async function connectApi(context) {
   expect((await context.request.patch(`${baseUrl}/api/settings/addons`, { data: { xero: true } })).ok()).toBeTruthy();
   const { url } = await api(context, "connect");
   const state = new URL(url).searchParams.get("state");
-  const callback = await context.request.get(`${baseUrl}/api/integrations/xero/callback?state=${encodeURIComponent(state)}&code=fixture`, { maxRedirects: 0 });
-  expect(callback.status()).toBe(303);
-  expect(callback.headers().location).toContain("result=connected");
+  const callback = await fetch(`${baseUrl}/api/integrations/xero/callback?state=${encodeURIComponent(state)}&code=fixture`, { redirect: "manual" });
+  expect(callback.status).toBe(302);
+  expect(callback.headers.get("location")).toContain("result=connected");
+  expect(callback.headers.get("set-cookie")).toBeNull();
   const configuration = await context.request.patch(`${baseUrl}/api/integrations/xero/config`, { data: { salesAccountId: "sales-id", taxMappings: { taxable: "OUTPUT" } }, headers: { "X-Accounting-Request": "1" } });
   expect(configuration.ok(), await configuration.text()).toBeTruthy();
 }
@@ -394,7 +403,7 @@ test("actual server preserves raw webhook bytes, refreshes clean invoices and pr
     const signature = crypto.createHmac("sha256", "xero-e2e-signature-only").update(raw).digest("base64");
     const response = await fetch(`${baseUrl}/api/integrations/xero/webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-xero-signature": signature }, body: raw });
     expect(response.status).toBe(200); expect(response.headers.get("set-cookie")).toBeNull();
-    await expect.poll(() => withDb((db) => db.prepare("SELECT status FROM integration_webhook_events").get().status)).toBe("PROCESSED");
+    await expect.poll(() => readDb((db) => db.prepare("SELECT status FROM integration_webhook_events").get().status)).toBe("PROCESSED");
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(page.locator(".document-payment")).toContainText("Xero payment");
     await expect(card(page)).toContainText("Payment sync: Up to date");
@@ -403,7 +412,7 @@ test("actual server preserves raw webhook bytes, refreshes clean invoices and pr
     const second = JSON.stringify({ ...JSON.parse(raw), firstEventSequence: 2, lastEventSequence: 2 });
     const secondSignature = crypto.createHmac("sha256", "xero-e2e-signature-only").update(second).digest("base64");
     expect((await fetch(`${baseUrl}/api/integrations/xero/webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-xero-signature": secondSignature }, body: second })).status).toBe(200);
-    await expect.poll(() => withDb((db) => db.prepare("SELECT count(*) n FROM integration_webhook_events WHERE status='PROCESSED'").get().n)).toBe(2);
+    await expect.poll(() => readDb((db) => db.prepare("SELECT count(*) n FROM integration_webhook_events WHERE status='PROCESSED'").get().n)).toBe(2);
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(card(page).getByRole("button", { name: "Sync from Xero" })).toBeDisabled();
     await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("99001");

@@ -18,7 +18,7 @@ export class AccountingStore {
     return this.integration();
   }
   update(values) {
-    const allowed = new Set(["external_tenant_id", "external_tenant_name", "external_connection_id", "encrypted_access_token", "encrypted_refresh_token", "token_expires_at", "granted_scopes", "status", "config_json", "organisations_json", "connected_by_user_id", "connected_at", "last_success_at", "last_error_at", "safe_error_message", "retry_after"]);
+    const allowed = new Set(["external_tenant_id", "external_tenant_name", "external_connection_id", "encrypted_access_token", "encrypted_refresh_token", "token_expires_at", "granted_scopes", "status", "config_json", "organisations_json", "connected_by_user_id", "connected_at", "last_success_at", "last_error_at", "safe_error_message", "retry_after", "provider_environment", "credential_metadata_json"]);
     const entries = Object.entries(values);
     if (entries.some(([key]) => !allowed.has(key))) throw new Error("Invalid integration field");
     this.db.prepare(`UPDATE workspace_integrations SET ${entries.map(([key]) => `${key} = ?`).join(", ")}, updated_at = ? WHERE workspace_id = ? AND provider = ?`)
@@ -28,14 +28,14 @@ export class AccountingStore {
   mapping(tenant, type, id) {
     return this.db.prepare(`SELECT * FROM integration_entity_mappings WHERE workspace_id=? AND provider=? AND external_tenant_id=? AND local_entity_type=? AND local_entity_id=?`).get(...this.scope(tenant, type, id));
   }
-  map(tenant, type, id, externalId, reference = "", fingerprint = "") {
+  map(tenant, type, id, externalId, reference = "", fingerprint = "", version = "") {
     const now = new Date().toISOString();
     try {
-      this.db.prepare(`INSERT INTO integration_entity_mappings(id, workspace_id, provider, external_tenant_id, local_entity_type, local_entity_id, external_entity_id, external_reference, external_fingerprint, created_at, updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(workspace_id,provider,external_tenant_id,local_entity_type,local_entity_id)
-        DO UPDATE SET external_reference=excluded.external_reference, external_fingerprint=excluded.external_fingerprint, updated_at=excluded.updated_at
+      this.db.prepare(`INSERT INTO integration_entity_mappings(id, workspace_id, provider, external_tenant_id, local_entity_type, local_entity_id, external_entity_id, external_reference, external_fingerprint, created_at, updated_at, external_version)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(workspace_id,provider,external_tenant_id,local_entity_type,local_entity_id)
+        DO UPDATE SET external_reference=excluded.external_reference, external_fingerprint=excluded.external_fingerprint, updated_at=excluded.updated_at, external_version=excluded.external_version
         WHERE integration_entity_mappings.external_entity_id=excluded.external_entity_id`)
-        .run(crypto.randomUUID(), ...this.scope(tenant, type, id), externalId, reference, fingerprint, now, now);
+        .run(crypto.randomUUID(), ...this.scope(tenant, type, id), externalId, reference, fingerprint, now, now, version);
       if (this.mapping(tenant, type, id)?.external_entity_id !== externalId) throw new Error();
     } catch { throw new AccountingError("MAPPING_CONFLICT", "This accounting record is already mapped to another local record. Review the mapping before retrying.", 409); }
   }

@@ -27,7 +27,7 @@ export default function App() {
   const [invoiceNotice, setInvoiceNotice] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
   const [activeSection, setActiveSection] = useState("service-board");
-  const [activeSettingsTab, setActiveSettingsTab] = useState(() => window.location.pathname === "/settings" && new URLSearchParams(window.location.search).get("accounting") === "xero" ? "addons" : "preferences");
+  const [activeSettingsTab, setActiveSettingsTab] = useState(() => window.location.pathname === "/settings" && ["xero", "quickbooks"].includes(new URLSearchParams(window.location.search).get("accounting")) ? "addons" : "preferences");
   const [officeSearch, setOfficeSearch] = useState("");
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
   const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);

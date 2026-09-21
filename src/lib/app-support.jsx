@@ -826,7 +826,7 @@ export function normalizeInvoicePaymentRecord(payment) {
     reference: String(payment.reference || "").trim(),
     notes: String(payment.notes || "").trim(),
     createdAt: payment.createdAt || new Date().toISOString(),
-    source: payment.source === "xero" ? "xero" : "manual",
+    source: ["xero", "quickbooks"].includes(payment.source) ? payment.source : "manual",
   };
 }
 
@@ -905,7 +905,7 @@ export function normalizeDocument(type, doc) {
     dueDate,
     paymentNotes: String(doc.paymentNotes || "").trim(),
     payments: normalizeInvoicePayments(doc, invoiceTotal, dueDate || baseDocument.issueDate),
-    paymentManagement: doc.paymentManagement === "xero" ? "xero" : "manual",
+    paymentManagement: ["xero", "quickbooks"].includes(doc.paymentManagement) ? doc.paymentManagement : "manual",
   };
 }
 

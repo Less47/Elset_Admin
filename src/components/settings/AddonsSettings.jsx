@@ -1,6 +1,6 @@
 import { useState } from "react";
-import XeroSettings from "./XeroSettings";
-import { ADDON_LIST, isAddonEnabled } from "@/lib/addons";
+import AccountingSettings from "./AccountingSettings";
+import { ADDON_LIST, ACCOUNTING_PROVIDERS, activeAccountingProvider, accountingProviderName, isAddonEnabled } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,12 +20,13 @@ export default function AddonsSettings({ workspaceAddons, available, fetchWithAu
     <div><h2 className="text-lg font-semibold">Add-ons</h2><p className="text-sm text-text-secondary">Choose the built-in modules your company uses. Changes apply to everyone in this workspace.</p></div>
     {ADDON_LIST.map((addon) => {
       const enabled = isAddonEnabled(addons, addon.key);
+      const otherAccounting = ACCOUNTING_PROVIDERS.includes(addon.key) && !enabled && activeAccountingProvider(addons);
       return <article key={addon.key} className="rounded-xl border border-border bg-card p-4 text-card-foreground" data-addon={addon.key}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0"><h3 className="text-base font-semibold">{addon.name}</h3><p id={`addon-description-${addon.key}`} className="mt-1 max-w-2xl text-sm text-text-secondary">{addon.description}</p></div>
           <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
             <Badge className={enabled ? "bg-status-success-surface text-status-success" : "bg-muted text-muted-foreground"}>{enabled ? "Enabled" : "Disabled"}</Badge>
-            <button type="button" role="switch" aria-label={`${addon.name} enabled`} aria-describedby={`addon-description-${addon.key}${available ? "" : " addon-storage-requirement"}`} aria-checked={enabled} disabled={!available || loading || saving}
+            <button type="button" role="switch" aria-label={`${addon.name} enabled`} aria-describedby={`addon-description-${addon.key}${available ? "" : " addon-storage-requirement"}`} aria-checked={enabled} disabled={!available || loading || saving || Boolean(otherAccounting)}
               onClick={() => enabled ? setDisableAddon(addon) : void save(addon, true)}
               className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50">
               <span aria-hidden="true" className={`pointer-events-none inline-flex h-6 w-11 items-center rounded-full border border-border transition-colors ${enabled ? "bg-primary" : "bg-muted"}`}>
@@ -35,7 +36,8 @@ export default function AddonsSettings({ workspaceAddons, available, fetchWithAu
           </div>
         </div>
         {addon.includes?.length ? <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-text-secondary">{addon.includes.map((item) => <li key={item}>• {item}</li>)}</ul> : null}
-        {addon.key === "xero" ? <XeroSettings enabled={enabled} available={available} fetchWithAuth={fetchWithAuth} /> : null}
+        {otherAccounting ? <p className="mt-3 text-sm text-text-secondary">Disable {accountingProviderName(otherAccounting)} before enabling {addon.name}. Its connection and history will be preserved; existing invoices stay with their original provider.</p> : null}
+        {ACCOUNTING_PROVIDERS.includes(addon.key) ? <AccountingSettings provider={addon.key} enabled={enabled} available={available} fetchWithAuth={fetchWithAuth} /> : null}
       </article>;
     })}
     {!available ? <p id="addon-storage-requirement" className="text-sm text-text-secondary">Add-ons require SQLite workspace storage. This workspace is using legacy JSON storage.</p> : null}

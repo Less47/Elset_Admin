@@ -5,12 +5,13 @@ import { fileURLToPath } from "url";
 import { assertWorkspaceWritable } from "./server-workspace-restore-lock.js";
 import { accountingSchemaSql } from "./server-accounting-schema.js";
 import { accountingPaymentSchemaSql } from "./server-accounting-payment-schema.js";
+import { accountingV3SchemaSql } from "./server-accounting-v3-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 10;
+export const WORKSPACE_SCHEMA_VERSION = 12;
 
 const migrations = [
   {
@@ -528,6 +529,20 @@ const migrations = [
   },
   { version: 9, name: "provider-neutral-accounting-integrations", sql: accountingSchemaSql },
   { version: 10, name: "accounting-payment-reconciliation", sql: accountingPaymentSchemaSql },
+  { version: 11, name: "accounting-online-provider-allocations", sql: accountingV3SchemaSql },
+  {
+    version: 12,
+    name: "accounting-webhook-event-leases",
+    // Some locally applied v10/v11 databases predate the lease column. Keep
+    // released SQL unchanged; fresh databases already have it from v10.
+    apply(db) {
+      const columns = db.pragma("table_info(integration_webhook_events)");
+      if (!columns.some((column) => column.name === "lease_owner")) {
+        db.exec("ALTER TABLE integration_webhook_events ADD COLUMN lease_owner TEXT NOT NULL DEFAULT ''");
+      }
+    },
+    sql: "UPDATE workspace_info SET schema_version=12 WHERE id=1;",
+  },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -571,13 +586,20 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 12) db.prepare("SELECT lease_owner FROM integration_webhook_events LIMIT 0").all();
+  if (version >= 11) {
+    db.prepare("SELECT provider_environment,credential_metadata_json FROM workspace_integrations LIMIT 0").all();
+    db.prepare("SELECT external_version FROM integration_entity_mappings LIMIT 0").all();
+    db.prepare("SELECT provider_environment FROM integration_oauth_states LIMIT 0").all();
+  }
   if (version >= 10) db.prepare("SELECT source FROM payments LIMIT 0").all();
   if (version >= 7) db.prepare("SELECT service_board_note FROM jobs LIMIT 0").all();
   const objects = new Set(db.prepare("SELECT type || ':' || name AS object FROM sqlite_schema").all().map((row) => row.object));
   for (const migration of migrations.filter((entry) => entry.version <= version)) {
     // The migration definitions remain the source of truth for required objects.
     for (const match of migration.sql.matchAll(/CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(?:IF NOT EXISTS\s+)?(\w+)/gi)) {
-      if (!objects.has(`${match[1].toLowerCase()}:${match[2]}`)) {
+      const renamed = [...migration.sql.matchAll(/ALTER\s+TABLE\s+(\w+)\s+RENAME\s+TO\s+(\w+)/gi)].find((rename) => rename[1] === match[2]);
+      if (!objects.has(`${match[1].toLowerCase()}:${renamed?.[2] || match[2]}`)) {
         throw new Error(`SQLite workspace schema ${version} is missing required ${match[1].toLowerCase()} ${match[2]}.`);
       }
     }
@@ -617,6 +639,7 @@ export function migrateWorkspaceSchema(db, { onMigration } = {}) {
       if (migration.version !== version + 1) throw new Error(`No supported workspace schema migration from version ${version}.`);
       onMigration?.({ fromVersion: version, toVersion: migration.version });
       try {
+        migration.apply?.(db);
         db.exec(migration.sql);
         const now = new Date().toISOString();
         if (version === 0) {

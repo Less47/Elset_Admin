@@ -568,6 +568,19 @@ export async function getRequestAuthSession(req) {
   };
 }
 
+// OAuth callbacks may legitimately arrive without a browser cookie. The stored
+// initiating session is still required to be live and its user still authorised.
+export async function authorizeAccountingOAuthInitiator(state) {
+  await ensureAuthReady();
+  const user = getRawAuthUserRowById(state.user_id);
+  if (!user || !["admin", "office"].includes(deriveWorkspaceRole({ ...user, role: user.authRole }))) return false;
+  const expiryMs = (value) => typeof value === "number" ? value : Date.parse(value);
+  if (user.banned && (!user.banExpires || !Number.isFinite(expiryMs(user.banExpires)) || expiryMs(user.banExpires) > Date.now())) return false;
+  return authDb.prepare('SELECT id,expiresAt FROM "session" WHERE userId=?').all(state.user_id)
+    .some((session) => expiryMs(session.expiresAt) > Date.now()
+      && crypto.createHash("sha256").update(session.id).digest("hex") === state.session_hash);
+}
+
 export function verifyUserPassword(userId, password) {
   const normalizedUserId = normalizeOptionalString(userId);
   const passwordValue = String(password || "");
