@@ -1,6 +1,6 @@
 // Synthetic HTTP boundary. No request ever leaves this fixture.
 export function createQuickBooksMock() {
-  const mock = { calls: [], customers: [], invoices: [], payments: [], refreshes: 0, failNext: null, loseInvoiceResponse: false, staleNext: false,
+  const mock = { calls: [], customers: [], invoices: [], payments: [], refreshes: 0, failNext: null, loseInvoiceResponse: false, loseItemResponse: false, staleNext: false,
     realm: "123456789", country: "AU", currency: "AUD", companyName: "Fixture AU company", tokenSuffix: "", customNumbers: true, usingSalesTax: true,
     accounts: [{ Id: "10", Name: "Service income", AccountType: "Income", Active: true }],
     items: [{ Id: "20", Name: "Service", Type: "Service", Active: true, IncomeAccountRef: { value: "10" } }],
@@ -45,10 +45,18 @@ export function createQuickBooksMock() {
     const values = lists[entity];
     if (!values) throw new Error(`Unknown fixture request ${endpoint}`);
     if (method === "GET") { const row = values.find((row) => row.Id === id); return row ? json({ [entity]: row }) : fault("610"); }
-    if (method !== "POST" || !["Customer", "Invoice"].includes(entity)) throw new Error("Unsupported fixture write");
+    if (method !== "POST" || !["Customer", "Invoice", "Item"].includes(entity)) throw new Error("Unsupported fixture write");
     const requestId = url.searchParams.get("requestid");
     if (!requestId) throw new Error("Fixture requires durable request ID");
     if (requests.has(requestId)) return json(requests.get(requestId));
+    if (entity === "Item") {
+      if (body.Id || body.Type !== "Service" || body.Active !== true || !mock.accounts.some(account => account.Id === body.IncomeAccountRef?.value && account.Active && account.AccountType === "Income")) throw new Error("Unsafe fixture item write");
+      if (mock.items.some(row => row.Name.trim().toLowerCase() === body.Name.trim().toLowerCase())) return fault("6240");
+      const row = { ...body, Id: String(sequence++), SyncToken: "0" };
+      mock.items.push(row); requests.set(requestId, { Item: row });
+      if (mock.loseItemResponse) { mock.loseItemResponse = false; throw new Error("Fixture item accepted; response lost"); }
+      return json({ Item: row });
+    }
     if (entity === "Customer") {
       if (mock.customers.some((row) => row.DisplayName === body.DisplayName)) return fault("6240");
       const row = { ...body, Id: String(sequence++), SyncToken: "0", Active: true };

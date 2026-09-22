@@ -45,6 +45,146 @@ const paid = (db, id = "invoice") => db.prepare("SELECT COALESCE(SUM(amount_cent
 const allocations = (mock, values) => mock.setPayments(values.map(([id, amount]) => ({ id, allocations: [[mock.invoices[0].Id, amount]] })));
 const event = (mock, { id = crypto.randomUUID(), resource = mock.invoices[0]?.Id, type = "qbo.invoice.updated.v1", realm = mock.realm } = {}) => [quickBooksCloudEvent({ id, type, time: "2026-09-18T01:00:00Z", intuitentityid: resource, intuitaccountid: realm, data: { ignored: "not stored" } })];
 
+test("sales item options paginate large lists and include names, SKU, type and active income account context", async (t) => {
+  const { service, mock } = fixture(t); await consent(service);
+  mock.accounts.push({ Id: "11", Name: "Product Sales", AccountType: "Income", Active: true }, { Id: "12", Name: "Inactive income", AccountType: "Income", Active: false }, { Id: "13", Name: "Purchases", AccountType: "Expense", Active: true });
+  mock.items = Array.from({ length: 2001 }, (_, index) => ({ Id: String(1000 + index), Name: `Part ${index}`, FullyQualifiedName: `Parts:Part ${index}`, Sku: `BAT-${index}`, Type: "NonInventory", Active: true, IncomeAccountRef: { value: "11" } }));
+  mock.items.push({ Id: "20", Name: "Maintenance", Type: "Service", Active: true, IncomeAccountRef: { value: "10" } });
+  for (const [index, patch] of [{ Type: "Inventory" }, { Type: "Group" }, { Type: "Category" }, { Active: false }, { SpecialItem: true }, { IncomeAccountRef: { value: "12" } }, { IncomeAccountRef: { value: "13" } }, { IncomeAccountRef: {} }].entries()) {
+    mock.items.push({ Id: String(4000 + index), Name: "Excluded", Active: true, Type: "Service", IncomeAccountRef: { value: "10" }, ...patch });
+  }
+  const options = await service.getConfig();
+  assert.equal(options.items.length, 2002);
+  assert.deepEqual(options.items[2000], { id: "3000", name: "Part 2000", fullyQualifiedName: "Parts:Part 2000", code: "BAT-2000", type: "NonInventory", incomeAccountId: "11", incomeAccountName: "Product Sales" });
+  assert.equal(options.items.at(-1).type, "Service");
+  assert.ok(mock.calls.some(call => new URL(call.url).searchParams.get("query")?.includes("FROM Item WHERE Active = true STARTPOSITION 2001")));
+  await service.configure({ itemId: "3000", taxMappings: { taxable: "30" } });
+  assert.equal(service.status().config.itemId, "3000");
+  await assert.rejects(service.configure({ itemId: "4000", taxMappings: { taxable: "30" } }), { code: "ITEM_MAPPING" });
+});
+
+test("creating ELSET Services requires an explicit active Income account and leaves existing mappings and records intact", async (t) => {
+  const { service, mock, db } = fixture(t); await ready(service); await service.syncInvoice("job");
+  mock.accounts.push({ Id: "11", Name: "Other income", AccountType: "Other Income", Active: true }, { Id: "12", Name: "Inactive", AccountType: "Income", Active: false }, { Id: "13", Name: "Sales Income", AccountType: "Income", Active: true });
+  const previousItems = structuredClone(mock.items), accounts = structuredClone(mock.accounts), invoices = structuredClone(mock.invoices);
+  const mappings = db.prepare("SELECT * FROM integration_entity_mappings").all(), config = service.status().config;
+  const records = loadWorkspaceStateFromDb(db);
+  for (const incomeAccountId of [undefined, "", "11", "12", "999"]) await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId }), { code: "ACCOUNT_MAPPING" });
+  assert.equal(mock.calls.filter(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST").length, 0);
+  const result = await service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "13" });
+  assert.equal(result.reused, false); assert.equal(result.salesItem.name, "ELSET Services"); assert.equal(result.salesItem.incomeAccountName, "Sales Income");
+  assert.deepEqual(mock.items.at(-1), { Id: result.salesItem.id, Name: "ELSET Services", Type: "Service", Active: true, IncomeAccountRef: { value: "13" }, SyncToken: "0" });
+  assert.deepEqual(mock.items.slice(0, -1), previousItems); assert.deepEqual(mock.accounts, accounts); assert.deepEqual(mock.invoices, invoices);
+  assert.deepEqual(db.prepare("SELECT * FROM integration_entity_mappings").all(), mappings);
+  assert.deepEqual(service.status().config, config); assert.deepEqual(loadWorkspaceStateFromDb(db), records);
+  const replay = await service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" });
+  assert.equal(replay.reused, true); assert.equal(replay.salesItem.id, result.salesItem.id); assert.equal(replay.salesItem.incomeAccountId, "13");
+  assert.equal(mock.calls.filter(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST").length, 1);
+});
+
+for (const type of ["Service", "NonInventory"]) test(`existing case-insensitive ELSET Services ${type} is reused without changing its account`, async (t) => {
+  const { service, mock } = fixture(t); await consent(service);
+  mock.items.push({ Id: "21", Name: "eLsEt SeRvIcEs", Type: type, Active: true, IncomeAccountRef: { value: "10" } });
+  const result = await service.createDefaultSalesItem({ tenantId: mock.realm });
+  assert.equal(result.reused, true); assert.equal(result.salesItem.id, "21"); assert.equal(result.salesItem.type, type);
+  assert.equal(mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item")).length, 0);
+});
+
+test("ELSET Services name collisions fail closed for inactive, unsupported, missing-account and ambiguous items", async (t) => {
+  for (const patch of [{ Active: false }, { Type: "Inventory" }, { Type: "Category" }, { SpecialItem: true }, { IncomeAccountRef: { value: "missing" } }, { duplicate: true }]) {
+    await t.test(JSON.stringify(patch), async sub => {
+      const { service, mock } = fixture(sub); await consent(service);
+      mock.items.push({ Id: "21", Name: "ELSET Services", Type: "Service", Active: true, IncomeAccountRef: { value: "10" }, ...patch });
+      if (patch.duplicate) mock.items.push({ ...mock.items.at(-1), Id: "22", Name: "elset services", FullyQualifiedName: "Parent:elset services" });
+      const before = structuredClone(mock.items);
+      await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" }), { code: "ITEM_NAME_CONFLICT" });
+      assert.deepEqual(mock.items, before); assert.equal(mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item")).length, 0);
+    });
+  }
+});
+
+test("lost sales-item response is reconciled and retries after a service restart do not duplicate it", async (t) => {
+  const { service, mock, db, env } = fixture(t); await consent(service); mock.loseItemResponse = true;
+  const result = await service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" });
+  assert.equal(result.reused, true);
+  const restarted = new AccountingService(db, { providerId: "quickbooks", env, fetchImpl: mock.fetch });
+  assert.equal((await restarted.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" })).salesItem.id, result.salesItem.id);
+  assert.equal(mock.items.filter(item => item.Name === "ELSET Services").length, 1);
+  assert.equal(mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item")).length, 1);
+  assert.equal(service.store.operation(mock.realm, "default-sales-item", "elset-services").status, "DONE");
+});
+
+test("an external same-name race reuses the eligible item after QuickBooks rejects the duplicate", async (t) => {
+  const { service, mock } = fixture(t); await consent(service);
+  service.provider.fetch = async (url, options) => {
+    if (new URL(url).pathname.endsWith("/item") && options.method === "POST") {
+      mock.items.push({ Id: "21", Name: "ELSET Services", Type: "Service", Active: true, IncomeAccountRef: { value: "10" } });
+    }
+    return mock.fetch(url, options);
+  };
+  const result = await service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" });
+  assert.equal(result.reused, true); assert.equal(result.salesItem.id, "21");
+  assert.equal(mock.items.filter(item => item.Name === "ELSET Services").length, 1);
+  assert.equal(service.store.operation(mock.realm, "default-sales-item", "elset-services").status, "DONE");
+});
+
+test("uncertain item writes retain their durable request ID and reject changed payloads", async (t) => {
+  const { service, mock } = fixture(t); await consent(service);
+  mock.accounts.push({ Id: "11", Name: "Sales", AccountType: "Income", Active: true });
+  mock.failNext = { path: "/item", throw: true };
+  await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" }), { code: "PROVIDER_UNAVAILABLE" });
+  const operation = service.store.operation(mock.realm, "default-sales-item", "elset-services");
+  assert.equal(operation.status, "PENDING");
+  await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "11" }), { code: "AMBIGUOUS_WRITE" });
+  await service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" });
+  const writes = mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item"));
+  assert.equal(writes.length, 2); assert.equal(new URL(writes[0].url).searchParams.get("requestid"), new URL(writes[1].url).searchParams.get("requestid"));
+  assert.equal(mock.items.filter(item => item.Name === "ELSET Services").length, 1);
+});
+
+test("expired uncertain sales-item writes fail closed without issuing another create", async (t) => {
+  const { service, mock, db } = fixture(t); await consent(service);
+  mock.failNext = { path: "/item", throw: true };
+  await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" }), { code: "PROVIDER_UNAVAILABLE" });
+  db.prepare("UPDATE integration_operations SET started_at=? WHERE entity_type='default-sales-item'").run(Date.now() - 360_000);
+  await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" }), { code: "AMBIGUOUS_WRITE" });
+  assert.equal(mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item")).length, 1);
+});
+
+test("concurrent sales item creation is locked and a changed or pending company cannot receive the write", async (t) => {
+  const { service, mock, db, env } = fixture(t); await consent(service);
+  await assert.rejects(service.createDefaultSalesItem({ tenantId: "987654321", incomeAccountId: "10" }), { code: "REALM_MISMATCH" });
+  let release, entered;
+  const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { entered = resolve; });
+  service.provider.fetch = async (url, options) => {
+    if (new URL(url).pathname.endsWith("/item") && options.method === "POST") { entered(); await gate; }
+    return mock.fetch(url, options);
+  };
+  const first = service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" });
+  await started;
+  const second = new AccountingService(db, { providerId: "quickbooks", env, fetchImpl: mock.fetch });
+  try { await assert.rejects(second.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" }), { code: "INTEGRATION_BUSY" }); }
+  finally { release(); }
+  await first;
+  assert.equal(mock.items.filter(item => item.Name === "ELSET Services").length, 1);
+  mock.realm = "987654321"; await consent(service, mock.realm);
+  await assert.rejects(service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" }), { code: "COMPANY_SWITCH_PENDING" });
+});
+
+test("configured ELSET Services preserves invoice description, quantity, price and AU GST across repeated sync", async (t) => {
+  const { service, mock, db } = fixture(t); await consent(service);
+  db.prepare("UPDATE invoice_line_items SET description=?,qty_text='1',quantity_micros=1000000,rate_cents=? WHERE invoice_id=?").run("Replace compressor control board", 85000, "invoice");
+  const created = await service.createDefaultSalesItem({ tenantId: mock.realm, incomeAccountId: "10" });
+  await service.configure({ itemId: created.salesItem.id, taxMappings: { taxable: "30" } });
+  await service.syncInvoice("job"); await service.syncInvoice("job");
+  assert.equal(mock.invoices.length, 1); assert.equal(mock.items.filter(item => item.Name === "ELSET Services").length, 1);
+  assert.equal(mock.invoices[0].Line[0].Description, "Replace compressor control board");
+  assert.deepEqual(mock.invoices[0].Line[0].SalesItemLineDetail, { ItemRef: { value: created.salesItem.id }, TaxCodeRef: { value: "30" }, Qty: 1, UnitPrice: 850 });
+  assert.equal(mock.invoices[0].TxnTaxDetail.TotalTax, 85); assert.equal(mock.invoices[0].TotalAmt, 935);
+  assert.equal(db.prepare("SELECT description FROM invoice_line_items WHERE invoice_id=?").get("invoice").description, "Replace compressor control board");
+  assert.equal(mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item")).length, 1);
+});
+
 test("QuickBooks OAuth accounting-only scope, state digest, cookie-free callback, realm and encrypted tokens", async (t) => {
   const { service, db, env, mock } = fixture(t);
   const url = new URL((await service.connect("admin", "session")).url), state = url.searchParams.get("state");
@@ -501,4 +641,12 @@ test("HTTP callback is public while connect/config/sync remain protected; redire
   assert.equal(result.headers.get("location"), "/settings?accounting=quickbooks&result=connected"); assert.equal(await result.text(), "");
   assert.equal(db.prepare("SELECT external_tenant_id FROM workspace_integrations").get().external_tenant_id, mock.realm);
   const forbidden = await fetch(`${base}/config`, { method: "PATCH", headers: { "x-test-user": "technician", "x-test-role": "technician", "X-Accounting-Request": "1" } }); assert.equal(forbidden.status, 403);
+  const salesBody = JSON.stringify({ tenantId: mock.realm, incomeAccountId: "10" });
+  for (const [headers, expected] of [[{}, 401], [{ "x-test-user": "technician", "x-test-role": "technician", "X-Accounting-Request": "1" }, 403], [{ "x-test-user": "admin" }, 403], [{ "x-test-user": "admin", "X-Accounting-Request": "1", "Sec-Fetch-Site": "cross-site" }, 403]]) {
+    assert.equal((await fetch(`${base}/sales-item`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: salesBody })).status, expected);
+  }
+  const created = await fetch(`${base}/sales-item`, { method: "POST", headers: { "x-test-user": "admin", "X-Accounting-Request": "1", "Content-Type": "application/json" }, body: salesBody });
+  assert.equal(created.status, 200); assert.equal((await created.json()).result.salesItem.name, "ELSET Services");
+  updateWorkspaceAddons(db, { quickbooks: false });
+  assert.equal((await fetch(`${base}/sales-item`, { method: "POST", headers: { "x-test-user": "admin", "X-Accounting-Request": "1", "Content-Type": "application/json" }, body: salesBody })).status, 403);
 });

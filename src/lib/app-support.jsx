@@ -1,4 +1,5 @@
 import { normalizeDeletedInvoices } from "./invoice-deletion.js";
+import { createBlankDocumentLine } from "./price-list.js";
 import { normalizeServiceBoardNote } from "./service-board-note.js";
 import { invoiceStatusFromAmounts } from "./invoice-account.js";
 import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
@@ -125,12 +126,18 @@ export const contentDensityStyles = {
 export const settingsTabs = [
   { value: "preferences", label: "Preferences" },
   { value: "templates", label: "Document Templates" },
+  { value: "price-list", label: "Items & Price List" },
   { value: "ui", label: "UI Settings" },
   { value: "addons", label: "Add-ons" },
   { value: "backup", label: "Data Backup" },
 ];
 
 export const settingsTabMeta = {
+  "price-list": {
+    eyebrow: "Workspace Items",
+    title: "Items & Price List",
+    description: "Reusable items for quotes and invoices, with editable prices on each document.",
+  },
   addons: {
     eyebrow: "Workspace Modules",
     title: "Add-ons",
@@ -1990,7 +1997,7 @@ export function createTemplatePreviewFixture(type) {
   };
 }
 
-export function buildDefaultDoc(job, type) {
+export function buildDefaultDoc(_job, type) {
   const isInvoice = type === "invoice";
   const issueDate = slugDate();
   return {
@@ -2005,13 +2012,6 @@ export function buildDefaultDoc(job, type) {
         }
       : {}),
     sentHistory: [],
-    items: [
-      {
-        id: crypto.randomUUID(),
-        description: isInvoice ? `Labour for ${job.title}` : `${job.title} assessment / parts estimate`,
-        qty: 1,
-        rate: isInvoice ? 165 : 150,
-      },
-    ],
+    items: [createBlankDocumentLine()],
   };
 }

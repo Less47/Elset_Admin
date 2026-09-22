@@ -47,6 +47,7 @@ import { registerQuickBooksWebhook } from "./server-quickbooks-webhooks.js";
 import { createMapLocationsRouter } from "./server-map-locations-routes.js";
 import { createWorkspaceLogoRouter } from "./server-workspace-logo-routes.js";
 import { createUserPreferencesRouter } from "./server-user-preferences-routes.js";
+import { createPriceListRouter } from "./server-price-list-routes.js";
 import { registerStaffRoutes } from "./server-staff-routes.js";
 import { registerServiceM8ImportRoutes } from "./server-servicem8-import-routes.js";
 import { registerWorkspaceRestoreRoutes } from "./server-workspace-restore-routes.js";
@@ -343,6 +344,7 @@ export function createServerApp({ accountingFetch } = {}) {
   registerAccountingRoutes(app, { requireAuth, requireRole, getOptionalAuthSession: getRequestAuthSession, authorizeOAuthInitiator: authorizeAccountingOAuthInitiator, fetchImpl: accountingFetch });
   app.use(createWorkspaceLogoRouter({ requireAuth, requireRole }));
   app.use(createUserPreferencesRouter({ requireAuth }));
+  app.use(createPriceListRouter({ requireAuth, requireRole }));
   registerServiceM8ImportRoutes(app, {
     requireAuth,
     requireRole,

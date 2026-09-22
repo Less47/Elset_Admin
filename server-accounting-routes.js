@@ -42,6 +42,7 @@ export function createAccountingRouter({ requireAuth, requireRole, getOptionalAu
   }, { callback: true }));
   router.get(`${route}/config`, auth, manage, handle((service) => service.getConfig()));
   router.patch(`${route}/config`, auth, manage, handle((service, req) => service.configure(req.body), { mutation: true }));
+  router.post(`${route}/sales-item`, auth, manage, handle((service, req) => service.createDefaultSalesItem(req.body), { mutation: true }));
   router.post(`${route}/organisation`, auth, manage, handle((service, req) => service.chooseOrganisation(req.body?.tenantId, req.body?.confirmChange), { mutation: true }));
   router.post(`${route}/company-switch`, auth, manage, handle((service, req) => service.switchCompany(req.body?.switchId, req.body?.confirm), { mutation: true }));
   router.post(`${route}/test`, auth, manage, handle((service) => service.testConnection(), { mutation: true }));

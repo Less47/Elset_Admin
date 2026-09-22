@@ -246,6 +246,7 @@ test.beforeEach(()=>{
   const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
   try {
     db.exec("DELETE FROM deleted_invoices");
+    db.exec("DELETE FROM price_list_items");
     const clean=normalizeStoredData(documentFixture());
     for(const job of clean.jobs){db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);insertJobTree(db,job);}
   }finally{db.close();}
@@ -450,7 +451,14 @@ for (const preset of themePresets) test(`invoice deletion dialog follows ${prese
     } finally { await context.close(); }
   }
 });
-const save=async(page,type)=>{await page.getByRole('button',{name:'Save '+(type==='quote'?'Quote':'Invoice'),exact:true}).click();await expect(editor(page).locator('.document-feedback')).toHaveText('Saved');};
+const save = async (page, type) => {
+  // JSON mode retains its existing debounced workspace autosave. Wait for the
+  // actual write before a test reloads/navigates away or inspects persisted data.
+  const sync = storageMode === "json" ? page.waitForResponse((response) => response.url().endsWith("/api/app-state") && response.request().method() === "PUT") : null;
+  await page.getByRole("button", { name: "Save " + (type === "quote" ? "Quote" : "Invoice"), exact: true }).click();
+  await expect(editor(page).locator(".document-feedback")).toHaveText("Saved");
+  if (sync) expect((await sync).ok()).toBeTruthy();
+};
 async function noModalOrOverflow(page){
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCount(0);
@@ -471,13 +479,16 @@ for (const type of ["quote", "invoice"]) {
       await noModalOrOverflow(page);
       expect(dbJob(NEW_JOB)[type]).toBeNull();
       expect(writes).toEqual([]);
+      await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("");
+      await expect(page.getByLabel("Item 1 quantity", { exact: true })).toHaveValue("1");
+      await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("0");
       await page.getByLabel("Item 1 description", { exact: true }).fill("Motor replacement");
       await page.getByLabel("Item 1 quantity", { exact: true }).fill("2.5");
       await page.getByLabel("Item 1 rate", { exact: true }).fill("120");
-      await page.getByRole("button", { name: "Add Item", exact: true }).click();
+      await page.getByRole("button", { name: "Add blank line", exact: true }).click();
       await page.getByLabel("Item 2 description", { exact: true }).fill("Travel");
       await page.getByLabel("Item 2 rate", { exact: true }).fill("50");
-      await page.getByRole("button", { name: "Add Item", exact: true }).click();
+      await page.getByRole("button", { name: "Add blank line", exact: true }).click();
       await page.getByRole("button", { name: "Remove item 3", exact: true }).click();
       await expect(page.locator("[data-document-subtotal]")).toHaveText("$350.00");
       await expect(page.locator("[data-document-gst]")).toHaveText("$35.00");
@@ -540,6 +551,116 @@ for (const type of ["quote", "invoice"]) {
     } finally { await context.close(); }
   });
 }
+
+test("price list management shares editable snapshots across quotes and invoices", async ({ browser }, info) => {
+  const { context, page } = await openWorkspace(browser, { jobId: NEW_JOB, type: "quote" });
+  async function settings() {
+    await page.goto(`${baseUrl}/settings`);
+    await page.getByRole("button", { name: "Items & Price List", exact: true }).last().click();
+  }
+  try {
+    const original = dbJob(EXISTING_JOB);
+    await settings();
+    await page.getByRole("button", { name: "Add item", exact: true }).click();
+    let dialog = page.getByRole("dialog", { name: "Add price-list item" });
+    await dialog.getByLabel("Name", { exact: true }).fill("Labour");
+    await dialog.getByLabel("Description", { exact: true }).fill("Gate maintenance labour");
+    await dialog.getByLabel("Item code / SKU (optional)").fill("LAB-01");
+    await dialog.getByLabel("Category (optional)").fill("Services");
+    await dialog.getByLabel("Unit", { exact: true }).selectOption("hour");
+    await dialog.getByLabel("Unit price ex GST").fill("145");
+    await dialog.getByRole("button", { name: "Save item", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("list", { name: "Price-list items" })).toContainText("$145.00");
+    await page.getByLabel("Search price list").fill("LAB-01");
+    await expect(page.getByRole("listitem", { name: "Labour", exact: true })).toBeVisible();
+    await capture(page, info, "price-list-settings-desktop");
+    await page.goto(`${baseUrl}/jobs/${NEW_JOB}/quote`);
+    await page.getByRole("button", { name: "Remove item 1", exact: true }).click();
+    await page.getByRole("button", { name: "Add from price list", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Add from price list", exact: true });
+    for (const query of ["Labour", "LAB-01", "maintenance"]) {
+      await dialog.getByLabel("Search price list").fill(query);
+      await expect(dialog.getByRole("button", { name: "Add Labour", exact: true })).toBeVisible();
+    }
+    await dialog.getByRole("button", { name: "Add Labour", exact: true }).click();
+    await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("145");
+    await page.getByLabel("Item 1 rate", { exact: true }).fill("140");
+    await page.getByLabel("Item 1 description", { exact: true }).fill("Agreed labour");
+    await save(page, "quote");
+    const savedQuote = structuredClone(dbJob(NEW_JOB).quote);
+    await settings();
+    await page.getByRole("listitem", { name: "Labour", exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Edit price-list item" });
+    await dialog.getByLabel("Unit price ex GST").fill("155");
+    await dialog.getByLabel("Name", { exact: true }).fill("Labour revised");
+    await dialog.getByRole("button", { name: "Save item", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.goto(`${baseUrl}/jobs/${NEW_JOB}/invoice`);
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("");
+    await page.getByRole("button", { name: "Remove item 1", exact: true }).click();
+    await page.getByRole("button", { name: "Add from price list", exact: true }).click();
+    await page.getByRole("button", { name: "Add Labour revised", exact: true }).click();
+    await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("155");
+    await page.getByRole("button", { name: "Add blank line", exact: true }).click();
+    await expect(page.getByLabel("Item 2 description", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Item 2 rate", { exact: true })).toHaveValue("0");
+    await page.getByLabel("Item 2 description", { exact: true }).fill("Manual travel");
+    await page.getByLabel("Item 2 rate", { exact: true }).fill("10");
+    await expect(page.locator("[data-document-total]")).toHaveText("$181.50");
+    await save(page, "invoice");
+    const savedInvoice = structuredClone(dbJob(NEW_JOB).invoice);
+    expect(savedQuote.items[0].priceListItemId).toBe(savedInvoice.items[0].priceListItemId);
+    expect(savedInvoice.items[1].priceListItemId).toBeUndefined();
+    await settings();
+    await page.getByRole("listitem", { name: "Labour revised", exact: true }).getByRole("button", { name: "Archive", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Item archived" })).toBeVisible();
+    await page.getByLabel("Price-list status").selectOption("archived");
+    await expect(page.getByRole("listitem", { name: "Labour revised", exact: true })).toContainText("$155.00");
+    await page.goto(`${baseUrl}/jobs/${NEW_JOB}/quote`);
+    await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("140");
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("Agreed labour");
+    await page.getByRole("button", { name: "Add from price list", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("No active items");
+    expect(dbJob(NEW_JOB).quote).toEqual(savedQuote);
+    expect(dbJob(NEW_JOB).invoice).toEqual(savedInvoice);
+    expect(dbJob(EXISTING_JOB)).toEqual(original);
+  } finally { await context.close(); }
+});
+
+for (const width of [390, 820, 1440]) test(`price-list picker is searchable and reads current values at ${width}px`, async ({ browser }, info) => {
+  const { context, page } = await openWorkspace(browser, { width, height: 1000, jobId: NEW_JOB, type: "invoice" });
+  try {
+    const response = await context.request.post(`${baseUrl}/api/price-list-items`, { data: { name: "Labour", description: "Gate maintenance labour", code: "LAB-01", unit: "hour", unitPrice: 145, taxTreatment: "taxable" } });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const { item } = await response.json();
+    await page.getByRole("button", { name: "Remove item 1", exact: true }).click();
+    await page.getByRole("button", { name: "Add from price list", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Add from price list", exact: true });
+    await dialog.getByLabel("Search price list").fill("LAB-01");
+    await expect(dialog.getByRole("button", { name: "Add Labour", exact: true })).toBeVisible();
+    expect(await dialog.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+    const box = await dialog.boundingBox(); expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+    await capture(page, info, `price-list-picker-${width}`);
+    const update = await context.request.patch(`${baseUrl}/api/price-list-items/${item.id}`, { data: { updatedAt: item.updatedAt, unitPrice: 155 } });
+    expect(update.ok()).toBeTruthy();
+    await dialog.getByRole("button", { name: "Add Labour", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("155");
+    await save(page, "invoice");
+    await page.reload();
+    await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("155");
+    const current = (await update.json()).item;
+    await page.getByRole("button", { name: "Add from price list", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "Add Labour", exact: true })).toBeVisible();
+    expect((await context.request.patch(`${baseUrl}/api/price-list-items/${item.id}`, { data: { updatedAt: current.updatedAt, archived: true } })).ok()).toBeTruthy();
+    await dialog.getByRole("button", { name: "Add Labour", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("archived");
+    await expect(page.locator("[data-document-item]")).toHaveCount(1);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await noModalOrOverflow(page);
+  } finally { await context.close(); }
+});
 
 test("document workspaces fit all eight requested viewports with usable line items and totals", async ({ browser }, info) => {
   for (const [width, height] of [[390,844],[430,932],[768,1024],[820,1180],[1024,768],[1280,720],[1440,900],[1920,1080]]) {

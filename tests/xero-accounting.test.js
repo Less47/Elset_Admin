@@ -416,7 +416,7 @@ test("version 8 to 9 migration is additive, transactional and runs once", (t) =>
   assert.equal(db.pragma("user_version", { simple: true }), 8);
   assert.equal(db.prepare("SELECT 1 FROM sqlite_master WHERE name='workspace_integrations'").get(), undefined);
   db.exec("DROP TABLE integration_operations"); migrateWorkspaceSchema(db);
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 12); assert.equal(db.pragma("user_version", { simple: true }), 12);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 13); assert.equal(db.pragma("user_version", { simple: true }), 13);
   assert.deepEqual(db.prepare("SELECT * FROM customers").all(), before);
   const identity = db.prepare("SELECT * FROM integration_workspace").get(); migrateWorkspaceSchema(db);
   assert.deepEqual(db.prepare("SELECT * FROM integration_workspace").get(), identity);

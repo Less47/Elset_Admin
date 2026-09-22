@@ -38,7 +38,7 @@ An Australian company with the workspace's AUD currency, custom transaction numb
 
 ## 9. Product/Service strategy
 
-Lists active Service and NonInventory Items backed by active income accounts. The selected ItemRef is used on invoice sales lines; each line keeps ELSET's own description, quantity and unit price. V3 creates no Items and modifies no chart-of-accounts entries.
+Lists active Service and NonInventory Items backed by active income accounts in a searchable picker with type, account and SKU context. The selected ItemRef is used on invoice sales lines; each line keeps ELSET's own description, quantity and unit price. The explicit **Create "ELSET Services" in QuickBooks** setup action creates one Service item using a selected existing Income account, or reuses an eligible exact-name item. Invoice sync never creates items, and no chart-of-accounts entries are modified. See the [sales item configuration report](quickbooks-sales-item-configuration.md).
 
 ## 10. GST strategy
 

@@ -272,5 +272,5 @@ test("genuine V1 schema 9 through 10 to latest preserves all records, rolls back
   db.exec("DROP TABLE integration_external_payments"); migrateWorkspaceSchema(db);
   for (const table of tables) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), table === "payments" ? before[table].map((row) => ({ ...row, source: "manual" })) : before[table]);
   migrateWorkspaceSchema(db); assert.equal(db.prepare("SELECT COUNT(*) n FROM workspace_schema_migrations WHERE version=10").get().n, 1);
-  assert.equal(db.pragma("user_version", { simple: true }), 12);
+  assert.equal(db.pragma("user_version", { simple: true }), 13);
 });

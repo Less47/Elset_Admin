@@ -141,6 +141,77 @@ async function syncPayments(context, page, payments) {
   await card(page).getByRole("button", { name: "Sync from QuickBooks", exact: true }).click();
   await expect(card(page)).toContainText("Payment sync: Up to date");
 }
+for (const width of [390, 820, 1440]) test(`searchable sales items and explicit ELSET Services creation/reuse at ${width}px`, async ({ browser }, info) => {
+  const { context, page } = await open(browser, { width });
+  try {
+    await connectApi(context, { configure: false });
+    const items = Array.from({ length: 600 }, (_, index) => ({ Id: String(index + 1000), Name: `Part ${index}`, Sku: `SKU-${index}`, Type: "NonInventory", Active: true, IncomeAccountRef: { value: "11" } }));
+    items[599] = { ...items[599], Name: "Batteries", FullyQualifiedName: "Electrical:Batteries", Sku: "BAT-SOLAR" };
+    items.push({ Id: "20", Name: "Maintenance", Type: "Service", Active: true, IncomeAccountRef: { value: "10" } },
+      { Id: "21", Name: "Hidden inventory", Type: "Inventory", Active: true, IncomeAccountRef: { value: "10" } },
+      { Id: "22", Name: "Hidden inactive", Type: "Service", Active: false, IncomeAccountRef: { value: "10" } });
+    await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: { items, accounts: [
+      { Id: "10", Name: "Service Income", AccountType: "Income", Active: true },
+      { Id: "11", Name: "Product Sales", AccountType: "Income", Active: true },
+      { Id: "12", Name: "Unrelated expense", AccountType: "Expense", Active: true },
+    ] } });
+    await page.reload();
+    const connection = page.getByLabel("QuickBooks connection", { exact: true });
+    await connection.getByRole("button", { name: "Configure", exact: true }).click();
+    await expect(connection).toContainText("Your ELSET descriptions, quantities and prices are still sent separately.");
+    await connection.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Choose QuickBooks sales item" });
+    const search = picker.getByRole("textbox", { name: "Search QuickBooks sales items" });
+    await expect(picker.getByRole("status")).toContainText("601 matching items · Showing 100");
+    await expect(picker.getByRole("listitem")).toHaveCount(100);
+    await picker.getByRole("button", { name: "Show more items" }).click();
+    await expect(picker.getByRole("listitem")).toHaveCount(200);
+    for (const query of ["Batteries", "Electrical:Batteries", "BAT-SOLAR"]) {
+      await search.fill(query); await expect(picker.getByRole("listitem")).toHaveCount(1);
+      await expect(picker.getByRole("listitem")).toContainText("Non-inventory · Product Sales");
+    }
+    await capture(page, info, `sales-item-picker-${width}`, picker);
+    for (const query of ["NonInventory", "Non-inventory", "Product Sales"]) {
+      await search.fill(query); await expect(picker.getByRole("status")).toContainText("600 matching items");
+    }
+    await search.fill("Service Income"); await expect(picker.getByRole("listitem")).toHaveCount(1); await expect(picker.getByRole("listitem")).toContainText("Maintenance");
+    await search.fill("Hidden"); await expect(picker.getByRole("listitem")).toHaveCount(0);
+    await search.fill("BAT-SOLAR"); await picker.getByRole("button", { name: "Use Electrical:Batteries", exact: true }).press("Enter");
+    await connection.getByLabel("Default QuickBooks GST code", { exact: true }).selectOption("30");
+    await connection.getByRole("button", { name: "Save QuickBooks configuration" }).click();
+    await expect(connection).toContainText("QuickBooks configuration saved.");
+    await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
+    await expect(connection.locator('[data-quickbooks-selected-item="1599"]')).toContainText("Batteries");
+    await connection.getByRole("button", { name: 'Create "ELSET Services" in QuickBooks', exact: true }).click();
+    const create = page.getByRole("dialog");
+    await expect(create.getByRole("button", { name: "Create sales item", exact: true })).toBeDisabled();
+    await expect(create.getByLabel("Income account for ELSET Services")).toHaveValue("");
+    await expect(create.getByRole("option", { name: "Unrelated expense" })).toHaveCount(0);
+    await create.getByLabel("Income account for ELSET Services").selectOption("10");
+    await capture(page, info, `sales-item-create-${width}`, create);
+    await create.getByRole("button", { name: "Create sales item", exact: true }).click();
+    await expect(create).toHaveCount(0);
+    await expect(connection).toContainText("Created ELSET Services · Service Income");
+    await expect(connection.getByLabel("Default QuickBooks GST code")).toHaveValue("30");
+    const beforeSave = await context.request.get(`${baseUrl}/api/integrations/quickbooks/status`);
+    expect((await beforeSave.json()).result.config.itemId).toBe("1599");
+    await connection.getByRole("button", { name: "Save QuickBooks configuration" }).click();
+    await expect(connection).toContainText("QuickBooks configuration saved.");
+    await connection.getByRole("button", { name: 'Use "ELSET Services"', exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Use existing ELSET Services", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(connection).toContainText("Reused existing ELSET Services · Service Income");
+    await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const remote = await (await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: {} })).json();
+    expect(remote.items.filter(item => item.Name === "ELSET Services")).toHaveLength(1);
+    expect(remote.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/item"))).toHaveLength(1);
+    expect(remote.invoices[0].Line[0].Description).toBe("Invoiced work");
+    expect(remote.invoices[0].Line[0].SalesItemLineDetail.ItemRef.value).toBe(remote.items.find(item => item.Name === "ELSET Services").Id);
+    expect(remote.invoices[0].TxnTaxDetail.TotalTax).toBe(100);
+  } finally { await context.close(); }
+});
+
 test("QuickBooks consent, configuration, invoice, partial/full receipts, correction and disconnect", async ({ browser }, info) => {
   const { context, page } = await open(browser);
   try {
@@ -155,11 +226,12 @@ test("QuickBooks consent, configuration, invoice, partial/full receipts, correct
     const connection = page.getByLabel("QuickBooks connection", { exact: true });
     await expect(connection.getByText("Connected", { exact: true })).toBeVisible(); await expect(connection).toContainText("Sandbox — test company");
     await connection.getByRole("button", { name: "Configure", exact: true }).click();
-    await page.getByLabel("Product / Service", { exact: true }).selectOption("20");
-    await connection.getByLabel("Taxable sales (10% GST)", { exact: true }).selectOption("30");
+    await page.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
+    await page.getByRole("button", { name: "Use Service", exact: true }).click();
+    await connection.getByLabel("Default QuickBooks GST code", { exact: true }).selectOption("30");
     await page.getByRole("button", { name: "Save QuickBooks configuration" }).click(); await expect(connection).toContainText("QuickBooks configuration saved.");
     await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
-    await expect(connection.getByLabel("Taxable sales (10% GST)", { exact: true })).toHaveValue("30");
+    await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toHaveValue("30");
     await connection.getByRole("button", { name: "Test connection" }).click(); await expect(connection).toContainText("Connection verified");
     await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
     await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
@@ -212,17 +284,18 @@ for (const width of [390, 1440]) test(`QuickBooks reconnect switches US to AU af
     await expect(dialog).toHaveCount(0);
     await expect(connection).toContainText("Connected organisation: Fixture AU new company");
     await expect(connection).toContainText("987654321 · AU · AUD"); await expect(connection).not.toContainText("Fixture US company");
-    await expect(connection).toContainText("Configure this company's Product / Service and GST tax code");
+    await expect(connection).toContainText("Configure this company's default sales item and GST code");
     await connection.getByRole("button", { name: "Configure", exact: true }).click();
-    await expect(connection.getByLabel("Product / Service", { exact: true })).toHaveValue("");
-    await expect(connection.getByLabel("Taxable sales (10% GST)", { exact: true })).toHaveValue("");
+    await expect(connection.getByRole("group", { name: "Default QuickBooks sales item" })).toContainText("No default sales item selected.");
+    await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toHaveValue("");
     await capture(page, info, `reconnect-active-au-${width}`, connection);
-    await connection.getByLabel("Product / Service", { exact: true }).selectOption("20");
-    await connection.getByLabel("Taxable sales (10% GST)", { exact: true }).selectOption("30");
+    await connection.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
+    await page.getByRole("button", { name: "Use Service", exact: true }).click();
+    await connection.getByLabel("Default QuickBooks GST code", { exact: true }).selectOption("30");
     await connection.getByRole("button", { name: "Save QuickBooks configuration" }).click();
     await expect(connection).toContainText("QuickBooks configuration saved.");
     await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
-    await expect(connection.getByLabel("Product / Service", { exact: true })).toHaveValue("20");
+    await expect(connection.locator('[data-quickbooks-selected-item="20"]')).toContainText("Service income");
     await expect(connection).not.toContainText("Fixture US company");
   } finally { await context.close(); }
 });
@@ -237,9 +310,9 @@ for (const width of [390, 1440]) test(`tax configuration explains US company, di
       const connection = page.getByLabel("QuickBooks connection", { exact: true });
       await connection.getByRole("button", { name: "Configure", exact: true }).click();
       await expect(connection.getByRole("alert")).toContainText(message);
-      await expect(page.getByLabel("Product / Service", { exact: true })).toHaveValue("20");
-      await expect(connection.getByLabel("Taxable sales (10% GST)", { exact: true })).toBeDisabled();
-      if (scenario !== "disabled") await expect(connection.getByLabel("Taxable sales (10% GST)", { exact: true })).toHaveValue("");
+      await expect(connection.locator('[data-quickbooks-selected-item="20"]')).toContainText("Service income");
+      await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toBeDisabled();
+      if (scenario !== "disabled") await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toHaveValue("");
       if (scenario === "real-us") await expect(connection).toContainText("Company ID: 123456789 · US · USD");
       await expect(page.getByRole("button", { name: "Save QuickBooks configuration" })).toBeDisabled();
       await capture(page, info, `quickbooks-tax-${scenario}-${width}`, page.locator('[data-addon="quickbooks"]'));
@@ -300,7 +373,7 @@ for (const width of [390, 820, 1440]) for (const preset of themePresets) {
     try {
       await connectApi(context); await page.reload();
       await page.getByLabel("QuickBooks connection", { exact: true }).getByRole("button", { name: "Configure", exact: true }).click();
-      await expect(page.getByLabel("Product / Service", { exact: true })).toHaveValue("20");
+      await expect(page.locator('[data-quickbooks-selected-item="20"]')).toContainText("Service income");
       await capture(page, info, `${preset.id}-settings-${width}`, page.locator('[data-addon="quickbooks"]'));
       await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
       await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");

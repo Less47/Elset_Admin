@@ -506,6 +506,85 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [1024,768], 
   });
 }
 
+for (const width of [320, 390, 768, 820, 1024, 1280, 1440, 1536, 1920]) {
+  test(`compact eight-preset chooser keeps order, swatches and responsive columns at ${width}px`, async ({ browser }) => {
+    const a = await openSettings(browser, width, 1000);
+    try {
+      const cards = a.page.locator('[data-theme-preset]');
+      const labels = ['Elset Classic', 'Midnight Signal', 'Copper Dawn', 'Evergreen Ledger', 'Studio Rose', 'Desert Circuit', 'Harbour Steel', 'Alpine Frost'];
+      await expect(cards).toHaveCount(8);
+      // Text content is exactly the names: no body descriptions or hidden remnants.
+      await expect(cards).toHaveText(labels);
+      const layout = await cards.evaluateAll(elements => elements.map(el => {
+        const card = el.getBoundingClientRect();
+        const swatches = el.querySelector('[data-theme-swatches]');
+        const dots = [...swatches.children].map(dot => dot.getBoundingClientRect());
+        const label = el.querySelector('[data-theme-sample] + div > span').getBoundingClientRect();
+        return {
+          x: card.x, y: card.y, height: card.height,
+          dots: dots.length,
+          fits: el.scrollWidth <= el.clientWidth && dots.every(dot => dot.x >= card.x && dot.right <= card.right && dot.bottom <= card.bottom) && label.right + 7 <= dots[0].x,
+          aligned: Math.abs(label.y + label.height / 2 - dots[0].y - dots[0].height / 2) < 1,
+        };
+      }));
+      for (const card of layout) {
+        expect(card.dots).toBe(6);
+        expect(card.fits).toBe(true);
+        expect(card.aligned).toBe(true);
+        expect(card.height).toBe(layout[0].height);
+        expect(card.height).toBeLessThanOrEqual(112);
+      }
+      for (let index = 0; index < layout.length; index++) {
+        if (width >= 768) {
+          expect(layout[index].x).toBe(layout[index % 2].x);
+          if (index % 2 === 1) expect(layout[index].y).toBe(layout[index - 1].y);
+          if (index >= 2) expect(layout[index].y).toBeGreaterThan(layout[index - 2].y);
+        } else {
+          expect(layout[index].x).toBe(layout[0].x);
+          if (index) expect(layout[index].y).toBeGreaterThan(layout[index - 1].y);
+        }
+      }
+      expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await expect(a.page.locator('[data-theme-preset="elset"]')).toHaveAttribute('aria-pressed', 'true');
+      await a.page.locator('[data-theme-preset-grid]').screenshot({ path: path.join(screenshotDir, `preset-grid-${width}.png`) });
+    } finally { await a.context.close(); }
+  });
+}
+
+for (const id of ['harbour-steel', 'alpine-frost']) {
+  test(`${id} selection persists across sessions and Reset UI restores Classic`, async ({ browser }) => {
+    const preset = themePresets.find(p => p.id === id);
+    const a = await openSettings(browser);
+    let fresh;
+    const before = readWorkspaceState();
+    try {
+      const card = a.page.getByRole('button', { name: preset.label, exact: true });
+      await card.focus();
+      await card.press('Enter');
+      await expect(card).toHaveAttribute('aria-pressed', 'true');
+      await expect(card).toHaveCSS('outline-style', 'solid');
+      await expect(card).toHaveCSS('outline-width', '2px');
+      await expect(status(a.page)).toHaveText('Saved');
+      assertTargeted(a.writes, 1);
+      expect(readPersonalSettings()).toMatchObject(preset.values);
+      expect(readPersonalSettings('mobileoffice')).toMatchObject(themePresets[0].values);
+      fresh = await openSettings(browser);
+      await expect(fresh.page.locator(`[data-theme-preset="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
+      await fresh.page.reload();
+      await navigate(fresh.page, 'Settings', 1440);
+      await fresh.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
+      await expect(fresh.page.locator(`[data-theme-preset="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
+      expect(fresh.writes).toHaveLength(0);
+      await fresh.page.getByRole('button', { name: 'Reset UI', exact: true }).click();
+      await expect(status(fresh.page)).toHaveText('Saved');
+      await expect(fresh.page.locator('[data-theme-preset="elset"]')).toHaveAttribute('aria-pressed', 'true');
+      assertTargeted(fresh.writes, 1);
+      expect(readPersonalSettings()).toMatchObject(defaultUi);
+      expect(readWorkspaceState()).toEqual(before);
+    } finally { await a.context.close(); await fresh?.context.close(); }
+  });
+}
+
 test('semantic light preset screenshot matrix changes real database surfaces and popups', async ({ browser }) => {
   const a = await openSettings(browser);
   const colours = [];
@@ -524,7 +603,7 @@ test('semantic light preset screenshot matrix changes real database surfaces and
       colours.push(await a.page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--data-view-row')));
       await themeScreenshot(a.page, `${preset.id}-customers`, { dark: false });
     }
-    expect(new Set(colours).size).toBe(5);
+    expect(new Set(colours).size).toBe(7);
   } finally { await a.context.close(); }
 });
 
@@ -569,7 +648,7 @@ test('semantic presets save once under rapid switching and Midnight stays privat
   try {
     await a.page.locator('[data-theme-preset]').first().evaluate((_, ids) => {
       for (const id of ids) document.querySelector(`[data-theme-preset="${id}"]`).click();
-    }, [...Array.from({ length: 19 }, (_, i) => themePresets[i % 6].id), 'midnight-signal']);
+    }, [...Array.from({ length: 19 }, (_, i) => themePresets[i % themePresets.length].id), 'midnight-signal']);
     await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
     await expect(status(a.page)).toHaveText('Saved');
     assertTargeted(a.writes, 1);

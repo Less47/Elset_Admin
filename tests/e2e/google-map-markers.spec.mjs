@@ -120,7 +120,8 @@ for (const live of [false, true]) test(`${live ? "live Google" : "contract"} the
     window.previousMaps = [map]; window.previousMarkers = [...node.querySelectorAll("gmp-advanced-marker")];
   });
   await expect(canvas).toHaveAttribute("data-map-center", "-37.820000,144.950000");
-  for (const preset of [themePresets[3], ...themePresets, themePresets[3], themePresets[0]]) {
+  const midnight = themePresets.find(preset => preset.id === 'midnight-signal');
+  for (const preset of [midnight, ...themePresets, midnight, themePresets[0]]) {
     const dark = preset.id === "midnight-signal";
     await page.getByLabel("Test appearance").selectOption(preset.id);
     await expect(canvas).toHaveAttribute("data-map-scheme", dark ? "dark" : "light");

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import InvoiceAccounting from "@/components/invoices/InvoiceAccounting";
+import PriceListPicker from "./PriceListPicker";
+import { createBlankDocumentLine } from "@/lib/price-list";
 import { activeAccountingProvider, accountingProviderName } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ function draftSnapshot(document) {
 
 export default function DocumentEditor({ job, type, backLabel, onBack, registerNavigationBlocker, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, onDeleteInvoice, onInvoiceDeleted, onInvoiceReconciled, isSendingDocument = false, addons, fetchWithAuth }) {
   const [docState, setDocState] = useState(() => normalizeDocument(type, job[type] || buildDefaultDoc(job, type)));
+  const [priceListOpen, setPriceListOpen] = useState(false);
   const [baseline, setBaseline] = useState(() => draftSnapshot(docState));
   const [isSaving, setIsSaving] = useState(false);
   const [accountingBusy, setAccountingBusy] = useState(false);
@@ -187,6 +190,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
   const title = sendPreview ? sendPreview.previewTitle : job[type] ? `${documentLabel} ${buildDocumentReference(job, type)}` : `New ${documentLabel}`;
 
   return <div ref={workspaceRef} className="document-workspace" data-document-workspace={type} data-document-mode={job[type] ? "edit" : "create"}>
+    {priceListOpen && <PriceListPicker fetchWithAuth={fetchWithAuth} onClose={() => setPriceListOpen(false)} onAdd={(line) => setDocState((prev) => ({ ...prev, items: [...prev.items, line] }))} />}
     <RecordWorkspace maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} title={title} eyebrow={`Job #${job.jobNumber} · ${job.title}`} subtitle={`${job.customerName} · ${job.jobAddress || ""}`} backLabel={sendPreview ? `${documentLabel} editor` : backLabel} onBack={sendPreview ? () => { if (!busyRef.current && !sending) setSendPreview(null); } : () => onBack()} headerActions={<div className="hidden gap-2 lg:flex">{sendPreview ? previewActions : actions}</div>}>
       <div role={sendStatus?.phase === "error" ? "alert" : "status"} aria-live={sendStatus?.phase === "error" ? "assertive" : "polite"} aria-atomic="true" className="document-send-status" data-document-send-status={sendStatus?.phase}>
         {sendStatus ? <WorkspaceMessage tone={sendStatus.phase === "error" ? "error" : sendStatus.phase === "success" ? "success" : "neutral"}>
@@ -217,7 +221,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
           </div>
         </section>
         <section className="document-section" aria-labelledby="document-items-title">
-          <div className="document-section-heading"><h2 id="document-items-title">Line items</h2><Button type="button" variant="outline" onClick={() => setDocState((prev) => ({ ...prev, items: [...prev.items, { id: crypto.randomUUID(), description: "", qty: 1, rate: 0 }] }))}><Plus className="h-4 w-4" /> Add Item</Button></div>
+          <div className="document-section-heading flex-wrap"><h2 id="document-items-title">Line items</h2><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" onClick={() => setDocState((prev) => ({ ...prev, items: [...prev.items, createBlankDocumentLine()] }))}><Plus className="h-4 w-4" /> Add blank line</Button><Button type="button" variant="outline" onClick={() => setPriceListOpen(true)}>Add from price list</Button></div></div>
           <div className="document-item-labels" aria-hidden="true"><span>Description</span><span>Qty</span><span>Rate</span><span>Total</span><span /></div>
           <div className="document-items">{docState.items.map((item, index) => <div className="document-item" key={item.id} data-document-item>
             <Field id={`item-${item.id}-description`} label={`Item ${index + 1} description`}><Input id={`item-${item.id}-description`} placeholder={`Item ${index + 1} description`} value={item.description} onChange={(e) => updateItem(item.id, "description", e.target.value)} /></Field>

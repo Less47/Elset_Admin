@@ -50,13 +50,16 @@ If Connect is unavailable, contact the operator. The UI intentionally has no cre
 
 First check the country and currency shown in Configure. The local Sandbox inspected on 18 September 2026 was **US/USD**, with California/Tucson tax codes, so it had no valid Australian 10% GST choice. A successful OAuth connection or loaded Product/Service list does not establish that the company is Australian. Connect an **Australian/AUD Sandbox**; do not substitute a US tax code. See the [live tax investigation](quickbooks-v3-tax-fix-report.md).
 
-In the Sandbox, ensure an existing active **Service** or **Non-inventory** Product/Service uses an active income account. ELSET does not create items or accounts. Enable **custom transaction numbers** in QuickBooks sales settings so ELSET's invoice number can be preserved.
+Enable **custom transaction numbers** in QuickBooks sales settings so ELSET's invoice number can be preserved. ELSET can use an existing active **Service** or **Non-inventory** sales item, or create a dedicated **ELSET Services** Service item using an existing income account you select. It never creates or changes accounting accounts.
 
 In ELSET, select **Configure**:
 
-- **Product / Service:** choose the existing sales item. Each ELSET invoice line retains its own description, quantity and unit price while using this item.
-- **Taxable sales (10% GST):** select the active Australian sales tax code at 10%. Combined tax codes, purchase-only taxes, US automated sales tax and a different home currency are outside V3.
+- **Default QuickBooks sales item:** choose **Use existing QuickBooks item** to search by name, fully-qualified name, SKU, type or income account. Results show the item type and income account. Only eligible active items appear.
+- Alternatively, choose **Create "ELSET Services" in QuickBooks**, explicitly select an active Income account, then **Create sales item**. An existing eligible exact name is reused case-insensitively with its original income account. An inactive, unsupported or ambiguous name conflict stops creation. If the item already appears in the list, the action is labelled **Use "ELSET Services"**. This action creates/reuses the QuickBooks item; **Save QuickBooks configuration** still saves the default selection.
+- **Default QuickBooks GST code:** select the active Australian sales tax code at 10%. Combined tax codes, purchase-only taxes, US automated sales tax and a different home currency are outside V3.
 - Select **Save QuickBooks configuration**, then **Test connection**. This health check creates no Customers or Invoices.
+
+All invoice lines use the saved default QuickBooks item while retaining their ELSET descriptions, quantities and prices. ELSET's own Items & Price List remains separate, with no per-item QuickBooks mappings required. See the [sales item configuration report](quickbooks-sales-item-configuration.md) for eligibility, creation/retry safeguards and test evidence.
 
 Invoice amounts are exclusive of tax. QuickBooks calculates GST using the chosen code; ELSET compares the result in cents. A mismatch retains the external ID but reports **Accounting review required**. Review the item/tax/company settings before retrying; do not manually create a replacement invoice.
 

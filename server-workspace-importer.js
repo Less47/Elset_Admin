@@ -7,6 +7,7 @@ import {
   migrateWorkspaceSchema,
 } from "./server-workspace-db.js";
 import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
+import { insertPriceListItem, normalizePriceListInput } from "./server-workspace-price-list.js";
 
 export const WORKSPACE_IMPORTER_VERSION = "workspace-json-importer-v1";
 const QUANTITY_SCALE = 1_000_000;
@@ -145,6 +146,7 @@ function sourceCounts(data) {
     quoteSentHistory: jobs.reduce((sum, job) => sum + (job.quote?.sentHistory || []).length, 0),
     invoiceSentHistory: jobs.reduce((sum, job) => sum + (job.invoice?.sentHistory || []).length, 0),
     inventoryItems: (data.inventoryItems || []).length,
+    priceListItems: (data.priceListItems || []).length,
     maintenancePlans: maintenancePlans.length,
     maintenanceChecklistItems: maintenancePlans.reduce((sum, plan) => sum + (plan.checklist || []).length, 0),
     deletedJobs: (data.deletedJobs || []).length,
@@ -231,6 +233,7 @@ export function summarizeWorkspaceDb(db) {
       quoteSentHistory: db.prepare("SELECT COUNT(*) AS count FROM document_send_history WHERE document_kind = 'quote'").get().count,
       invoiceSentHistory: db.prepare("SELECT COUNT(*) AS count FROM document_send_history WHERE document_kind = 'invoice'").get().count,
       inventoryItems: countTable(db, "inventory_items"),
+      priceListItems: countTable(db, "price_list_items"),
       maintenancePlans: countTable(db, "maintenance_plans"),
       maintenanceChecklistItems: countTable(db, "maintenance_checklist_items"),
       deletedJobs: db.prepare("SELECT COUNT(*) AS count FROM deleted_records WHERE kind = 'job'").get().count,
@@ -284,6 +287,7 @@ function getNonEmptyEntityTables(db) {
     "payments",
     "maintenance_plans",
     "inventory_items",
+    "price_list_items",
     "deleted_records",
     "deleted_invoices",
   ];
@@ -905,6 +909,12 @@ export function importWorkspaceJsonData(db, rawData, {
 
   const importTransaction = db.transaction(() => {
     insertWorkspaceData(db, data, { sourceJsonSha256 });
+    for (const item of data.priceListItems || []) {
+      if (!item.id || typeof item.id !== "string" || !Number.isFinite(Date.parse(item.createdAt)) || !Number.isFinite(Date.parse(item.updatedAt))) {
+        throw new Error("Price-list items require an ID and valid created/updated dates.");
+      }
+      insertPriceListItem(db, { ...normalizePriceListInput(item), id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt });
+    }
     for (const plan of data.maintenancePlans || []) {
       for (const entry of plan.occurrenceExceptions || []) writeMaintenanceException(db, plan.id, entry);
     }

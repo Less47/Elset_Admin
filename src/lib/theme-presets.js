@@ -2,7 +2,6 @@ export const themePresets = [
   {
     id: "elset",
     label: "Elset Classic",
-    description: "The original Elset brand palette with the bright blue shell and orange action colour.",
     values: {
       pageBackgroundStart: "#0F90CD",
       pageBackgroundEnd: "#0F90CD",
@@ -18,9 +17,25 @@ export const themePresets = [
     },
   },
   {
+    id: "midnight-signal",
+    label: "Midnight Signal",
+    values: {
+      pageBackgroundStart: "#080D16",
+      pageBackgroundEnd: "#0A101B",
+      sidebarSurface: "#111827",
+      sidebarHeader: "#132A43",
+      sidebarActive: "#1B436F",
+      heroSurface: "#111827",
+      actionColor: "#1469B8",
+      borderColor: "#34465E",
+      dialogSurface: "#162235",
+      dataViewSurface: "#101826",
+      dataViewAccent: "#5F87A5",
+    },
+  },
+  {
     id: "copper-dawn",
     label: "Copper Dawn",
-    description: "Warm terracotta, soft cream, and punchier copper action colours.",
     values: {
       pageBackgroundStart: "#FFF1E7",
       pageBackgroundEnd: "#F3BA8D",
@@ -38,7 +53,6 @@ export const themePresets = [
   {
     id: "evergreen-ledger",
     label: "Evergreen Ledger",
-    description: "Deep greens, pale paper surfaces, and a more grounded workshop feel.",
     values: {
       pageBackgroundStart: "#EEF7E8",
       pageBackgroundEnd: "#B4D29B",
@@ -54,27 +68,8 @@ export const themePresets = [
     },
   },
   {
-    id: "midnight-signal",
-    label: "Midnight Signal",
-    description: "True dark mode: layered midnight surfaces, light text, and restrained blue actions.",
-    values: {
-      pageBackgroundStart: "#080D16",
-      pageBackgroundEnd: "#0A101B",
-      sidebarSurface: "#111827",
-      sidebarHeader: "#132A43",
-      sidebarActive: "#1B436F",
-      heroSurface: "#111827",
-      actionColor: "#1469B8",
-      borderColor: "#34465E",
-      dialogSurface: "#162235",
-      dataViewSurface: "#101826",
-      dataViewAccent: "#5F87A5",
-    },
-  },
-  {
     id: "studio-rose",
     label: "Studio Rose",
-    description: "Soft blush foundations with richer magenta accents and darker wine framing.",
     values: {
       pageBackgroundStart: "#FFF1F5",
       pageBackgroundEnd: "#F4BCCB",
@@ -92,7 +87,6 @@ export const themePresets = [
   {
     id: "desert-circuit",
     label: "Desert Circuit",
-    description: "Sand, brass, and workshop amber for a warmer, more industrial palette.",
     values: {
       pageBackgroundStart: "#FFF6DB",
       pageBackgroundEnd: "#E7C56D",
@@ -105,6 +99,40 @@ export const themePresets = [
       dialogSurface: "#F3E8CF",
       dataViewSurface: "#EEE1C3",
       dataViewAccent: "#D4932A",
+    },
+  },
+  {
+    id: "harbour-steel",
+    label: "Harbour Steel",
+    values: {
+      pageBackgroundStart: "#DDE5ED",
+      pageBackgroundEnd: "#C5D1DD",
+      sidebarSurface: "#1F2D3A",
+      sidebarHeader: "#152330",
+      sidebarActive: "#305773",
+      heroSurface: "#2B4357",
+      actionColor: "#25647A",
+      borderColor: "#7A909F",
+      dialogSurface: "#EAF0F5",
+      dataViewSurface: "#ECF1F5",
+      dataViewAccent: "#618DA8",
+    },
+  },
+  {
+    id: "alpine-frost",
+    label: "Alpine Frost",
+    values: {
+      pageBackgroundStart: "#F8FBF9",
+      pageBackgroundEnd: "#EEF6F2",
+      sidebarSurface: "#EAF2EE",
+      sidebarHeader: "#DCE9E2",
+      sidebarActive: "#D7E6E0",
+      heroSurface: "#F2F7F4",
+      actionColor: "#2D70B4",
+      borderColor: "#B8CDC3",
+      dialogSurface: "#F7FBF9",
+      dataViewSurface: "#FCFDFD",
+      dataViewAccent: "#7CA58F",
     },
   },
 ];

@@ -8,7 +8,7 @@ import { accountingSchemaSql } from "../server-accounting-schema.js";
 import { accountingPaymentSchemaSql } from "../server-accounting-payment-schema.js";
 import { migrateWorkspaceSchema, openWorkspaceDb } from "../server-workspace-db.js";
 
-test("committed schema 10 migrates once through 11 to 12, preserving Xero/business data and rolling back a late failure", (t) => {
+test("committed schema 10 migrates once through 11 and 12 to 13, preserving Xero/business data and rolling back a late failure", (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "qbo-schema-")), dbPath = path.join(directory, "workspace.db");
   let db = new Database(dbPath);
   t.after(() => { if (db.open) db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
@@ -45,6 +45,6 @@ test("committed schema 10 migrates once through 11 to 12, preserving Xero/busine
   assert.throws(() => db.prepare("INSERT INTO payments(id,invoice_id,created_at,source) VALUES('bad','i','fixture','unknown')").run(), /CHECK/);
   assert.deepEqual(db.pragma("foreign_key_check"), []); assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
   db.close(); db = openWorkspaceDb({ dbPath });
-  assert.equal(db.pragma("user_version", { simple: true }), 12); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
+  assert.equal(db.pragma("user_version", { simple: true }), 13); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
   assert.equal(db.prepare("SELECT encrypted_access_token FROM workspace_integrations").get().encrypted_access_token, "existing-ciphertext");
 });

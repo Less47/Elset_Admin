@@ -169,7 +169,7 @@ export class AccountingService {
     const organisations = await this.provider.getOrganisations(context.accessToken, { realmId: context.authorisedTenantId || context.tenantId });
     if (!organisations.some((organisation) => organisation.id === context.tenantId)) throw new AccountingError("NEEDS_REAUTHORIZATION", `The selected organisation is no longer connected. Reconnect ${this.provider.name}.`, 409);
     const [organisation, accounts, taxRates] = await Promise.all([this.provider.getOrganisation(context), this.provider.getAccounts(context), this.provider.getTaxRates(context)]);
-    const options = { organisation, accounts, taxRates, ...(this.provider.getItems ? { items: await this.provider.getItems(context) } : {}) };
+    const options = { organisation, accounts, taxRates, ...(this.provider.getItems ? { items: await this.provider.getItems(context, accounts) } : {}) };
     return { ...options, ...(this.provider.configurationIssue ? { configurationIssue: this.provider.configurationIssue(options, workspaceAccountingModel) } : {}) };
   }
   getConfig() { return this.work(async () => {
@@ -196,6 +196,31 @@ export class AccountingService {
       const config = this.validateConfig(input || {}, options);
       this.store.update({ config_json: JSON.stringify(config), safe_error_message: "" });
       return { ...this.status(), ...options };
+    });
+  }
+  createDefaultSalesItem(input) {
+    return this.work(async () => {
+      if (!this.provider.ensureDefaultSalesItem) throw new AccountingError("UNSUPPORTED_ACTION", "This accounting provider does not support sales item creation.", 404);
+      const context = await this.credentials();
+      if (input?.tenantId !== context.tenantId) throw new AccountingError("REALM_MISMATCH", "The QuickBooks company changed. Reload configuration before creating a sales item.", 409);
+      const options = await this.options(context);
+      if (options.configurationIssue) throw new AccountingError(options.configurationIssue.code, options.configurationIssue.message, 409);
+      const entity = "default-sales-item", id = "elset-services";
+      const result = await this.provider.ensureDefaultSalesItem(context, input?.incomeAccountId, options.accounts, async (payload, write) => {
+        requireWorkspaceAddon(this.db, this.provider.id);
+        const key = this.store.prepareOperation(context.tenantId, entity, id, payload);
+        try { return await write(key); }
+        catch (error) {
+          if (error.code === "PROVIDER_VALIDATION") this.store.finishOperation(context.tenantId, entity, id, "REJECTED");
+          throw error;
+        }
+      });
+      this.store.finishOperation(context.tenantId, entity, id);
+      this.store.log(context.tenantId, entity, id, result.reused ? "reuse" : "create", "SYNCED", result.item.id);
+      this.store.update({ safe_error_message: "" });
+      // Selecting and saving the default remains an explicit configuration step.
+      // Existing invoice mappings and business records are not touched.
+      return { ...this.status(), ...options, items: [...options.items.filter((item) => item.id !== result.item.id), result.item], salesItem: result.item, reused: result.reused };
     });
   }
   testConnection() {

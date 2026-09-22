@@ -13,6 +13,8 @@ const review = (message, code = "ACCOUNTING_REVIEW_REQUIRED") => { throw new Acc
 const ref = (value) => value?.value || "";
 const idOK = (id) => typeof id === "string" && /^[0-9]{1,50}$/.test(id);
 const quote = (value) => `'${String(value).replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+const defaultSalesItemName = "ELSET Services";
+const sameItemName = (name) => typeof name === "string" && name.normalize("NFKC").trim().toLowerCase() === defaultSalesItemName.toLowerCase();
 function comparable(invoice, homeCurrency) {
   return { customer: ref(invoice.CustomerRef), number: invoice.DocNumber, date: invoice.TxnDate, due: invoice.DueDate,
     currency: ref(invoice.CurrencyRef) || homeCurrency, taxCalculation: invoice.GlobalTaxCalculation,
@@ -133,11 +135,51 @@ export class QuickBooksAccountingProvider {
   }
   async getAccounts(context) {
     return (await this.query(context, "Account", "Active = true")).filter((row) => row.Active === true && ["Income", "Other Income"].includes(row.AccountType))
-      .map((row) => ({ id: row.Id, code: row.AcctNum || "", name: row.Name }));
+      .map((row) => ({ id: row.Id, code: row.AcctNum || "", name: row.FullyQualifiedName || row.Name, type: row.AccountType }));
   }
-  async getItems(context) {
-    return (await this.query(context, "Item", "Active = true")).filter((row) => row.Active === true && ["Service", "NonInventory"].includes(row.Type) && ref(row.IncomeAccountRef))
-      .map((row) => ({ id: row.Id, name: row.FullyQualifiedName || row.Name, type: row.Type, incomeAccountId: ref(row.IncomeAccountRef) }));
+  salesItem(row, accounts) {
+    const account = accounts.find((entry) => entry.id === ref(row.IncomeAccountRef));
+    if (!idOK(row.Id) || row.Active !== true || !["Service", "NonInventory"].includes(row.Type) || row.SpecialItem === true || !account) return null;
+    return { id: row.Id, name: row.Name, fullyQualifiedName: row.FullyQualifiedName || row.Name, code: row.Sku || "", type: row.Type,
+      incomeAccountId: account.id, incomeAccountName: account.name };
+  }
+  async getItems(context, accounts = null) {
+    accounts ||= await this.getAccounts(context);
+    return (await this.query(context, "Item", "Active = true")).map((row) => this.salesItem(row, accounts)).filter(Boolean);
+  }
+  async ensureDefaultSalesItem(context, incomeAccountId, accounts, write) {
+    // Include inactive and unsupported records in the collision check. Never
+    // reactivate, rename or change an existing record to make it eligible.
+    const existing = async () => {
+      const matches = (await this.query(context, "Item", "Active IN (true,false)"))
+        .filter((row) => sameItemName(row.Name) || sameItemName(row.FullyQualifiedName));
+      if (!matches.length) return null;
+      const item = matches.length === 1 ? this.salesItem(matches[0], accounts) : null;
+      if (!item) review('The name "ELSET Services" is already used by an inactive, unsupported or ambiguous QuickBooks item. Choose an existing eligible sales item instead.', "ITEM_NAME_CONFLICT");
+      return { item, reused: true };
+    };
+    const found = await existing();
+    if (found) return found;
+    const account = accounts.find((row) => row.id === incomeAccountId && row.type === "Income");
+    if (!account) review('Choose an active QuickBooks income account for "ELSET Services". No account will be created or changed.', "ACCOUNT_MAPPING");
+    const payload = { Name: defaultSalesItemName, Type: "Service", Active: true, IncomeAccountRef: { value: account.id } };
+    let response;
+    try { response = await write(payload, (key) => this.request(context, "item", "POST", payload, key)); }
+    catch (error) {
+      // Reconcile name races and accepted writes whose response was lost.
+      // Other failures retain the durable pending operation for a safe retry.
+      if (["PROVIDER_VALIDATION", "PROVIDER_UNAVAILABLE"].includes(error.code)) {
+        const reconciled = await existing();
+        if (reconciled) return reconciled;
+      }
+      throw error;
+    }
+    const row = response?.Item;
+    const item = row && this.salesItem(row, accounts);
+    if (!item || !sameItemName(row.Name) || row.Type !== "Service" || item.incomeAccountId !== account.id) {
+      throw new AccountingError("ITEM_RESPONSE", "QuickBooks did not confirm the sales item. Retry to check its result safely.", 502);
+    }
+    return { item, reused: false };
   }
   async getTaxRates(context) {
     const [codes, rates] = await Promise.all([this.query(context, "TaxCode", "Active = true"), this.query(context, "TaxRate", "Active = true")]);

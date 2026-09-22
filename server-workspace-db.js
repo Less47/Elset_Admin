@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 12;
+export const WORKSPACE_SCHEMA_VERSION = 13;
 
 const migrations = [
   {
@@ -542,6 +542,27 @@ const migrations = [
       }
     },
     sql: "UPDATE workspace_info SET schema_version=12 WHERE id=1;",
+  },
+  {
+    version: 13,
+    name: "workspace-price-list-items",
+    sql: `
+      CREATE TABLE price_list_items (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        code TEXT NOT NULL DEFAULT '',
+        unit TEXT NOT NULL CHECK(unit IN ('each','hour','day','km','metre','fixed')),
+        unit_price_cents INTEGER NOT NULL CHECK(unit_price_cents >= 0),
+        tax_treatment TEXT NOT NULL DEFAULT 'taxable' CHECK(tax_treatment = 'taxable'),
+        category TEXT NOT NULL DEFAULT '',
+        archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_price_list_items_status_name ON price_list_items(archived, name COLLATE NOCASE);
+      UPDATE workspace_info SET schema_version=13 WHERE id=1;
+    `,
   },
 ];
 

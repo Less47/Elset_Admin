@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import ThemeColourField from "./ThemeColourField";
 import WorkspaceBranding from "./WorkspaceBranding";
 import AddonsSettings from "./AddonsSettings";
+import PriceListSettings from "./PriceListSettings";
 import { FormField } from "@/components/shared/FormField";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -105,7 +106,7 @@ const presetPreviewKeys = [
 function WorkspacePreview({ settings }) {
   const { vars } = buildSemanticTheme(normalizeThemeSettings(settings));
   return (
-    <Card className="min-w-0 self-start overflow-hidden rounded-3xl border-border shadow-sm xl:sticky xl:top-5">
+    <Card className="min-w-0 self-start overflow-hidden rounded-3xl border-border shadow-sm 2xl:sticky 2xl:top-5">
       <CardHeader><CardTitle className="text-base">Workspace Preview</CardTitle></CardHeader>
       <CardContent>
         <div data-workspace-preview style={vars} className="theme-workspace-preview rounded-2xl border p-3 text-sm">
@@ -479,6 +480,7 @@ export default function SettingsManager({
       </div>
 
       {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available={isSqliteBackupMode} fetchWithAuth={fetchWithAuth} /> : null}
+      {canManageWorkspaceSettings && activeSettingsTab === "price-list" ? <PriceListSettings fetchWithAuth={fetchWithAuth} /> : null}
 
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
@@ -704,8 +706,8 @@ export default function SettingsManager({
       )}
 
       {activeSettingsTab === "ui" && (
-        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-          <p className="text-sm text-text-secondary xl:col-span-2">Personal appearance — saved to your account across devices. These choices do not change anyone else's view.</p>
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          <p className="text-sm text-text-secondary 2xl:col-span-2">Personal appearance — saved to your account across devices. These choices do not change anyone else's view.</p>
           <div className="grid gap-4">
             <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -717,30 +719,29 @@ export default function SettingsManager({
                   Reset UI
                 </Button>
               </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
+              <CardContent data-theme-preset-grid className="grid gap-3 md:grid-cols-2">
                 {themePresets.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
                     data-theme-preset={preset.id}
                     aria-pressed={Object.entries(preset.values).every(([key, value]) => normalizedSettings[key] === value)}
-                    className="theme-preset-card min-w-0 rounded-2xl border border-border bg-surface-raised p-3 text-left transition hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-ring"
+                    className="theme-preset-card min-w-0 rounded-2xl border border-border bg-surface-raised p-2.5 text-left transition hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-ring"
                     onClick={() => onApplyPreset(preset.values)}
                   >
-                    <div data-theme-sample className="theme-preset-sample mb-3" style={buildSemanticTheme(preset.values).vars}><span /><div><i /><i /><i /></div></div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-semibold text-foreground">{preset.label}</p>
-                      <div className="flex gap-1.5">
+                    <div aria-hidden="true" data-theme-sample className="theme-preset-sample mb-2" style={buildSemanticTheme(preset.values).vars}><span /><div><i /><i /><i /></div></div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold leading-5 text-foreground">{preset.label}</span>
+                      <div aria-hidden="true" data-theme-swatches className="flex shrink-0 gap-1">
                         {presetPreviewKeys.map((key) => (
                           <span
                             key={`${preset.id}-${key}`}
-                            className="h-4 w-4 rounded-full border border-border"
+                            className="size-2.5 rounded-full border border-border"
                             style={{ backgroundColor: preset.values[key] }}
                           />
                         ))}
                       </div>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-text-secondary">{preset.description}</p>
                   </button>
                 ))}
               </CardContent>
