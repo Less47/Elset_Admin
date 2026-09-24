@@ -1,4 +1,5 @@
 import { siteAddressMetadata } from "./src/lib/site-location.js";
+import { customerPostalFields } from "./src/lib/customer-profile.js";
 import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { normalizeDeletedInvoices } from "./src/lib/invoice-deletion.js";
 import fs from "fs";
@@ -579,6 +580,7 @@ function normalizeCustomerRecord(customer) {
       : [],
     billingContactId: String(customer.billingContactId || "").trim(),
     address,
+    ...customerPostalFields(customer),
     sites,
     siteAccessNotes,
     externalRefs: normalizeExternalRefs(customer.externalRefs),

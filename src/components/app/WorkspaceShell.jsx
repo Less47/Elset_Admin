@@ -1,3 +1,4 @@
+import { FilterPopover } from "@/components/shared/ResponsivePageControls";
 import { lazy, Suspense, useState } from "react";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
@@ -45,7 +46,7 @@ import {
 
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons }) {
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons, settingsPersistence, settingsNavigation, onSettingsPreview }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -83,9 +84,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     visibleSideNavItems,
   } = derived;
   const {
-    handleApplyThemePreset,
-    themeSaveState,
-    handleRetryThemeSave,
     handleCreateInventoryItem,
     handleCreateMaintenancePlan,
     handleCreateStaff,
@@ -103,9 +101,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleOpenSiteProfile,
     handleRemoveAllJobsFromTomorrow,
     handleRemoveJobFromTomorrow,
-    handleResetDocumentTemplate,
-    handleResetPreferences,
-    handleResetUiSettings,
     handleRestoreDeletedCustomer,
     handleRestoreDeletedJob,
     handleSaveStaffLoginAccount,
@@ -113,8 +108,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handlePreviewDayReschedule,
     handleRescheduleDayJobs,
     handleStatusChange,
-    handleThemeSettingChange,
-    handleUpdateDocumentTemplate,
     handleUpdateInventoryItem,
     handleUpdateInvoicePayment,
     handleUpdateMaintenancePlan,
@@ -138,9 +131,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     const searchInputClassName = isHeroTone
       ? "min-w-0 flex-1 border-border bg-card/95 text-foreground placeholder:text-muted-foreground shadow-sm"
       : "min-w-0 flex-1";
-    const urgencyContainerClassName = isHeroTone
-      ? "flex items-center gap-2 rounded-2xl border border-white/20 bg-current/10 px-3 py-2 text-inherit"
-      : "flex items-center gap-2 rounded-2xl border bg-card px-3 py-2";
     const fullScreenButtonClassName = isHeroTone
       ? "rounded-2xl border-white/30 bg-card/95 text-foreground hover:bg-card"
       : "rounded-2xl bg-card";
@@ -156,10 +146,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           />
 
           <div className="flex shrink-0 flex-nowrap items-center gap-2 md:justify-end">
-            <div className={urgencyContainerClassName}>
+            <FilterPopover activeCount={showHighUrgencyOnly ? 1 : 0} onReset={() => setShowHighUrgencyOnly(false)}><label className="flex min-h-11 items-center gap-3 text-sm">
               <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
               <span className="whitespace-nowrap text-sm">High urgency only</span>
-            </div>
+            </label></FilterPopover>
             <Button
               variant="outline"
               className={`${fullScreenButtonClassName} whitespace-nowrap px-3`}
@@ -361,7 +351,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
       <div
         className={
           workspacePage
-            ? "min-w-0 lg:pl-[var(--sidebar-offset)] lg:pt-4"
+            ? "min-w-0 lg:pl-[var(--sidebar-width)]"
             : desktopServiceBoardFullScreen
             ? "min-w-0 space-y-4 px-3 py-3 sm:px-4 sm:py-4"
             : mapWorkspaceOpen
@@ -374,7 +364,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         }
       >
         {workspacePage}
-        {personalPreferences?.error && !(activeSection === "settings" && activeSettingsTab === "ui" && themeSaveState.scope === "theme") ? (
+        {personalPreferences?.error ? (
           <div role="alert" className="m-3 flex flex-wrap items-center gap-2 rounded-lg border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">
             <span>Personal preferences could not be synced. {personalPreferences.error}</span>
             <Button type="button" variant="outline" onClick={personalPreferences.retry}>Retry personal preferences</Button>
@@ -648,18 +638,15 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {isAuthenticated && activeSection === "settings" ? (
           <SettingsManager
+            settingsPersistence={settingsPersistence}
+            settingsNavigation={settingsNavigation}
+            onSettingsPreview={onSettingsPreview}
             fetchWithAuth={auth.fetchWithAuth}
             workspaceAddons={workspaceAddons}
             canManageWorkspaceSettings={canManageBusiness}
             activeSettingsTab={activeSettingsTab}
             onActiveSettingsTabChange={setActiveSettingsTab}
-            settings={themeSettings}
-            themeSaveState={themeSaveState}
-            onRetryThemeSave={handleRetryThemeSave}
-            onSettingChange={handleThemeSettingChange}
-            onApplyPreset={handleApplyThemePreset}
-            onResetUiSettings={handleResetUiSettings}
-            onResetPreferences={handleResetPreferences}
+            settings={{ ...data.settings, ...personalPreferences.preferences }}
             onWorkspaceLogoChange={actions.handleWorkspaceLogoChange}
             activeTemplateType={activeTemplateType}
             onActiveTemplateTypeChange={setActiveTemplateType}
@@ -667,8 +654,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
               quote: data.quoteTemplate,
               invoice: data.invoiceTemplate,
             }}
-            onTemplateChange={handleUpdateDocumentTemplate}
-            onResetTemplate={handleResetDocumentTemplate}
             isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
             onDownloadBackup={auth.handleDownloadBackup}

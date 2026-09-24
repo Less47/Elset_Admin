@@ -153,7 +153,11 @@ async function capture(page, info, name, locator) {
 for (const role of ["admin", "office"]) test(`${role} sees only a support message for missing infrastructure and can connect after operator recovery`, async ({ browser }, info) => {
   const { context, page } = await open(browser, { role });
   try {
+    await page.getByRole("dialog", { name: "Xero", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("switch", { name: "Xero enabled" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "About Xero", exact: true }).click();
     const connection = page.getByLabel("Xero connection", { exact: true });
     const connectButton = connection.getByRole("button", { name: "Connect to Xero", exact: true });
     await expect(connectButton).toBeEnabled();
@@ -173,7 +177,7 @@ for (const role of ["admin", "office"]) test(`${role} sees only a support messag
       await expect.poll(() => serverOutput.includes(`missing ${name}`)).toBe(true);
     }
     expect(serverOutput).not.toContain("fixture-secret");
-    await capture(page, info, `xero-unavailable-${role}`, page.locator('[data-addon="xero"]'));
+    await capture(page, info, `xero-unavailable-${role}`, page.getByRole("dialog", { name: "Xero", exact: true }));
     await context.request.post(`${baseUrl}/__xero-fixture`, { data: { reset: true } });
     await page.reload();
     await expect(connectButton).toBeEnabled();
@@ -191,8 +195,12 @@ for (const role of ["admin", "office"]) test(`${role} sees only a support messag
 test("enable, mocked consent callback, configuration, health check, manual sync, update and disconnect", async ({ browser }, info) => {
   const { context, page } = await open(browser);
   try {
-    await expect(page.getByRole("heading", { name: "Add-ons", exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Xero", exact: true })).toBeVisible();
+    await page.getByRole("dialog", { name: "Xero", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("switch", { name: "Xero enabled" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "About Xero", exact: true }).click();
     await expect(page.getByRole("button", { name: "Connect to Xero", exact: true })).toBeEnabled();
     await page.route("https://login.xero.com/**", (route) => {
       const state = new URL(route.request().url()).searchParams.get("state");
@@ -206,13 +214,13 @@ test("enable, mocked consent callback, configuration, health check, manual sync,
     await connection.getByRole("button", { name: "Configure", exact: true }).click();
     await page.getByLabel("Sales account", { exact: true }).selectOption("sales-id");
     await page.getByLabel("Taxable sales (10% GST)", { exact: true }).selectOption("OUTPUT");
-    await page.getByRole("button", { name: "Save Xero configuration" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(connection).toContainText("Xero configuration saved.");
     await page.getByRole("button", { name: "Test connection", exact: true }).click();
     await expect(connection).toContainText("Connection verified");
     let remote = await (await context.request.post(`${baseUrl}/__xero-fixture`, { data: {} })).json();
     expect(remote.contacts).toHaveLength(0); expect(remote.invoices).toHaveLength(0);
-    await capture(page, info, "xero-settings-configured", page.locator('[data-addon="xero"]'));
+    await capture(page, info, "xero-settings-configured", page.getByRole("dialog", { name: "Xero", exact: true }));
     await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
     await card(page).getByRole("button", { name: "Send to Xero" }).click();
     await expect(card(page).getByRole("status")).toHaveText("Synced");
@@ -431,7 +439,7 @@ for (const width of [390, 820, 1440]) for (const preset of themePresets) {
       await connectApi(context); await page.reload();
       await page.getByRole("button", { name: "Configure", exact: true }).click();
       await expect(page.getByLabel("Sales account", { exact: true })).toHaveValue("sales-id");
-      await capture(page, info, `${preset.id}-settings-${width}`, page.locator('[data-addon="xero"]'));
+      await capture(page, info, `${preset.id}-settings-${width}`, page.getByRole("dialog", { name: "Xero", exact: true }));
       withDb((db) => db.prepare("UPDATE invoice_line_items SET rate_cents=100000 WHERE invoice_id=(SELECT id FROM invoices WHERE job_id='other-job')").run());
       await page.goto(`${baseUrl}/jobs/other-job/invoice`);
       await card(page).getByRole("button", { name: "Send to Xero" }).click();

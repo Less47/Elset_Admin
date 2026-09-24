@@ -289,7 +289,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
           summary={<ResultSummary>{filteredParts.length} {filteredParts.length === 1 ? "part" : "parts"}</ResultSummary>}
         />
 
-        <DesktopPageControls
+        <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setFilterBy("all"); }}
           search={(
             <DesktopControlField label="Search" size="search">
               <PageSearchField

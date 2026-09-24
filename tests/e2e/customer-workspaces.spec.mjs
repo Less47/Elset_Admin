@@ -279,6 +279,24 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 const customerPath = `/customers/${fixtureCustomerId}`;
+test("short secondary pages do not scroll and their header remains edge to edge while long pages scroll", async ({ page }) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    if (width === 390) await login(page, { pathname: `/customers/${emptyCustomerId}` });
+    else await page.goto(`${baseUrl}/customers/${emptyCustomerId}`);
+    await expect(page.locator(".record-workspace h1")).toHaveText("Empty sections customer");
+    expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(1);
+    const header = page.locator(".record-workspace-header");
+    const before = await header.boundingBox();
+    expect(before.y).toBe(0);
+    expect(before.x + before.width).toBeCloseTo(width, 0);
+    expect(await header.evaluate(el => getComputedStyle(el).borderRadius)).toBe("0px");
+    await page.goto(`${baseUrl}/customers/${denseCustomerId}`);
+    if (width < 1024) await page.getByRole("tab", { name: /^Job History/ }).click();
+    await page.evaluate(() => scrollTo(0, 800));
+    expect((await header.boundingBox()).y).toBe(0);
+  }
+});
 const screenshots = path.join(repoRoot, "test-results/customer-section-consistency/screenshots");
 
 async function showCustomerSection(page, label) {
@@ -292,27 +310,30 @@ async function checkCustomerGrid(page) {
   await expect(page.locator(".customer-workspace-grid")).toBeVisible();
   await expect(page.getByRole("tab", { includeHidden: true })).toHaveCount(0);
   await expect(page.getByRole("tabpanel", { includeHidden: true })).toHaveCount(0);
-  await expect(page.locator('[data-customer-section]')).toHaveCount(5);
+  await expect(page.locator('[data-customer-section]')).toHaveCount(6);
   const boxes = {};
   await expect(page.locator('[data-account-balance]')).toBeVisible();
-  for (const name of ["details", "sites", "contacts", "account", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
+  for (const name of ["details", "sites", "contacts", "account", "maintenance", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
   expect(boxes.details.x).toBeCloseTo(boxes.contacts.x, 0);
   expect(boxes.sites.x).toBeCloseTo(boxes.jobs.x, 0);
   expect(boxes.details.y).toBeCloseTo(boxes.account.y, 0);
   expect(boxes.contacts.y - boxes.details.y - boxes.details.height).toBeCloseTo(12, 0);
   expect(boxes.sites.y - boxes.account.y - boxes.account.height).toBeCloseTo(12, 0);
-  expect(boxes.jobs.y - boxes.sites.y - boxes.sites.height).toBeCloseTo(12, 0);
+  expect(boxes.maintenance.y - boxes.sites.y - boxes.sites.height).toBeCloseTo(12, 0);
+  expect(boxes.jobs.y - boxes.maintenance.y - boxes.maintenance.height).toBeCloseTo(12, 0);
   expect(boxes.sites.x - boxes.details.x - boxes.details.width).toBeCloseTo(12, 0);
   expect(boxes.details.width / boxes.sites.width).toBeCloseTo(2 / 3, 2);
   await expect(page.locator('[data-customer-section="details"]').getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Destructive customer actions" }).getByRole("button", { name: "Delete Customer", exact: true })).toBeVisible();
   const header = await page.locator('.record-workspace-header').boundingBox();
   const grid = await page.locator('.customer-workspace-grid').boundingBox();
-  expect(grid.x).toBeCloseTo(header.x, 0);
-  expect(grid.x + grid.width).toBeCloseTo(header.x + header.width, 0);
+  expect(header.y).toBe(0);
+  expect(grid.x).toBeGreaterThan(header.x);
+  expect(grid.x + grid.width).toBeLessThan(header.x + header.width);
+  expect(header.x + header.width).toBeCloseTo(page.viewportSize().width, 0);
   const danger = await page.locator('[data-customer-danger-zone]').boundingBox();
   expect(danger.y - grid.y - grid.height).toBeCloseTo(12, 0);
-  await expect(page.locator('.customer-section-panel')).toHaveCount(5);
+  await expect(page.locator('.customer-section-panel')).toHaveCount(6);
   const styles = await page.locator('.customer-section-panel').evaluateAll((panels) => panels.map((panel) => {
     const style = getComputedStyle(panel);
     const header = panel.querySelector('.customer-section-header');
@@ -323,14 +344,16 @@ async function checkCustomerGrid(page) {
       titleInsideHeader: header.contains(panel.querySelector('h2')),
     };
   }));
-  for (const style of styles) expect(style).toEqual(styles[0]);
+  for (const style of styles) { expect(style.border).toBe(styles[0].border); expect(style.background).toBe(styles[0].background); expect(style.titleInsideHeader).toBe(true); }
   expect(styles[0].border).toMatch(/^1px solid/);
   expect(styles[0].radius).toBe("8px");
   expect(styles[0].headerHeight).toBe(44);
   expect(styles[0].titleInsideHeader).toBe(true);
-  expect(styles[0].bodyPadding).toBe("12px");
+  expect(styles[0].bodyPadding).toBe("10px 12px");
   await expect(page.locator('[data-customer-section="sites"] .customer-section-header').getByRole("button", { name: "Add Site", exact: true })).toBeVisible();
   await expect(page.locator('.customer-section-header .customer-section-count')).toHaveCount(3);
+  await expect(page.locator('[data-customer-section="jobs"] [data-customer-job-stats]')).toContainText('total jobs');
+  await expect(page.locator('[data-customer-section="details"]')).not.toContainText('total jobs');
   const recordStyles = await page.locator('.customer-section-panel [data-mobile-record-card]').evaluateAll((records) => records.map((record) => {
     const style = getComputedStyle(record);
     return { border: style.borderLeftWidth, radius: style.borderRadius, background: style.backgroundColor, shadow: style.boxShadow };
@@ -395,6 +418,8 @@ test("Customer create and edit persist account, contact and primary Site ownersh
   await page.getByRole("button", { name: "New Customer", exact: true }).click();
   await expect(page).toHaveURL(baseUrl + "/customers/new");
   await expect(page.getByRole("button", { name: "Create Customer", exact: true })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Postal address is the same as the main address" })).toBeChecked();
+  await expect(page.getByLabel("Postal address", { exact: true })).toHaveCount(0);
   await page.getByLabel("Customer / company name").fill("Workspace Customer");
   await page.getByLabel("Account email").fill("workspace@example.test");
   await page.getByLabel("Account phone").fill("0400 123 456");
@@ -410,6 +435,8 @@ test("Customer create and edit persist account, contact and primary Site ownersh
   expect(created.sites[0]).toMatchObject({ address: "28 Synthetic Road, Testville VIC 3999", siteType: "commercial", ocNumber: "PS-WORKSPACE" });
   expect(created.primaryOcNumber).toBeUndefined();
   expect(created.ocNumber).toBeUndefined();
+  expect(created.postalAddressSameAsPrimary).toBe(true);
+  expect(created.postalAddress).toBe(created.address);
   await page.reload();
   await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
   await page.getByLabel("Customer / company name").fill("");
@@ -527,6 +554,59 @@ test("Customer save errors retain the draft and delete requires the existing con
   await expect(page).toHaveURL(baseUrl + "/customers");
   expect(readWorkspaceState().customers.some((entry) => entry.id === result.id)).toBe(false);
 });
+
+for (const width of [1440, 390]) {
+  test(`postal address, editable primary site and linked maintenance contracts at ${width}px`, async ({ browser }, info) => {
+    const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 1000 } });
+    const page = await context.newPage();
+    const id = `profile-features-${width}`, siteId = `${id}-primary`, otherSiteId = `${id}-other`;
+    const mainAddress = "101 Main Road, Example VIC 3000", newAddress = "102 Main Road, Example VIC 3000";
+    try {
+      await login(page, { pathname: "/customers" });
+      await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();
+      await apiJson(page, "POST", "/api/customers", { customer: { id, name: `Profile features ${width}`, address: mainAddress,
+        sites: [{ id: siteId, address: mainAddress, siteType: "commercial", ocNumber: "PS-ORIGINAL", assets: [{ id: `${id}-gate`, name: "Existing gate" }] },
+          { id: otherSiteId, address: "201 Other Road, Example VIC 3000" }] } });
+      for (const [key, active, contractSite] of [["active", true, siteId], ["inactive", false, siteId], ["other", true, otherSiteId]]) {
+        await apiJson(page, "POST", "/api/maintenance-plans", { plan: { id: `${id}-${key}`, customerId: id, siteId: contractSite,
+          frequency: "quarterly", nextDueDate: "2026-12-01", active, contractPrice: 125, contractPriceSet: true, estimatedDurationHours: 1, checklist: ["Inspect gate"] } });
+      }
+      await page.goto(`${baseUrl}/customers/${id}/edit`);
+      await expect(page.getByLabel("Address", { exact: true })).toHaveValue(mainAddress);
+      await expect(page.getByRole("checkbox", { name: "Postal address is the same as the main address" })).toBeChecked();
+      await page.getByRole("checkbox", { name: "Postal address is the same as the main address" }).uncheck();
+      await page.getByLabel("Postal address", { exact: true }).fill("PO Box 42, Example VIC 3000");
+      await page.getByLabel("Address", { exact: true }).fill(newAddress);
+      await page.getByLabel("OC number", { exact: true }).fill("PS-UPDATED");
+      await page.getByRole("button", { name: "Save Customer", exact: true }).click();
+      await expect(page).toHaveURL(`${baseUrl}/customers/${id}`);
+      await page.reload();
+      const saved = readWorkspaceState().customers.find((customer) => customer.id === id);
+      expect(saved).toMatchObject({ address: newAddress, postalAddressSameAsPrimary: false, postalAddress: "PO Box 42, Example VIC 3000" });
+      expect(saved.sites.find((site) => site.id === siteId)).toMatchObject({ address: newAddress, ocNumber: "PS-UPDATED", assets: [{ id: `${id}-gate`, name: "Existing gate" }] });
+      if (width < 1024) await page.getByRole("tab", { name: /^Maintenance/ }).click();
+      await expect(page.locator("[data-profile-maintenance]")).toHaveCount(3);
+      await expect(page.locator(`[data-profile-maintenance="${id}-inactive"]`)).toContainText("Inactive");
+      await noModalOrOverflow(page);
+      await captureWorkspace(page, info, `customer-contracts-${width}`);
+      await page.locator(`[data-profile-maintenance="${id}-active"]`).getByRole("button", { name: "Open contract" }).click();
+      await expect(page).toHaveURL(`${baseUrl}/maintenance/${id}-active`);
+      await page.goto(`${baseUrl}/customers/${id}/sites/${siteId}`);
+      await page.getByRole("tab", { name: /^Maintenance/ }).click();
+      await expect(page.locator("[data-profile-maintenance]")).toHaveCount(2);
+      await expect(page.locator(`[data-profile-maintenance="${id}-other"]`)).toHaveCount(0);
+      await noModalOrOverflow(page);
+      await captureWorkspace(page, info, `site-contracts-${width}`);
+      await page.goto(`${baseUrl}/customers/${id}/edit`);
+      await expect(page.getByRole("checkbox", { name: "Postal address is the same as the main address" })).not.toBeChecked();
+      await expect(page.getByLabel("Postal address", { exact: true })).toHaveValue("PO Box 42, Example VIC 3000");
+      await page.getByRole("checkbox", { name: "Postal address is the same as the main address" }).check();
+      await page.getByRole("button", { name: "Save Customer", exact: true }).click();
+      await expect(page).toHaveURL(`${baseUrl}/customers/${id}`);
+      expect(readWorkspaceState().customers.find((customer) => customer.id === id).postalAddress).toBe(newAddress);
+    } finally { await context.close(); }
+  });
+}
 
 test("Customer and Site pages fill desktop, tablet and phone workspaces", async ({ browser }, info) => {
   for (const [width, height] of [[390,844], [430,932], [768,1024], [820,1180], [1024,768], [1280,720], [1440,900], [1920,1080]]) {

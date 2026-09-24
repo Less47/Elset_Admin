@@ -24,7 +24,7 @@ export function RecordWorkspace({
 }) {
   return (
     <main className="record-workspace min-h-[100dvh] min-w-0 text-foreground">
-      <header className="record-workspace-header sticky top-0 z-40 border-b backdrop-blur-xl lg:mx-[var(--content-padding-x-lg)] lg:rounded-xl lg:border lg:shadow-xl">
+      <header className="record-workspace-header sticky top-0 z-40 w-full border-b">
         <div
           className={`mx-auto flex min-h-16 w-full ${maxWidth} items-center gap-2 px-panel py-2 sm:gap-3`}
           style={{
@@ -58,7 +58,7 @@ export function RecordWorkspace({
         </div>
       </header>
 
-      <div className={`mx-auto w-full ${maxWidth} px-panel pb-24 pt-3 lg:px-[var(--content-padding-x-lg)] lg:pb-6 lg:pt-4`}>
+      <div className={`record-workspace-body mx-auto w-full ${maxWidth} px-panel pb-4 pt-3 lg:px-[var(--content-padding-x-lg)] lg:pb-6 lg:pt-4`}>
         {children}
       </div>
     </main>
@@ -99,21 +99,21 @@ export function WorkspaceActionBar({ children, maxWidth = "max-w-6xl", status = 
   );
 }
 
-export function UnsavedChangesDialog({ open, onDiscard, onKeepEditing }) {
+export function UnsavedChangesDialog({ open, onDiscard, onKeepEditing, settings = false, busy = false }) {
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
       if (!nextOpen) onKeepEditing();
     }}>
       <DialogContent className="rounded-2xl sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle className="text-lg">Discard unsaved changes?</DialogTitle>
+          <DialogTitle className="text-lg">{settings ? "Unsaved changes" : "Discard unsaved changes?"}</DialogTitle>
           <DialogDescription>
-            Your changes on this page have not been saved.
+            {settings ? "You have changes that haven't been saved. If you leave this page, those changes will be discarded." : "Your changes on this page have not been saved."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="sm:justify-end">
-          <Button type="button" variant="outline" onClick={onKeepEditing}>Keep editing</Button>
-          <Button type="button" variant="destructive" onClick={onDiscard}>Discard</Button>
+          <Button type="button" variant="outline" onClick={onKeepEditing}>{settings ? "Stay" : "Keep editing"}</Button>
+          <Button type="button" variant="destructive" disabled={busy} onClick={onDiscard}>{settings ? "Discard changes" : "Discard"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -563,6 +563,17 @@ test("price list management shares editable snapshots across quotes and invoices
     await settings();
     await page.getByRole("button", { name: "Add item", exact: true }).click();
     let dialog = page.getByRole("dialog", { name: "Add price-list item" });
+    await expect(dialog.getByRole("button", { name: "Save item", exact: true })).toBeDisabled();
+    await dialog.getByLabel("Name", { exact: true }).fill("Discarded item");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    const guard = page.getByRole("dialog", { name: "Unsaved changes", exact: true });
+    await guard.getByRole("button", { name: "Stay", exact: true }).click();
+    await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("Discarded item");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await guard.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("listitem", { name: "Discarded item", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Add item", exact: true }).click();
     await dialog.getByLabel("Name", { exact: true }).fill("Labour");
     await dialog.getByLabel("Description", { exact: true }).fill("Gate maintenance labour");
     await dialog.getByLabel("Item code / SKU (optional)").fill("LAB-01");

@@ -112,9 +112,18 @@ async function openAccount(browser, { width = 1440, height = 900, preset, custom
   return { context, page, account: page.locator('[data-customer-section="account"]') };
 }
 
+async function expectLifetime(account, { invoiced = "$1,760.00", received = "$510.00", outstanding = "$1,250.00", invoices = "4" } = {}) {
+  await expect(account.locator('dl[aria-label="Lifetime account summary"]')).toBeVisible();
+  await expect(account.locator("[data-account-total-invoiced]")).toHaveText(invoiced);
+  await expect(account.locator("[data-account-total-received]")).toHaveText(received);
+  await expect(account.locator("[data-account-balance]")).toHaveText(outstanding);
+  await expect(account.locator("[data-account-invoice-count]")).toHaveText(invoices);
+}
+
 test("invoice-only account totals, dates, ordering, navigation and customer filter survive refresh and Back", async ({ browser }) => {
   const { context, page, account } = await openAccount(browser);
   try {
+    await expectLifetime(account);
     await expect(account.locator("[data-account-balance]")).toHaveText("$1,250.00");
     await expect(account).toContainText("3 unpaid invoices · 2 overdue");
     await expect(account).toContainText("Oldest overdue: 24 days");
@@ -151,6 +160,7 @@ test("payment edits in the existing editor immediately refresh the account after
     await page.getByRole("button", { name: "Save Invoice", exact: true }).first().click();
     await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
     await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
+    await expectLifetime(account, { received: "$610.00", outstanding: "$1,150.00" });
     await expect(account.locator("[data-account-balance]")).toHaveText("$1,150.00");
     await account.getByRole("button", { name: "Open invoice INV-3001", exact: true }).click();
     await page.getByLabel("Payment 1 amount", { exact: true }).fill("400");
@@ -162,12 +172,14 @@ test("payment edits in the existing editor immediately refresh the account after
 test("zero and failure states never show quote values or a false zero, and retry recovers", async ({ browser }) => {
   const { context, page, account } = await openAccount(browser, { customerId: "account-zero" });
   try {
+    await expectLifetime(account, { invoiced: "$0.00", received: "$0.00", outstanding: "$0.00", invoices: "0" });
     await expect(account.locator("[data-account-balance]")).toHaveText("$0.00");
     await expect(account).toContainText("Account up to date");
     await page.route("**/api/customers/account-zero/account-summary?*", (route) => route.fulfill({ status: 503, json: { error: "Unavailable" } }));
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(account.getByRole("alert")).toContainText("Account balance unavailable");
     await expect(account.locator("[data-account-balance]")).toHaveCount(0);
+    await expect(account.locator("[data-account-total-invoiced]")).toHaveCount(0);
     await page.unroute("**/api/customers/account-zero/account-summary?*");
     await account.getByRole("button", { name: "Retry", exact: true }).click();
     await expect(account.locator("[data-account-balance]")).toHaveText("$0.00");
@@ -186,6 +198,7 @@ test("focus discovers a newly issued invoice from another session and opens the 
       payments: [{ id: "external-payment", amount: 30, date: invoiceToday() }],
     });
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expectLifetime(account, { invoiced: "$110.00", received: "$30.00", outstanding: "$80.00", invoices: "1" });
     await expect(account.locator("[data-account-balance]")).toHaveText("$80.00");
     await expect(account).toContainText("1 unpaid invoice");
     await expect(account).not.toContainText("overdue");
@@ -196,6 +209,7 @@ test("focus discovers a newly issued invoice from another session and opens the 
     await expect(account.locator("[data-account-balance]")).toHaveText("$80.00");
     db.prepare("DELETE FROM invoices WHERE job_id = ?").run("account-job-8001");
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expectLifetime(account, { invoiced: "$0.00", received: "$0.00", outstanding: "$0.00", invoices: "0" });
     await expect(account.locator("[data-account-balance]")).toHaveText("$0.00");
   } finally {
     db.prepare("DELETE FROM invoices WHERE job_id = ?").run("account-job-8001");
@@ -210,6 +224,7 @@ test("account remains compact and legible across all themes on desktop, tablet a
     for (const viewport of [{ width: 1440, height: 900 }, { width: 820, height: 1180 }, { width: 390, height: 844 }]) {
       const { context, page, account } = await openAccount(browser, { ...viewport, preset });
       try {
+        await expectLifetime(account);
         await expect(account.locator("[data-account-balance]")).toHaveText("$1,250.00");
         expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
         const box = await account.boundingBox();

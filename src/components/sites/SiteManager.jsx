@@ -234,7 +234,7 @@ export default function SiteManager({
           summary={<ResultSummary>{filteredSites.length} {filteredSites.length === 1 ? "site" : "sites"}</ResultSummary>}
         />
 
-        <DesktopPageControls
+        <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setSiteTypeFilter("all"); }}
           search={(
             <DesktopControlField label="Search" size="search">
               <PageSearchField

@@ -3,6 +3,7 @@ import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
 import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 import { loadData, saveData } from "./server-store.js";
 import { filterPriceList } from "./src/lib/price-list.js";
+import { withPriceListAccountingMappings } from "./server-accounting-price-list.js";
 import { PriceListError, buildPriceListItem, createPriceListItem, getPriceListItem, listPriceListItems, updatePriceListItem } from "./server-workspace-price-list.js";
 
 export function createPriceListRouter({ requireAuth, requireRole, env = process.env, jsonStore = { loadData, saveData } } = {}) {
@@ -26,12 +27,12 @@ export function createPriceListRouter({ requireAuth, requireRole, env = process.
     const { status = "active", search = "" } = req.query;
     if (!["active", "archived", "all"].includes(status) || typeof search !== "string" || search.length > 2000) throw new PriceListError("Invalid price-list filter.");
     const items = db ? listPriceListItems(db, { status, search }) : filterPriceList(jsonStore.loadData().priceListItems || [], search, status).sort((a, b) => a.name.localeCompare(b.name));
-    return { items };
+    return { items: db ? withPriceListAccountingMappings(db, items) : items };
   }));
   router.get("/api/price-list-items/:id", handle((req, db) => {
     const item = db ? getPriceListItem(db, req.params.id) : (jsonStore.loadData().priceListItems || []).find((entry) => entry.id === req.params.id);
     if (!item) throw new PriceListError("Price-list item not found.", 404);
-    return { item };
+    return { item: db ? withPriceListAccountingMappings(db, [item])[0] : item };
   }));
   function mutate(req, db, edit) {
     if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) throw new PriceListError("An item is required.");

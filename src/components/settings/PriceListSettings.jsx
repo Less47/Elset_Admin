@@ -9,28 +9,37 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { filterPriceList, priceListUnits, priceListTaxLabel } from "@/lib/price-list";
 import { money } from "@/lib/quote-template";
 import { priceListRequest, usePriceList } from "@/hooks/usePriceList";
+import { useSettingsDraft } from "@/hooks/useSettingsDraft";
+import { FilterPopover, FilterSheetField } from "@/components/shared/ResponsivePageControls";
 
 const emptyItem = () => ({ name: "", description: "", code: "", unit: "each", unitPrice: "", taxTreatment: "taxable", category: "", archived: false });
 const selectClass = "h-10 w-full rounded-md border border-input bg-input-surface px-3 text-sm text-foreground";
+const editableItem = item => Object.fromEntries(Object.entries(emptyItem()).map(([key, fallback]) => [key, item?.[key] ?? fallback]));
 
 export default function PriceListSettings({ fetchWithAuth }) {
   const { items, loading, error: loadError, refresh } = usePriceList(fetchWithAuth);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("active");
-  const [draft, setDraft] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const form = useSettingsDraft("price-list-item", editableItem(editing), async values => {
+    await priceListRequest(fetchWithAuth, editing.id ? `/${encodeURIComponent(editing.id)}` : "", { method: editing.id ? "PATCH" : "POST", body: JSON.stringify({ ...values, ...(editing.id ? { updatedAt: editing.updatedAt } : {}) }) });
+    return values;
+  }, { enabled: Boolean(editing) });
+  const draft = editing ? { ...editing, ...form.draft } : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const visible = filterPriceList(items, search, status);
-  const edit = (item) => { setDraft({ ...item }); setError(""); setMessage(""); };
-  const change = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const edit = (item) => { setEditing({ ...item }); setError(""); setMessage(""); };
+  const close = () => form.scope.requestNavigation(() => { setEditing(null); setError(""); });
+  const change = (key, value) => form.setDraft((current) => ({ ...current, [key]: value }));
   async function save(event) {
     event.preventDefault();
     if (busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      await priceListRequest(fetchWithAuth, draft.id ? `/${encodeURIComponent(draft.id)}` : "", { method: draft.id ? "PATCH" : "POST", body: JSON.stringify(draft) });
-      setDraft(null); setMessage("Item saved."); await refresh();
+      if (!await form.save()) return;
+      setEditing(null); setMessage("Item saved."); await refresh();
     } catch (failure) { setError(failure.message); }
     finally { setBusy(false); }
   }
@@ -51,7 +60,7 @@ export default function PriceListSettings({ fetchWithAuth }) {
     <CardContent className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
         <div className="relative"><Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input aria-label="Search price list" placeholder="Search name, code or description" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" /></div>
-        <select aria-label="Price-list status" className={selectClass} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All items</option></select>
+        <FilterPopover activeCount={status === "active" ? 0 : 1} onReset={() => setStatus("active")}><FilterSheetField id="price-list-status" label="Price-list status"><select id="price-list-status" className={selectClass} value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="archived">Archived</option><option value="all">All items</option></select></FilterSheetField></FilterPopover>
       </div>
       {message && <p role="status" className="text-sm text-status-success">{message}</p>}
       {(loadError || (error && !draft)) && <div role="alert" className="text-sm text-status-danger">{loadError || error}<Button variant="outline" className="ml-3" onClick={() => refresh()}>Reload list</Button></div>}
@@ -61,10 +70,13 @@ export default function PriceListSettings({ fetchWithAuth }) {
             {item.description && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">{item.description}</p>}
             <p className="mt-1 break-words text-xs text-muted-foreground">{[item.code, item.category].filter(Boolean).join(" · ")}</p>
             <p className="mt-2 text-sm"><span className="font-medium">{money(item.unitPrice)}</span> / {item.unit} <span className="text-text-secondary">ex GST · 10% GST</span></p>
+            {item.accountingMappings?.filter(mapping => mapping.provider === "quickbooks").map(mapping => <p key={mapping.provider} className="mt-2 break-words text-xs text-text-secondary">
+              QuickBooks item: {mapping.status === "MAPPED" ? `${mapping.name} · Mapped` : mapping.status === "FALLBACK" ? `Fallback sales item used. ${mapping.message}` : "Not mapped — will create/match on first sync"}
+            </p>)}
           </div>
           <div className="flex shrink-0 gap-2"><Button variant="outline" onClick={() => edit(item)} disabled={busy}>Edit</Button><Button variant="outline" onClick={() => archive(item)} disabled={busy}>{item.archived ? "Restore" : "Archive"}</Button></div>
         </li>)}</ul>}
-      <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !busy) { setDraft(null); setError(""); } }}>
+      <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open && !busy) close(); }}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader><DialogTitle>{draft?.id ? "Edit price-list item" : "Add price-list item"}</DialogTitle><DialogDescription>Changes apply when items are added to a document. Existing lines stay unchanged.</DialogDescription></DialogHeader>
           {draft && <form onSubmit={save} className="space-y-4">
@@ -77,8 +89,8 @@ export default function PriceListSettings({ fetchWithAuth }) {
               <div className="space-y-2"><Label htmlFor="price-item-price">Unit price ex GST</Label><Input id="price-item-price" type="number" inputMode="decimal" min="0" max="999999999.99" step="0.01" required value={draft.unitPrice} onChange={(event) => change("unitPrice", event.target.value)} /></div>
               <div className="space-y-2 sm:col-span-2"><Label htmlFor="price-item-tax">Tax treatment</Label><select id="price-item-tax" className={selectClass} value={draft.taxTreatment} disabled><option value="taxable">{priceListTaxLabel}</option></select><p className="text-xs text-muted-foreground">Uses ELSET’s existing 10% GST calculation. Units are stored for reference; document and PDF totals use quantity and rate.</p></div>
             </fieldset>
-            {error && <p role="alert" className="text-sm text-status-danger">{error}</p>}
-            <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={() => setDraft(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving..." : "Save item"}</Button></DialogFooter>
+            {(error || form.error) && <p role="alert" className="text-sm text-status-danger">{error || form.error}</p>}
+            <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={close}>Cancel</Button><Button type="submit" disabled={busy || !form.dirty}>{busy ? "Saving..." : "Save item"}</Button></DialogFooter>
           </form>}
         </DialogContent>
       </Dialog>

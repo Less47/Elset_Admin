@@ -1,0 +1,452 @@
+[
+  {
+    "invoiceNumber": "INV-0041",
+    "reviews": [
+      "CANONICAL_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0052",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0043",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0070",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0078",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0083",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0033",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0092",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0091",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0061",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0095",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0035",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0068",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0107",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0122",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0137",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0113",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0152",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0153",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0154",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0169",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0163",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0164",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0170",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0171",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0181",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0185",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0186",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0183",
+    "reviews": [
+      "LINKED_OR_SETTLED_INVOICE_CUSTOMER_DATE_FINANCIAL_CHANGE_REQUIRES_REVIEW"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0189",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0191",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0194",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0139",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0195",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0202",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0203",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0030",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0192",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0145",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0133",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0114",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0215",
+    "reviews": [
+      "CANONICAL_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0213",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0216",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0219",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0230",
+    "reviews": [
+      "CANONICAL_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0236",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0239",
+    "reviews": [
+      "CUSTOMER_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0242",
+    "reviews": [
+      "CANONICAL_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0244",
+    "reviews": [
+      "CANONICAL_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0246",
+    "reviews": [],
+    "warnings": [
+      "ELSET has payments; new QB invoice will remain unpaid. No Payment is exported or changed."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0233",
+    "reviews": [
+      "CANONICAL_IDENTITY_REVIEW_REQUIRED"
+    ],
+    "warnings": []
+  },
+  {
+    "invoiceNumber": "INV-0249",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0252",
+    "reviews": [],
+    "warnings": [
+      "Before void, give the unlinked duplicate a unique VOID-<id> reference to release the canonical invoice number; retain its original number in the archive and audit log."
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0251",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0255",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0258",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0259",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0265",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0266",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0272",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0264",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0273",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  },
+  {
+    "invoiceNumber": "INV-0227",
+    "reviews": [],
+    "warnings": [
+      "PAYMENT_AMOUNT_DIFFERENCE_NO_PAYMENT_MUTATION"
+    ]
+  }
+]

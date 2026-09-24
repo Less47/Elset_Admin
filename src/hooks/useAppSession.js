@@ -80,6 +80,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   const [workspaceStorageMode, setWorkspaceStorageMode] = useState("json");
   const lastSyncedDataRef = useRef("");
   const saveTimeoutRef = useRef(null);
+  const legacySaveRef = useRef(Promise.resolve());
   const syncErrorRef = useRef("");
   const hasLoadedServerStateRef = useRef(false);
 
@@ -277,40 +278,42 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       window.clearTimeout(saveTimeoutRef.current);
     }
 
-    saveTimeoutRef.current = window.setTimeout(async () => {
-      try {
-        const response = await fetchWithAuth("/api/app-state", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: serialized,
-        });
-        const payload = await response.json().catch(() => ({}));
+    saveTimeoutRef.current = window.setTimeout(() => {
+      legacySaveRef.current = legacySaveRef.current.then(async () => {
+        try {
+          const response = await fetchWithAuth("/api/app-state", {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: serialized,
+          });
+          const payload = await response.json().catch(() => ({}));
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error("Your session expired. Please sign in again.");
+          if (!response.ok) {
+            if (response.status === 401) {
+              throw new Error("Your session expired. Please sign in again.");
+            }
+
+            throw new Error(payload.error || "Failed to save the latest changes to the shared workspace.");
           }
 
-          throw new Error(payload.error || "Failed to save the latest changes to the shared workspace.");
-        }
+          lastSyncedDataRef.current = serialized;
+          syncErrorRef.current = "";
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to save the latest changes to the shared workspace.";
 
-        lastSyncedDataRef.current = serialized;
-        syncErrorRef.current = "";
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to save the latest changes to the shared workspace.";
+          if (/session expired|sign in again|authentication required/i.test(message)) {
+            clearSessionState(message);
+            return;
+          }
 
-        if (/session expired|sign in again|authentication required/i.test(message)) {
-          clearSessionState(message);
-          return;
+          if (syncErrorRef.current !== message) {
+            window.alert(message);
+            syncErrorRef.current = message;
+          }
         }
-
-        if (syncErrorRef.current !== message) {
-          window.alert(message);
-          syncErrorRef.current = message;
-        }
-      }
+      });
     }, 500);
 
     return () => {
@@ -680,6 +683,21 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     }
   }
 
+  async function saveLegacySettings(patch) {
+    if (!canManageBusiness || workspaceStorageMode !== "json") throw new Error("Shared settings cannot be saved in this session.");
+    if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+    const nextState = { ...data, ...patch, ...(patch.settings ? { settings: { ...data.settings, ...patch.settings } } : {}) };
+    // Finish any older legacy autosave first so it cannot overwrite this Save.
+    const write = legacySaveRef.current.then(async () => {
+      const response = await fetchWithAuth("/api/app-state", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nextState) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.state) throw new Error(payload.error || "Settings could not be saved. Please retry.");
+      return applyServerWorkspaceState(payload.state);
+    });
+    legacySaveRef.current = write.catch(() => {});
+    return write;
+  }
+
   return {
     adminUserAccounts,
     adminUserAccountsError,
@@ -703,5 +721,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     isTechnician,
     loginForm,
     workspaceStorageMode,
+    saveLegacySettings,
   };
 }

@@ -90,8 +90,11 @@ function getWorkspaceState() {
 export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   const [route, setRoute] = useState(() => parseWorkspacePath(window.location.pathname, getWorkspaceState(), window.location.search));
   const [discardPromptOpen, setDiscardPromptOpen] = useState(false);
+  const [blockerOptions, setBlockerOptions] = useState({});
   const routeRef = useRef(route);
   const blockerRef = useRef(null);
+  const blockerOptionsRef = useRef({});
+  const unloadCleanupRef = useRef(() => {});
   const pendingNavigationRef = useRef(null);
   const bypassNextPopRef = useRef(false);
   const restoringBlockedPopRef = useRef(false);
@@ -139,10 +142,21 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     return true;
   }, []);
 
-  const registerBlocker = useCallback((blocker) => {
+  const registerBlocker = useCallback((blocker, options = {}) => {
+    unloadCleanupRef.current();
     blockerRef.current = typeof blocker === "function" ? blocker : null;
+    blockerOptionsRef.current = options;
+    setBlockerOptions(options);
+    const handleBeforeUnload = (event) => {
+      if (!blockerRef.current?.()) return;
+      event.preventDefault(); event.returnValue = "";
+    };
+    if (blockerRef.current?.()) window.addEventListener("beforeunload", handleBeforeUnload);
+    const cleanup = () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    unloadCleanupRef.current = cleanup;
     return () => {
-      if (blockerRef.current === blocker) blockerRef.current = null;
+      cleanup();
+      if (blockerRef.current === blocker) { blockerRef.current = null; blockerOptionsRef.current = {}; }
     };
   }, []);
 
@@ -280,6 +294,7 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, [restoreSourceScroll, runOrBlock, onSectionChange]);
 
   const resetToRoot = useCallback(() => {
+    unloadCleanupRef.current();
     blockerRef.current = null;
     pendingNavigationRef.current = null;
     setDiscardPromptOpen(false);
@@ -302,7 +317,7 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
 
       if (bypassNextPopRef.current) {
         bypassNextPopRef.current = false;
-      } else if (currentRoute.type !== "section" && blockerRef.current?.()) {
+      } else if (blockerRef.current?.()) {
         // Restore the original entry without pushing over the Forward stack.
         const distance = currentRoute.historyIndex - nextRoute.historyIndex || 1;
         restoringBlockedPopRef.current = true;
@@ -329,16 +344,7 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [restoreSourceScroll, onSectionChange]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (event) => {
-      if (!blockerRef.current?.()) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  useEffect(() => () => unloadCleanupRef.current(), []);
 
   const keepEditing = useCallback(() => {
     pendingNavigationRef.current = null;
@@ -346,6 +352,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
   }, []);
 
   const discardAndContinue = useCallback(() => {
+    if (blockerOptionsRef.current.busy || blockerOptionsRef.current.onDiscard?.() === false) return;
+    unloadCleanupRef.current();
     const navigation = pendingNavigationRef.current;
     pendingNavigationRef.current = null;
     setDiscardPromptOpen(false);
@@ -356,6 +364,8 @@ export function useWorkspaceNavigation({ activeSection, onSectionChange }) {
     closeWorkspace,
     discardAndContinue,
     discardPromptOpen,
+    discardPromptKind: blockerOptions.kind,
+    discardPromptBusy: blockerOptions.busy,
     keepEditing,
     navigateToCreateJob,
     navigateToJob,

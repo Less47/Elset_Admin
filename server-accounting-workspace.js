@@ -26,7 +26,9 @@ export function readAccountingInvoice(db, jobId) {
       const nextTax = gstCentsFromSubtotal(runningSubtotal);
       const taxCents = nextTax - runningTax;
       runningTax = nextTax;
+      const extra = JSON.parse(row.extra_json || "{}");
       return { id: row.id, description: row.description, quantity: row.quantity_micros / 1_000_000,
+        ...(typeof extra?.priceListItemId === "string" && extra.priceListItemId ? { priceListItemId: extra.priceListItemId } : {}),
         unitAmountCents: row.rate_cents, amountCents, taxCents, taxTreatment: "taxable" };
     });
     const reason = !actual ? "Only sent invoices or invoices with recorded payments can be sent to accounting."

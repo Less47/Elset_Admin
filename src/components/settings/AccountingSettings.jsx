@@ -5,13 +5,24 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { accountingRequest } from "@/lib/accounting-api";
 import { accountingProviderName } from "@/lib/addons";
 import QuickBooksSalesItemSettings from "./QuickBooksSalesItemSettings";
+import { useSettingsDraft } from "@/hooks/useSettingsDraft";
+import { Badge } from "@/components/ui/badge";
+import AddonDetails from "./AddonDetails";
 
 const selectClass = "h-10 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const labels = { CONNECTED: "Connected", DISCONNECTED: "Not connected", SELECT_ORGANISATION: "Choose organisation", NEEDS_REAUTHORIZATION: "Reconnect required" };
+const editableConfig = (config = {}, quickbooks) => ({ ...(quickbooks ? { itemId: config.itemId || "" } : { salesAccountId: config.salesAccountId || "" }), taxMappings: config.taxMappings || {} });
 
-export default function AccountingSettings({ provider = "xero", enabled, available, fetchWithAuth }) {
+export default function AccountingSettings({ provider = "xero", addon, enabled, showStatus, available, fetchWithAuth, open, onOpenChange, providerWarning, returnFocusRef }) {
   const name = accountingProviderName(provider), quickbooks = provider === "quickbooks";
-  const [status, setStatus] = useState(null), [options, setOptions] = useState(null), [draft, setDraft] = useState({});
+  const [status, setStatus] = useState(null), [options, setOptions] = useState(null);
+  const configuration = useSettingsDraft(`${provider}-configuration`, editableConfig(options?.config, quickbooks), async value => {
+    if (options?.configurationIssue) throw new Error(options.configurationIssue.message);
+    const result = await execute("config", "PATCH", value);
+    if (!result?.config || result.error) throw new Error(result?.error || `${name} configuration could not be saved. Please retry.`);
+    return editableConfig(result.config, quickbooks);
+  }, { enabled: Boolean(available && options) });
+  const { draft, setDraft, scope } = configuration;
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const [notice, setNotice] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,7 +40,13 @@ export default function AccountingSettings({ provider = "xero", enabled, availab
     }).catch((cause) => { if (active) { setError(cause.message); setLoading(false); } });
     return () => { active = false; };
   }, [fetchWithAuth, available, enabled, base]);
-  async function run(endpoint, method = "GET", body) {
+  function run(endpoint, method = "GET", body) {
+    if (["connect", "disconnect", "organisation", "company-switch"].includes(endpoint)) {
+      return scope.requestNavigation(() => { void execute(endpoint, method, body); });
+    }
+    return execute(endpoint, method, body);
+  }
+  async function execute(endpoint, method = "GET", body) {
     if (busyRef.current) return;
     busyRef.current = true; setBusy(true); setError(""); setNotice("");
     try {
@@ -37,12 +54,12 @@ export default function AccountingSettings({ provider = "xero", enabled, availab
       if (result.url) { window.location.assign(result.url); return; }
       setStatus(result);
       setTenantId(result.externalTenantId || result.organisations?.[0]?.id || "");
-      if (result.accounts) { setOptions(result); setDraft(current => endpoint === "sales-item" ? { ...current, itemId: result.salesItem.id } : result.config); }
-      if (["organisation", "disconnect", "company-switch"].includes(endpoint)) { setOptions(null); setDraft({}); setConfirm(""); }
-      if (endpoint === "company-switch") setNotice(body.confirm ? "QuickBooks company switched. Configure its default sales item and GST code before syncing." : "Company switch cancelled. The previous connection was kept.");
+      if (result.accounts) { setOptions(result); if (endpoint === "sales-item") setDraft(current => ({ ...current, itemId: result.salesItem.id })); }
+      if (["organisation", "disconnect", "company-switch"].includes(endpoint)) { setOptions(null); configuration.discard(); setConfirm(""); }
+      if (endpoint === "company-switch") setNotice(body.confirm ? "QuickBooks company switched. Configure its fallback sales item and GST code before syncing." : "Company switch cancelled. The previous connection was kept.");
       if (endpoint === "test") setNotice(result.message);
       if (endpoint === "config" && method === "PATCH") setNotice(`${name} configuration saved.`);
-      if (endpoint === "sales-item") setNotice(`${result.reused ? "Reused existing" : "Created"} ${result.salesItem.name} · ${result.salesItem.incomeAccountName}. Save QuickBooks configuration to use this default.`);
+      if (endpoint === "sales-item") setNotice(`${result.reused ? "Reused existing" : "Created"} ${result.salesItem.name} · ${result.salesItem.incomeAccountName}. Use Save changes to use this default.`);
       return result;
     } catch (cause) {
       setError(cause.message);
@@ -50,12 +67,15 @@ export default function AccountingSettings({ provider = "xero", enabled, availab
       return { error: cause.message };
     } finally { busyRef.current = false; setBusy(false); setLoading(false); }
   }
-  if (!available) return null;
   const pendingSwitch = quickbooks ? status?.pendingCompanySwitch : null;
   const connected = status?.status === "CONNECTED", disabled = busy || loading || Boolean(pendingSwitch);
   const company = options?.organisation && options.organisation.id === status?.externalTenantId ? options.organisation
     : status?.organisations?.find((organisation) => organisation.id === status.externalTenantId);
-  return <div className="mt-3 space-y-3 border-t pt-3" aria-label={`${name} connection`}>
+  return <>
+    {showStatus ? <Badge className={`text-[10px] ${connected ? "bg-status-success-surface text-status-success" : "bg-status-danger-surface text-status-danger"}`} data-connection-status={connected ? "connected" : "disconnected"}>{loading && available ? "Checking…" : connected ? "Connected" : status ? "Not connected" : "Unavailable"}</Badge> : null}
+    <AddonDetails addon={addon} open={open} onOpenChange={onOpenChange} scope={scope} returnFocusRef={returnFocusRef}>
+    {providerWarning}
+    {available ? <div className="mt-3 space-y-3 border-t pt-3" aria-label={`${name} connection`}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="min-w-0 text-sm"><p className="font-medium">{loading ? "Loading connection…" : labels[status?.status] || "Connection unavailable"}</p>
         {status?.externalTenantName && status.status !== "DISCONNECTED" ? <p className="break-words text-text-secondary">{quickbooks ? "Connected organisation: " : ""}{status.externalTenantName}</p> : null}
@@ -79,8 +99,8 @@ export default function AccountingSettings({ provider = "xero", enabled, availab
       </select></div>
       <Button variant="outline" size="sm" disabled={disabled || !tenantId || (connected && tenantId === status.externalTenantId)} onClick={() => status.externalTenantId && tenantId !== status.externalTenantId ? setConfirm("organisation") : void run("organisation", "POST", { tenantId })}>Use organisation</Button>
     </div> : null}
-    {enabled && connected && quickbooks && !status.config?.itemId ? <p className="text-sm text-text-secondary">Configure this company's default sales item and GST code before syncing invoices.</p> : null}
-    {enabled && options && connected ? <form className="space-y-3 rounded-lg border bg-surface-raised p-3" onSubmit={(event) => { event.preventDefault(); void run("config", "PATCH", draft); }}>
+    {enabled && connected && quickbooks && !status.config?.itemId ? <p className="text-sm text-text-secondary">Configure this company's fallback sales item and GST code before syncing invoices.</p> : null}
+    {enabled && options && connected ? <form className="space-y-3 rounded-lg border bg-surface-raised p-3" onSubmit={(event) => { event.preventDefault(); void scope.group.save(); }}>
       <h4 className="text-sm font-semibold">Configuration</h4>
       {options.configurationIssue ? <p role="alert" className="text-sm text-status-danger">{options.configurationIssue.message}</p> : null}
       {quickbooks && options.organisation ? <p className="text-xs text-text-secondary">Company tax settings: {options.organisation.country} · {options.organisation.currency}. {options.organisation.usingSalesTax === true ? "GST / sales tax is enabled." : options.organisation.usingSalesTax === false ? "GST / sales tax is disabled." : "QuickBooks did not report whether GST / sales tax is enabled."}</p> : null}
@@ -98,13 +118,15 @@ export default function AccountingSettings({ provider = "xero", enabled, availab
       </div>
       <p className="text-xs text-text-secondary">Invoice sync is manual. {name} manages payments on mapped invoices. This workspace invoices in AUD with 10% GST on all lines.</p>
       {quickbooks ? <p className="text-xs text-text-secondary">Enable custom transaction numbers in QuickBooks to keep ELSET invoice numbers.</p> : null}
-      <Button type="submit" size="sm" disabled={disabled || Boolean(options.configurationIssue) || (quickbooks && !options.items.some(item => item.id === draft.itemId))}>Save {name} configuration</Button>
+      <p className="text-xs text-text-secondary">Use Save changes to save this configuration.</p>
     </form> : null}
     {status?.lastSuccessAt ? <p className="text-xs text-text-secondary">Last successful sync: {new Date(status.lastSuccessAt).toLocaleString()}</p> : null}
     {status?.retryAt > Date.now() ? <p className="text-xs text-text-secondary">Retry after {new Date(status.retryAt).toLocaleString()}.</p> : null}
     {error || status?.error ? <p role="alert" className="break-words text-sm text-status-danger">{error || status.error}</p> : null}
     {!status && !loading ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void run("status")}>Retry connection status</Button> : null}
     <p role="status" className="text-sm text-text-secondary">{busy ? "Working…" : notice}</p>
+    </div> : <p className="text-sm text-text-secondary">Connections require SQLite workspace storage.</p>}
+    </AddonDetails>
     <Dialog open={Boolean(confirm || pendingSwitch)} onOpenChange={(open) => { if (!open && !busy && !pendingSwitch) setConfirm(""); }}>
       <DialogContent showCloseButton={!busy && !pendingSwitch} className="sm:max-w-md" onEscapeKeyDown={(event) => { if (busy || pendingSwitch) event.preventDefault(); }} onInteractOutside={(event) => { if (busy || pendingSwitch) event.preventDefault(); }}>
         <DialogHeader><DialogTitle>{pendingSwitch ? "Switch QuickBooks company?" : confirm === "disconnect" ? `Disconnect ${name}?` : `Change ${name} organisation?`}</DialogTitle><DialogDescription>{pendingSwitch
@@ -117,5 +139,5 @@ export default function AccountingSettings({ provider = "xero", enabled, availab
         <DialogFooter><Button variant="outline" disabled={busy} onClick={() => pendingSwitch ? void run("company-switch", "POST", { switchId: pendingSwitch.id, confirm: false }) : setConfirm("")}>Cancel</Button><Button disabled={busy} onClick={() => void run(pendingSwitch ? "company-switch" : confirm === "disconnect" ? "disconnect" : "organisation", "POST", pendingSwitch ? { switchId: pendingSwitch.id, confirm: true } : confirm === "disconnect" ? {} : { tenantId, confirmChange: true })}>{pendingSwitch ? "Switch company" : confirm === "disconnect" ? `Disconnect ${name}` : "Change organisation"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-  </div>;
+  </>;
 }

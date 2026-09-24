@@ -48,11 +48,22 @@ function safeCents(value) {
 }
 
 export function summarizeInvoiceAccount(customerId, records, { today = invoiceToday(), limit = 5 } = {}) {
-  const invoices = [];
+  const invoices = [], seen = new Set();
+  let totalInvoicedCents = 0, totalReceivedCents = 0;
   for (const record of records) {
     // Only actual invoice projections enter this function; never Job/Quote values.
-    if (record.customerId !== customerId || !isQualifyingActualInvoice(record) || !(record.balanceCents > 0)) continue;
+    const metadata = record.metadata || {};
+    const state = String(metadata.status || metadata.invoiceStatus || "").trim().toLowerCase();
+    if (record.customerId !== customerId || !isQualifyingActualInvoice(record) || seen.has(record.invoiceId)
+      || !record.invoiceId || record.valid === false || !invoiceDate(record.issueDate) || !(record.totalCents > 0)
+      || ["draft", "unfinished", "incomplete", "invalid", "archived"].includes(state)
+      || metadata.invalid || metadata.incomplete || metadata.archived === true || metadata.archivedAt) continue;
     const totalCents = safeCents(record.totalCents), paidCents = safeCents(record.paidCents), balanceCents = safeCents(record.balanceCents);
+    seen.add(record.invoiceId);
+    totalInvoicedCents = safeCents(totalInvoicedCents + totalCents);
+    totalReceivedCents = safeCents(totalReceivedCents + paidCents);
+    // Paid invoices contribute to lifetime value, but not the open-invoice list.
+    if (balanceCents === 0) continue;
     const dueDate = invoiceDate(record.dueDate), issueDate = invoiceDate(record.issueDate);
     const overdueDays = invoiceOverdueDays(balanceCents, dueDate, today);
     const status = invoiceStatusFromAmounts({ total: totalCents, balance: balanceCents, paid: paidCents,
@@ -65,6 +76,9 @@ export function summarizeInvoiceAccount(customerId, records, { today = invoiceTo
     || b.issueDate.localeCompare(a.issueDate) || b.invoiceNumber.localeCompare(a.invoiceNumber, "en", { numeric: true })
     || a.invoiceId.localeCompare(b.invoiceId));
   return { customerId, asOfDate: today,
+    totalInvoicedCents, totalReceivedCents, invoiceCount: seen.size,
+    // Preserve the existing per-invoice balance: an overpayment on one invoice
+    // does not settle a different invoice without a recorded allocation.
     outstandingCents: safeCents(invoices.reduce((sum, invoice) => sum + invoice.balanceCents, 0)),
     openInvoiceCount: invoices.length, overdueInvoiceCount: invoices.filter((invoice) => invoice.overdueDays > 0).length,
     oldestOverdueDays: invoices.reduce((days, invoice) => Math.max(days, invoice.overdueDays), 0),
@@ -79,6 +93,8 @@ export function summarizeJsonCustomerAccount(customerId, jobs = [], options) {
     const invoice = job.invoice;
     if (job.customerId !== customerId || isInactiveInvoice(invoice) || (invoice.type && invoice.type !== "invoice")) continue;
     const items = Array.isArray(invoice.items) ? invoice.items : [];
+    if (!items.length || items.some((item) => !item || !Number.isFinite(Number(item.qty)) || Number(item.qty) <= 0
+      || item.rate === "" || item.rate === null || item.rate === undefined || !Number.isFinite(Number(item.rate)) || Number(item.rate) < 0)) continue;
     const total = calculateInvoiceTotal(items);
     let payments = (Array.isArray(invoice.payments) ? invoice.payments : []).filter((payment) => Number(payment?.amount) > 0)
       .map((payment) => ({ amount: roundCurrency(payment.amount) }));

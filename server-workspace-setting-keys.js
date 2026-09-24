@@ -14,6 +14,7 @@ export const workspaceUiSettingKeys = [
   "dataViewAccent",
   "sidebarWidth",
   "contentDensity",
+  "roundedEdges",
 ];
 
 export const workspacePreferenceSettingKeys = [
@@ -34,6 +35,7 @@ export const workspacePreferenceSettingKeys = [
 ];
 
 export const defaultWorkspaceSettings = {
+  roundedEdges: true,
   pageBackgroundStart: "#0F90CD",
   pageBackgroundEnd: "#0F90CD",
   sidebarSurface: "#FFFFFF",

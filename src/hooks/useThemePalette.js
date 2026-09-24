@@ -31,6 +31,7 @@ export function useThemePalette(settings) {
 
     return {
       dark: semantic.dark,
+      roundedEdges: themeSettings.roundedEdges,
       rootStyle: {
         backgroundImage: semantic.vars["--page-gradient"],
         color: semantic.vars["--foreground"],
@@ -108,11 +109,13 @@ export function useThemePalette(settings) {
     for (const [key, value] of variables) root.style.setProperty(key, value);
     root.classList.toggle('dark', themePalette.dark);
     root.dataset.themeMode = themePalette.dark ? 'dark' : 'light';
+    root.dataset.roundedEdges = String(themePalette.roundedEdges);
     root.style.colorScheme = themePalette.dark ? 'dark' : 'light';
     return () => {
       for (const [key] of variables) root.style.removeProperty(key);
       root.classList.remove('dark');
       delete root.dataset.themeMode;
+      delete root.dataset.roundedEdges;
       root.style.removeProperty('color-scheme');
     };
   }, [themePalette]);

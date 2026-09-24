@@ -22,7 +22,9 @@ Selecting an item creates a new line ID and copies its description, quantity 1 a
 
 The audited application applies 10% GST to document subtotals, and both accounting adapters expose only `taxable`. The price list therefore accepts **Taxable / 10% GST** only. GST-free was not already supported and has not been added. Existing rounding, PDF calculations, email/send history and accounting arithmetic are unchanged.
 
-Xero and QuickBooks continue reading stored invoice lines. The catalog is independent of their enablement, credentials and configuration. No Xero Item or QuickBooks Product/Service creation is performed.
+Xero and QuickBooks continue reading stored invoice lines. The catalog is independent of their enablement, credentials and configuration. Xero behavior is unchanged. QuickBooks now resolves each saved `priceListItemId` through the provider/company-scoped `price-list-item` accounting mapping. A unique eligible exact-name Service/NonInventory item is reused; otherwise a missing Service item can be created once using the configured fallback item's active Income account. Ambiguous, inactive, unsupported, missing/archived catalog sources and unsafe names use the configured fallback and log a visible mapping warning. Ad-hoc lines also use the fallback. None of these operations change saved descriptions, quantities, prices or tax.
+
+Provider IDs are stored only in the existing accounting mapping table, not invoice line snapshots or the price-list table. Optional read-only `accountingMappings` metadata on catalog API responses shows the current connected company's mapping state. It is not an editable client field. No schema migration is required. See [the reconciliation and per-line mapping report](quickbooks-reconciliation-report.md) for current verification and production dry-run results.
 
 ## API
 

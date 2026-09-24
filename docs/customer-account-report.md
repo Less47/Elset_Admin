@@ -1,4 +1,20 @@
-# Customer Account: invoice receivables
+# Customer Account: lifetime value and invoice receivables
+
+## Lifetime summary added locally on 2026-09-22
+
+The top of Customer > Account now shows **Total invoiced**, **Total received**, **Outstanding**, and **Invoices** in a compact two-column account card. Existing unpaid-invoice rows, overdue information, editor links, and View all invoices remain below it. Amounts use the existing AUD formatter and semantic theme tokens.
+
+The existing read-only account query and JSON fallback now aggregate every eligible current invoice across all of the customer's jobs/sites before limiting the open-invoice list to five rows. `totalInvoicedCents` includes GST, `totalReceivedCents` sums currently recorded payments, and `invoiceCount` counts that same invoice set. Paid invoices contribute to lifetime totals and count even though they do not appear in the open-invoice list.
+
+Eligibility retains ELSET's existing invoice-send-history or positive-payment evidence. It excludes quotes, unissued/unpaid drafts, explicit draft/unfinished/incomplete/invalid/archive metadata, inactive/deleted records, missing/invalid issue dates, missing/invalid lines, and nonpositive invoices. The current document is counted once by invoice ID; ServiceM8 references, send-history snapshots, cached totals and provider mappings are not additional invoices or revenue sources. No issuance, import, payment, job-costing or provider behavior was changed.
+
+Outstanding still uses the authoritative sum of remaining per-invoice balances. Normally this equals invoiced minus received; existing overpayments stay attached to their invoice and do not settle another invoice without an allocation. Existing SQLite/JSON rounding and legacy JSON paid markers are preserved.
+
+Files changed for this addition: `server-customer-account.js`, `src/lib/invoice-account.js`, `src/hooks/useCustomerAccount.js`, `src/components/customers/CustomerAccount.jsx`, `src/components/customers/CustomerWorkspace.css`, `tests/customer-account.test.js`, `tests/e2e/customer-account.spec.mjs`, and this report. No schema changes, provider queries, stored customer totals, graphs, date filters, integration changes or production access were added.
+
+Local validation: **27 account unit tests passed; 659 full-suite tests passed; lint, build and `git diff --check` passed** (build retains the existing large-chunk advisory). Coverage includes multiple jobs/sites, full/partial/no payments, draft/deleted/invalid exclusions, zero state, actual historical ServiceM8 import and duplicate projections, invoice counts, current invoice edits, overpayments, and AUD formatting.
+
+**15 relevant browser tests passed** using `tests/e2e/customer-account.spec.mjs` and `tests/e2e/customer-workspaces.spec.mjs` with `--config=playwright.config.mjs --tsconfig=tsconfig.app.json --workers=1 --reporter=line`. These exercise the real local SQLite API, payment updates, new/deleted invoice refresh, errors/retry, navigation, customer/site editing, and **24 Account theme/viewport combinations** (eight presets at desktop, tablet and mobile sizes). Manually inspected the generated ELSET desktop, Harbour Steel tablet and Midnight Signal mobile screenshots: all four values and existing invoice rows are readable without horizontal overflow. Only temporary synthetic local databases were used. Work remains uncommitted, unpushed and undeployed.
 
 ## Model audited
 
@@ -54,7 +70,7 @@ SQLite uses the existing `invoiceFinancialsFromRows` calculation, extracted with
 | Tests | `tests/customer-account.test.js`, `tests/workspace-navigation.test.js`, `tests/e2e/customer-account.spec.mjs`, `tests/e2e/customer-workspaces.spec.mjs` |
 | Report | `docs/customer-account-report.md` |
 
-## Verification
+## Original receivables implementation verification
 
 - `node --test tests/customer-account.test.js tests/workspace-navigation.test.js`: **24/24 passed**. The account tests cover the four required invoice-only scenarios in both SQLite and JSON, plus partial/full/multiple payments, multi-site ownership, overdue dates, drafts, deleted/void metadata, zero invoices, rounding, lifecycle changes, bounded response and API authorization/read-only behavior.
 - `node --test --test-reporter=dot`: **376 passed**.

@@ -199,7 +199,7 @@ export default function JobHistoryManager({
         )}
       />
 
-      <DesktopPageControls
+      <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setStatusFilter("all"); setUrgencyFilter("all"); setDocumentFilter("all"); setCreatedRange("all-time"); setCreatedFrom(""); setCreatedTo(""); }}
         search={(
           <DesktopControlField label="Search" size="search">
             <PageSearchField

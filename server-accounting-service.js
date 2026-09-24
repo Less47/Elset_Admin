@@ -8,6 +8,7 @@ import { getWorkspaceAddons, requireWorkspaceAddon } from "./server-workspace-ad
 import { paymentSyncStatus, reconcileInvoicePayments, reconcilePaymentGroup } from "./server-accounting-payments.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 import { assertInvoiceAccountingOwner } from "./server-accounting-payment-policy.js";
+import { resolveQuickBooksLineItems } from "./server-accounting-price-list.js";
 import { acceptQuickBooksCallback, pendingQuickBooksCompany, quickBooksOAuthDiagnostic, resolveQuickBooksCompanySwitch } from "./server-quickbooks-oauth.js";
 
 export class AccountingService {
@@ -275,7 +276,12 @@ export class AccountingService {
       this.store.log(tenant, "invoice", source.id, "sync", "SYNCING");
       try {
         const context = await this.credentials();
-        const config = this.validateConfig(JSON.parse(this.store.integration().config_json), await this.options(context));
+        const options = await this.options(context);
+        let config = this.validateConfig(JSON.parse(this.store.integration().config_json), options);
+        const mapping = this.store.mapping(tenant, "invoice", source.id);
+        let external = mapping ? await this.provider.getInvoice(context, mapping.external_entity_id) : null;
+        if (external) this.provider.assertUpdateSafe(external);
+        if (this.provider.id === "quickbooks") config = await resolveQuickBooksLineItems(this, context, source, config, options.accounts);
         const mappedCustomer = this.store.mapping(tenant, "customer", source.customerId);
         const customer = mappedCustomer ? await this.provider.getCustomer(context, mappedCustomer.external_entity_id)
           : await this.provider.ensureCustomer(context, source.customer, `ops-${digest(`${this.store.workspaceId}:${source.customerId}`).slice(0, 40)}`,
@@ -288,10 +294,7 @@ export class AccountingService {
         this.store.map(tenant, "customer", source.customerId, customer.id, customer.reference);
         this.store.finishOperation(tenant, "customer", source.customerId);
         const payload = this.provider.invoicePayload(source, customer.id, config, `ops-${digest(`${this.store.workspaceId}:${source.id}`).slice(0, 24)}`);
-        const mapping = this.store.mapping(tenant, "invoice", source.id);
-        let external;
         if (mapping) {
-          external = await this.provider.getInvoice(context, mapping.external_entity_id);
           this.provider.assertUpdateSafe(external);
           if (!this.provider.matchesInvoice(external, payload)) {
             if (this.provider.describeInvoice(external).fingerprint !== mapping.external_fingerprint) throw new AccountingError("EXTERNAL_EDIT_CONFLICT", `The ${this.provider.name} invoice changed since the last sync. Review the accounting changes before updating.`, 409);

@@ -20,7 +20,8 @@ export function useCustomerAccount(customerId, jobs, storageMode) {
         });
         if (!response.ok) throw new Error("Account unavailable");
         const summary = await response.json();
-        if (summary.customerId !== customerId || !Number.isSafeInteger(summary.outstandingCents)) throw new Error("Invalid account response");
+        if (summary.customerId !== customerId || ["outstandingCents", "totalInvoicedCents", "totalReceivedCents", "invoiceCount"]
+          .some((key) => !Number.isSafeInteger(summary[key]) || summary[key] < 0)) throw new Error("Invalid account response");
         if (active && !request.signal.aborted) setRemote({ customerId, jobs, summary });
       } catch {
         if (active && !request.signal.aborted) setRemote({ customerId, jobs, error: true });

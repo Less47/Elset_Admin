@@ -56,7 +56,7 @@ The timestamp is an ISO string. Repeated startup is idempotent. Existing auth ro
 
 ## 6. Preference schema
 
-The explicit flat schema has 22 fields. Its defaults are:
+The explicit flat schema has 23 fields. Its defaults are:
 
 ```json
 {
@@ -73,6 +73,7 @@ The explicit flat schema has 22 fields. Its defaults are:
   "dataViewAccent": "#0F90CD",
   "sidebarWidth": "standard",
   "contentDensity": "comfortable",
+  "roundedEdges": true,
   "customerView": "list",
   "siteView": "list",
   "boardToDoView": "list",
@@ -85,7 +86,7 @@ The explicit flat schema has 22 fields. Its defaults are:
 }
 ```
 
-Colours accept `#RGB` or `#RRGGBB` and normalize to uppercase six-digit hex. Sidebar choices are icon-only/compact/standard/wide; density is compact/comfortable/spacious. Page views are list/grid; board views add compact. Board sorts are recent/oldest/urgency/customer/scheduled/value. Tag labels require a boolean. Unknown keys, nested arbitrary objects, invalid values, and prototype-pollution keys are rejected with 400.
+Colours accept `#RGB` or `#RRGGBB` and normalize to uppercase six-digit hex. Sidebar choices are icon-only/compact/standard/wide; density is compact/comfortable/spacious. Page views are list/grid; board views add compact. Board sorts are recent/oldest/urgency/customer/scheduled/value. Tag labels and rounded edges require a boolean. Rounded edges default to enabled; disabling them previews square corners across panels, controls and dialogs, and Save changes persists the choice for this account. Unknown keys, nested arbitrary objects, invalid values, and prototype-pollution keys are rejected with 400.
 
 The retired `boardHiddenColumns` preference is ignored when reading existing rows and removed from the stored JSON on the next preference save. All three Service Board columns remain visible on tablet and desktop; no database migration is needed.
 
@@ -105,11 +106,13 @@ Logged-out screens use safe defaults and make no preference request. Auth identi
 
 ## 10. Legacy transition
 
-Global appearance values remain as a migration fallback. `PATCH /api/settings` rejects personal keys, including mixed company/appearance patches; the old global UI reset rejects requests. Legacy broad JSON workspace saves preserve existing appearance fields. Personal controls always use the new endpoint, including in JSON mode. Explicit business backup/import behavior remains intact. Reset UI Settings resets this account's 13 appearance values, leaving page/board choices under their existing controls.
+Global appearance values remain as a migration fallback. `PATCH /api/settings` rejects personal keys, including mixed company/appearance patches; the old global UI reset rejects requests. Legacy broad JSON workspace saves preserve existing appearance fields. Personal controls always use the new endpoint, including in JSON mode. Explicit business backup/import behavior remains intact. Reset UI Settings resets this account's 14 appearance values, leaving page/board choices under their existing controls.
 
 ## 11. Save strategy
 
-The app-level personal store updates visible drafts immediately and coalesces controls for 400 ms. There is at most one active preference write; newer keys/values wait for it and latest selections win. Local overrides protect active choices from stale acknowledgements. Navigating between sections does not cancel saves; signing out cancels pending work. Failures retain the local appearance, expose compact feedback and support retry. The separate company-text queue retains its 600 ms debounce and caret-safe drafts. No localStorage/sessionStorage preference persistence was introduced.
+Updated 24 September 2026: Settings uses local drafts and an explicit **Save changes** action. Theme selections preview locally; section/sidebar/history navigation and sign-out are guarded while dirty. Discard restores saved appearance. Company text and document templates also require Save; their old autosave hook was removed. See [Settings explicit Save report](settings-explicit-save.md) for the architecture, resource-level acknowledgement, guards and current verification.
+
+Display controls outside Settings (Customer/Site views and Service Board choices) still use the app-level personal store's 400 ms queue. Local overrides protect those active choices from stale acknowledgements, and identity teardown cancels pending work. No localStorage/sessionStorage preference persistence was introduced.
 
 ## 12. Cross-account isolation results
 

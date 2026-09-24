@@ -14,7 +14,7 @@ const ref = (value) => value?.value || "";
 const idOK = (id) => typeof id === "string" && /^[0-9]{1,50}$/.test(id);
 const quote = (value) => `'${String(value).replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const defaultSalesItemName = "ELSET Services";
-const sameItemName = (name) => typeof name === "string" && name.normalize("NFKC").trim().toLowerCase() === defaultSalesItemName.toLowerCase();
+export const normalizedItemName = name => String(name || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 function comparable(invoice, homeCurrency) {
   return { customer: ref(invoice.CustomerRef), number: invoice.DocNumber, date: invoice.TxnDate, due: invoice.DueDate,
     currency: ref(invoice.CurrencyRef) || homeCurrency, taxCalculation: invoice.GlobalTaxCalculation,
@@ -148,6 +148,10 @@ export class QuickBooksAccountingProvider {
     return (await this.query(context, "Item", "Active = true")).map((row) => this.salesItem(row, accounts)).filter(Boolean);
   }
   async ensureDefaultSalesItem(context, incomeAccountId, accounts, write) {
+    return this.ensureNamedSalesItem(context, defaultSalesItemName, incomeAccountId, accounts, write);
+  }
+  async ensureNamedSalesItem(context, name, incomeAccountId, accounts, write) {
+    const sameItemName = value => normalizedItemName(value) === normalizedItemName(name);
     // Include inactive and unsupported records in the collision check. Never
     // reactivate, rename or change an existing record to make it eligible.
     const existing = async () => {
@@ -155,14 +159,15 @@ export class QuickBooksAccountingProvider {
         .filter((row) => sameItemName(row.Name) || sameItemName(row.FullyQualifiedName));
       if (!matches.length) return null;
       const item = matches.length === 1 ? this.salesItem(matches[0], accounts) : null;
-      if (!item) review('The name "ELSET Services" is already used by an inactive, unsupported or ambiguous QuickBooks item. Choose an existing eligible sales item instead.', "ITEM_NAME_CONFLICT");
+      if (!item) review("This name is already used by an inactive, unsupported or ambiguous QuickBooks item. Review the existing items before mapping it.", "ITEM_NAME_CONFLICT");
       return { item, reused: true };
     };
     const found = await existing();
     if (found) return found;
+    if (typeof name !== "string" || !name.trim() || name.length > 100 || name.includes(":") || [...name].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) review("This price-list name cannot safely become a QuickBooks item name. The fallback sales item will be used.", "ITEM_NAME_INVALID");
     const account = accounts.find((row) => row.id === incomeAccountId && row.type === "Income");
     if (!account) review('Choose an active QuickBooks income account for "ELSET Services". No account will be created or changed.', "ACCOUNT_MAPPING");
-    const payload = { Name: defaultSalesItemName, Type: "Service", Active: true, IncomeAccountRef: { value: account.id } };
+    const payload = { Name: name.trim(), Type: "Service", Active: true, IncomeAccountRef: { value: account.id } };
     let response;
     try { response = await write(payload, (key) => this.request(context, "item", "POST", payload, key)); }
     catch (error) {
@@ -255,7 +260,7 @@ export class QuickBooksAccountingProvider {
     return { CustomerRef: { value: customerId }, DocNumber: invoice.number, TxnDate: invoice.date, DueDate: invoice.dueDate,
       CurrencyRef: { value: invoice.currency }, PrivateNote: `${invoice.reference} | ELSET:${sourceReference}`,
       GlobalTaxCalculation: "TaxExcluded", Line: invoice.lines.map((line) => ({ DetailType: "SalesItemLineDetail", Description: line.description,
-        Amount: line.amountCents / 100, SalesItemLineDetail: { ItemRef: { value: config.itemId }, TaxCodeRef: { value: config.taxMappings[line.taxTreatment] },
+        Amount: line.amountCents / 100, SalesItemLineDetail: { ItemRef: { value: config.lineItemIds?.[line.id] || config.itemId }, TaxCodeRef: { value: config.taxMappings[line.taxTreatment] },
           Qty: line.quantity, UnitPrice: line.unitAmountCents / 100 } })) };
   }
   async findInvoice(context, number) { return this.query(context, "Invoice", `DocNumber = ${quote(number)}`); }

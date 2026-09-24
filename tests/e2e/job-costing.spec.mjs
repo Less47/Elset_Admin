@@ -115,6 +115,11 @@ async function open(browser, { role = "admin", width = 1440, height = 1000, pres
   return { context, page };
 }
 const metric = (page, key) => page.locator(`[data-costing-metric="${key}"]`);
+async function saveAddons(page) {
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
+}
+
 async function settings(page, { expectEnabled = true } = {}) {
   if ((page.viewportSize()?.width || 0) < 1024) await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Settings", exact: true }).click();
@@ -126,6 +131,38 @@ function deferred() {
   const promise = new Promise((done) => { resolve = done; });
   return { promise, resolve };
 }
+test("add-on cards are uniform and open details, with connection pills only for enabled providers", async ({ browser }, info) => {
+  const { context, page } = await open(browser);
+  try {
+    await page.route("**/api/integrations/quickbooks/status", route => route.fulfill({ json: { result: { status: "DISCONNECTED", organisations: [], taxTreatments: [], serverConfigured: false } } }));
+    await settings(page);
+    await expect(page.locator('[data-addon] [data-connection-status]')).toHaveCount(0);
+    await expect(page.getByLabel("QuickBooks connection", { exact: true })).toHaveCount(0);
+    for (const width of [390, 820, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      const sizes = await page.locator("[data-addon]").evaluateAll(cards => cards.map(card => ({ width: card.getBoundingClientRect().width, height: card.getBoundingClientRect().height })));
+      for (const size of sizes) { expect(size.width).toBeCloseTo(sizes[0].width, 0); expect(size.height).toBeCloseTo(sizes[0].height, 0); }
+      await page.getByRole("button", { name: "About Job Costing", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Job Costing", exact: true });
+      await expect(dialog).toContainText("Quote vs invoice comparison");
+      await dialog.getByRole("button", { name: "Done", exact: true }).click();
+      await expect(page.getByRole("button", { name: "About Job Costing", exact: true })).toBeFocused();
+      await capture(page, info, `uniform-addons-${width}`);
+    }
+    await page.getByRole("switch", { name: "QuickBooks Online enabled", exact: true }).click();
+    await saveAddons(page);
+    await expect(page.locator('[data-addon="quickbooks"] [data-connection-status]')).toHaveText("Not connected");
+    await expect(page.locator('[data-addon="xero"] [data-connection-status]')).toHaveCount(0);
+    await page.getByRole("button", { name: "About QuickBooks Online", exact: true }).click();
+    await expect(page.getByLabel("QuickBooks connection", { exact: true })).toBeVisible();
+    await page.getByRole("dialog", { name: "QuickBooks Online", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
+    await page.unroute("**/api/integrations/quickbooks/status");
+    await page.route("**/api/integrations/quickbooks/status", route => route.fulfill({ json: { result: { status: "CONNECTED", organisations: [], taxTreatments: [], serverConfigured: true } } }));
+    await page.reload();
+    await page.locator('[data-settings-navigation]').getByRole("button", { name: "Add-ons", exact: true }).click();
+    await expect(page.locator('[data-addon="quickbooks"] [data-connection-status]')).toHaveText("Connected");
+  } finally { await context.close(); }
+});
 async function addCost(page, { description = "Safety beams", category = "Materials", quantity = "2", unitCost = "95.00" } = {}) {
   await page.getByRole("button", { name: "Add Cost", exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "Add cost", exact: true });
@@ -148,6 +185,18 @@ const costEntries = (page) => page.getByRole("region", { name: /^Cost entries/ }
 const costFilter = (page, label) => page.getByRole("group", { name: "Filter cost entries by category" })
   .getByRole("button", { name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(\\d+\\)$`) });
 
+async function showCostFilters(page) {
+  await costEntries(page).getByRole("button", { name: /^Filters/ }).click();
+}
+async function closeCostFilters(page) {
+  await page.getByRole("dialog", { name: "Filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
+}
+async function chooseCostFilter(page, label) {
+  await showCostFilters(page);
+  await costFilter(page, label).click();
+  await closeCostFilters(page);
+}
+
 for (const width of [390, 820, 1440]) {
   test(`category filters show ordered entries and subtotals without changing job totals or fetching at ${width}px`, async ({ browser }, info) => {
     const { context, page } = await open(browser, { width, enabled: true });
@@ -163,8 +212,10 @@ for (const width of [390, 820, 1440]) {
       const section = costEntries(page);
       const filters = page.getByRole("group", { name: "Filter cost entries by category" });
       await expect(section.getByRole("heading")).toHaveText("Cost entries (7)");
+      await showCostFilters(page);
       await expect(costFilter(page, "All")).toHaveAttribute("aria-pressed", "true");
       await expect(filters.getByRole("button")).toHaveCount(8);
+      await closeCostFilters(page);
       const summaries = page.locator('[data-costing-metric], [aria-labelledby="cost-breakdown-title"], [aria-labelledby="profit-summary-title"]');
       const beforeSummary = await summaries.allTextContents();
       const requests = [];
@@ -173,11 +224,13 @@ for (const width of [390, 820, 1440]) {
       const rows = width < 768 ? section.locator("ul > li") : section.locator("tbody > tr");
       for (const category of [{ key: "all", label: "All" }, ...COST_CATEGORIES]) {
         const matching = summary.entries.filter((entry) => category.key === "all" || entry.category === category.key);
+        await showCostFilters(page);
         const button = costFilter(page, category.label);
         await expect(button).toHaveText(`${category.label}(${matching.length})`);
         await button.click();
         await expect(button).toHaveAttribute("aria-pressed", "true");
         await expect(filters.locator('[aria-pressed="true"]')).toHaveCount(1);
+        await closeCostFilters(page);
         await expect(rows).toHaveCount(matching.length);
         for (let index = 0; index < matching.length; index++) await expect(rows.nth(index)).toContainText(matching[index].description);
         await expect(section.getByRole("heading")).toHaveText(`Cost entries (${category.key === "all" ? 7 : `${matching.length} of 7`})`);
@@ -185,7 +238,8 @@ for (const width of [390, 820, 1440]) {
         if (!matching.length) await expect(section).toContainText(`No ${category.label} cost entries.`);
         expect(await summaries.allTextContents()).toEqual(beforeSummary);
       }
-      // Native button keyboard activation works even for initially off-screen pills.
+      // Category buttons remain keyboard accessible in the filter dialog.
+      await showCostFilters(page);
       await costFilter(page, "Travel").focus();
       await page.keyboard.press("Enter");
       await expect(costFilter(page, "Travel")).toHaveAttribute("aria-pressed", "true");
@@ -194,13 +248,16 @@ for (const width of [390, 820, 1440]) {
       await page.keyboard.press("Space");
       await expect(costFilter(page, "Other")).toHaveAttribute("aria-pressed", "true");
       expect(requests).toEqual([]);
+      await closeCostFilters(page);
       await addCost(page, { category: "Other", description: "Other direct cost", quantity: "1", unitCost: "12.34" });
+      await showCostFilters(page);
       await expect(costFilter(page, "Other")).toHaveAttribute("aria-pressed", "true");
       await expect(costFilter(page, "Other")).toHaveText("Other(1)");
+      await closeCostFilters(page);
       await expect(rows).toHaveCount(1);
       await expect(rows.first()).toContainText("Other direct cost");
       await expect(page.getByTestId("cost-entries-subtotal")).toContainText("$12.34");
-      await costFilter(page, "Materials").click();
+      await chooseCostFilter(page, "Materials");
       await capture(page, info, `category-filters-${width}`);
     } finally { await context.close(); }
   });
@@ -210,12 +267,14 @@ test("active category survives add, category edit and delete with immediate coun
   const { context, page } = await open(browser, { enabled: true });
   try {
     const section = costEntries(page);
-    await costFilter(page, "Materials").click();
+    await chooseCostFilter(page, "Materials");
     await expect(section).toContainText("No Materials cost entries.");
     const expectMaterials = async (count, total, allCount) => {
+      await showCostFilters(page);
       await expect(costFilter(page, "Materials")).toHaveAttribute("aria-pressed", "true");
       await expect(costFilter(page, "Materials")).toHaveText(`Materials(${count})`);
       await expect(costFilter(page, "All")).toHaveText(`All(${allCount})`);
+      await closeCostFilters(page);
       await expect(section.locator("tbody tr")).toHaveCount(count);
       await expect(page.getByTestId("cost-entries-subtotal")).toHaveText(`Materials subtotal ex GST${total}`);
     };
@@ -224,7 +283,9 @@ test("active category survives add, category edit and delete with immediate coun
     await addCost(page, { description: "Consumables", category: "Sundries", quantity: "1", unitCost: "5.25" });
     await expectMaterials(1, "$20.50", 2);
     await expect(section).not.toContainText("Consumables");
+    await showCostFilters(page);
     await expect(costFilter(page, "Sundries")).toHaveText("Sundries(1)");
+    await closeCostFilters(page);
     await addCost(page, { description: "Bolts", quantity: "2", unitCost: "1.25" });
     await expectMaterials(2, "$23.00", 3);
     await expect(metric(page, "total-costs")).toHaveText("$28.25");
@@ -236,17 +297,19 @@ test("active category survives add, category edit and delete with immediate coun
     await expect(edit).toHaveCount(0);
     await expectMaterials(1, "$2.50", 3);
     await expect(section).not.toContainText("Motor");
+    await showCostFilters(page);
     await expect(costFilter(page, "Sundries")).toHaveText("Sundries(2)");
+    await closeCostFilters(page);
     await expect(metric(page, "total-costs")).toHaveText("$28.25");
     await section.getByRole("button", { name: "Delete cost: Bolts", exact: true }).click();
     await page.getByRole("dialog", { name: "Delete cost?", exact: true }).getByRole("button", { name: "Delete cost", exact: true }).click();
     await expectMaterials(0, "$0.00", 2);
     await expect(section).toContainText("No Materials cost entries.");
     await expect(metric(page, "total-costs")).toHaveText("$25.75");
-    await costFilter(page, "Sundries").click();
+    await chooseCostFilter(page, "Sundries");
     await expect(section.locator("tbody tr")).toHaveCount(2);
     await expect(page.getByTestId("cost-entries-subtotal")).toHaveText("Sundries subtotal ex GST$25.75");
-    await costFilter(page, "All").click();
+    await chooseCostFilter(page, "All");
     await expect(page.getByTestId("cost-entries-subtotal")).toHaveText("Total costs ex GST$25.75");
   } finally { await context.close(); }
 });
@@ -260,7 +323,12 @@ test("workspace enablement, exact costs, edit/delete and disable preserve record
     await settings(page);
     await page.getByRole("switch", { name: "Job Costing enabled" }).click();
     await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toBeChecked();
+      await saveAddons(page);
     await capture(page, info, "addons-enabled-desktop");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator("[data-addon-grid]")).toBeVisible();
+    await capture(page, info, "addons-enabled-mobile");
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${baseUrl}/jobs/costing-job`);
     await page.getByRole("tab", { name: "Costing", exact: true }).click();
     await expect(metric(page, "revenue")).toContainText("$5,000.00");
@@ -294,9 +362,11 @@ test("workspace enablement, exact costs, edit/delete and disable preserve record
       await expect(disable).toContainText("preserved");
       await disable.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toBeChecked();
+      await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
       await page.getByRole("switch", { name: "Job Costing enabled" }).click();
       await disable.getByRole("button", { name: "Disable", exact: true }).click();
       await expect(page.getByRole("switch", { name: "Job Costing enabled" })).not.toBeChecked();
+      await saveAddons(page);
       await office.page.evaluate(() => window.dispatchEvent(new Event("focus")));
       await expect(office.page.getByRole("tab", { name: "Costing", exact: true })).toHaveCount(0);
       await expect(office.page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("data-state", "active");
@@ -304,6 +374,7 @@ test("workspace enablement, exact costs, edit/delete and disable preserve record
       expect(withDb((db) => db.prepare("SELECT COUNT(*) n FROM job_cost_entries").get().n)).toBe(1);
       await page.getByRole("switch", { name: "Job Costing enabled" }).click();
       await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toBeChecked();
+      await saveAddons(page);
       await office.page.reload();
       await office.page.getByRole("tab", { name: "Costing", exact: true }).click();
       await expect(metric(office.page, "total-costs")).toContainText("$270.00");
@@ -346,14 +417,17 @@ test("failed add-on and cost saves retain the current state and allow retry", as
     await page.route("**/api/settings/addons", (route) => route.request().method() === "PATCH"
       ? route.fulfill({ status: 503, json: { error: "Temporary add-on save failure" } }) : route.continue());
     await page.getByRole("switch", { name: "Job Costing enabled" }).click();
-    await expect(page.getByRole("alert")).toContainText("Temporary add-on save failure");
-    await expect(page.getByRole("switch", { name: "Job Costing enabled" })).not.toBeChecked();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("alert").first()).toContainText("Temporary add-on save failure");
+    await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toBeChecked();
+    expect((await (await context.request.get(`${baseUrl}/api/settings/addons`)).json()).result.jobCosting).toBe(false);
     await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toBeEnabled();
     await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toHaveCSS("cursor", "pointer");
     expect((await context.request.get(`${baseUrl}/api/settings/addons`)).ok()).toBeTruthy();
     await page.unroute("**/api/settings/addons");
-    await page.getByRole("switch", { name: "Job Costing enabled" }).click();
+    await saveAddons(page);
     await expect(page.getByRole("switch", { name: "Job Costing enabled" })).toBeChecked();
+      await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
     await page.goto(`${baseUrl}/jobs/costing-job`);
     await page.getByRole("tab", { name: "Costing", exact: true }).click();
     await page.route("**/api/jobs/costing-job/costs", (route) => route.fulfill({ status: 503, json: { error: "Temporary cost save failure" } }));
@@ -395,6 +469,7 @@ for (const failInitialLoad of [false, true]) {
       await page.unroute("**/api/settings/addons");
       await toggle.click();
       await expect(toggle).toBeChecked();
+      await saveAddons(page);
       expect((await (await context.request.get(`${baseUrl}/api/settings/addons`)).json()).result.jobCosting).toBe(true);
     } finally { responseGate.resolve(); await context.close(); }
   });
@@ -421,9 +496,10 @@ for (const role of ["admin", "office"]) {
         await expect(toggle).toHaveCSS("cursor", "pointer");
         await toggle.click();
         if (!enabled) await page.getByRole("dialog").getByRole("button", { name: "Disable", exact: true }).click();
+        await page.getByRole("button", { name: "Save changes", exact: true }).click();
         await expect(toggle).toBeDisabled();
         await expect(toggle).toHaveCSS("cursor", "not-allowed");
-        await expect(toggle).toHaveAttribute("aria-checked", String(!enabled));
+        await expect(toggle).toHaveAttribute("aria-checked", String(enabled));
         await expect(page.locator('[aria-label="Workspace add-ons"] > [role="status"]')).toContainText("Saving add-ons");
         gate.resolve();
         await expect(toggle).toBeEnabled();
@@ -442,7 +518,7 @@ for (const role of ["admin", "office"]) {
   });
 }
 
-test("failed add-on disable keeps the enabled state and permits an immediate retry", async ({ browser }) => {
+test("failed add-on disable keeps the disabled draft and persisted enabled state and permits an immediate retry", async ({ browser }) => {
   const { context, page } = await open(browser, { enabled: true });
   try {
     await settings(page);
@@ -452,17 +528,16 @@ test("failed add-on disable keeps the enabled state and permits an immediate ret
     await toggle.click();
     const dialog = page.getByRole("dialog", { name: "Disable Job Costing?", exact: true });
     await dialog.getByRole("button", { name: "Disable", exact: true }).click();
-    await expect(dialog.getByRole("alert")).toContainText("Temporary disable failure");
-    await expect(dialog.getByRole("button", { name: "Disable", exact: true })).toBeEnabled();
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-    await expect(toggle).toBeChecked();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("alert").first()).toContainText("Temporary disable failure");
+    await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeEnabled();
+    await expect(toggle).not.toBeChecked();
     await expect(toggle).toBeEnabled();
     await expect(toggle).toHaveCSS("cursor", "pointer");
     expect((await (await context.request.get(`${baseUrl}/api/settings/addons`)).json()).result.jobCosting).toBe(true);
     await page.unroute("**/api/settings/addons");
-    await toggle.click();
-    await dialog.getByRole("button", { name: "Disable", exact: true }).click();
-    await expect(dialog).toHaveCount(0);
+    await saveAddons(page);
     await expect(toggle).not.toBeChecked();
     await expect(toggle).toBeEnabled();
     await expect(toggle).toHaveCSS("cursor", "pointer");
@@ -508,27 +583,17 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 820, height: 1180 
         await addCost(page, { description: "Replacement safety beams and mounting hardware" });
         await expect(metric(page, "total-costs")).toContainText("$190.00");
         const section = costEntries(page);
-        const filters = page.getByRole("group", { name: "Filter cost entries by category" });
-        await costFilter(page, "Other").click();
+        await chooseCostFilter(page, "Other");
         await expect(section).toContainText("No Other cost entries.");
-        await costFilter(page, "Materials").click();
-        await expect(costFilter(page, "Materials")).toHaveAttribute("aria-pressed", "true");
+        await chooseCostFilter(page, "Materials");
         await expect(page.getByTestId("cost-entries-subtotal")).toHaveText("Materials subtotal ex GST$190.00");
-        const titleBox = await section.getByRole("heading").boundingBox();
-        const filterBox = await filters.boundingBox();
-        const addBox = await section.getByRole("button", { name: "Add Cost", exact: true }).boundingBox();
-        expect(titleBox.x + titleBox.width).toBeLessThanOrEqual(addBox.x);
-        expect(filterBox.width).toBeGreaterThan(150);
-        if (viewport.width >= 1024) {
-          expect(filterBox.x).toBeGreaterThanOrEqual(titleBox.x + titleBox.width);
-          expect(filterBox.x + filterBox.width).toBeLessThanOrEqual(addBox.x);
-          expect(Math.abs(filterBox.y + filterBox.height / 2 - addBox.y - addBox.height / 2)).toBeLessThan(2);
-        } else {
-          expect(filterBox.y).toBeGreaterThanOrEqual(Math.max(titleBox.y + titleBox.height, addBox.y + addBox.height));
-        }
+        await expect(section.getByRole("button", { name: /^Filters, 1 active/ })).toBeVisible();
+        await showCostFilters(page);
+        await expect(costFilter(page, "Materials")).toHaveAttribute("aria-pressed", "true");
         const activeColor = await costFilter(page, "Materials").evaluate((element) => getComputedStyle(element).backgroundColor);
         const inactiveColor = await costFilter(page, "All").evaluate((element) => getComputedStyle(element).backgroundColor);
         expect(activeColor).not.toBe(inactiveColor);
+        await closeCostFilters(page);
         if (viewport.width >= 768) {
           const row = page.getByTestId("job-costing").locator("tbody tr").first();
           const totalCell = await row.locator("td").nth(5).boundingBox();

@@ -19,7 +19,7 @@ export function useUserUiPreferences({ fetchWithAuth, sessionKey, legacySettings
       : normalizeUserUiPreferences();
   };
   return {
-    preferences, getPreferences, change: store.change, retry: store.retry,
+    preferences, getPreferences, change: store.change, save: store.save, retry: store.retry,
     loading: !snapshot.loaded, status: snapshot.loadError ? "error" : snapshot.status,
     error: snapshot.error || snapshot.loadError,
   };

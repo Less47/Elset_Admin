@@ -1,4 +1,4 @@
-import { forwardRef } from "react";
+import { forwardRef, useRef, useState } from "react";
 import { ArrowDownUp, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,16 +25,21 @@ const desktopFieldSizeClassNames = {
   date: "page-controls__filter page-controls__filter--date",
 };
 
-export function DesktopPageControls({ search, viewToggle, filters, summary, actions, className }) {
+export function DesktopPageControls({ search, viewToggle, filters, summary, actions, className, activeCount = 0, onReset }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
   return (
     <div className={cn("page-controls floating-page-toolbar hidden px-4 py-3 xl:flex", className)} data-desktop-page-controls>
       <div className="page-controls__left">
         {search}
         {viewToggle}
-        {filters}
+        {filters ? <div className="shrink-0"><FilterButton ref={triggerRef} activeCount={activeCount} open={open} onClick={() => setOpen(true)} /></div> : null}
       </div>
       {summary}
       {actions ? <div className="page-controls__right">{actions}</div> : null}
+      {filters ? <MobileFilterSheet open={open} onOpenChange={setOpen} returnFocusRef={triggerRef} activeCount={activeCount} onReset={onReset} className="desktop-filter-sheet sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-xl">
+        {filters}
+      </MobileFilterSheet> : null}
     </div>
   );
 }
@@ -55,9 +60,20 @@ export function DesktopControlField({ children, className, htmlFor, label, size 
   );
 }
 
-export function ResponsivePageControls({ search, controls, action, summary, toolbarSummary, className, compact = false, surfaceClassName }) {
+export function FilterPopover({ children, activeCount = 0, onReset, title = "Filters" }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  return <>
+    <FilterButton ref={triggerRef} activeCount={activeCount} open={open} onClick={() => setOpen(true)} />
+    <MobileFilterSheet open={open} onOpenChange={setOpen} returnFocusRef={triggerRef} activeCount={activeCount} onReset={onReset} title={title}>
+      {children}
+    </MobileFilterSheet>
+  </>;
+}
+
+export function ResponsivePageControls({ search, controls, action, summary, toolbarSummary, className, compact = false, surfaceClassName, allSizes = false }) {
   return (
-    <div className={cn("grid gap-2 xl:hidden", className)} data-responsive-page-controls>
+    <div className={cn("grid gap-2", !allSizes && "xl:hidden", className)} data-responsive-page-controls>
       <div className={cn("floating-page-toolbar p-2.5 sm:p-3", surfaceClassName)}>
         <div className={cn(
           "grid gap-1.5",
@@ -292,9 +308,9 @@ export function MobileFilterSheet({
             paddingLeft: "calc(var(--panel-padding) + env(safe-area-inset-left))",
           }}
         >
-          <Button type="button" variant="ghost" className="min-h-11 rounded-xl px-3" onClick={onReset} disabled={activeCount === 0}>
+          {onReset ? <Button type="button" variant="ghost" className="min-h-11 rounded-xl px-3" onClick={onReset} disabled={activeCount === 0}>
             Reset
-          </Button>
+          </Button> : <span />}
           <DialogClose asChild>
             <Button type="button" className="min-h-11 rounded-xl px-4">Done</Button>
           </DialogClose>

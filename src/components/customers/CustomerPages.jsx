@@ -2,13 +2,16 @@ import CustomerWorkspace from "@/components/customers/CustomerWorkspace";
 import CustomerFormPage from "@/components/customers/CustomerFormPage";
 import SiteWorkspace from "@/components/sites/SiteWorkspace";
 import { RecordWorkspace, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
-import { buildCustomerSites } from "@/lib/app-support";
+import { buildCustomerSites, normalizeSiteAddress } from "@/lib/app-support";
 
 export default function CustomerPages({ route, navigation, actions, data, canManageBusiness, backLabel, storageMode }) {
   const customer = data.customers.find((entry) => entry.id === route.customerId);
   const jobs = customer ? data.jobs.filter((job) => job.customerId === customer.id) : [];
   const sites = customer ? buildCustomerSites(customer, jobs) : [];
   const site = sites.find((entry) => entry.id === route.siteKey || entry.siteProfileId === route.siteKey);
+  const contracts = (data.maintenancePlans || []).filter((plan) => plan.customerId === customer?.id);
+  const siteContracts = site ? contracts.filter((plan) => plan.siteId ? plan.siteId === site.siteProfileId
+    : normalizeSiteAddress(plan.siteAddress).toLowerCase() === normalizeSiteAddress(site.address).toLowerCase()) : [];
   const siteRoute = ["site-details", "edit-site", "create-site"].includes(route.type);
   const title = siteRoute ? "Site Profile" : "Customer";
   if (!canManageBusiness || (route.type !== "create-customer" && !customer) || (siteRoute && route.type !== "create-site" && !site)) {
@@ -26,6 +29,7 @@ export default function CustomerPages({ route, navigation, actions, data, canMan
   }
   if (siteRoute) {
     return <SiteWorkspace key={route.path} customer={customer} site={site} jobs={jobs} editing={route.type !== "site-details"}
+      maintenancePlans={siteContracts} onOpenPlan={actions.handleOpenMaintenancePlan}
       tab={route.tab} onTabChange={navigation.setWorkspaceTab} backLabel={route.type === "edit-site" ? "Site Profile" : backLabel}
       onBack={navigation.closeWorkspace} onEdit={() => navigation.navigateToSite(customer.id, route.siteKey, { edit: true })}
       onOpenCustomer={() => actions.handleOpenCustomerProfile(customer.id)} onOpenJob={actions.handleOpenJob}
@@ -36,6 +40,7 @@ export default function CustomerPages({ route, navigation, actions, data, canMan
       onDeleteSiteProfile={async (customerId, entry) => { if (await actions.handleDeleteSiteProfile(customerId, entry)) navigation.closeWorkspace({ force: true }); }} />;
   }
   return <CustomerWorkspace key={customer.id} customer={customer} jobs={jobs} tab={route.tab} onTabChange={navigation.setWorkspaceTab} backLabel={backLabel}
+    maintenancePlans={contracts} onOpenPlan={actions.handleOpenMaintenancePlan}
     accountJobs={data.jobs} storageMode={storageMode}
     onOpenInvoice={(jobId) => {
       const job = data.jobs.find((entry) => entry.id === jobId && entry.customerId === customer.id && entry.invoice);

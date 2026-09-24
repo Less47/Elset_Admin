@@ -40,7 +40,7 @@ function workspaceFixture() {
     invoice: invoiceStatus === "not-invoiced" ? null : {
       type: "invoice", issueDate: index === 6 ? "2000-01-01" : today, dueDate: `2099-01-0${index + 1}`,
       notes: "Invoice filter fixture", paymentNotes: "", items: [{ id: `item-${index}`, description: "Service", qty: 1, rate }],
-      sentHistory: invoiceStatus === "draft" ? [] : [{ id: `sent-${index}`, sentAt: `${today}T00:00:00.000Z` }],
+      sentHistory: ["draft", "paid"].includes(invoiceStatus) ? [] : [{ id: `sent-${index}`, sentAt: `${today}T00:00:00.000Z` }],
       payments: invoiceStatus === "paid" ? [{ id: `payment-${index}`, amount: 440, date: today, reference: "BANK-REF-C", method: "Bank transfer" }] : [],
     },
   }));
@@ -127,7 +127,7 @@ async function openInvoices(browser, viewport = viewports[1], preset) {
   await page.goto(baseUrl);
   if (viewport.width < 1024) await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Invoices", exact: true }).click();
-  await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]")).toHaveCount(7);
+  await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]")).toHaveCount(5);
   if (preset) await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--primary"))).toBe(preset.values.actionColor);
   requests.length = 0;
   return { context, page, requests };
@@ -143,14 +143,16 @@ async function expectJobs(page, expected, { ordered = false } = {}) {
     return ordered ? actual : actual.sort((a, b) => a - b);
   }).toEqual(ordered ? expected : [...expected].sort((a, b) => a - b));
 }
-async function showFilters(page, width) {
-  if (width >= 1280) return page.locator("[data-desktop-page-controls]");
+async function showFilters(page) {
   await page.getByRole("button", { name: /^Filters/ }).click();
   return page.getByRole("dialog", { name: "Filters", exact: true });
 }
 async function choose(page, label, option) {
+  const openedHere = !await page.getByRole("dialog", { name: "Filters", exact: true }).count();
+  if (openedHere) await showFilters(page);
   await page.getByRole("combobox", { name: label, exact: true }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
+  if (openedHere) await page.getByRole("dialog", { name: "Filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
 }
 async function noOverflow(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
@@ -164,9 +166,9 @@ test("Job Status composes with invoice status, search, dates and existing sorts 
   const before = readWorkspace();
   const { context, page, requests } = await openInvoices(browser);
   try {
-    await expect(page.getByRole("combobox", { name: "Job Status", exact: true })).toHaveText("All Job Statuses");
+    await expect(page.getByRole("combobox", { name: "Job Status", exact: true })).toHaveCount(0);
     await choose(page, "Job Status", "Completed");
-    await expectJobs(page, [2001, 2004, 2005, 2007]);
+    await expectJobs(page, [2001, 2004, 2007]);
     await choose(page, "Status filter", "Unpaid");
     await expectJobs(page, [2001, 2007]);
     await choose(page, "Sort by", "Highest value");
@@ -178,13 +180,13 @@ test("Job Status composes with invoice status, search, dates and existing sorts 
     await choose(page, "Job Status", "In Progress");
     await expectJobs(page, [2002]);
     await page.getByRole("button", { name: "Clear search", exact: true }).click();
-    await choose(page, "Status filter", "All jobs");
-    await expectJobs(page, [2002, 2006]);
+    await choose(page, "Status filter", "All invoices");
+    await expectJobs(page, [2002]);
     await choose(page, "Job Status", "To Do");
     await expectJobs(page, [2003]);
     await choose(page, "Job Status", "Completed");
     await choose(page, "Time range", "Past week");
-    await expectJobs(page, [2001, 2004, 2005]);
+    await expectJobs(page, [2001, 2004]);
     await page.getByRole("textbox", { name: "Search billing records", exact: true }).fill("BANK-REF-C");
     await expectJobs(page, [2004]);
     await choose(page, "Job Status", "In Progress");
@@ -218,7 +220,7 @@ test("mobile reset clears Job Status and invoice filters, preserves sort/search 
     await expect(page.getByRole("combobox", { name: /^Sort invoices/ })).toContainText("Newest job");
     await expect(page.getByRole("button", { name: "Filters", exact: true })).toBeFocused();
     await page.getByRole("button", { name: "Clear search invoices", exact: true }).click();
-    await expectJobs(page, [2007, 2006, 2005, 2004, 2003, 2002, 2001], { ordered: true });
+    await expectJobs(page, [2007, 2004, 2003, 2002, 2001], { ordered: true });
     expect(requests).toEqual([]);
   } finally { await context.close(); }
 });
@@ -230,10 +232,7 @@ for (const viewport of viewports) {
       const controls = await showFilters(page, viewport.width);
       const picker = controls.getByRole("combobox", { name: "Job Status", exact: true });
       await expect(picker).toHaveText("All Job Statuses");
-      if (viewport.width >= 1280) {
-        const positions = await controls.locator('input, button[role="combobox"]').evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().y));
-        expect(Math.max(...positions) - Math.min(...positions)).toBeLessThanOrEqual(1);
-      }
+      await expect(controls).toBeInViewport();
       await picker.focus();
       await picker.press("ArrowDown");
       await expect(page.getByRole("option")).toHaveText(["All Job Statuses", ...statuses]);
@@ -245,8 +244,8 @@ for (const viewport of viewports) {
       await expect(picker).toBeFocused();
       await noOverflow(page);
       await capture(page, info, `filter-${viewport.width}x${viewport.height}`);
-      if (viewport.width < 1280) await controls.getByRole("button", { name: "Done", exact: true }).click();
-      await expectJobs(page, [2001, 2004, 2005, 2007]);
+      await controls.getByRole("button", { name: "Done", exact: true }).click();
+      await expectJobs(page, [2001, 2004, 2007]);
       await noOverflow(page);
       await capture(page, info, `results-${viewport.width}x${viewport.height}`);
       expect(requests).toEqual([]);
@@ -269,8 +268,8 @@ for (const preset of themePresets) {
         await noOverflow(page);
         await capture(page, info, `theme-${preset.id}-${viewport.width}`);
         await page.getByRole("option", { name: "In Progress", exact: true }).click();
-        if (viewport.width < 1280) await controls.getByRole("button", { name: "Done", exact: true }).click();
-        await expectJobs(page, [2002, 2006]);
+        await controls.getByRole("button", { name: "Done", exact: true }).click();
+        await expectJobs(page, [2002]);
       } finally { await context.close(); }
     }
   });

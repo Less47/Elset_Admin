@@ -5,6 +5,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Apply the user's corner preference to controls, panels and portal dialogs. */
+@layer base {
+  :root[data-rounded-edges="false"] *,
+  :root[data-rounded-edges="false"] *::before,
+  :root[data-rounded-edges="false"] *::after {
+    border-radius: 0 !important;
+  }
+}
+
 /* Grid notes and prices share the existing price pill's edge alignment. */
 .service-board-floating-pill {
   position: absolute;
@@ -330,10 +339,20 @@
   }
 
   .record-workspace-header {
+    border-radius: 0;
     border-color: var(--ui-border-color) !important;
     background: var(--workspace-hero-bg) !important;
     color: var(--workspace-hero-text) !important;
   }
+
+  @media (width < 64rem) {
+    .record-workspace-body:has(.record-workspace-action-bar) {
+      padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    }
+  }
+
+  .desktop-filter-sheet .page-controls__field { width: 100%; max-width: none; }
+  .desktop-filter-sheet .page-controls__label { color: var(--text-secondary); }
 
   .record-major-panel {
     border-color: var(--ui-border-color) !important;
@@ -624,15 +643,13 @@
     padding: 0.625rem !important;
   }
 
-  .map-desktop-filter-bar {
-    width: min(calc(100% - 2rem), 58rem);
-  }
-
   @media (min-width: 40rem) {
     .map-floating-controls {
       top: 1rem;
       right: calc(1rem + env(safe-area-inset-right));
       left: calc(1rem + env(safe-area-inset-left));
+      max-width: 42rem;
+      margin-inline: auto;
     }
   }
 

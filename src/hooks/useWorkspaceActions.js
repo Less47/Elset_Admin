@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { applyPrimarySiteUpdate } from "@/lib/customer-profile";
 import { createJobStatusQueue, mergeJobStatusFields, requestJobStatusUpdate } from "./workspace-job-status";
 import { normalizeServiceBoardNote } from "@/lib/service-board-note";
 import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
@@ -9,7 +10,6 @@ import {
   addDaysToDateInput,
   buildContactSnapshot,
   buildMaintenanceJobDescription,
-  defaultThemeSettings,
   getCustomerBillingContact,
   getNextJobNumber,
   getNextMaintenanceDueDate,
@@ -25,22 +25,15 @@ import {
   normalizeSiteAddress,
   normalizeSiteProfileRecord,
   normalizeStaffRecord,
-  normalizeThemeSettings,
-  pickSettings,
-  preferenceSettingKeys,
   slugDate,
   syncJobWithCustomer,
   toDateInputValue,
-  uiSettingKeys,
 } from "@/lib/app-support";
 import {
   ADMIN_EMAIL,
   buildTemplateWithBusinessDetails,
-  defaultInvoiceTemplate,
-  defaultQuoteTemplate,
   getDocumentRecipientEmail,
   getDocumentRecipientName,
-  normalizeDocumentTemplate,
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
 } from "@/lib/quote-template";
@@ -50,7 +43,6 @@ import {
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
   requestMaintenanceWorkspaceUpdate,
-  requestSettingsWorkspaceUpdate,
   requestStaffWorkspaceUpdate,
   requestWorkspaceUpdate,
 } from "./workspace-customer-api";
@@ -76,7 +68,6 @@ export function useWorkspaceActions({
   setIsSendingDocument,
   setSelectedJob,
   themeSettings,
-  themeSettingsSave,
   workspaceStorageMode = "json",
 }) {
   const useSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
@@ -233,28 +224,6 @@ export function useWorkspaceActions({
     }
   }
 
-  async function saveSettingsApiRequest({
-    path,
-    method = "POST",
-    body,
-    errorMessage = "Unable to update workspace settings.",
-  }) {
-    try {
-      const payload = await requestSettingsWorkspaceUpdate({
-        fetchWithAuth,
-        path,
-        method,
-        body,
-        errorMessage,
-      });
-      const state = applyServerState(payload.state);
-      return { ok: true, payload, result: payload.result, state };
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : errorMessage);
-      return { ok: false, result: null, state: null };
-    }
-  }
-
   function customerPath(customerId, suffix = "") {
     return `/api/customers/${encodeURIComponent(String(customerId || ""))}${suffix}`;
   }
@@ -289,10 +258,6 @@ export function useWorkspaceActions({
       : "/api/staff";
   }
 
-  function documentTemplatePath(type, suffix = "") {
-    const templateType = type === "invoice" ? "invoice" : "quote";
-    return `/api/document-templates/${templateType}${suffix}`;
-  }
 
   function getTomorrowPlanningDate() {
     return addDaysToDateInput(toDateInputValue(new Date()), 1);
@@ -2012,10 +1977,16 @@ export function useWorkspaceActions({
       return saved.ok ? (saved.result || true) : false;
     }
 
+    const { primarySite, ...customerFields } = updates;
+    // Validate before scheduling the state update so the form can show errors.
+    const currentCustomer = data.customers.find((entry) => entry.id === customerId);
+    if (!currentCustomer) return false;
+    if (primarySite !== undefined) applyPrimarySiteUpdate(currentCustomer, primarySite);
     setData((prev) => {
+      const previousCustomer = prev.customers.find((customer) => customer.id === customerId);
       const customers = prev.customers.map((customer) =>
         customer.id === customerId
-          ? normalizeCustomerRecord({ ...customer, ...updates, id: customer.id, createdAt: customer.createdAt })
+          ? normalizeCustomerRecord({ ...(primarySite === undefined ? customer : applyPrimarySiteUpdate(customer, primarySite)), ...customerFields, id: customer.id, createdAt: customer.createdAt })
           : customer
       );
       const updatedCustomer = customers.find((customer) => customer.id === customerId);
@@ -2028,10 +1999,15 @@ export function useWorkspaceActions({
               customerName: updatedCustomer.name,
               customerEmail: updatedCustomer.email || billingContact?.email || "",
               customerPhone: updatedCustomer.phone || billingContact?.phone || "",
+              ...(primarySite !== undefined && normalizeSiteAddress(job.jobAddress).toLowerCase() === normalizeSiteAddress(previousCustomer.address).toLowerCase()
+                ? { jobAddress: updatedCustomer.address } : {}),
             }
           : job
       );
-      return { ...prev, customers, jobs };
+      const maintenancePlans = primarySite === undefined ? prev.maintenancePlans : (prev.maintenancePlans || []).map((plan) =>
+        plan.customerId === customerId && normalizeSiteAddress(plan.siteAddress).toLowerCase() === normalizeSiteAddress(previousCustomer.address).toLowerCase()
+          ? maintenancePlanIdentity({ ...plan, siteAddress: updatedCustomer.address }, customers) : plan);
+      return { ...prev, customers, jobs, maintenancePlans };
     });
 
     return true;
@@ -2222,77 +2198,6 @@ export function useWorkspaceActions({
     return true;
   }
 
-  async function handleUpdateDocumentTemplate(type, nextTemplate) {
-    if (!canManageBusiness) return;
-    const normalizedTemplate = normalizeDocumentTemplate(nextTemplate, type);
-
-    if (useSqliteApi) {
-      const saved = await saveSettingsApiRequest({
-        path: documentTemplatePath(type),
-        method: "PUT",
-        body: { template: normalizedTemplate },
-        errorMessage: "Unable to save the document template.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      [type === "invoice" ? "invoiceTemplate" : "quoteTemplate"]: normalizedTemplate,
-    }));
-
-    return true;
-  }
-
-  async function handleResetDocumentTemplate(type) {
-    if (!canManageBusiness) return;
-    if (useSqliteApi) {
-      const saved = await saveSettingsApiRequest({
-        path: documentTemplatePath(type, "/reset"),
-        method: "POST",
-        errorMessage: "Unable to reset the document template.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      [type === "invoice" ? "invoiceTemplate" : "quoteTemplate"]:
-        type === "invoice"
-          ? normalizeInvoiceTemplate(defaultInvoiceTemplate)
-          : normalizeQuoteTemplate(defaultQuoteTemplate),
-    }));
-
-    return true;
-  }
-
-  async function handleThemeSettingChange(key, value) {
-    if (uiSettingKeys.includes(key)) return themeSettingsSave.change({ [key]: value });
-    if (!canManageBusiness) return;
-    if (preferenceSettingKeys.includes(key) && useSqliteApi) {
-      return themeSettingsSave.changePreferences({ [key]: value });
-    }
-    if (useSqliteApi) {
-      const saved = await saveSettingsApiRequest({
-        path: "/api/settings",
-        method: "PATCH",
-        body: { settings: { [key]: value } },
-        errorMessage: "Unable to save workspace settings.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      settings: normalizeThemeSettings({
-        ...prev.settings,
-        [key]: value,
-      }),
-    }));
-
-    return true;
-  }
-
   async function handleWorkspaceLogoChange(file) {
     if (!canManageBusiness || !useSqliteApi) throw new Error("Workspace branding is not available for this account or storage mode.");
     const response = await fetchWithAuth("/api/settings/workspace-logo", file
@@ -2301,49 +2206,15 @@ export function useWorkspaceActions({
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(payload.error || "Unable to save the workspace logo.");
     setData((previous) => ({ ...previous, settings: { ...previous.settings, workspaceLogoUrl: payload.workspaceLogoUrl } }));
-  }
-
-  async function handleApplyThemePreset(values) {
-    return themeSettingsSave.change(values);
-  }
-
-  async function handleResetUiSettings() {
-    return themeSettingsSave.change(pickSettings(defaultThemeSettings, uiSettingKeys));
-  }
-
-  function handleRetryThemeSave() {
-    themeSettingsSave.retry();
-  }
-
-  async function handleResetPreferences() {
-    if (!canManageBusiness) return;
-    if (useSqliteApi) {
-      return themeSettingsSave.changePreferences(
-        pickSettings(defaultThemeSettings, preferenceSettingKeys),
-        { immediate: true }
-      );
-    }
-
-    setData((prev) => ({
-      ...prev,
-      settings: normalizeThemeSettings({
-        ...prev.settings,
-        ...pickSettings(defaultThemeSettings, preferenceSettingKeys),
-      }),
-    }));
-
-    return true;
+    return payload.workspaceLogoUrl;
   }
 
   return {
-    themeSaveState: { status: themeSettingsSave.status, error: themeSettingsSave.error, scope: themeSettingsSave.scope },
-    handleRetryThemeSave,
     handleWorkspaceLogoChange,
     createJob,
     handleAddInvoicePayment,
     handleAddJobNote,
     handleAddJobPhotos,
-    handleApplyThemePreset,
     handleCreateCustomer,
     handleCreateInventoryItem,
     handleCreateMaintenancePlan,
@@ -2375,9 +2246,6 @@ export function useWorkspaceActions({
     handleOpenSiteProfile,
     handleRemoveAllJobsFromTomorrow,
     handleRemoveJobFromTomorrow,
-    handleResetDocumentTemplate,
-    handleResetPreferences,
-    handleResetUiSettings,
     handleRestoreDeletedCustomer,
     handleRestoreDeletedJob,
     handleSaveDocument,
@@ -2388,9 +2256,7 @@ export function useWorkspaceActions({
     handleUndoCalendarChange,
     handleSendDocument,
     handleStatusChange,
-    handleThemeSettingChange,
     handleUpdateCustomer,
-    handleUpdateDocumentTemplate,
     handleUpdateInventoryItem,
     handleUpdateInvoicePayment,
     handleUpdateJobDetails,

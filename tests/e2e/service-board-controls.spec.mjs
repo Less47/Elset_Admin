@@ -609,7 +609,12 @@ async function highUrgency(page, checked) {
     const dialog = page.getByRole("dialog", { name: "Board filters", exact: true });
     await dialog.getByRole("checkbox", { name: /^High urgency only/ }).setChecked(checked);
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  } else await page.getByText("High urgency only", { exact: true }).locator("..").getByRole("checkbox").setChecked(checked);
+  } else {
+    await page.getByRole("button", { name: /^Filters/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Filters", exact: true });
+    await dialog.getByRole("checkbox", { name: "High urgency only", exact: true }).setChecked(checked);
+    await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  }
 }
 async function capture(page, info, name) {
   await page.evaluate(() => document.fonts.ready);

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { applyPrimarySiteUpdate, customerPostalFields } from "./src/lib/customer-profile.js";
 import {
   archiveMaintenancePlansForCustomer,
   restoreMaintenancePlansForCustomer,
@@ -343,7 +344,7 @@ export function normalizeCustomerInput(input, existingCustomer = null) {
       : {},
     createdAt: trimText(source.createdAt) || now,
     updatedAt: trimText(source.updatedAt) || now,
-    extra: pickExtra(source, customerKnownKeys),
+    extra: { ...pickExtra(source, customerKnownKeys), ...customerPostalFields(source) },
   };
   customer.contacts = normalizeContacts({ ...source, ...customer }, sites);
 
@@ -564,12 +565,15 @@ export function updateCustomer(db, customerIdInput, input) {
   return db.transaction(() => {
     ensureCustomerExists(db, customerId);
     const existingCustomer = getCustomerState(db, customerId);
-    const customer = normalizeCustomerInput({ ...input, id: customerId }, existingCustomer);
+    const { primarySite, ...customerFields } = input;
+    const nextCustomer = primarySite === undefined ? existingCustomer : applyPrimarySiteUpdate(existingCustomer, primarySite);
+    const customer = normalizeCustomerInput({ ...customerFields, id: customerId }, nextCustomer);
     if (!trimText(customer.name)) {
       throw new WorkspaceCustomerError("Customer name is required.");
     }
     insertOrReplaceCustomer(db, customer);
     syncJobCustomerSnapshots(db, customer, customer.updatedAt);
+    if (primarySite !== undefined) syncAddressReferences(db, customerId, existingCustomer.address, customer.address, customer.updatedAt);
     touchWorkspaceInfo(db, customer.updatedAt);
     runForeignKeyCheck(db);
     return getCustomerState(db, customer.id);

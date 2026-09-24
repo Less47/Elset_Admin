@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { calculateInvoiceTotal, money } from "@/lib/quote-template";
 import { statuses } from "@/lib/job-status";
-import { matchesInvoiceJobStatus } from "@/lib/invoice-filters";
+import { isInvoicedRow, matchesInvoiceJobStatus } from "@/lib/invoice-filters";
 
 const invoiceTimeRangeOptions = [
   { value: "all-time", label: "All time" },
@@ -72,7 +72,7 @@ export default function InvoiceManager({
 
   const invoiceRows = useMemo(() => {
     return jobs
-      .filter((job) => !customerId || (job.customerId === customerId && Boolean(job.invoice)))
+      .filter((job) => Boolean(job.invoice) && (!customerId || job.customerId === customerId))
       .map((job) => {
         const invoice = normalizeDocument("invoice", job.invoice);
         const invoiceStatus = getInvoiceStatus({ ...job, invoice });
@@ -86,7 +86,7 @@ export default function InvoiceManager({
           paymentSummary,
           outstanding: invoice ? paymentSummary.balanceAmount : 0,
         };
-      });
+      }).filter(isInvoicedRow);
   }, [customerId, getInvoicePaymentSummary, getInvoiceStatus, jobs, normalizeDocument]);
 
   const rangedRows = useMemo(() => {
@@ -115,7 +115,6 @@ export default function InvoiceManager({
       invoiced: stats.invoiced + (row.invoice ? 1 : 0),
       paid: stats.paid + (row.invoiceStatus.id === "paid" ? 1 : 0),
       overdue: stats.overdue + (row.invoiceStatus.id === "overdue" ? 1 : 0),
-      notInvoiced: stats.notInvoiced + (row.invoiceStatus.id === "not-invoiced" ? 1 : 0),
       totalValue: stats.totalValue + row.total,
       outstandingValue: stats.outstandingValue + row.outstanding,
       receivedValue: stats.receivedValue + row.paymentSummary.paidAmount,
@@ -124,7 +123,6 @@ export default function InvoiceManager({
       invoiced: 0,
       paid: 0,
       overdue: 0,
-      notInvoiced: 0,
       totalValue: 0,
       outstandingValue: 0,
       receivedValue: 0,
@@ -194,12 +192,12 @@ export default function InvoiceManager({
         )}
         summary={(
           <ResultSummary>
-            {visibleInvoiceCount} {visibleInvoiceCount === 1 ? "invoice" : "invoices"} · {filteredRows.length} billing {filteredRows.length === 1 ? "record" : "records"}
+            {visibleInvoiceCount} {visibleInvoiceCount === 1 ? "invoice" : "invoices"}
           </ResultSummary>
         )}
       />
 
-      <DesktopPageControls
+      <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setTimeRange("all-time"); setFilterBy("all"); setJobStatusFilter("all"); }}
         search={(
           <DesktopControlField label="Search" size="search" className="flex-[1_1_12rem]">
             <PageSearchField compact value={search} onChange={setSearch} placeholder="Search billing records..." label="Search billing records" />
@@ -228,10 +226,8 @@ export default function InvoiceManager({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All jobs</SelectItem>
+                <SelectItem value="all">All invoices</SelectItem>
                 <SelectItem value="outstanding">Outstanding</SelectItem>
-                <SelectItem value="not-invoiced">Not invoiced</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="unpaid">Unpaid</SelectItem>
                 <SelectItem value="deposit-paid">Deposit paid</SelectItem>
                 <SelectItem value="partially-paid">Partially paid</SelectItem>
@@ -280,7 +276,7 @@ export default function InvoiceManager({
       <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
-          { label: "Not invoiced", value: invoiceStats.notInvoiced },
+          { label: "Paid", value: invoiceStats.paid },
           { label: "Overdue", value: invoiceStats.overdue },
           { label: "Total", value: money(invoiceStats.totalValue) },
           { label: "Outstanding", value: money(invoiceStats.outstandingValue) },
@@ -534,10 +530,8 @@ export default function InvoiceManager({
         <Select value={filterBy} onValueChange={setFilterBy}>
           <SelectTrigger id="mobile-invoice-status-filter" className="h-11 w-full rounded-xl bg-card"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All jobs</SelectItem>
+            <SelectItem value="all">All invoices</SelectItem>
             <SelectItem value="outstanding">Outstanding</SelectItem>
-            <SelectItem value="not-invoiced">Not invoiced</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="unpaid">Unpaid</SelectItem>
             <SelectItem value="deposit-paid">Deposit paid</SelectItem>
             <SelectItem value="partially-paid">Partially paid</SelectItem>

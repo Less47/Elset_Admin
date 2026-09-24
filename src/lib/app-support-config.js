@@ -64,6 +64,7 @@ export const defaultThemeSettings = {
   dataViewAccent: "#0F90CD",
   sidebarWidth: "standard",
   contentDensity: "comfortable",
+  roundedEdges: true,
   companyName: "Elset",
   companyAbn: "",
   companyAcn: "",
@@ -94,6 +95,7 @@ export const uiSettingKeys = [
   "dataViewAccent",
   "sidebarWidth",
   "contentDensity",
+  "roundedEdges",
 ];
 
 export const preferenceSettingKeys = [

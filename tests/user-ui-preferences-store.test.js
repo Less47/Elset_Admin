@@ -6,6 +6,38 @@ import { normalizeUserUiPreferences } from "../src/lib/user-ui-preferences.js";
 const pause = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 const response = (preferences) => ({ ok: true, json: async () => ({ preferences }) });
 const visible = (store) => normalizeUserUiPreferences(store.getSnapshot().stored, store.getSnapshot().overrides);
+test("explicit personal save normalizes only on success, rejects invalid values without writes, and keeps the saved baseline on failure", async () => {
+  const writes = []; let fail = true;
+  const store = createUserUiPreferencesStore({ sessionKey: "A", fetchWithAuth: async (_url, options) => {
+    if (options.method !== "PATCH") return response({ actionColor: "#123456" });
+    writes.push(JSON.parse(options.body));
+    return fail ? { ok: false, json: async () => ({ error: "Save failed" }) } : response({ actionColor: "#000000" });
+  } });
+  store.activate();
+  try {
+    await pause();
+    await assert.rejects(store.save({ actionColor: "invalid" }), /valid hex/);
+    assert.equal(writes.length, 0);
+    await assert.rejects(store.save({ actionColor: "#abc", contentDensity: "compact" }), /Save failed/);
+    assert.equal(visible(store).actionColor, "#123456");
+    fail = false;
+    const saved = await store.save({ actionColor: "#abc", contentDensity: "compact" });
+    assert.equal(saved.actionColor, "#AABBCC");
+    assert.equal(visible(store).contentDensity, "compact");
+    assert.deepEqual(writes, [{ actionColor: "#AABBCC", contentDensity: "compact" }, { actionColor: "#AABBCC", contentDensity: "compact" }]);
+  } finally { store.dispose(); }
+});
+
+test("explicit personal save cannot acknowledge into a disposed session", async () => {
+  let release;
+  const store = createUserUiPreferencesStore({ sessionKey: "A", fetchWithAuth: async (_url, options) =>
+    options.method === "PATCH" ? new Promise(resolve => { release = resolve; }) : response({ actionColor: "#123456" }) });
+  store.activate(); await pause();
+  const saving = store.save({ actionColor: "#fff" });
+  store.dispose(); release(response({ actionColor: "#fff" }));
+  await assert.rejects(saving, /signed-in account changed/);
+  assert.equal(visible(store).actionColor, "#123456");
+});
 
 test("personal preferences coalesce twenty selections and keep latest UI through a stale in-flight response", async () => {
   const writes = [];

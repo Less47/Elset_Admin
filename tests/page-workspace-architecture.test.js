@@ -167,7 +167,7 @@ test("database pages share accessible responsive and desktop page controls", () 
 
   const mapSource = readSource("src/components/map/GoogleMapFilters.jsx");
   assert.match(mapSource, /<ResponsivePageControls/);
-  assert.match(mapSource, /map-desktop-filter-bar[^"]*hidden[^"]*xl:block/);
+  assert.match(mapSource, /<ResponsivePageControls allSizes/);
 });
 
 test("database pages declare the shared semantic phone record system and desktop result boundary", () => {

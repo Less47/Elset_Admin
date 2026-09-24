@@ -1,5 +1,8 @@
 import { buildSemanticTheme } from "@/lib/theme-tokens";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useSettingsDraft } from "@/hooks/useSettingsDraft";
+import SettingsDraftScope, { SettingsSaveButton } from "./SettingsDraftScope";
+import { SettingsDraftContext } from "./settings-draft-context";
 import ThemeColourField from "./ThemeColourField";
 import WorkspaceBranding from "./WorkspaceBranding";
 import AddonsSettings from "./AddonsSettings";
@@ -22,12 +25,18 @@ import {
   templateTypeOptions,
   themeColorFields,
   themePresets,
+  defaultThemeSettings,
+  pickSettings,
+  preferenceSettingKeys,
+  uiSettingKeys,
 } from "@/lib/app-support";
 import {
   buildTemplateWithBusinessDetails,
   documentTemplatePlaceholders,
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
+  defaultInvoiceTemplate,
+  defaultQuoteTemplate,
 } from "@/lib/quote-template";
 
 const companyFields = [
@@ -244,22 +253,22 @@ function ExactDocumentPreview({ requestBody }) {
   );
 }
 
-export default function SettingsManager({
+export default function SettingsManager(props) {
+  return <SettingsDraftScope key={`${props.activeSettingsTab}:${props.activeTemplateType}`} navigation={props.settingsNavigation}>
+    <SettingsContent {...props} />
+  </SettingsDraftScope>;
+}
+
+function SettingsContent({
   activeSettingsTab,
   onActiveSettingsTabChange,
   settings,
-  themeSaveState,
-  onRetryThemeSave,
-  onSettingChange,
-  onApplyPreset,
-  onResetUiSettings,
-  onResetPreferences,
+  settingsPersistence,
+  onSettingsPreview,
   onWorkspaceLogoChange,
   activeTemplateType,
   onActiveTemplateTypeChange,
   templates,
-  onTemplateChange,
-  onResetTemplate,
   isAuthenticated,
   isAdmin,
   onDownloadBackup,
@@ -272,7 +281,21 @@ export default function SettingsManager({
   workspaceAddons,
   fetchWithAuth,
 }) {
-  const normalizedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
+  const scope = useContext(SettingsDraftContext);
+  const savedSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
+  const preferences = useSettingsDraft("preferences", pickSettings(savedSettings, preferenceSettingKeys), settingsPersistence.preferences, { enabled: activeSettingsTab === "preferences" });
+  const appearance = useSettingsDraft("appearance", pickSettings(savedSettings, uiSettingKeys), settingsPersistence.appearance, { enabled: activeSettingsTab === "ui" });
+  const normalizedSettings = useMemo(() => ({ ...savedSettings, ...preferences.draft, ...appearance.draft }), [savedSettings, preferences.draft, appearance.draft]);
+  useLayoutEffect(() => {
+    if (activeSettingsTab === "ui") onSettingsPreview(appearance.draft);
+    return () => onSettingsPreview(null);
+  }, [activeSettingsTab, appearance.draft, onSettingsPreview]);
+  const onSettingChange = (key, value) => (uiSettingKeys.includes(key) ? appearance : preferences).setDraft(current => ({ ...current, [key]: value }));
+  const onApplyPreset = (values) => appearance.setDraft(current => pickSettings(normalizeThemeSettings({ ...current, ...values }), uiSettingKeys));
+  const onResetUiSettings = () => appearance.setDraft(pickSettings(defaultThemeSettings, uiSettingKeys));
+  const onResetPreferences = () => preferences.setDraft(pickSettings(defaultThemeSettings, preferenceSettingKeys));
+  const themeSaveState = { ...(activeSettingsTab === "ui" ? appearance : preferences), scope: activeSettingsTab === "ui" ? "theme" : "preferences" };
+  const onRetryThemeSave = () => void scope.group.save();
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
   const isSqliteBackupMode = String(workspaceStorageMode || "").trim().toLowerCase() === "sqlite";
   const [downloadStatus, setDownloadStatus] = useState("idle");
@@ -297,11 +320,15 @@ export default function SettingsManager({
   const [serviceM8Summary, setServiceM8Summary] = useState(null);
   const [serviceM8PreviewId, setServiceM8PreviewId] = useState("");
 
-  const activeTemplate = useMemo(() => {
+  const persistedTemplate = useMemo(() => {
     return currentTemplateType === "invoice"
       ? normalizeInvoiceTemplate(templates?.invoice)
       : normalizeQuoteTemplate(templates?.quote);
   }, [currentTemplateType, templates?.invoice, templates?.quote]);
+  const template = useSettingsDraft(`template-${currentTemplateType}`, persistedTemplate, value => settingsPersistence.template(currentTemplateType, value), { enabled: activeSettingsTab === "templates" });
+  const activeTemplate = template.draft;
+  const onTemplateChange = (_type, value) => template.setDraft(value);
+  const onResetTemplate = () => template.setDraft(currentTemplateType === "invoice" ? normalizeInvoiceTemplate(defaultInvoiceTemplate) : normalizeQuoteTemplate(defaultQuoteTemplate));
   const activePreviewTemplate = useMemo(
     () => buildTemplateWithBusinessDetails(activeTemplate, normalizedSettings, currentTemplateType),
     [activeTemplate, currentTemplateType, normalizedSettings]
@@ -453,9 +480,10 @@ export default function SettingsManager({
   };
 
   return (
-    <div className="grid gap-4">
+    <fieldset className="grid min-w-0 gap-4">
       <div className="floating-page-toolbar flex flex-col gap-2 overflow-x-auto overscroll-x-contain px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+          {["preferences", "templates", "ui", "addons"].includes(activeSettingsTab) ? <SettingsSaveButton scope={scope} /> : null}
           <Badge className={isAuthenticated ? "bg-status-success-surface text-status-success" : "bg-surface-raised text-text-secondary"}>
             {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
@@ -470,7 +498,7 @@ export default function SettingsManager({
                 type="button"
                 variant={isActive ? "default" : "outline"}
                 className="rounded-xl"
-                onClick={() => onActiveSettingsTabChange?.(tab.value)}
+                onClick={() => tab.value !== activeSettingsTab && scope.requestNavigation(() => onActiveSettingsTabChange?.(tab.value))}
               >
                 {tab.label}
               </Button>
@@ -634,8 +662,8 @@ export default function SettingsManager({
                   <p className="mt-1 text-sm text-text-secondary">Adjust wording, headings, and section text for each document type. Company and bank details come from Preferences.</p>
                 </div>
                 <div className="w-full max-w-[220px]">
-                  <Select value={currentTemplateType} onValueChange={onActiveTemplateTypeChange}>
-                    <SelectTrigger className="w-full rounded-xl">
+                  <Select value={currentTemplateType} onValueChange={value => value !== currentTemplateType && scope.requestNavigation(() => onActiveTemplateTypeChange(value))}>
+                    <SelectTrigger aria-label="Document template type" className="w-full rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -658,15 +686,17 @@ export default function SettingsManager({
                 <div className="grid gap-4 md:grid-cols-2">
                   {visibleTemplateFields.map((field) => (
                     <div key={field.key} className={field.multiline ? "md:col-span-2" : ""}>
-                      <FormField label={field.label}>
+                      <FormField label={field.label} htmlFor={`template-${field.key}`}>
                         {field.multiline ? (
                           <Textarea
+                            id={`template-${field.key}`}
                             rows={field.rows || 4}
                             value={activeTemplate[field.key]}
                             onChange={(event) => updateTemplateField(field.key, event.target.value)}
                           />
                         ) : (
                           <Input
+                            id={`template-${field.key}`}
                             value={activeTemplate[field.key]}
                             onChange={(event) => updateTemplateField(field.key, event.target.value)}
                           />
@@ -802,6 +832,10 @@ export default function SettingsManager({
                       </SelectContent>
                     </Select>
                   </FormField>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={normalizedSettings.roundedEdges} onChange={(event) => onSettingChange("roundedEdges", event.target.checked)} />
+                    <span><span className="block font-medium">Rounded edges</span><span className="text-xs text-text-secondary">Turn off for square corners throughout the app.</span></span>
+                  </label>
                 </div>
               </CardContent>
             </Card>
@@ -1207,6 +1241,6 @@ export default function SettingsManager({
           </Card>
         </div>
       )}
-    </div>
+    </fieldset>
   );
 }

@@ -51,6 +51,15 @@ export function createUserUiPreferencesStore({ fetchWithAuth, sessionKey }) {
       if (!sessionKey || controller?.signal.aborted) return false;
       try { return queue.change(validateUserUiPreferencePatch(values)); } catch { return false; }
     },
+    async save(values) {
+      const started = generation;
+      const patch = validateUserUiPreferencePatch(values);
+      const payload = await request({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+      if (started !== generation) throw new Error("The signed-in account changed. Please reload settings.");
+      const preferences = normalizeUserUiPreferences(payload.preferences, patch);
+      publish({ stored: preferences, loaded: true, loadError: "" });
+      return preferences;
+    },
     retry() {
       if (snapshot.loadError) void load();
       queue.retry();

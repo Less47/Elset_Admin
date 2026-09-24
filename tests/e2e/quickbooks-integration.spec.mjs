@@ -88,6 +88,7 @@ test.beforeAll(async ({ browser }) => {
 test.beforeEach(async ({ request }) => {
   await request.post(`${baseUrl}/__quickbooks-fixture`, { data: { reset: true } });
   withDb((db) => {
+  db.prepare("DELETE FROM price_list_items").run();
   for (const table of ["integration_webhook_events", "integration_external_payments", "integration_invoice_payment_sync", "integration_operations", "integration_locks", "integration_oauth_states", "integration_sync_log", "integration_entity_mappings", "workspace_integrations"]) db.prepare(`DELETE FROM ${table}`).run();
   db.prepare("DELETE FROM jobs").run();
   for (const job of normalizeStoredData(fixture()).jobs) insertJobTree(db, job);
@@ -141,6 +142,91 @@ async function syncPayments(context, page, payments) {
   await card(page).getByRole("button", { name: "Sync from QuickBooks", exact: true }).click();
   await expect(card(page)).toContainText("Payment sync: Up to date");
 }
+test("explicit settings retain provider configuration drafts through status, failure, and guarded commands", async ({ browser }) => {
+  const { context, page } = await open(browser);
+  try {
+    await connectApi(context, { configure: false });
+    await page.reload();
+    const connection = page.getByLabel("QuickBooks connection", { exact: true });
+    const save = page.getByRole("button", { name: "Save changes", exact: true });
+    await connection.getByRole("button", { name: "Configure", exact: true }).click();
+    await expect(connection.getByLabel("Default QuickBooks GST code")).toBeVisible();
+    await expect(save).toBeDisabled();
+    const writes = [];
+    page.on("request", request => { if (["PATCH", "POST", "DELETE"].includes(request.method())) writes.push(new URL(request.url()).pathname); });
+    await connection.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
+    await page.getByRole("button", { name: "Use Service", exact: true }).click();
+    await connection.getByLabel("Default QuickBooks GST code").selectOption("30");
+    await page.waitForTimeout(500);
+    expect(writes).toEqual([]);
+    await expect(save).toBeEnabled();
+    await page.getByRole("dialog", { name: "QuickBooks Online", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("button", { name: "About QuickBooks Online", exact: true }).click();
+    await expect(connection.getByLabel("Default QuickBooks GST code")).toHaveValue("30");
+    await expect(connection.locator('[data-quickbooks-selected-item="20"]')).toBeVisible();
+    await connection.getByRole("button", { name: "Test connection", exact: true }).click();
+    await expect(connection).toContainText("Connection verified");
+    await expect(save).toBeEnabled();
+    await connection.getByRole("button", { name: "Reconnect QuickBooks", exact: true }).click();
+    const guard = page.getByRole("dialog", { name: "Unsaved changes", exact: true });
+    await expect(guard).toBeVisible();
+    await guard.getByRole("button", { name: "Stay", exact: true }).click();
+    expect(writes).toEqual(["/api/integrations/quickbooks/test"]);
+    await page.route("**/api/integrations/quickbooks/config", route => route.request().method() === "PATCH"
+      ? route.fulfill({ status: 503, json: { error: "Synthetic configuration failure" } }) : route.continue());
+    await save.click();
+    await expect(page.getByRole("alert").first()).toContainText("Synthetic configuration failure");
+    await expect(save).toBeEnabled();
+    await expect(connection.getByLabel("Default QuickBooks GST code")).toHaveValue("30");
+    await page.unroute("**/api/integrations/quickbooks/config");
+    await save.click();
+    await expect(save).toBeDisabled();
+    await expect(connection).toContainText("QuickBooks configuration saved.");
+    expect((await (await context.request.get(baseUrl + "/api/integrations/quickbooks/status")).json()).result.config).toMatchObject({ itemId: "20", taxMappings: { taxable: "30" } });
+    // A destructive command stays independent, but cannot silently drop another draft.
+    await page.getByRole("dialog", { name: "QuickBooks Online", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
+    await page.getByRole("switch", { name: "Job Costing enabled" }).click();
+    await page.getByRole("button", { name: "About QuickBooks Online", exact: true }).click();
+    await connection.getByRole("button", { name: "Disconnect", exact: true }).click();
+    await page.getByRole("dialog", { name: "Disconnect QuickBooks?", exact: true }).getByRole("button", { name: "Disconnect QuickBooks", exact: true }).click();
+    await expect(guard).toBeVisible();
+    await guard.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(connection).toContainText("Not connected");
+    expect((await (await context.request.get(baseUrl + "/api/settings/addons")).json()).result.jobCosting).toBe(false);
+    expect(writes.filter(path => path.endsWith("/config"))).toHaveLength(2);
+    expect(writes.filter(path => path.endsWith("/disconnect"))).toHaveLength(1);
+    expect(writes.filter(path => path === "/api/settings/addons")).toHaveLength(0);
+  } finally { await context.close(); }
+});
+for (const width of [390, 1440]) test(`price-list mapping state and fallback wording preserve invoice snapshots at ${width}px`, async ({ browser }, info) => {
+  const { context, page } = await open(browser, { width });
+  try {
+    await connectApi(context);
+    await page.reload();
+    const connection = page.getByLabel("QuickBooks connection", { exact: true });
+    await connection.getByRole("button", { name: "Configure", exact: true }).click();
+    await expect(connection.getByRole("group", { name: "Fallback QuickBooks sales item" })).toContainText("Used for ad-hoc invoice lines that are not linked to an ELSET Price List item.");
+    const created = await context.request.post(`${baseUrl}/api/price-list-items`, { data: { name: "Labour", description: "Current catalog description", unitPrice: 999, unit: "hour" } });
+    expect(created.ok()).toBeTruthy(); const { item } = await created.json();
+    withDb(db => db.prepare("UPDATE invoice_line_items SET extra_json=? WHERE invoice_id=(SELECT id FROM invoices WHERE job_id='costing-job')").run(JSON.stringify({ priceListItemId: item.id })));
+    await page.getByRole("button", { name: "Items & Price List", exact: true }).last().click();
+    await expect(page.getByRole("listitem", { name: "Labour", exact: true })).toContainText("Not mapped — will create/match on first sync");
+    await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const remote = await (await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: {} })).json();
+    const labour = remote.items.filter(row => row.Name === "Labour"); expect(labour).toHaveLength(1);
+    expect(remote.invoices[0].Line[0].SalesItemLineDetail.ItemRef.value).toBe(labour[0].Id);
+    expect(remote.invoices[0].Line[0].Description).toBe("Invoiced work"); expect(remote.invoices[0].Line[0].SalesItemLineDetail.UnitPrice).toBe(1000);
+    expect(remote.calls.some(call => /\/send(?:\?|$)/.test(call.url))).toBe(false);
+    await page.goto(`${baseUrl}/settings`); await page.getByRole("button", { name: "Items & Price List", exact: true }).last().click();
+    await expect(page.getByRole("listitem", { name: "Labour", exact: true })).toContainText("QuickBooks item: Labour · Mapped");
+    await capture(page, info, `price-list-quickbooks-mapped-${width}`, page.getByRole("list", { name: "Price-list items" }));
+    expect((await context.request.patch(`${baseUrl}/api/price-list-items/${item.id}`, { data: { updatedAt: item.updatedAt, name: "Renamed labour", description: "Later words", unitPrice: 1 } })).ok()).toBeTruthy();
+    await page.goto(`${baseUrl}/jobs/costing-job/invoice`); await card(page).getByRole("button", { name: "Update QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const rerun = await (await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: {} })).json();
+    expect(rerun.items.filter(row => row.Name === "Labour")).toHaveLength(1); expect(rerun.invoices[0].TotalAmt).toBe(1100);
+  } finally { await context.close(); }
+});
 for (const width of [390, 820, 1440]) test(`searchable sales items and explicit ELSET Services creation/reuse at ${width}px`, async ({ browser }, info) => {
   const { context, page } = await open(browser, { width });
   try {
@@ -158,7 +244,7 @@ for (const width of [390, 820, 1440]) test(`searchable sales items and explicit 
     await page.reload();
     const connection = page.getByLabel("QuickBooks connection", { exact: true });
     await connection.getByRole("button", { name: "Configure", exact: true }).click();
-    await expect(connection).toContainText("Your ELSET descriptions, quantities and prices are still sent separately.");
+    await expect(connection).toContainText("Line descriptions, quantities and prices are sent separately.");
     await connection.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "Choose QuickBooks sales item" });
     const search = picker.getByRole("textbox", { name: "Search QuickBooks sales items" });
@@ -178,7 +264,7 @@ for (const width of [390, 820, 1440]) test(`searchable sales items and explicit 
     await search.fill("Hidden"); await expect(picker.getByRole("listitem")).toHaveCount(0);
     await search.fill("BAT-SOLAR"); await picker.getByRole("button", { name: "Use Electrical:Batteries", exact: true }).press("Enter");
     await connection.getByLabel("Default QuickBooks GST code", { exact: true }).selectOption("30");
-    await connection.getByRole("button", { name: "Save QuickBooks configuration" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(connection).toContainText("QuickBooks configuration saved.");
     await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
     await expect(connection.locator('[data-quickbooks-selected-item="1599"]')).toContainText("Batteries");
@@ -195,7 +281,7 @@ for (const width of [390, 820, 1440]) test(`searchable sales items and explicit 
     await expect(connection.getByLabel("Default QuickBooks GST code")).toHaveValue("30");
     const beforeSave = await context.request.get(`${baseUrl}/api/integrations/quickbooks/status`);
     expect((await beforeSave.json()).result.config.itemId).toBe("1599");
-    await connection.getByRole("button", { name: "Save QuickBooks configuration" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(connection).toContainText("QuickBooks configuration saved.");
     await connection.getByRole("button", { name: 'Use "ELSET Services"', exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Use existing ELSET Services", exact: true }).click();
@@ -215,8 +301,12 @@ for (const width of [390, 820, 1440]) test(`searchable sales items and explicit 
 test("QuickBooks consent, configuration, invoice, partial/full receipts, correction and disconnect", async ({ browser }, info) => {
   const { context, page } = await open(browser);
   try {
+    await page.getByRole("dialog", { name: "QuickBooks Online", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("switch", { name: "QuickBooks Online enabled" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
     await expect(page.getByRole("switch", { name: "Xero enabled" })).toBeDisabled();
+    await page.getByRole("button", { name: "About QuickBooks Online", exact: true }).click();
     await page.route("https://appcenter.intuit.com/**", (route) => {
       const state = new URL(route.request().url()).searchParams.get("state");
       return route.fulfill({ contentType: "text/html", body: `<a href="${baseUrl}/api/integrations/quickbooks/callback?state=${state}&code=fixture&realmId=123456789">Approve Sandbox</a>` });
@@ -229,7 +319,7 @@ test("QuickBooks consent, configuration, invoice, partial/full receipts, correct
     await page.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
     await page.getByRole("button", { name: "Use Service", exact: true }).click();
     await connection.getByLabel("Default QuickBooks GST code", { exact: true }).selectOption("30");
-    await page.getByRole("button", { name: "Save QuickBooks configuration" }).click(); await expect(connection).toContainText("QuickBooks configuration saved.");
+    await page.getByRole("button", { name: "Save changes", exact: true }).click(); await expect(connection).toContainText("QuickBooks configuration saved.");
     await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
     await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toHaveValue("30");
     await connection.getByRole("button", { name: "Test connection" }).click(); await expect(connection).toContainText("Connection verified");
@@ -247,7 +337,7 @@ test("QuickBooks consent, configuration, invoice, partial/full receipts, correct
     await capture(page, info, "quickbooks-invoice-reconciled", card(page));
     await page.goto(`${baseUrl}/settings?accounting=quickbooks`);
     await connection.getByRole("button", { name: "Disconnect", exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Disconnect QuickBooks", exact: true }).click(); await expect(connection).toContainText("Not connected");
+    await page.getByRole("dialog", { name: "Disconnect QuickBooks?", exact: true }).getByRole("button", { name: "Disconnect QuickBooks", exact: true }).click(); await expect(connection).toContainText("Not connected");
     expect(withDb((db) => db.prepare("SELECT encrypted_refresh_token FROM workspace_integrations WHERE provider='quickbooks'").get().encrypted_refresh_token)).toBeNull();
     expect(withDb((db) => db.prepare("SELECT count(*) n FROM integration_entity_mappings").get().n)).toBe(2);
   } finally { await context.close(); }
@@ -284,15 +374,15 @@ for (const width of [390, 1440]) test(`QuickBooks reconnect switches US to AU af
     await expect(dialog).toHaveCount(0);
     await expect(connection).toContainText("Connected organisation: Fixture AU new company");
     await expect(connection).toContainText("987654321 · AU · AUD"); await expect(connection).not.toContainText("Fixture US company");
-    await expect(connection).toContainText("Configure this company's default sales item and GST code");
+    await expect(connection).toContainText("Configure this company's fallback sales item and GST code");
     await connection.getByRole("button", { name: "Configure", exact: true }).click();
-    await expect(connection.getByRole("group", { name: "Default QuickBooks sales item" })).toContainText("No default sales item selected.");
+    await expect(connection.getByRole("group", { name: "Fallback QuickBooks sales item" })).toContainText("No fallback sales item selected.");
     await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toHaveValue("");
     await capture(page, info, `reconnect-active-au-${width}`, connection);
     await connection.getByRole("button", { name: "Use existing QuickBooks item", exact: true }).click();
     await page.getByRole("button", { name: "Use Service", exact: true }).click();
     await connection.getByLabel("Default QuickBooks GST code", { exact: true }).selectOption("30");
-    await connection.getByRole("button", { name: "Save QuickBooks configuration" }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(connection).toContainText("QuickBooks configuration saved.");
     await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
     await expect(connection.locator('[data-quickbooks-selected-item="20"]')).toContainText("Service income");
@@ -314,7 +404,7 @@ for (const width of [390, 1440]) test(`tax configuration explains US company, di
       await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toBeDisabled();
       if (scenario !== "disabled") await expect(connection.getByLabel("Default QuickBooks GST code", { exact: true })).toHaveValue("");
       if (scenario === "real-us") await expect(connection).toContainText("Company ID: 123456789 · US · USD");
-      await expect(page.getByRole("button", { name: "Save QuickBooks configuration" })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
       await capture(page, info, `quickbooks-tax-${scenario}-${width}`, page.locator('[data-addon="quickbooks"]'));
     }
   } finally { await context.close(); }

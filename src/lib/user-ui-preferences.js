@@ -5,7 +5,7 @@ export const defaultAppearanceSettings = {
   sidebarSurface: "#FFFFFF", sidebarHeader: "#0F90CD", sidebarActive: "#F69320",
   heroSurface: "#0F90CD", actionColor: "#F69320", borderColor: "#1E293B",
   dialogSurface: "#9FE4FB", dataViewSurface: "#EAF7FB", dataViewAccent: "#0F90CD",
-  sidebarWidth: "standard", contentDensity: "comfortable",
+  sidebarWidth: "standard", contentDensity: "comfortable", roundedEdges: true,
 };
 export const appearanceSettingKeys = Object.keys(defaultAppearanceSettings);
 export const boardPreferenceKeys = {
@@ -22,7 +22,7 @@ export const defaultUserUiPreferences = {
 };
 export const userUiPreferenceKeys = Object.keys(defaultUserUiPreferences);
 const allowedKeys = new Set(userUiPreferenceKeys);
-const colorKeys = new Set(appearanceSettingKeys.filter((key) => key !== "sidebarWidth" && key !== "contentDensity"));
+const colorKeys = new Set(appearanceSettingKeys.filter((key) => !["sidebarWidth", "contentDensity", "roundedEdges"].includes(key)));
 const choices = {
   sidebarWidth: ["icon-only", "compact", "standard", "wide"],
   contentDensity: ["compact", "comfortable", "spacious"],
@@ -60,7 +60,7 @@ export function validateUserUiPreferencePatch(input) {
     } else if (Object.hasOwn(choices, key)) {
       if (!choices[key].includes(value)) throw new UserUiPreferenceError(`${key} is invalid.`);
       patch[key] = value;
-    } else if (key === "boardShowTagLabels") {
+    } else if (key === "boardShowTagLabels" || key === "roundedEdges") {
       if (typeof value !== "boolean") throw new UserUiPreferenceError(`${key} must be a boolean.`);
       patch[key] = value;
     }

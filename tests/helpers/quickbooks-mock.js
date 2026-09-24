@@ -1,6 +1,6 @@
 // Synthetic HTTP boundary. No request ever leaves this fixture.
 export function createQuickBooksMock() {
-  const mock = { calls: [], customers: [], invoices: [], payments: [], refreshes: 0, failNext: null, loseInvoiceResponse: false, loseItemResponse: false, staleNext: false,
+  const mock = { calls: [], customers: [], invoices: [], payments: [], credits: [], deposits: [], refreshes: 0, failNext: null, loseInvoiceResponse: false, loseItemResponse: false, staleNext: false,
     realm: "123456789", country: "AU", currency: "AUD", companyName: "Fixture AU company", tokenSuffix: "", customNumbers: true, usingSalesTax: true,
     accounts: [{ Id: "10", Name: "Service income", AccountType: "Income", Active: true }],
     items: [{ Id: "20", Name: "Service", Type: "Service", Active: true, IncomeAccountRef: { value: "10" } }],
@@ -31,7 +31,7 @@ export function createQuickBooksMock() {
     const endpoint = url.pathname.split(`/v3/company/${mock.realm}/`)[1];
     if (endpoint === `companyinfo/${mock.realm}`) return json({ CompanyInfo: { Id: "1", CompanyName: mock.companyName, Country: mock.country } });
     if (endpoint === "preferences") return json({ Preferences: { CurrencyPrefs: { HomeCurrency: { value: mock.currency } }, SalesFormsPrefs: { CustomTxnNumbers: mock.customNumbers }, TaxPrefs: { UsingSalesTax: mock.usingSalesTax } } });
-    const lists = { Customer: mock.customers, Invoice: mock.invoices, Payment: mock.payments, Account: mock.accounts, Item: mock.items, TaxCode: mock.taxCodes, TaxRate: mock.taxRates };
+    const lists = { Customer: mock.customers, Invoice: mock.invoices, Payment: mock.payments, CreditMemo: mock.credits, Deposit: mock.deposits, Account: mock.accounts, Item: mock.items, TaxCode: mock.taxCodes, TaxRate: mock.taxRates };
     if (endpoint === "query") {
       const query = url.searchParams.get("query"), entity = query.match(/FROM (\w+)/)?.[1];
       let values = lists[entity];

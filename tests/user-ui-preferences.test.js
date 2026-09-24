@@ -30,9 +30,11 @@ test("personal schema matches legacy appearance defaults and strictly validates 
   assert.deepEqual(appearanceSettingKeys, workspaceUiSettingKeys);
   for (const key of appearanceSettingKeys) assert.equal(defaultUserUiPreferences[key], defaultWorkspaceSettings[key]);
   assert.deepEqual(validateUserUiPreferencePatch({ actionColor: "#abc", contentDensity: "compact" }), { actionColor: "#AABBCC", contentDensity: "compact" });
+  assert.deepEqual(validateUserUiPreferencePatch({ roundedEdges: false }), { roundedEdges: false });
+  assert.equal(normalizeUserUiPreferences({}).roundedEdges, true);
   for (const input of [null, [], {}, { userId: "B" }, { companyName: "Private company" }, { theme: { accent: "#abc" } },
     { actionColor: "url(evil)" }, { sidebarWidth: "enormous" }, { contentDensity: "dense" }, { customerView: "compact" },
-    { boardToDoSort: "unknown" }, { boardShowTagLabels: "true" }, { boardHiddenColumns: ["Completed"] },
+    { boardToDoSort: "unknown" }, { boardShowTagLabels: "true" }, { roundedEdges: "false" }, { boardHiddenColumns: ["Completed"] },
     JSON.parse('{"__proto__":{"polluted":true}}'), { constructor: {} }, { prototype: {} }]) {
     assert.throws(() => validateUserUiPreferencePatch(input));
   }

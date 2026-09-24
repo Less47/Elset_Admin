@@ -1,4 +1,5 @@
 import { normalizeDeletedInvoices } from "./invoice-deletion.js";
+import { customerPostalFields } from "./customer-profile.js";
 import { createBlankDocumentLine } from "./price-list.js";
 import { normalizeServiceBoardNote } from "./service-board-note.js";
 import { invoiceStatusFromAmounts } from "./invoice-account.js";
@@ -800,6 +801,7 @@ export function normalizeThemeSettings(settings) {
     dataViewAccent: normalizeHexColor(settings?.dataViewAccent, defaultThemeSettings.dataViewAccent),
     sidebarWidth: normalizeOptionValue(settings?.sidebarWidth, sidebarWidthOptions, defaultThemeSettings.sidebarWidth),
     contentDensity: normalizeOptionValue(settings?.contentDensity, contentDensityOptions, defaultThemeSettings.contentDensity),
+    roundedEdges: typeof settings?.roundedEdges === "boolean" ? settings.roundedEdges : defaultThemeSettings.roundedEdges,
     companyName: normalizeTextSetting(settings?.companyName, defaultThemeSettings.companyName),
     companyAbn: normalizeTextSetting(settings?.companyAbn, defaultThemeSettings.companyAbn),
     companyAcn: normalizeTextSetting(settings?.companyAcn, defaultThemeSettings.companyAcn),
@@ -1196,6 +1198,7 @@ export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
     contacts,
     billingContactId: resolvedBillingContact?.id || "",
     address,
+    ...customerPostalFields(normalizedCustomer),
     sites,
     siteAccessNotes,
     createdAt: normalizedCustomer.createdAt || fallbackCreatedAt || new Date().toISOString(),

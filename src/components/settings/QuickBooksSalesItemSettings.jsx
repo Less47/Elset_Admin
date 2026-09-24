@@ -31,11 +31,11 @@ export default function QuickBooksSalesItemSettings({ items, accounts, value, on
     if (result?.salesItem) setDialog("");
     else setError(result?.error || 'The sales item could not be confirmed. Try again.');
   }
-  return <div className="min-w-0 space-y-2" role="group" aria-label="Default QuickBooks sales item">
-    <p className="text-sm font-medium">Default QuickBooks sales item</p>
-    <p className="text-xs text-text-secondary">ELSET uses this QuickBooks item when creating invoice lines in QuickBooks. Your ELSET descriptions, quantities and prices are still sent separately.</p>
+  return <div className="min-w-0 space-y-2" role="group" aria-label="Fallback QuickBooks sales item">
+    <p className="text-sm font-medium">Fallback QuickBooks sales item</p>
+    <p className="text-xs text-text-secondary">Used for ad-hoc invoice lines that are not linked to an ELSET Price List item. Line descriptions, quantities and prices are sent separately.</p>
     {selected ? <div className="rounded-lg border bg-card p-3 text-sm" data-quickbooks-selected-item={selected.id}><ItemContext item={selected} /></div>
-      : <p className="text-sm text-text-secondary">{value ? "The saved item is no longer eligible. Choose an active sales item." : "No default sales item selected."}</p>}
+      : <p className="text-sm text-text-secondary">{value ? "The saved item is no longer eligible. Choose an active sales item." : "No fallback sales item selected."}</p>}
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" className="h-auto min-h-9 whitespace-normal" disabled={disabled || creationDisabled} onClick={() => { setError(""); setIncomeAccountId(""); setDialog("create"); }}>
         {canReuse ? 'Use "ELSET Services"' : 'Create "ELSET Services" in QuickBooks'}
@@ -67,7 +67,7 @@ export default function QuickBooksSalesItemSettings({ items, accounts, value, on
             </select>
             {!accounts.some(account => account.type === "Income") && <p role="alert">No active sales income accounts are available. Set up an appropriate income account in QuickBooks, then reload configuration.</p>}
           </>}
-          <p className="text-xs text-text-secondary">If an eligible item named ELSET Services already exists, ELSET will reuse it with its current income account. Existing items and accounts will not be changed. Save the configuration afterwards to use this item as your default.</p>
+          <p className="text-xs text-text-secondary">If an eligible item named ELSET Services already exists, ELSET will reuse it with its current income account. Existing items and accounts will not be changed. Save the configuration afterwards to use this item as your fallback.</p>
           {error && <p role="alert" className="text-status-danger">{error}</p>}
         </div>}
         <DialogFooter><Button type="button" variant="outline" disabled={disabled} onClick={() => setDialog("")}>Cancel</Button>

@@ -15,6 +15,8 @@ import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
 import { getCustomerAccountSummary } from "../server-customer-account.js";
 import { createQuickBooksMock } from "./helpers/quickbooks-mock.js";
 import { quickBooksCloudEvent } from "./helpers/quickbooks-webhooks.js";
+import { createPriceListItem, updatePriceListItem } from "../server-workspace-price-list.js";
+import { withPriceListAccountingMappings } from "../server-accounting-price-list.js";
 import { QuickBooksAccountingProvider } from "../server-accounting-providers/quickbooks.js";
 import { quickBooksOAuthDiagnostic } from "../server-quickbooks-oauth.js";
 import { processQuickBooksInbox, persistQuickBooksEvents, registerQuickBooksWebhook, verifyQuickBooksSignature } from "../server-quickbooks-webhooks.js";
@@ -44,6 +46,88 @@ async function ready(service) { await consent(service); await service.configure(
 const paid = (db, id = "invoice") => db.prepare("SELECT COALESCE(SUM(amount_cents),0) amount FROM payments WHERE invoice_id=?").get(id).amount;
 const allocations = (mock, values) => mock.setPayments(values.map(([id, amount]) => ({ id, allocations: [[mock.invoices[0].Id, amount]] })));
 const event = (mock, { id = crypto.randomUUID(), resource = mock.invoices[0]?.Id, type = "qbo.invoice.updated.v1", realm = mock.realm } = {}) => [quickBooksCloudEvent({ id, type, time: "2026-09-18T01:00:00Z", intuitentityid: resource, intuitaccountid: realm, data: { ignored: "not stored" } })];
+
+function catalogLine(db, name = "Labour", invoiceId = "invoice") {
+  const item = createPriceListItem(db, { name, description: "Catalog text", unitPrice: 999, unit: "hour" });
+  db.prepare("UPDATE invoice_line_items SET extra_json=?,description=? WHERE invoice_id=?").run(JSON.stringify({ priceListItemId: item.id }), "Replace contactor and test unit", invoiceId);
+  return item;
+}
+test("price-list mapping selects per-line ItemRef while preserving saved description, quantity, rate and AU GST", async t => {
+  const { db, mock, service } = fixture(t); const item = catalogLine(db); await ready(service);
+  mock.items.push({ Id: "21", Name: "Mapped labour", Type: "NonInventory", Active: true, IncomeAccountRef: { value: "10" } });
+  service.store.map(mock.realm, "price-list-item", item.id, "21", "Mapped labour");
+  const before = db.prepare("SELECT * FROM invoice_line_items").all();
+  await service.syncInvoice("job"); const line = mock.invoices[0].Line[0];
+  assert.equal(line.SalesItemLineDetail.ItemRef.value, "21"); assert.equal(line.Description, "Replace contactor and test unit");
+  assert.equal(line.SalesItemLineDetail.Qty, 2); assert.equal(line.SalesItemLineDetail.UnitPrice, 500); assert.equal(line.Amount, 1000); assert.equal(line.SalesItemLineDetail.TaxCodeRef.value, "30");
+  assert.equal(mock.invoices[0].TxnTaxDetail.TotalTax, 100); assert.deepEqual(db.prepare("SELECT * FROM invoice_line_items").all(), before);
+  assert.equal(mock.calls.filter(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST").length, 0);
+});
+test("price-list exact normalized eligible item is reused and mapping metadata is provider and company scoped", async t => {
+  const { db, mock, service } = fixture(t); const item = catalogLine(db); await ready(service);
+  mock.items.push({ Id: "21", Name: "  LABOUR ", Type: "Service", Active: true, IncomeAccountRef: { value: "10" } });
+  await service.syncInvoice("job");
+  assert.equal(mock.invoices[0].Line[0].SalesItemLineDetail.ItemRef.value, "21"); assert.equal(service.store.mapping(mock.realm, "price-list-item", item.id).external_entity_id, "21");
+  const metadata = withPriceListAccountingMappings(db, [item])[0].accountingMappings[0];
+  assert.equal(metadata.provider, "quickbooks"); assert.equal(metadata.tenantId, mock.realm); assert.equal(metadata.status, "MAPPED");
+  assert.equal(mock.items.length, 2);
+});
+test("missing price-list item is created once with fallback income account and reused across invoices and reruns", async t => {
+  const { db, mock, service } = fixture(t); const item = catalogLine(db); await ready(service);
+  db.prepare("UPDATE invoice_line_items SET extra_json=? WHERE invoice_id='invoice-b'").run(JSON.stringify({ priceListItemId: item.id }));
+  await service.syncInvoice("job"); await service.syncInvoice("job-b"); await service.syncInvoice("job");
+  const created = mock.items.filter(row => row.Name === "Labour"); assert.equal(created.length, 1); assert.equal(created[0].Type, "Service"); assert.equal(created[0].IncomeAccountRef.value, "10");
+  assert.ok(mock.invoices.every(row => row.Line[0].SalesItemLineDetail.ItemRef.value === created[0].Id));
+  assert.equal(mock.calls.filter(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST").length, 1);
+  assert.equal(service.store.operation(mock.realm, "price-list-item", item.id).status, "DONE");
+  assert.ok(!mock.calls.some(call => /\/send(?:\?|$)/.test(call.url)));
+});
+test("ambiguous, inactive and unsupported names fall back without duplicate item creation and expose the reason", async t => {
+  for (const variant of ["duplicate", "inactive", "inventory", "long-name", "mapped-inactive"]) await t.test(variant, async sub => {
+    const { db, mock, service } = fixture(sub); const item = catalogLine(db, variant === "long-name" ? "L".repeat(101) : "Labour"); await ready(service);
+    if (variant !== "long-name") mock.items.push({ Id: "21", Name: "Labour", Type: variant === "inventory" ? "Inventory" : "Service", Active: !["inactive", "mapped-inactive"].includes(variant), IncomeAccountRef: { value: "10" } });
+    if (variant === "duplicate") mock.items.push({ ...mock.items.at(-1), Id: "22", Name: " LABOUR " });
+    if (variant === "mapped-inactive") service.store.map(mock.realm, "price-list-item", item.id, "21", "Labour");
+    await service.syncInvoice("job"); assert.equal(mock.invoices[0].Line[0].SalesItemLineDetail.ItemRef.value, "20");
+    assert.equal(service.store.latest(mock.realm, "price-list-item", item.id).status, "FALLBACK");
+    assert.equal(withPriceListAccountingMappings(db, [item])[0].accountingMappings[0].status, "FALLBACK");
+    assert.ok(!mock.calls.some(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST"));
+  });
+});
+test("ad-hoc invoice lines use the configured fallback while catalog lines use their own mapping", async t => {
+  const { db, mock, service, invoice } = fixture(t); const item = createPriceListItem(db, { name: "Labour", unitPrice: 40 });
+  insertInvoiceTree(db, "job", { ...invoice, id: "invoice", items: [{ description: "Fitted parts", qty: 1, rate: 100 }, { description: "Historical labour description", qty: 2, rate: 40, priceListItemId: item.id }] });
+  await ready(service); await service.syncInvoice("job");
+  assert.equal(mock.invoices[0].Line[0].SalesItemLineDetail.ItemRef.value, "20"); assert.notEqual(mock.invoices[0].Line[1].SalesItemLineDetail.ItemRef.value, "20");
+  assert.equal(mock.invoices[0].Line[1].Description, "Historical labour description");
+});
+test("later catalog rename, repricing, description, archive and mapping changes never alter historical ELSET lines", async t => {
+  const { db, mock, service } = fixture(t); const item = catalogLine(db); await ready(service); await service.syncInvoice("job");
+  const before = db.prepare("SELECT * FROM invoice_line_items WHERE invoice_id='invoice'").all(), mappedId = service.store.mapping(mock.realm, "price-list-item", item.id).external_entity_id;
+  updatePriceListItem(db, item.id, { updatedAt: item.updatedAt, name: "Renamed service", description: "New words", unitPrice: 1, archived: true });
+  await service.syncInvoice("job");
+  assert.deepEqual(db.prepare("SELECT * FROM invoice_line_items WHERE invoice_id='invoice'").all(), before);
+  assert.equal(mock.invoices[0].Line[0].Description, "Replace contactor and test unit"); assert.equal(mock.invoices[0].TotalAmt, 1100); assert.equal(mock.invoices[0].Line[0].SalesItemLineDetail.ItemRef.value, mappedId);
+  assert.equal(mock.items.filter(row => row.Name === "Renamed service").length, 0);
+});
+test("lost item-create response reconciles by name and does not create a duplicate", async t => {
+  const { db, mock, service } = fixture(t); const item = catalogLine(db); await ready(service); mock.loseItemResponse = true;
+  await service.syncInvoice("job"); await service.syncInvoice("job");
+  assert.equal(mock.items.filter(row => row.Name === "Labour").length, 1); assert.ok(service.store.mapping(mock.realm, "price-list-item", item.id));
+  assert.equal(mock.calls.filter(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST").length, 1);
+});
+test("an item write with an uncertain outcome retains its durable key across retries", async t => {
+  const { db, mock, service } = fixture(t); const item = catalogLine(db); await ready(service); mock.failNext = { path: "/item", throw: true };
+  await assert.rejects(service.syncInvoice("job"), { code: "PROVIDER_UNAVAILABLE" });
+  const pending = service.store.operation(mock.realm, "price-list-item", item.id); assert.equal(pending.status, "PENDING");
+  await service.syncInvoice("job");
+  const requests = mock.calls.filter(call => new URL(call.url).pathname.endsWith("/item") && call.method === "POST");
+  assert.equal(requests.length, 2); assert.equal(new URL(requests[0].url).searchParams.get("requestid"), new URL(requests[1].url).searchParams.get("requestid"));
+});
+test("protected mapped invoice refuses sync before creating any missing catalog item", async t => {
+  const { db, mock, service } = fixture(t); await ready(service); await service.syncInvoice("job"); catalogLine(db); mock.invoices[0].Balance = 1000;
+  const count = mock.items.length; await assert.rejects(service.syncInvoice("job"), { code: "ACCOUNTING_STATE_CONFLICT" }); assert.equal(mock.items.length, count);
+});
 
 test("sales item options paginate large lists and include names, SKU, type and active income account context", async (t) => {
   const { service, mock } = fixture(t); await consent(service);

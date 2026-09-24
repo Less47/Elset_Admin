@@ -248,7 +248,7 @@ export default function CustomerManager({
         summary={<ResultSummary>{filteredCustomers.length} {filteredCustomers.length === 1 ? "customer" : "customers"}</ResultSummary>}
       />
 
-      <DesktopPageControls
+      <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setFilterBy("all"); setCreatedRange("all-time"); setCustomerTypeFilter("all"); }}
         search={(
           <DesktopControlField label="Search" size="search">
             <PageSearchField compact value={search} onChange={setSearch} placeholder="Search customers..." label="Search customers" />

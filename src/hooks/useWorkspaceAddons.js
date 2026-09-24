@@ -50,7 +50,7 @@ export function useWorkspaceAddons({ fetchWithAuth, sessionKey, refreshKey }) {
     };
   }, [refresh, refreshKey]);
 
-  const change = useCallback(async (key, enabled) => {
+  const save = useCallback(async (patch) => {
     if (!sessionKey || !scope.active || scope.saving) return false;
     scope.saving = true;
     scope.version += 1;
@@ -60,24 +60,24 @@ export function useWorkspaceAddons({ fetchWithAuth, sessionKey, refreshKey }) {
     }));
     try {
       const response = await fetchWithAuth("/api/settings/addons", {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [key]: enabled }),
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || "Unable to save add-ons.");
       const addons = readAddonState(payload);
       if (!scope.active) return false;
       setSnapshot({ scope, addons, loading: false, saving: false, error: "" });
-      return true;
+      return addons;
     } catch (error) {
       if (scope.active) setSnapshot((previous) => ({
         scope, addons: previous?.scope === scope ? previous.addons : normalizeAddonState(),
         loading: false, saving: false, error: error.message || "Unable to save add-ons.",
       }));
-      return false;
+      throw error;
     } finally { scope.saving = false; }
   }, [fetchWithAuth, scope, sessionKey]);
 
   const current = snapshot?.scope === scope ? snapshot : null;
   return { addons: current?.addons || normalizeAddonState(), loading: Boolean(sessionKey) && (!current || current.loading),
-    saving: current?.saving || false, error: current?.error || "", refresh, change };
+    saving: current?.saving || false, error: current?.error || "", refresh, save };
 }

@@ -230,6 +230,13 @@ async function navigate(page, label, width) {
 
 async function openSettings(browser, width = 1440, height = 900, tab = "UI Settings", username = "mobileadmin") {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: width < 1280, isMobile: width < 768, locale: "en-AU", reducedMotion: "reduce" });
+  await context.addInitScript(() => {
+    const add = window.addEventListener.bind(window), remove = window.removeEventListener.bind(window);
+    const unload = new Set();
+    window.__settingsUnloadCount = () => unload.size;
+    window.addEventListener = (type, callback, options) => { if (type === "beforeunload") unload.add(callback); add(type, callback, options); };
+    window.removeEventListener = (type, callback, options) => { if (type === "beforeunload") unload.delete(callback); remove(type, callback, options); };
+  });
   const page = await context.newPage();
   await page.goto(baseUrl);
   await page.getByPlaceholder("Enter your username").fill(username);
@@ -249,6 +256,70 @@ async function openSettings(browser, width = 1440, height = 900, tab = "UI Setti
   return { context, page, writes, dialogs };
 }
 const status = (page) => page.getByRole("status", { name: "Theme save status" });
+const saveButton = page => page.getByRole("button", { name: "Save changes", exact: true });
+test("rounded edges preview globally, save per account and survive reload", async ({ browser }) => {
+  const { context, page, writes } = await openSettings(browser);
+  try {
+    const checkbox = page.getByRole("checkbox", { name: /Rounded edges/ });
+    await expect(checkbox).toBeChecked();
+    await checkbox.uncheck();
+    await expect(page.locator("html")).toHaveAttribute("data-rounded-edges", "false");
+    expect(writes).toEqual([]);
+    expect(await saveButton(page).evaluate(el => getComputedStyle(el).borderRadius)).toBe("0px");
+    await saveDraft(page);
+    await expect(saveButton(page)).toBeDisabled();
+    expect(writes.map(write => write.body)).toEqual([{ roundedEdges: false }]);
+    await page.reload();
+    await page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
+    await expect(checkbox).not.toBeChecked();
+    await navigate(page, "Customers", 1440);
+    await page.getByRole("button", { name: /^Filters/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Filters", exact: true });
+    expect(await dialog.evaluate(el => getComputedStyle(el).borderRadius)).toBe("0px");
+    await dialog.getByRole("button", { name: "Done", exact: true }).click();
+    await navigate(page, "Settings", 1440);
+    await page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
+    await checkbox.check();
+    await saveDraft(page);
+    await expect(saveButton(page)).toBeDisabled();
+    expect(await saveButton(page).evaluate(el => getComputedStyle(el).borderRadius)).not.toBe("0px");
+  } finally { await context.close(); }
+});
+test("desktop list filters stay behind their button and remain keyboard accessible", async ({ browser }) => {
+  const { context, page, writes } = await openSettings(browser);
+  try {
+    for (const label of ["Customers", "Sites", "Invoices", "Job History", "Maintenance", "Parts Inventory", "Staff", "Service Board"]) {
+      await navigate(page, label, 1440);
+      const button = page.getByRole("button", { name: /^Filters/ });
+      await expect(button).toBeVisible();
+      const toolbar = page.locator('[data-desktop-page-controls], [data-service-board-toolbar]');
+      await expect(toolbar.getByRole("combobox")).toHaveCount(0);
+      await button.focus();
+      await page.keyboard.press("Enter");
+      const dialog = page.getByRole("dialog", { name: "Filters", exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.locator('[role="combobox"], [role="checkbox"]').first()).toBeVisible();
+      await dialog.getByRole("button", { name: "Done", exact: true }).click();
+      await expect(button).toBeFocused();
+    }
+    await navigate(page, "Settings", 1440);
+    await page.locator("[data-settings-navigation]").getByRole("button", { name: "Items & Price List", exact: true }).click();
+    await expect(page.getByLabel("Price-list status", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Filters/ }).click();
+    await page.getByLabel("Price-list status", { exact: true }).selectOption("archived");
+    await page.getByRole("dialog", { name: "Filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Filters, 1 active", exact: true })).toBeVisible();
+    await expect(page.getByText("No archived items.", { exact: true })).toBeVisible();
+    expect(writes).toEqual([]);
+  } finally { await context.close(); }
+});
+async function saveDraft(page) {
+  await expect(saveButton(page)).toBeEnabled();
+  // Keep focus/selection for the existing caret regression checks.
+  await saveButton(page).evaluate(button => button.click());
+}
+const unloadCount = page => page.evaluate(() => window.__settingsUnloadCount());
+const settingsDialog = page => page.getByRole("dialog", { name: "Unsaved changes", exact: true });
 const preferenceStatus = (page) => page.getByRole("status", { name: "Preferences save status" });
 const preferenceInput = (page, key) => page.locator(`[data-setting-key="${key}"]`);
 const selectRange = (input, start, end = start) => input.evaluate((element, range) => {
@@ -371,6 +442,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await screenshot(a.page, 'desktop-no-logo');
     const png = fs.readFileSync(path.join(repoRoot, 'public/elset-logo.png'));
     await upload(a.page, png);
+    await saveDraft(a.page);
     await expect(branding(a.page).getByRole('status')).toHaveText('Workspace logo saved.');
     const firstUrl = await sidebarLogo(a.page).locator('img').getAttribute('src');
     await assertImage(sidebarLogo(a.page), firstUrl);
@@ -385,6 +457,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await preferences(a.page);
     await a.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
     await a.page.getByRole('button', { name: /^Midnight Signal/ }).click();
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText('Saved');
     await assertImage(sidebarLogo(a.page), firstUrl);
     await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
@@ -396,6 +469,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await screenshot(a.page, 'settings-workspace-branding-midnight');
     const webp = await sharp(png).resize(220).webp().toBuffer();
     await upload(a.page, webp, 'image/webp', 'replacement.webp');
+    await saveDraft(a.page);
     await expect(branding(a.page).getByRole('status')).toHaveText('Workspace logo saved.');
     const secondUrl = await sidebarLogo(a.page).locator('img').getAttribute('src');
     expect(secondUrl).not.toBe(firstUrl);
@@ -404,13 +478,16 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     expect(read.status()).toBe(200);
     expect(await read.body()).toEqual(webp);
     await upload(a.page, Buffer.from('not an image'), 'image/png');
-    await expect(branding(a.page).getByRole('alert')).toContainText('must be a PNG');
+    await saveDraft(a.page);
+    await expect(a.page.getByRole('alert')).toContainText('must be a PNG');
     await assertImage(sidebarLogo(a.page), secondUrl);
     await upload(a.page, Buffer.alloc(2 * 1024 * 1024 + 1));
     await expect(branding(a.page).getByRole('alert')).toHaveText('Workspace logo must be 2 MB or smaller.');
     await screenshot(a.page, 'oversized-upload-error');
     await upload(a.page, Buffer.from('<svg/>'), 'image/svg+xml', 'unsafe.svg');
     await expect(branding(a.page).getByRole('alert')).toHaveText('Choose a PNG, JPEG or WebP image.');
+    await a.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
+    await settingsDialog(a.page).getByRole('button', { name: 'Discard changes', exact: true }).click();
     const anonymous = await browser.newContext(); extraContexts.push(anonymous);
     expect((await anonymous.request.put(baseUrl + '/api/settings/workspace-logo', { headers: { 'Content-Type': 'image/png' }, data: png })).status()).toBe(401);
     expect((await anonymous.request.get(baseUrl + secondUrl)).status()).toBe(401);
@@ -442,6 +519,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await a.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
     await a.page.getByRole('combobox', { name: 'Sidebar width', exact: true }).click();
     await a.page.getByRole('option', { name: 'Icon only', exact: true }).click();
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText('Saved');
     await assertImage(sidebarLogo(a.page), secondUrl);
     expect((await sidebarLogo(a.page).boundingBox()).width).toBe(48);
@@ -458,6 +536,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await preferences(b.page);
     await branding(b.page).getByRole('button', { name: 'Remove Logo', exact: true }).click();
     await b.page.getByRole('dialog', { name: 'Remove workspace logo?' }).getByRole('button', { name: 'Remove Logo', exact: true }).click();
+    await saveDraft(b.page);
     await expect(branding(b.page).getByRole('status')).toHaveText('Workspace logo removed.');
     await expect(sidebarLogo(b.page).locator('[data-workspace-logo-fallback]')).toBeVisible();
     await a.page.reload();
@@ -480,6 +559,7 @@ for (const [width, height] of [[1920,1080], [1440,900], [1280,720], [1024,768], 
     page.on('pageerror', error => errors.push(error.message));
     try {
       await page.getByRole('button', { name: /^Midnight Signal/ }).click();
+      await saveDraft(page);
       await expect(status(page)).toHaveText('Saved');
       await page.evaluate(() => scrollTo(0, 0));
       await themeScreenshot(page, `midnight-${width}-ui-settings`, { fullPage: true });
@@ -564,6 +644,7 @@ for (const id of ['harbour-steel', 'alpine-frost']) {
       await expect(card).toHaveAttribute('aria-pressed', 'true');
       await expect(card).toHaveCSS('outline-style', 'solid');
       await expect(card).toHaveCSS('outline-width', '2px');
+      await saveDraft(a.page);
       await expect(status(a.page)).toHaveText('Saved');
       assertTargeted(a.writes, 1);
       expect(readPersonalSettings()).toMatchObject(preset.values);
@@ -576,6 +657,7 @@ for (const id of ['harbour-steel', 'alpine-frost']) {
       await expect(fresh.page.locator(`[data-theme-preset="${id}"]`)).toHaveAttribute('aria-pressed', 'true');
       expect(fresh.writes).toHaveLength(0);
       await fresh.page.getByRole('button', { name: 'Reset UI', exact: true }).click();
+      await saveDraft(fresh.page);
       await expect(status(fresh.page)).toHaveText('Saved');
       await expect(fresh.page.locator('[data-theme-preset="elset"]')).toHaveAttribute('aria-pressed', 'true');
       assertTargeted(fresh.writes, 1);
@@ -593,7 +675,8 @@ test('semantic light preset screenshot matrix changes real database surfaces and
       await navigate(a.page, 'Settings', 1440);
       await a.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
       await a.page.getByRole('button', { name: new RegExp('^' + preset.label) }).click();
-      await expect(status(a.page)).toHaveText('Saved');
+      if (preset.id === "elset") await expect(saveButton(a.page)).toBeDisabled();
+      else { await saveDraft(a.page); await expect(status(a.page)).toHaveText("Saved"); }
       await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
       await themeScreenshot(a.page, `${preset.id}-settings`, { dark: false, fullPage: true });
       await a.page.getByRole('combobox', { name: 'Content density', exact: true }).click();
@@ -612,6 +695,7 @@ test('semantic Midnight covers remaining pages, editors, pickers and document pa
   const page = a.page;
   try {
     await page.getByRole('button', { name: /^Midnight Signal/ }).click();
+    await saveDraft(page);
     await expect(status(page)).toHaveText('Saved');
     for (const label of ['Service Board', 'Sites', 'Map', 'Job History', 'Invoices', 'Staff', 'Parts Inventory', 'Statistics']) {
       await navigate(page, label, 1440);
@@ -650,6 +734,7 @@ test('semantic presets save once under rapid switching and Midnight stays privat
       for (const id of ids) document.querySelector(`[data-theme-preset="${id}"]`).click();
     }, [...Array.from({ length: 19 }, (_, i) => themePresets[i % themePresets.length].id), 'midnight-signal']);
     await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText('Saved');
     assertTargeted(a.writes, 1);
     await expect(b.page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
@@ -659,7 +744,7 @@ test('semantic presets save once under rapid switching and Midnight stays privat
     await navigate(b.page, 'Settings', 1440);
     await b.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
     await b.page.getByRole('button', { name: 'Reset UI', exact: true }).click();
-    await expect(status(b.page)).toHaveText('Saved');
+    await expect(saveButton(b.page)).toBeDisabled();
     await a.page.reload();
     await assertDarkSurfaces(a.page, 'User A after User B reset');
     expect(readWorkspaceState()).toEqual(before);
@@ -673,6 +758,7 @@ test('semantic custom popup colours select a safe local foreground independently
   try {
     await a.page.getByRole('button', { name: /^Midnight Signal/ }).click();
     await a.page.getByLabel('Popup surface colour', { exact: true }).fill('#f7eee0');
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText('Saved');
     await a.page.getByRole('combobox', { name: 'Content density', exact: true }).click();
     const popup = a.page.locator('[data-slot="select-content"]');
@@ -696,6 +782,7 @@ test('semantic mobile fields, autocomplete, focus, drawers and discard dialogs r
   const page = a.page;
   try {
     await page.getByRole('button', { name: /^Midnight Signal/ }).click();
+    await saveDraft(page);
     await expect(status(page)).toHaveText('Saved');
     await page.getByRole('combobox', { name: 'Content density', exact: true }).click();
     await page.keyboard.press('ArrowDown');
@@ -739,6 +826,175 @@ function restoreOriginalPreferences() {
     preferenceSettingKeys.map((key) => [key, originalRecords.preferences[key] ?? defaultThemeSettings[key]])
   ));
 }
+test("explicit settings legacy JSON transport never autosaves drafts and keeps failed saves editable", async ({ browser }) => {
+  const a = await openSettings(browser, 1440, 900, "Preferences");
+  let persisted = structuredClone(readWorkspaceState()), attempts = 0, fail = true;
+  // Use stable legacy contact snapshots; the SQLite fixture deliberately leaves
+  // some null for the client's separate legacy-contact normalization path.
+  persisted.jobs = persisted.jobs.map(job => ({ ...job, billingContact: job.billingContact || {
+    id: `legacy-billing-${job.id}`, name: job.customerName, role: "Billing contact",
+    phone: job.customerPhone, email: job.customerEmail, notes: "",
+  } }));
+  const originalJobs = structuredClone(persisted.jobs);
+  await a.page.route("**/api/app-state", async route => {
+    if (route.request().method() === "PUT") {
+      attempts++;
+      if (fail) return route.fulfill({ status: 503, json: { error: "Legacy save failed" } });
+      persisted = route.request().postDataJSON();
+      return route.fulfill({ json: { state: persisted, storageMode: "json" } });
+    }
+    const response = await route.fetch();
+    return route.fulfill({ response, json: { ...await response.json(), storageMode: "json", state: persisted } });
+  });
+  try {
+    await a.page.reload();
+    await navigate(a.page, "Settings", 1440);
+    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
+    await expect(saveButton(a.page)).toBeDisabled();
+    const original = persisted.settings.companyName;
+    await preferenceInput(a.page, "companyName").fill("Legacy explicit save");
+    await preferenceInput(a.page, "companyPhone").fill("0400000999");
+    await a.page.waitForTimeout(700);
+    expect(attempts).toBe(0);
+    expect(persisted.settings.companyName).toBe(original);
+    await saveButton(a.page).click();
+    await expect(a.page.getByRole("alert").first()).toContainText("Legacy save failed");
+    await expect(saveButton(a.page)).toBeEnabled();
+    await expect(preferenceInput(a.page, "companyName")).toHaveValue("Legacy explicit save");
+    fail = false;
+    await saveButton(a.page).click();
+    await expect(saveButton(a.page)).toBeDisabled();
+    expect(attempts).toBe(2);
+    expect(persisted.settings).toMatchObject({ companyName: "Legacy explicit save", companyPhone: "0400000999" });
+    expect(persisted.jobs).toEqual(originalJobs);
+    expect(await unloadCount(a.page)).toBe(0);
+    await a.page.reload();
+    expect(a.dialogs).toEqual([]);
+    await navigate(a.page, "Settings", 1440);
+    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
+    await expect(preferenceInput(a.page, "companyName")).toHaveValue("Legacy explicit save");
+  } finally { await a.context.close(); }
+});
+test("explicit settings templates guard document type changes and save all wording together", async ({ browser }) => {
+  const a = await openSettings(browser, 1440, 900, "Document Templates");
+  const original = readWorkspaceState().quoteTemplate;
+  const templateDb = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  const originalRow = templateDb.prepare("SELECT * FROM document_templates WHERE type='quote'").get();
+  templateDb.close();
+  try {
+    await expect(saveButton(a.page)).toBeDisabled();
+    await a.page.getByLabel("Document heading", { exact: true }).fill("Draft proposal");
+    await a.page.getByLabel("Footer text", { exact: true }).fill("Draft footer");
+    await a.page.getByRole("combobox", { name: "Document template type" }).click();
+    await a.page.getByRole("option", { name: "Invoice Template", exact: true }).click();
+    await expect(settingsDialog(a.page)).toBeVisible();
+    await settingsDialog(a.page).getByRole("button", { name: "Stay", exact: true }).click();
+    await expect(a.page.getByLabel("Document heading", { exact: true })).toHaveValue("Draft proposal");
+    expect(a.writes.filter(write => write.path.startsWith("/api/document-templates"))).toHaveLength(0);
+    expect(readWorkspaceState().quoteTemplate).toEqual(original);
+    await saveButton(a.page).click();
+    await expect(saveButton(a.page)).toBeDisabled();
+    expect(a.writes.filter(write => write.path === "/api/document-templates/quote")).toHaveLength(1);
+    expect(readWorkspaceState().quoteTemplate).toMatchObject({ quoteHeading: "Draft proposal", footerText: "Draft footer" });
+    await a.page.getByLabel("Document heading", { exact: true }).fill("Discard this heading");
+    await a.page.getByRole("combobox", { name: "Document template type" }).click();
+    await a.page.getByRole("option", { name: "Invoice Template", exact: true }).click();
+    await settingsDialog(a.page).getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(a.page.getByRole("combobox", { name: "Document template type" })).toHaveText("Invoice Template");
+    await expect(saveButton(a.page)).toBeDisabled();
+    expect(readWorkspaceState().quoteTemplate.quoteHeading).toBe("Draft proposal");
+  } finally {
+    await a.context.close();
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try {
+      const keys = Object.keys(originalRow).filter(key => key !== "type");
+      db.prepare(`UPDATE document_templates SET ${keys.map(key => `"${key}"=?`).join(",")} WHERE type='quote'`).run(...keys.map(key => originalRow[key]));
+    } finally { db.close(); }
+  }
+});
+test("explicit settings save groups edits, tracks reverts, and removes the unload guard after acknowledgement", async ({ browser }) => {
+  const a = await openSettings(browser, 1440, 900, "Preferences");
+  try {
+    const name = preferenceInput(a.page, "companyName"), phone = preferenceInput(a.page, "companyPhone");
+    const originalName = await name.inputValue();
+    await expect(saveButton(a.page)).toBeDisabled();
+    expect(await unloadCount(a.page)).toBe(0);
+    await name.fill(originalName + " draft");
+    await expect(saveButton(a.page)).toBeEnabled();
+    expect(await unloadCount(a.page)).toBe(1);
+    await name.fill(originalName);
+    await expect(saveButton(a.page)).toBeDisabled();
+    expect(await unloadCount(a.page)).toBe(0);
+    await name.fill("Explicit saved business");
+    await phone.fill("0400000123");
+    await a.page.waitForTimeout(700);
+    expect(a.writes).toHaveLength(0);
+    expect(readWorkspaceState().settings.companyName).toBe(originalName);
+    const attemptedReload = a.page.waitForEvent("dialog");
+    await a.page.evaluate(() => { setTimeout(() => window.location.reload(), 0); });
+    expect((await attemptedReload).type()).toBe("beforeunload");
+    await expect(name).toHaveValue("Explicit saved business");
+    expect(await unloadCount(a.page)).toBe(1);
+    a.dialogs.length = 0;
+    const delayed = await delayedSettings(a.page);
+    await saveButton(a.page).click();
+    await expect(a.page.getByRole("button", { name: "Saving...", exact: true })).toBeDisabled();
+    await expect.poll(() => delayed.requests.length).toBe(1);
+    expect(delayed.requests[0].patch).toEqual({ companyName: "Explicit saved business", companyPhone: "0400000123" });
+    delayed.requests[0].release();
+    await expect(saveButton(a.page)).toBeDisabled();
+    await expect(a.page.getByRole("status", { name: "Settings save status", exact: true })).toHaveText("Saved");
+    expect(await unloadCount(a.page)).toBe(0);
+    await expect(name).toHaveValue("Explicit saved business");
+    expect(a.writes).toHaveLength(1);
+    await a.page.reload();
+    expect(a.dialogs).toEqual([]);
+    expect(readWorkspaceState().settings.companyName).toBe("Explicit saved business");
+  } finally { await a.context.close(); restoreOriginalPreferences(); }
+});
+
+test("explicit settings guards sections, sidebar, browser history, keyboard focus, and restores discarded theme previews", async ({ browser }) => {
+  const a = await openSettings(browser);
+  try {
+    const original = readPersonalSettings();
+    await a.page.getByRole("button", { name: /^Midnight Signal/ }).click();
+    await expect(a.page.locator("html")).toHaveAttribute("data-theme-mode", "dark");
+    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
+    const dialog = settingsDialog(a.page);
+    await expect(dialog).toContainText("You have changes that haven't been saved. If you leave this page, those changes will be discarded.");
+    await expect(dialog.getByRole("button", { name: "Stay", exact: true })).toBeFocused();
+    await a.page.keyboard.press("Shift+Tab");
+    expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    await dialog.getByRole("button", { name: "Stay", exact: true }).click();
+    await expect(colourInput(a.page)).toBeVisible();
+    await expect(saveButton(a.page)).toBeEnabled();
+    await navigate(a.page, "Customers", 1440);
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(colourInput(a.page)).toHaveCount(0);
+    await assertPrimary(a.page, original.actionColor);
+    await expect(a.page.locator("html")).toHaveAttribute("data-theme-mode", "light");
+    expect(await unloadCount(a.page)).toBe(0);
+    expect(a.writes).toHaveLength(0);
+    await navigate(a.page, "Settings", 1440);
+    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
+    await setColours(a.page, ["#123456"]);
+    await a.page.evaluate(() => history.back());
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Stay", exact: true }).click();
+    await expect(colourInput(a.page)).toHaveValue("#123456");
+    await a.page.evaluate(() => history.back());
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(colourInput(a.page)).toHaveCount(0);
+    await a.page.evaluate(() => history.forward());
+    await expect(saveButton(a.page)).toBeDisabled();
+    await assertPrimary(a.page, original.actionColor);
+    expect(a.writes).toHaveLength(0);
+    expect(readPersonalSettings()).toEqual(original);
+    expect(await unloadCount(a.page)).toBe(0);
+  } finally { await a.context.close(); }
+});
 
 test("preference drafts preserve textarea selection, DOM identity, and latest values through a stale two-second save", async ({ browser }) => {
   const initial = {
@@ -775,6 +1031,7 @@ test("preference drafts preserve textarea selection, DOM identity, and latest va
     expect(await signature.evaluate((element) => element === window.__elsetPreferenceTextarea)).toBe(true);
     expect(writes).toHaveLength(0);
 
+    await saveDraft(page);
     await expect.poll(() => delayed.requests.length).toBe(1);
     expect(delayed.requests[0].patch).toEqual({ emailSignature: firstSignature });
 
@@ -821,6 +1078,8 @@ test("preference drafts preserve textarea selection, DOM identity, and latest va
     expect(await selection(signature)).toEqual({ active: true, start: finalCaret, end: finalCaret });
 
     delayed.requests[0].release();
+    await expect(saveButton(page)).toBeEnabled();
+    await saveDraft(page);
     await expect.poll(() => delayed.requests.length).toBe(2);
     await expect(signature).toHaveValue(finalSignature);
     expect(await signature.evaluate((element) => element === window.__elsetPreferenceTextarea)).toBe(true);
@@ -833,6 +1092,7 @@ test("preference drafts preserve textarea selection, DOM identity, and latest va
       emailSignature: finalSignature,
     });
     delayed.requests[1].release();
+
     await expect(preferenceStatus(page)).toHaveText("Saved");
     expect(delayed.maximum()).toBe(1);
     expect(writes).toHaveLength(2);
@@ -866,6 +1126,7 @@ test("twenty rapid preference characters update immediately and produce one targ
     await expect(accountName).toHaveValue(`ELSET${typed}`);
     expect(await selection(accountName)).toEqual({ active: true, start: 25, end: 25 });
     expect(writes).toHaveLength(0);
+    await saveDraft(page);
     await expect(preferenceStatus(page)).toHaveText("Saved");
     expect(writes).toHaveLength(1);
     expect(writes[0]).toMatchObject({
@@ -901,10 +1162,13 @@ for (const latency of [500, 1_000, 2_000]) {
       await bsb.pressSequentially("1");
       await expect(bsb).toHaveValue("0331505");
       expect(await selection(bsb)).toEqual({ active: true, start: 4, end: 4 });
+      await saveDraft(page);
       await expect.poll(() => writes.length).toBe(1);
       await bsb.pressSequentially("2");
       await expect(bsb).toHaveValue("03312505");
       expect(await selection(bsb)).toEqual({ active: true, start: 5, end: 5 });
+      await expect(saveButton(page)).toBeEnabled();
+      await saveDraft(page);
       await expect(preferenceStatus(page)).toHaveText("Saved", { timeout: latency * 2 + 5_000 });
       await expect(bsb).toHaveValue("03312505");
       expect(await bsb.evaluate((element) => element === window.__elsetPreferenceBsb)).toBe(true);
@@ -934,6 +1198,7 @@ test("a failed preference save keeps the draft, focus, and selection until retry
     await selectRange(bsb, 3);
     await bsb.pressSequentially("12");
     await expect(bsb).toHaveValue("03312505");
+    await saveDraft(page);
     await expect(preferenceStatus(page)).toContainText("Preference changes could not be saved.");
     await expect(bsb).toHaveValue("03312505");
     expect(await bsb.evaluate((element) => element === window.__elsetPreferenceBsb)).toBe(true);
@@ -941,6 +1206,7 @@ test("a failed preference save keeps the draft, focus, and selection until retry
     expect(attempts).toBe(1);
     expect(dialogs).toEqual([]);
     await preferenceStatus(page).getByRole("button", { name: "Retry", exact: true }).click();
+
     await expect(preferenceStatus(page)).toHaveText("Saved");
     expect(attempts).toBe(2);
     expect(writes).toHaveLength(2);
@@ -951,7 +1217,7 @@ test("a failed preference save keeps the draft, focus, and selection until retry
   }
 });
 
-test("ten rapid selections update immediately, coalesce, and stay latest through delayed acknowledgements", async ({ browser }) => {
+test("ten rapid selections preview immediately, save together, and stay latest through delayed acknowledgements", async ({ browser }) => {
   const { context, page, writes, dialogs } = await openSettings(browser);
   const companyName = readWorkspaceState().settings.companyName;
   const delayed = await delayedPersonalSettings(page, (payload) => ({ ...payload, preferences: { ...payload.preferences, actionColor: "#000000" }, state: { jobs: [], settings: { companyName: "Stale response company" } } }));
@@ -959,6 +1225,7 @@ test("ten rapid selections update immediately, coalesce, and stay latest through
     await colourInput(page).fill("#112233");
     await assertPrimary(page, "#112233");
     expect(delayed.requests).toHaveLength(0);
+    await saveDraft(page);
     await expect.poll(() => delayed.requests.length).toBe(1);
     for (let i = 0; i < 10; i++) {
       await colourInput(page).fill(`#22550${i}`);
@@ -970,10 +1237,13 @@ test("ten rapid selections update immediately, coalesce, and stay latest through
     await expect(colourInput(page)).toBeEnabled();
     await expect(status(page)).toHaveText("Saving…");
     delayed.requests[0].release();
+    await expect(saveButton(page)).toBeEnabled();
+    await saveDraft(page);
     await expect.poll(() => delayed.requests.length).toBe(2);
     await assertPrimary(page, "#225509");
     expect(delayed.requests[1].patch).toEqual({ actionColor: "#225509", heroSurface: "#334455" });
     delayed.requests[1].release();
+
     await expect(status(page)).toHaveText("Saved");
     expect(delayed.maximum()).toBe(1);
     expect(readPersonalSettings().actionColor).toBe("#225509");
@@ -1000,6 +1270,7 @@ for (const failure of [
     });
     try {
       await setColours(page, Array.from({ length: 10 }, (_, i) => `#44550${i}`));
+      await saveDraft(page);
       await expect(status(page)).toContainText(failure.message);
       await expect(page.getByRole("button", { name: "Retry", exact: true })).toHaveCount(1);
       await assertPrimary(page, "#445509");
@@ -1010,6 +1281,7 @@ for (const failure of [
       await status(page).scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(screenshotDir, `theme-error-${failure.status}.png`) });
       await page.getByRole("button", { name: "Retry", exact: true }).click();
+
       await expect(status(page)).toHaveText("Saved");
       expect(readPersonalSettings().actionColor).toBe("#445509");
       await page.reload();
@@ -1021,23 +1293,31 @@ for (const failure of [
 }
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1180, height: 820 }]) {
-  test(`pending theme saves survive immediate navigation and reload at ${viewport.width}px`, async ({ browser }) => {
+  test(`theme drafts guard navigation and explicit pending saves at ${viewport.width}px`, async ({ browser }) => {
     const { context, page, writes, dialogs } = await openSettings(browser, viewport.width, viewport.height);
     const delayed = await delayedPersonalSettings(page);
     try {
       await assertPrimary(page, defaultUi.actionColor);
-      // Dispatch real input events without scrolling the distant controls; this
-      // lets navigation unmount Settings inside the 400ms debounce on mobile.
+      // Preview never persists, including an immediate mobile navigation.
       await setColours(page, ["#778899"]);
       await assertPrimary(page, "#778899");
       await navigate(page, "Service Board", viewport.width);
-      await expect(colourInput(page)).toHaveCount(0);
+      await expect(settingsDialog(page)).toBeVisible();
+      expect(writes).toHaveLength(0);
+      await settingsDialog(page).getByRole("button", { name: "Stay", exact: true }).click();
+      await saveDraft(page);
       await expect.poll(() => delayed.requests.length).toBe(1);
+      await navigate(page, "Service Board", viewport.width);
+      await expect(settingsDialog(page).getByRole("button", { name: "Discard changes", exact: true })).toBeDisabled();
+      await settingsDialog(page).getByRole("button", { name: "Stay", exact: true }).click();
       await assertPrimary(page, "#778899");
       delayed.requests[0].release();
+      await expect(saveButton(page)).toBeDisabled();
       await expect.poll(() => readPersonalSettings().actionColor).toBe("#778899");
+      await navigate(page, "Service Board", viewport.width);
+      await expect(colourInput(page)).toHaveCount(0);
       await navigate(page, "Settings", viewport.width);
-      await expect(status(page)).toHaveText("Saved");
+      await expect(saveButton(page)).toBeDisabled();
       await colourInput(page).scrollIntoViewIfNeeded();
       await page.screenshot({ path: path.join(screenshotDir, `theme-${viewport.width}.png`) });
       const sizes = await page.evaluate(() => ({ content: document.documentElement.scrollWidth, viewport: innerWidth }));
@@ -1061,39 +1341,49 @@ test("hex drafts stay editable and never send invalid colours", async ({ browser
     await hex.fill("#abc");
     await assertPrimary(page, "#AABBCC");
     await expect(hex).toHaveValue("#abc");
+    await saveDraft(page);
     await expect(status(page)).toHaveText("Saved");
     assertTargeted(writes, 1);
     expect(writes[0].body).toEqual({ actionColor: "#AABBCC" });
-    await hex.pressSequentially("def");
+    await hex.fill("#abcdef");
     await expect(hex).toHaveValue("#abcdef");
     await assertPrimary(page, "#ABCDEF");
     await hex.blur();
     await expect(hex).toHaveValue("#ABCDEF");
+    await saveDraft(page);
     await expect(status(page)).toHaveText("Saved");
     assertTargeted(writes, 2);
     expect(writes[1].body).toEqual({ actionColor: "#ABCDEF" });
     await hex.fill("not a colour");
     await hex.blur();
-    await expect(hex).toHaveValue("#ABCDEF");
+    await saveDraft(page);
+    await expect(page.getByRole("alert").first()).toContainText("valid hex colour");
+    await expect(hex).toHaveValue("not a colour");
+    assertTargeted(writes, 2);
+    await expect(saveButton(page)).toBeEnabled();
     expect(readPersonalSettings().actionColor).toBe("#ABCDEF");
   } finally { await context.close(); }
 });
 
-test("presets and reset share the colour queue and only change UI settings", async ({ browser }) => {
+test("presets and reset use explicit sequential saves and only change UI settings", async ({ browser }) => {
   const { context, page, writes } = await openSettings(browser);
   const delayed = await delayedPersonalSettings(page);
   try {
     await page.getByRole("button", { name: /^Copper Dawn/ }).click();
     await assertPrimary(page, "#E6632B");
+    await saveDraft(page);
     await expect.poll(() => delayed.requests.length).toBe(1);
     await page.getByRole("button", { name: "Reset UI", exact: true }).click();
     await assertPrimary(page, defaultUi.actionColor);
     await page.waitForTimeout(500);
     expect(delayed.requests).toHaveLength(1);
     delayed.requests[0].release();
+    await expect(saveButton(page)).toBeEnabled();
+    await saveDraft(page);
     await expect.poll(() => delayed.requests.length).toBe(2);
     await assertPrimary(page, defaultUi.actionColor);
     delayed.requests[1].release();
+
     await expect(status(page)).toHaveText("Saved");
     expect(delayed.maximum()).toBe(1);
     assertTargeted(writes, 2);
@@ -1119,13 +1409,16 @@ test("two simultaneous accounts keep separate appearance across a fresh browser,
   const original = readWorkspaceState();
   try {
     await colourInput(a.page).fill("#ff8800");
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText("Saved");
     await assertPrimary(b.page, defaultUi.actionColor);
     await colourInput(b.page).fill("#0077ff");
+    await saveDraft(b.page);
     await expect(status(b.page)).toHaveText("Saved");
     await assertPrimary(a.page, "#FF8800");
     await a.page.getByRole("combobox", { name: "Content density", exact: true }).click();
     await a.page.getByRole("option", { name: "Compact", exact: true }).click();
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText("Saved");
     device = await openSettings(browser);
     await assertPrimary(device.page, "#FF8800");
@@ -1148,6 +1441,7 @@ test("two simultaneous accounts keep separate appearance across a fresh browser,
     await navigate(a.page, "Settings", 1440);
     await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
     await preferenceInput(a.page, "companyName").fill("Shared Company Regression");
+    await saveDraft(a.page);
     await expect(preferenceStatus(a.page)).toHaveText("Saved");
     await b.page.reload();
     await navigate(b.page, "Settings", 1440);
@@ -1163,15 +1457,18 @@ test("two simultaneous accounts keep separate appearance across a fresh browser,
 test("sign out resets appearance before another account loads and pending choices never leak", async ({ browser }) => {
   const b = await openSettings(browser, 1440, 900, "UI Settings", "mobileoffice");
   await colourInput(b.page).fill("#0077ff");
+  await saveDraft(b.page);
   await expect(status(b.page)).toHaveText("Saved");
   await b.context.close();
   const a = await openSettings(browser);
   let release;
   try {
     await colourInput(a.page).fill("#ff8800");
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText("Saved");
     await setColours(a.page, ["#AA5577"]);
     await a.page.getByRole("button", { name: "Sign Out", exact: true }).click();
+    await settingsDialog(a.page).getByRole("button", { name: "Discard changes", exact: true }).click();
     await expect(a.page.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
     await assertPrimary(a.page, defaultUi.actionColor);
     const gate = new Promise((resolve) => { release = resolve; });
@@ -1233,6 +1530,7 @@ test("twenty rapid personal selections stay responsive, use one narrow write and
     expect(health.status()).toBe(200);
     const healthMs = Date.now() - started;
     expect(healthMs).toBeLessThan(2000);
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText("Saved");
     assertTargeted(a.writes, 1);
     expect(a.writes[0].body).toEqual({ actionColor: "#AA0013" });
@@ -1256,6 +1554,7 @@ test("real sessions reject unauthenticated and spoofed preference access; techni
     await expect(tech.page.locator("[data-settings-navigation]").getByRole("button")).toHaveCount(1);
     await expect(tech.page.getByText("Company Details", { exact: true })).toHaveCount(0);
     await colourInput(tech.page).fill("#336699");
+    await saveDraft(tech.page);
     await expect(status(tech.page)).toHaveText("Saved");
     expect(readPersonalSettings("mobiletech").actionColor).toBe("#336699");
     expect(readPersonalSettings().actionColor).toBe(defaultUi.actionColor);
@@ -1268,6 +1567,7 @@ test("a preference load failure uses the legacy fallback and can retry without l
   const a = await openSettings(browser);
   try {
     await colourInput(a.page).fill("#cc5500");
+    await saveDraft(a.page);
     await expect(status(a.page)).toHaveText("Saved");
     let fail = true;
     await a.page.route("**/api/user-preferences", (route) => fail && route.request().method() === "GET"

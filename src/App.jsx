@@ -11,7 +11,7 @@ import { RecordWorkspace, UnsavedChangesDialog, WorkspaceMessage } from "@/compo
 import { useAppSession } from "@/hooks/useAppSession";
 import { useWorkspaceAddons } from "@/hooks/useWorkspaceAddons";
 import { useThemePalette } from "@/hooks/useThemePalette";
-import { useThemeSettingsSave } from "@/hooks/useThemeSettingsSave";
+import { useSettingsPersistence } from "@/hooks/useSettingsPersistence";
 import { UserUiPreferencesContext, useUserUiPreferences } from "@/hooks/useUserUiPreferences";
 import { boardPreferenceKeys } from "@/lib/user-ui-preferences";
 import { useWorkspaceActions } from "@/hooks/useWorkspaceActions";
@@ -26,6 +26,7 @@ export default function App() {
   const [isSendingDocument, setIsSendingDocument] = useState(false);
   const [invoiceNotice, setInvoiceNotice] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
+  const [settingsPreview, setSettingsPreview] = useState(null);
   const [activeSection, setActiveSection] = useState("service-board");
   const [activeSettingsTab, setActiveSettingsTab] = useState(() => window.location.pathname === "/settings" && ["xero", "quickbooks"].includes(new URLSearchParams(window.location.search).get("accounting")) ? "addons" : "preferences");
   const [officeSearch, setOfficeSearch] = useState("");
@@ -104,14 +105,8 @@ export default function App() {
   const showServiceBoardTagLabels = personalPreferences.preferences.boardShowTagLabels;
   const setShowServiceBoardTagLabels = (value) => personalPreferences.change({ boardShowTagLabels: value });
 
-  const themeSettingsSave = useThemeSettingsSave({
-    settings: data.settings,
-    fetchWithAuth: session.fetchWithAuth,
-    setData,
-    sessionKey: session.authUser?.id || "",
-    personal: personalPreferences,
-  });
-  const { themeSettings, themePalette } = useThemePalette(themeSettingsSave.settings);
+  const settingsPersistence = useSettingsPersistence({ session, personal: personalPreferences, setData });
+  const { themeSettings, themePalette } = useThemePalette({ ...data.settings, ...personalPreferences.preferences, ...settingsPreview });
   const workspaceViewModel = useWorkspaceViewModel({
     activeSection: effectiveActiveSection,
     activeSettingsTab: effectiveActiveSettingsTab,
@@ -140,7 +135,6 @@ export default function App() {
     onNavigateToMaintenance: workspaceNavigation.navigateToMaintenance,
     setSelectedJob,
     themeSettings,
-    themeSettingsSave,
     workspaceStorageMode: session.workspaceStorageMode,
   });
 
@@ -339,12 +333,17 @@ export default function App() {
         workspacePage={workspacePageOpen ? workspacePage : null}
         personalPreferences={personalPreferences}
         workspaceAddons={workspaceAddons}
+        settingsPersistence={settingsPersistence}
+        settingsNavigation={workspaceNavigation}
+        onSettingsPreview={setSettingsPreview}
       />
 
       <UnsavedChangesDialog
         open={workspaceNavigation.discardPromptOpen}
         onKeepEditing={workspaceNavigation.keepEditing}
         onDiscard={workspaceNavigation.discardAndContinue}
+        settings={workspaceNavigation.discardPromptKind === "settings"}
+        busy={workspaceNavigation.discardPromptBusy}
       />
     </div>
     </UserUiPreferencesContext.Provider>

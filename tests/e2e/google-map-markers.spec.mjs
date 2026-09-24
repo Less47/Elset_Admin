@@ -55,6 +55,28 @@ async function open(page, { live = false, state = mapFixture() } = {}) {
   return { canvas, calls, before };
 }
 
+test("map filters collapse on desktop and mobile, preserve results and reset without writes", async ({ page }) => {
+  const { calls } = await open(page);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole("combobox", { name: "Jobs", exact: true })).toHaveCount(0);
+    const trigger = page.getByRole("button", { name: /^Filters/ });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Filters", exact: true });
+    await dialog.getByRole("combobox", { name: "Jobs", exact: true }).click();
+    await page.getByRole("option", { name: "Completed", exact: true }).click();
+    await dialog.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.locator(".google-test-pin")).toHaveCount(1);
+    await expect(trigger).toHaveAttribute("data-active-count", "1");
+    await trigger.click();
+    await dialog.getByRole("button", { name: "Reset", exact: true }).click();
+    await dialog.getByRole("button", { name: "Done", exact: true }).click();
+    await expect(page.locator(".google-test-pin")).toHaveCount(5);
+    await expect(trigger).toBeFocused();
+  }
+  expect(calls.every(method => method === "GET")).toBe(true);
+});
+
 test("individual markers show status colours, stack selection, titles and unchanged counts", async ({ page }) => {
   const { calls, before } = await open(page);
   await expect(page.locator(".google-test-pin")).toHaveCount(5);

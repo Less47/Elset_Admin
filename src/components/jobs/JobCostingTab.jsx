@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
 import { COST_CATEGORIES, costTotalCents, parseMoneyCents } from "@/lib/job-costing";
 import { invoiceToday } from "@/lib/invoice-account";
+import { FilterPopover } from "@/components/shared/ResponsivePageControls";
 
 const currency = new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" });
 const dateFormatter = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric" });
@@ -276,17 +277,19 @@ export default function JobCostingTab({ jobId, canEdit, fetchWithAuth, onAddonDi
         </div>
 
         <section aria-labelledby="cost-entries-title" className="border-t pt-3">
-          <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <h3 id="cost-entries-title" className="whitespace-nowrap text-sm font-semibold">Cost entries <span className="ml-1 font-normal text-muted-foreground">({categoryFilter === "all" ? summary.entries.length : `${visibleEntries.length} of ${summary.entries.length}`})</span></h3>
-            <div role="group" aria-label="Filter cost entries by category" className="col-span-2 row-start-2 flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain p-0.5 [scrollbar-width:thin] lg:col-span-1 lg:col-start-2 lg:row-start-1">
+            <div className="ml-auto"><FilterPopover activeCount={categoryFilter === "all" ? 0 : 1} onReset={() => setCategoryFilter("all")}>
+            <div role="group" aria-label="Filter cost entries by category" className="flex flex-wrap gap-2">
               {COST_FILTERS.map((category) => <Button key={category.key} type="button" size="xs"
                 variant={categoryFilter === category.key ? "default" : "ghost"}
-                className="h-7 gap-1 rounded-full max-lg:min-h-8 max-lg:min-w-8"
+                className="min-h-11 gap-1 rounded-lg px-3"
                 aria-pressed={categoryFilter === category.key} onClick={() => setCategoryFilter(category.key)}>
                 {category.label}<span className="text-[10px] tabular-nums">({categoryCounts[category.key] || 0})</span>
               </Button>)}
             </div>
-            {canEdit ? <div className="col-start-2 row-start-1 justify-self-end lg:col-start-3">{addButton}</div> : null}
+            </FilterPopover></div>
+            {canEdit ? addButton : null}
           </div>
           {visibleEntries.length ? <>
             <table className="hidden w-full table-fixed text-sm md:table">

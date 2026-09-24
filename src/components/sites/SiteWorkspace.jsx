@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -15,7 +16,7 @@ import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts,
 const NOT_SET_VALUE = "not-set";
 const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
-export default function SiteWorkspace({ customer, site, jobs, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, registerNavigationBlocker }) {
+export default function SiteWorkspace({ customer, site, jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, registerNavigationBlocker }) {
   const isEditingSite = editing || !site;
   const [initial] = useState(() => buildSiteProfileDraft(site));
   const [draftSite, setDraftSite] = useState(initial);
@@ -47,7 +48,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
     finally { submitting.current = false; setSaving(false); }
   };
-  const currentTab = ["overview", "assets", "jobs"].includes(tab) ? tab : "overview";
+  const currentTab = ["overview", "assets", "maintenance", "jobs"].includes(tab) ? tab : "overview";
   return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={!site ? "New Site" : isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
     subtitle={site?.address || "Site details and gates / projects"} maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} onBack={() => onBack()}
     headerActions={!isEditingSite ? <Button type="button" className="h-11" onClick={onEdit}>Edit Site Profile</Button> : null}>
@@ -57,6 +58,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="overview">Overview</TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="assets">Gates / Projects <span className="text-xs">{(activeSite?.assets || []).length}</span></TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="jobs">Job History <span className="text-xs">{siteJobs.length}</span></TabsTrigger>
+          <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="maintenance">Maintenance <span className="text-xs">{maintenancePlans.length}</span></TabsTrigger>
         </TabsList></div>
         <TabsContent value="overview" className="min-w-0"><WorkspaceSection title="Site details" panel>
           <fieldset disabled={saving} className={isEditingSite ? "grid min-w-0 items-start gap-3 sm:grid-cols-2" : "grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
@@ -299,6 +301,7 @@ export default function SiteWorkspace({ customer, site, jobs, editing = false, t
             
         </fieldset></WorkspaceSection></TabsContent>
         <TabsContent value="jobs" className="min-w-0"><WorkspaceSection title="Job History"><CustomerJobHistory jobs={siteJobs} onOpenJob={onOpenJob} /></WorkspaceSection></TabsContent>
+        <TabsContent value="maintenance" className="min-w-0"><WorkspaceSection title="Maintenance contracts"><ProfileMaintenanceContracts plans={maintenancePlans} jobs={jobs} onOpenPlan={onOpenPlan} /></WorkspaceSection></TabsContent>
       </Tabs>
       {error ? <div role="alert" className="mt-3"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
       {isEditingSite ? <WorkspaceActionBar maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} status={saving ? "Saving…" : dirty ? "Unsaved changes" : ""}>

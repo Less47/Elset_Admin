@@ -1,4 +1,4 @@
-# QuickBooks default sales item configuration
+# QuickBooks fallback sales item configuration
 
 ## Previous behaviour
 
@@ -8,7 +8,7 @@ Invoice sync already supplied the selected ItemRef separately from each ELSET li
 
 ## New configuration UX
 
-- **Default QuickBooks sales item** replaces **Product / Service**. Its helper text is: “ELSET uses this QuickBooks item when creating invoice lines in QuickBooks. Your ELSET descriptions, quantities and prices are still sent separately.”
+- **Fallback QuickBooks sales item** replaces **Default QuickBooks sales item**. Its helper text is: “Used for ad-hoc invoice lines that are not linked to an ELSET Price List item.” Descriptions, quantities and prices are sent separately. Price-list lines resolve their own provider/company-scoped item mapping; ambiguous mappings safely use this fallback and log a warning. See [the per-line mapping report](quickbooks-reconciliation-report.md).
 - **Create "ELSET Services" in QuickBooks** opens a dialog naming the connected company and requiring an income-account choice. Nothing is created just by opening configuration or the dialog.
 - If one eligible item with the exact name is already in the loaded options, the action reads **Use "ELSET Services"** and shows its existing income account.
 - **Use existing QuickBooks item** opens a searchable dialog. Results show name, type, income account, fully-qualified name when different, and SKU when present.

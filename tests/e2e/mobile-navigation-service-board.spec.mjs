@@ -1528,8 +1528,10 @@ test("responsive page-control matrix keeps tablet hybrid and desktop-rich layout
         await expect(compactControls.getByRole("button", { name: /^Filters/ })).toBeVisible();
       } else {
         await expect(compactControls).toBeHidden();
+        await page.getByRole("button", { name: /^Filters/ }).click();
         await expect(page.getByText("Record filter", { exact: true })).toBeVisible();
         await expect(page.getByText("Customer type", { exact: true })).toBeVisible();
+        await page.getByRole("dialog", { name: "Filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
       }
 
       if (viewport.width === 820) {
@@ -1545,8 +1547,10 @@ test("responsive page-control matrix keeps tablet hybrid and desktop-rich layout
         await expect(page.locator("[data-responsive-page-controls]").getByLabel("Search job history")).toBeVisible();
         await expect(page.getByText("Quick range", { exact: true })).toBeHidden();
       } else {
+        await page.getByRole("button", { name: /^Filters/ }).click();
         await expect(page.getByText("Quick range", { exact: true })).toBeVisible();
         await expect(page.getByText("Created from", { exact: true })).toBeVisible();
+        await page.getByRole("dialog", { name: "Filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
       }
       if (viewport.width === 820) {
         await capture(page, testInfo, "responsive-job-history-tablet-820x1180.png", "Job History tablet controls");
@@ -1558,7 +1562,9 @@ test("responsive page-control matrix keeps tablet hybrid and desktop-rich layout
 
       if (viewport.width === 1280) {
         await navigateToWorkspaceSection(page, "Sites", viewport.width);
+        await page.getByRole("button", { name: /^Filters/ }).click();
         await expect(page.getByText("Site type", { exact: true })).toBeVisible();
+        await page.getByRole("dialog", { name: "Filters", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
         await capture(page, testInfo, "responsive-sites-desktop-1280x720.png", "Sites desktop controls");
         await assertNoHorizontalOverflow(page);
       }
@@ -1625,9 +1631,12 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
           await expect(compactControls).toBeHidden();
           await expect(desktopControls.getByLabel(pageSpec.desktopSearchLabel)).toBeVisible();
 
+          await desktopControls.getByRole("button", { name: /^Filters/ }).click();
+          const filterDialog = page.getByRole("dialog", { name: "Filters", exact: true });
           for (const filterLabel of pageSpec.desktopFilters) {
-            await expect(desktopControls.getByText(filterLabel, { exact: true })).toBeVisible();
+            await expect(filterDialog.getByText(filterLabel, { exact: true })).toBeVisible();
           }
+          await filterDialog.getByRole("button", { name: "Done", exact: true }).click();
 
           const metrics = await desktopControls.evaluate((toolbar) => {
             const search = toolbar.querySelector(".page-controls__search");
@@ -1725,15 +1734,18 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
           await expect(page.getByText("No customers found", { exact: true })).toBeVisible();
           await desktopControls.getByRole("button", { name: "Clear search", exact: true }).click();
 
-          const sort = desktopControls.getByRole("combobox", { name: "Sort by" });
+          await desktopControls.getByRole("button", { name: /^Filters/ }).click();
+          const filters = page.getByRole("dialog", { name: "Filters", exact: true });
+          const sort = filters.getByRole("combobox", { name: "Sort by" });
           await sort.click();
           await page.getByRole("option", { name: "Alphabetical Z-A" }).click();
           await expect(sort).toContainText("Alphabetical Z-A");
 
-          const recordFilter = desktopControls.getByRole("combobox", { name: "Record filter" });
+          const recordFilter = filters.getByRole("combobox", { name: "Record filter" });
           await recordFilter.click();
           await page.getByRole("option", { name: "With jobs", exact: true }).click();
           await expect(recordFilter).toContainText("With jobs");
+          await filters.getByRole("button", { name: "Done", exact: true }).click();
 
           const gridButton = desktopControls.getByRole("button", { name: "Grid view" });
           const listButton = desktopControls.getByRole("button", { name: "List view" });
@@ -1778,9 +1790,12 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
           const desktopControls = page.locator("[data-desktop-page-controls]");
           await expect(desktopControls).toBeVisible();
           await expect(desktopControls.getByLabel(pageSpec.searchLabel)).toBeVisible();
+          await desktopControls.getByRole("button", { name: /^Filters/ }).click();
+          const filterDialog = page.getByRole("dialog", { name: "Filters", exact: true });
           for (const filterLabel of pageSpec.filters) {
-            await expect(desktopControls.getByText(filterLabel, { exact: true })).toBeVisible();
+            await expect(filterDialog.getByText(filterLabel, { exact: true })).toBeVisible();
           }
+          await filterDialog.getByRole("button", { name: "Done", exact: true }).click();
           await expect(desktopControls.getByRole("button", { name: pageSpec.action })).toBeVisible();
           await assertNoHorizontalOverflow(page);
           await capture(
