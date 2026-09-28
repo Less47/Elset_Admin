@@ -1,5 +1,5 @@
 import { FilterPopover } from "@/components/shared/ResponsivePageControls";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
 import WorkspaceLogo from "@/components/app/WorkspaceLogo";
@@ -46,7 +46,7 @@ import {
 
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons, settingsPersistence, settingsNavigation, onSettingsPreview }) {
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons, settingsPersistence, onSettingsPreview }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -119,6 +119,13 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
   const calendarWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "calendar";
   const jobNotes = useJobNoteEditor({ jobs: data.jobs, onSave: actions.handleSaveServiceBoardNote });
+  const boardFocus = useRef(null);
+  const recordOpen = Boolean(workspacePage);
+  useEffect(() => {
+    if (!recordOpen && activeSection === "service-board" && boardFocus.current?.isConnected) {
+      boardFocus.current.focus({ preventScroll: true });
+    }
+  }, [recordOpen, activeSection]);
 
   const handleMobileNavigate = (sectionId) => {
     const navigationStarted = setActiveSection(sectionId);
@@ -270,10 +277,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                               <button
                                 key={tab.value}
                                 type="button"
-                                onClick={() => {
-                                  const navigationStarted = setActiveSection("settings");
-                                  if (navigationStarted !== false) setActiveSettingsTab(tab.value);
-                                }}
+                                onClick={() => setActiveSettingsTab(tab.value)}
                                 className="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition hover:translate-x-[1px]"
                                 style={
                                   isSettingsTabActive
@@ -375,6 +379,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           className={workspacePage ? undefined : mapWorkspaceOpen || calendarWorkspaceOpen ? "relative h-full min-h-0" : "contents"}
           hidden={Boolean(workspacePage)}
           aria-hidden={workspacePage ? true : undefined}
+          onFocusCapture={(event) => {
+            if (activeSection === "service-board") boardFocus.current = event.target;
+          }}
         >
         {authError ? (
           <Card className={mapWorkspaceOpen
@@ -639,7 +646,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         {isAuthenticated && activeSection === "settings" ? (
           <SettingsManager
             settingsPersistence={settingsPersistence}
-            settingsNavigation={settingsNavigation}
             onSettingsPreview={onSettingsPreview}
             fetchWithAuth={auth.fetchWithAuth}
             workspaceAddons={workspaceAddons}

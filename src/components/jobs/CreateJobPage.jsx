@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Plus, Search, UserRound } from "lucide-react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
@@ -61,7 +62,6 @@ export default function CreateJobPage({
   onCancel,
   onCreated,
   onSave,
-  registerNavigationBlocker,
 }) {
   const orderedCustomers = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
@@ -183,7 +183,7 @@ export default function CreateJobPage({
     }));
   }, [customerMode, selectedCustomer, selectedCustomerSites]);
 
-  useEffect(() => registerNavigationBlocker(() => isDirty && !isSubmitting), [isDirty, isSubmitting, registerNavigationBlocker]);
+  const markSaved = useUnsavedChanges(isDirty && !isSubmitting);
 
   const selectedJobAddress = customerMode === "new" || siteMode === "create"
     ? siteDraft.address
@@ -254,6 +254,7 @@ export default function CreateJobPage({
       }
 
       setIsDirty(false);
+      markSaved();
       onCreated(saved);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "The job could not be created. Try again.");

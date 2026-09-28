@@ -3,6 +3,8 @@ import PublicLegalPage from "./components/legal/PublicLegalPage.jsx";
 import { legalDocuments } from "./lib/legal-documents.js";
 import { AuthLoadingScreen } from "./components/auth/AuthLoadingScreen.jsx";
 
+import UnsavedChangesProvider from "./components/workspace/UnsavedChangesProvider.jsx";
+
 const App = lazy(() => import("./App.jsx"));
 
 export default function AppEntry({ legalPath }) {
@@ -13,7 +15,7 @@ export default function AppEntry({ legalPath }) {
 
   return (
     <Suspense fallback={<AuthLoadingScreen logoSrc="/elset-logo.png" />}>
-      <App />
+      <UnsavedChangesProvider><App /></UnsavedChangesProvider>
     </Suspense>
   );
 }

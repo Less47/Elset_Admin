@@ -31,7 +31,7 @@ export default function PriceListSettings({ fetchWithAuth }) {
   const [message, setMessage] = useState("");
   const visible = filterPriceList(items, search, status);
   const edit = (item) => { setEditing({ ...item }); setError(""); setMessage(""); };
-  const close = () => form.scope.requestNavigation(() => { setEditing(null); setError(""); });
+  const close = () => form.scope.requestAction(() => { setEditing(null); setError(""); });
   const change = (key, value) => form.setDraft((current) => ({ ...current, [key]: value }));
   async function save(event) {
     event.preventDefault();

@@ -1,15 +1,15 @@
-import { useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { UnsavedChangesContext, useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import { useContext, useMemo, useState, useSyncExternalStore } from "react";
 import { createSettingsDraftGroup } from "@/lib/settings-draft";
 import { SettingsDraftContext } from "./settings-draft-context";
 import { Button } from "@/components/ui/button";
 
-export default function SettingsDraftScope({ navigation, children }) {
-  const { registerBlocker, requestNavigation } = navigation;
+export default function SettingsDraftScope({ children }) {
+  const { requestAction } = useContext(UnsavedChangesContext);
   const [group] = useState(createSettingsDraftGroup);
   const state = useSyncExternalStore(group.subscribe, group.getSnapshot);
-  useLayoutEffect(() => registerBlocker(() => group.getSnapshot().dirty || group.getSnapshot().saving,
-    { kind: "settings", onDiscard: group.discard, busy: state.saving }), [registerBlocker, group, state.dirty, state.saving]);
-  const value = useMemo(() => ({ group, state, requestNavigation }), [group, state, requestNavigation]);
+  useUnsavedChanges(state.dirty, { kind: "settings", onDiscard: group.discard, busy: state.saving });
+  const value = useMemo(() => ({ group, state, requestAction }), [group, state, requestAction]);
   return <SettingsDraftContext.Provider value={value}>{children}</SettingsDraftContext.Provider>;
 }
 

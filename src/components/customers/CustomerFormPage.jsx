@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import { useRef, useState } from "react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ export function CustomerTypeField({ id, label, value, options, onChange }) {
   </CustomerField>;
 }
 
-export default function CustomerFormPage({ customer = null, backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite, registerNavigationBlocker }) {
+export default function CustomerFormPage({ customer = null, backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite }) {
   const editing = Boolean(customer);
   const [initial] = useState(() => buildDraft(customer));
   const [draft, setDraft] = useState(initial);
@@ -47,7 +48,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
   const [error, setError] = useState("");
   const submitting = useRef(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
-  useEffect(() => registerNavigationBlocker?.(() => dirty || saving), [dirty, saving, registerNavigationBlocker]);
+  const markSaved = useUnsavedChanges(dirty, { busy: saving });
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const updateContact = (id, key, value) => setDraft((current) => ({ ...current, contacts: current.contacts.map((contact) => contact.id === id ? { ...contact, [key]: value } : contact) }));
   const primarySite = editing ? buildCustomerSites(customer, []).find((site) => site.isPrimary) : null;
@@ -76,6 +77,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
       })() : { ...draft, ...customerPostalFields(draft) };
       const saved = await onSave(payload);
       if (!saved) { setError("The customer could not be saved. Your changes are still here; review them and try again."); return; }
+      markSaved();
       onSaved(saved);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the customer.");

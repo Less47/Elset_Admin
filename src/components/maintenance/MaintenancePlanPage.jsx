@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useMatches, useNavigate, useOutletContext, useParams } from "react-router";
+import { recordLinkState } from "@/lib/record-link-state";
+import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import { useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +25,9 @@ function draftFor(plan, customers) {
     defaultTechnicianId: plan?.defaultTechnicianId || "" };
 }
 
-function MaintenanceEditor({ plan, data, navigation, actions, backLabel }) {
+function MaintenanceEditor({ plan, data, actions, backLabel, onBack }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [original] = useState(() => plan);
   const [initial] = useState(() => draftFor(plan, data.customers));
   const [draft, setDraft] = useState(initial);
@@ -31,14 +36,7 @@ function MaintenanceEditor({ plan, data, navigation, actions, backLabel }) {
   const [choice, setChoice] = useState(false);
   const saving = useRef(false);
   const dirty = JSON.stringify(initial) !== JSON.stringify(draft);
-  const registerBlocker = navigation.registerBlocker;
-  useEffect(() => registerBlocker(() => dirty || saving.current), [registerBlocker, dirty]);
-  useEffect(() => {
-    if (!dirty) return undefined;
-    const prevent = (event) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", prevent);
-    return () => window.removeEventListener("beforeunload", prevent);
-  }, [dirty]);
+  const markSaved = useUnsavedChanges(dirty, { busy });
   const changedFrequency = Boolean(original && draft.frequency !== normalizeMaintenanceFrequency(original.frequency));
   const changedDate = Boolean(original && draft.nextDueDate !== original.nextDueDate);
   const customer = data.customers.find((entry) => entry.id === draft.customerId);
@@ -72,11 +70,12 @@ function MaintenanceEditor({ plan, data, navigation, actions, backLabel }) {
       delete input.checklistText;
       const saved = original ? await actions.handleUpdateMaintenancePlan(original.id, input) : await actions.handleCreateMaintenancePlan(input);
       if (!saved) return;
-      navigation.navigateToMaintenance(saved.id || original?.id, { replace: true, force: true });
+      markSaved();
+      navigate(`/maintenance/${encodeURIComponent(saved.id || original?.id)}`, { replace: true, state: location.state });
     } catch (failure) { setError(failure.message || "Unable to save this maintenance plan."); }
     finally { saving.current = false; setBusy(false); setChoice(false); }
   }
-  return <RecordWorkspace title={original ? "Edit Maintenance Plan" : "Add Maintenance Plan"} eyebrow="Maintenance" backLabel={backLabel} onBack={() => navigation.closeWorkspace()}>
+  return <RecordWorkspace title={original ? "Edit Maintenance Plan" : "Add Maintenance Plan"} eyebrow="Maintenance" backLabel={backLabel} onBack={() => onBack()}>
     <form data-maintenance-editor onSubmit={(event) => { event.preventDefault(); save(); }}>
       {error ? <div className="mb-4" role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
       <fieldset disabled={busy} className="maintenance-detail-grid">
@@ -94,20 +93,31 @@ function MaintenanceEditor({ plan, data, navigation, actions, backLabel }) {
           <WorkspaceSection panel title="Notes"><Textarea aria-label="Plan notes" rows={3} {...field("notes")} /></WorkspaceSection>
         </div>
       </fieldset>
-      <WorkspaceActionBar status={busy ? "Saving…" : dirty ? "Unsaved changes" : ""}><Button type="button" variant="outline" disabled={busy} onClick={() => navigation.closeWorkspace()}>Cancel</Button><Button type="submit" disabled={busy || !canSave}>{original ? "Save Plan" : "Create Plan"}</Button></WorkspaceActionBar>
+      <WorkspaceActionBar status={busy ? "Saving…" : dirty ? "Unsaved changes" : ""}><Button type="button" variant="outline" disabled={busy} onClick={() => onBack()}>Cancel</Button><Button type="submit" disabled={busy || !canSave}>{original ? "Save Plan" : "Create Plan"}</Button></WorkspaceActionBar>
     </form>
     <MaintenanceDateChoice open={choice} from={original?.nextDueDate} to={draft.nextDueDate} frequencyChanged={changedFrequency} busy={busy} onChoose={save} onCancel={() => setChoice(false)} />
   </RecordWorkspace>;
 }
 
-export default function MaintenancePlanPage({ route, navigation, actions, data, backLabel }) {
-  const source = data.maintenancePlans.find((entry) => entry.id === route.planId);
+export default function MaintenancePlanPage() {
+  const { workspaceActions: actions, data, session } = useOutletContext();
+  const { planId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const match = useMatches().at(-1);
+  const mode = match.id;
+  const parentPath = mode === "edit-maintenance" ? `/maintenance/${encodeURIComponent(planId)}` : "/maintenance";
+  const backLabel = location.state?.returnTo?.label || "Maintenance";
+  const onBack = () => navigate(location.state?.returnTo ? -1 : parentPath, { replace: !location.state?.returnTo });
+  const linkState = recordLinkState(location, match, data.jobs);
+  const source = data.maintenancePlans.find((entry) => entry.id === planId);
   const plan = source ? effectiveMaintenancePlan(source, data.jobs) : null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const saving = useRef(false);
-  if (route.type === "create-maintenance" || (plan && route.type === "edit-maintenance")) return <MaintenanceEditor plan={plan} data={data} navigation={navigation} actions={actions} backLabel={backLabel} />;
-  if (!plan) return <RecordWorkspace title="Maintenance Plan" backLabel={backLabel} onBack={() => navigation.closeWorkspace()}><WorkspaceMessage>This maintenance plan was not found.</WorkspaceMessage></RecordWorkspace>;
+  if (!session.canManageBusiness) return <RecordWorkspace title="Maintenance" backLabel={backLabel} onBack={onBack}><WorkspaceMessage tone="error">You do not have permission to view maintenance plans.</WorkspaceMessage></RecordWorkspace>;
+  if (mode === "create-maintenance" || (plan && mode === "edit-maintenance")) return <MaintenanceEditor key={location.pathname} plan={plan} data={data} onBack={onBack} actions={actions} backLabel={backLabel} />;
+  if (!plan) return <RecordWorkspace title="Maintenance Plan" backLabel={backLabel} onBack={() => onBack()}><WorkspaceMessage>This maintenance plan was not found.</WorkspaceMessage></RecordWorkspace>;
   const customer = data.customers.find((entry) => entry.id === plan.customerId);
   const jobs = data.jobs.filter((job) => job.maintenancePlanId === plan.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const status = getMaintenancePlanStatus(plan, data.jobs);
@@ -125,7 +135,7 @@ export default function MaintenancePlanPage({ route, navigation, actions, data, 
     catch (failure) { setError(failure.message); }
     finally { saving.current = false; setBusy(false); }
   }
-  return <RecordWorkspace title={plan.planName} eyebrow="Maintenance Plan" subtitle={`${customer?.name || "Unknown customer"} · ${plan.siteAddress}`} backLabel={backLabel} onBack={() => navigation.closeWorkspace()} status={<Badge className={status.className}>{status.label}</Badge>} headerActions={<Button variant="outline" size="sm" onClick={() => navigation.navigateToMaintenance(plan.id, { edit: true })}>Edit Plan</Button>}>
+  return <RecordWorkspace title={plan.planName} eyebrow="Maintenance Plan" subtitle={`${customer?.name || "Unknown customer"} · ${plan.siteAddress}`} backLabel={backLabel} onBack={() => onBack()} status={<Badge className={status.className}>{status.label}</Badge>} headerActions={<Button variant="outline" size="sm" onClick={() => navigate(`/maintenance/${encodeURIComponent(plan.id)}/edit`, { state: linkState })}>Edit Plan</Button>}>
     {error ? <div role="alert" className="mb-4"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
     <div className="maintenance-detail-grid" data-maintenance-detail>
       <div className="maintenance-detail-column"><WorkspaceSection panel title="Plan Details" trailing={<Button size="sm" disabled={busy || !plan.active} onClick={generate}>{busy ? "Generating…" : "Generate Job"}</Button>}><dl className="grid gap-3 text-sm"><div><dt className="text-xs text-muted-foreground">Customer</dt><dd className="font-medium">{customer?.name || "Unknown customer"}</dd></div><div><dt className="text-xs text-muted-foreground">Site</dt><dd>{plan.siteAddress}</dd></div><div className="flex gap-6"><div><dt className="text-xs text-muted-foreground">Frequency</dt><dd>{getMaintenanceFrequencyMeta(plan.frequency).label}</dd></div><div><dt className="text-xs text-muted-foreground">Status</dt><dd>{plan.active ? "Active" : "Inactive"}</dd></div></div></dl><MaintenanceMetrics plan={plan} />{plan.notes ? <p className="mt-4 whitespace-pre-wrap text-sm text-text-secondary">{plan.notes}</p> : null}</WorkspaceSection>
@@ -133,7 +143,7 @@ export default function MaintenancePlanPage({ route, navigation, actions, data, 
       </div>
       <div className="maintenance-detail-column"><WorkspaceSection panel title="Checklist">{plan.checklist.length ? <ol className="grid list-decimal gap-2 pl-5 text-sm text-text-secondary">{plan.checklist.map((item, index) => <li key={index}>{typeof item === "string" ? item : item.text}</li>)}</ol> : <p className="text-sm text-muted-foreground">No checklist saved yet.</p>}</WorkspaceSection>
         <WorkspaceSection panel title="Generated Jobs">{jobs.length ? <div className="grid gap-3">{jobs.map((job) => <article className="rounded-lg border border-border p-3" key={job.id}><div className="flex items-center justify-between gap-2"><strong className="text-sm">Job #{job.jobNumber}</strong><Badge variant="secondary">{job.status}</Badge></div><p className="mt-1 text-xs text-muted-foreground">Scheduled: {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p><Button variant="outline" size="sm" className="mt-2" onClick={() => actions.handleOpenJob(job)}>Open Job</Button></article>)}</div> : <p className="text-sm text-muted-foreground">No jobs generated. Recurring visits are already on the Calendar.</p>}</WorkspaceSection>
-        <details className="rounded-xl border border-status-danger-border bg-card p-4"><summary className="cursor-pointer text-xs font-semibold text-status-danger">Delete maintenance plan</summary><p className="my-3 text-xs text-text-secondary">Stop this recurring plan and move it to the archive. Generated jobs are retained.</p><Button variant="destructive" size="sm" onClick={async () => { if (await actions.handleDeleteMaintenancePlan(plan.id)) navigation.navigateToSection("maintenance"); }}>Delete Plan</Button></details>
+        <details className="rounded-xl border border-status-danger-border bg-card p-4"><summary className="cursor-pointer text-xs font-semibold text-status-danger">Delete maintenance plan</summary><p className="my-3 text-xs text-text-secondary">Stop this recurring plan and move it to the archive. Generated jobs are retained.</p><Button variant="destructive" size="sm" onClick={async () => { if (await actions.handleDeleteMaintenancePlan(plan.id)) navigate("/maintenance"); }}>Delete Plan</Button></details>
       </div>
     </div>
   </RecordWorkspace>;

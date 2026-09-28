@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import { useMemo, useState } from "react";
 import { Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
@@ -113,7 +114,6 @@ export default function JobDetailsPage({
   onOpenSiteProfile,
   onStatusChange,
   onUpdateJobDetails,
-  registerNavigationBlocker,
   showCommercialDocuments,
   staff,
 }) {
@@ -156,10 +156,7 @@ export default function JobDetailsPage({
   const scheduleDirty = JSON.stringify(scheduleDraft) !== JSON.stringify(buildScheduleDraft(job));
   const hasUnsavedChanges = overviewDirty || scheduleDirty || Boolean(note.trim());
 
-  useEffect(
-    () => registerNavigationBlocker(() => hasUnsavedChanges && !isSavingOverview && !isSavingSchedule),
-    [hasUnsavedChanges, isSavingOverview, isSavingSchedule, registerNavigationBlocker]
-  );
+  const markSaved = useUnsavedChanges(hasUnsavedChanges && !isSavingOverview && !isSavingSchedule);
 
   if (!job) {
     return (
@@ -578,7 +575,7 @@ export default function JobDetailsPage({
               <div className="px-panel pb-3 pt-0">
                 <Button type="button" variant="destructive" className="h-11 rounded-lg" onClick={async () => {
                   const deleted = await onDeleteJob();
-                  if (deleted) onDeleted();
+                  if (deleted) { markSaved(); onDeleted(); }
                 }}><Trash2 className="h-4 w-4" /> Delete job</Button>
               </div>
             ) : null}

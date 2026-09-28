@@ -1,3 +1,5 @@
+import { useLocation, useMatches, useNavigate } from "react-router";
+import { recordLinkState } from "@/lib/record-link-state";
 import { useCallback, useRef, useState } from "react";
 import { applyPrimarySiteUpdate } from "@/lib/customer-profile";
 import { createJobStatusQueue, mergeJobStatusFields, requestJobStatusUpdate } from "./workspace-job-status";
@@ -57,19 +59,18 @@ export function useWorkspaceActions({
   data,
   docType,
   fetchWithAuth,
-  onNavigateToJob,
   selectedFreshJob,
   selectedJob,
-  onNavigateToCustomer,
-  onNavigateToSite,
-  onNavigateToMaintenance,
   setData,
-  onNavigateToDocument,
   setIsSendingDocument,
   setSelectedJob,
   themeSettings,
   workspaceStorageMode = "json",
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const match = useMatches().at(-1);
+  const linkState = recordLinkState(location, match, data.jobs);
   const useSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
   const useCustomerSqliteApi = useSqliteApi;
   const documentSendInFlightRef = useRef(false);
@@ -635,7 +636,10 @@ export function useWorkspaceActions({
   function handleOpenJob(job) {
     if (!job) return;
     setSelectedJob(job);
-    onNavigateToJob?.(job);
+    if (match.id === "job-details" && match.params.jobId === job.id) return;
+    navigate(`/jobs/${encodeURIComponent(job.id)}`, {
+      replace: match.id === "job-details", state: match.id === "job-details" ? location.state : linkState,
+    });
   }
 
   async function handleGenerateMaintenanceJob(planId, selectedOccurrence = null, { openJob = true } = {}) {
@@ -752,7 +756,9 @@ export function useWorkspaceActions({
     return saved.ok ? { change: saved.result?.change || null } : false;
   }
 
-  function handleOpenMaintenancePlan(planId, options) { return onNavigateToMaintenance?.(planId, options); }
+  function handleOpenMaintenancePlan(planId, options = {}) {
+    navigate(`/maintenance/${encodeURIComponent(planId)}${options.edit ? "/edit" : ""}`, { state: linkState });
+  }
 
   async function handleScheduleJob(jobId, scheduledDate, { onError, recordOnly = false, completedMaintenanceCorrection = false, expectedScheduledDate } = {}) {
     if (!canManageBusiness) return false;
@@ -1487,7 +1493,7 @@ export function useWorkspaceActions({
 
   function handleOpenCustomerProfile(customerId) {
     if (!canManageBusiness) return;
-    return onNavigateToCustomer?.(customerId);
+    return navigate(`/customers/${encodeURIComponent(customerId)}`, { state: linkState });
   }
 
   function handleOpenSiteProfile(customerId, siteKey) {
@@ -1497,12 +1503,12 @@ export function useWorkspaceActions({
     const customer = data.customers.find((entry) => entry.id === customerId);
     const savedSite = customer?.sites?.find((site) => site.id === normalizedSiteKey
       || normalizeSiteAddress(site.address).toLowerCase() === normalizedSiteKey.toLowerCase());
-    return onNavigateToSite?.(customerId, savedSite?.id || normalizedSiteKey);
+    return navigate(`/customers/${encodeURIComponent(customerId)}/sites/${encodeURIComponent(savedSite?.id || normalizedSiteKey)}`, { state: linkState });
   }
 
   function handleCreateSiteProfile(customerId) {
     if (!canManageBusiness || !customerId) return;
-    return onNavigateToSite?.(customerId, "__new__");
+    return navigate(`/customers/${encodeURIComponent(customerId)}/sites/new`, { state: linkState });
   }
 
   async function handleCreateCustomer(customerInput) {
@@ -1718,7 +1724,8 @@ export function useWorkspaceActions({
 
   function handleOpenDoc(job, type) {
     if (!canManageBusiness) return;
-    return onNavigateToDocument?.(job, type);
+    if (!job?.id || !["quote", "invoice"].includes(type)) return false;
+    return navigate(`/jobs/${encodeURIComponent(job.id)}/${type}`, { state: match.handle?.documentType ? location.state : linkState });
   }
 
   function getDocumentTemplateSnapshot(type) {

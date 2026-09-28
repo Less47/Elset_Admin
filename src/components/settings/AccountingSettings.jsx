@@ -42,7 +42,7 @@ export default function AccountingSettings({ provider = "xero", addon, enabled, 
   }, [fetchWithAuth, available, enabled, base]);
   function run(endpoint, method = "GET", body) {
     if (["connect", "disconnect", "organisation", "company-switch"].includes(endpoint)) {
-      return scope.requestNavigation(() => { void execute(endpoint, method, body); });
+      return scope.requestAction(() => { void execute(endpoint, method, body); });
     }
     return execute(endpoint, method, body);
   }

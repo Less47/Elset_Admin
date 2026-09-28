@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import InvoiceAccounting from "@/components/invoices/InvoiceAccounting";
@@ -28,7 +29,7 @@ function draftSnapshot(document) {
   return JSON.stringify(document, (key, value) => ["qty", "rate", "amount"].includes(key) ? String(value ?? "") : value);
 }
 
-export default function DocumentEditor({ job, type, backLabel, onBack, registerNavigationBlocker, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, onDeleteInvoice, onInvoiceDeleted, onInvoiceReconciled, isSendingDocument = false, addons, fetchWithAuth }) {
+export default function DocumentEditor({ job, type, backLabel, onBack, onSave, onPreviewDocument, onSendDocument, onOpenSentDocument, onDeleteInvoice, onInvoiceDeleted, onInvoiceReconciled, isSendingDocument = false, addons, fetchWithAuth }) {
   const [docState, setDocState] = useState(() => normalizeDocument(type, job[type] || buildDefaultDoc(job, type)));
   const [priceListOpen, setPriceListOpen] = useState(false);
   const [baseline, setBaseline] = useState(() => draftSnapshot(docState));
@@ -67,6 +68,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
         return;
       }
       setDeleteOpen(false);
+      markSaved();
       onInvoiceDeleted?.();
     } catch {
       setDeleteError("Unable to delete the invoice. Please try again.");
@@ -78,7 +80,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, registerN
 
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
-  useEffect(() => registerNavigationBlocker?.(() => dirty || busy), [registerNavigationBlocker, dirty, busy]);
+  const markSaved = useUnsavedChanges(dirty, { busy });
   useEffect(() => {
     // Preserve dirty drafts across server refreshes; rebase clean forms after save.
     if (!job[type] || dirty || busy) return;

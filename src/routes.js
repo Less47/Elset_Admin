@@ -3,33 +3,33 @@ export const workspaceRoutes = [
   { index: true, id: "home" },
   { path: "customers", children: [
     { index: true, id: "customers", handle: { section: "customers" } },
-    { path: "new", id: "create-customer", handle: { section: "customers", record: true } },
+    { path: "new", id: "create-customer", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customers" } },
     { path: ":customerId", children: [
-      { index: true, id: "customer-details", handle: { section: "customers", record: true } },
-      { path: "edit", id: "edit-customer", handle: { section: "customers", record: true } },
+      { index: true, id: "customer-details", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customer Profile" } },
+      { path: "edit", id: "edit-customer", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Edit Customer" } },
       { path: "sites", children: [
-        { path: "new", id: "create-site", handle: { section: "customers", record: true } },
+        { path: "new", id: "create-site", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customer Profile" } },
         { path: ":siteId", children: [
-          { index: true, id: "site-details", handle: { section: "customers", record: true } },
-          { path: "edit", id: "edit-site", handle: { section: "customers", record: true } },
+          { index: true, id: "site-details", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Site Profile" } },
+          { path: "edit", id: "edit-site", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Edit Site" } },
         ] },
       ] },
     ] },
   ] },
   { path: "jobs", children: [
-    { path: "new", id: "create-job", handle: { record: true } },
+    { path: "new", id: "create-job", lazy: async () => ({ Component: (await import("./components/jobs/JobRoutePages.jsx")).CreateJobRoute }), handle: { record: true, label: "Service Board" } },
     { path: ":jobId", children: [
-      { index: true, id: "job-details", handle: { record: true } },
-      { path: "quote", id: "quote", handle: { record: true, documentType: "quote" } },
-      { path: "invoice", id: "invoice", handle: { record: true, documentType: "invoice" } },
+      { index: true, id: "job-details", lazy: async () => ({ Component: (await import("./components/jobs/JobRoutePages.jsx")).JobDetailsRoute }), handle: { record: true, label: ({ jobId }, jobs) => `Job #${jobs.find((job) => job.id === jobId)?.jobNumber || "Details"}` } },
+      { path: "quote", id: "quote", lazy: async () => ({ Component: (await import("./components/jobs/JobRoutePages.jsx")).DocumentRoute }), handle: { record: true, documentType: "quote" } },
+      { path: "invoice", id: "invoice", lazy: async () => ({ Component: (await import("./components/jobs/JobRoutePages.jsx")).DocumentRoute }), handle: { record: true, documentType: "invoice" } },
     ] },
   ] },
   { path: "maintenance", children: [
     { index: true, id: "maintenance", handle: { section: "maintenance" } },
-    { path: "new", id: "create-maintenance", handle: { section: "maintenance", record: true } },
+    { path: "new", id: "create-maintenance", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenancePlanPage.jsx")).default }), handle: { section: "maintenance", record: true } },
     { path: ":planId", children: [
-      { index: true, id: "maintenance-details", handle: { section: "maintenance", record: true } },
-      { path: "edit", id: "edit-maintenance", handle: { section: "maintenance", record: true } },
+      { index: true, id: "maintenance-details", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenancePlanPage.jsx")).default }), handle: { section: "maintenance", record: true, label: "Maintenance" } },
+      { path: "edit", id: "edit-maintenance", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenancePlanPage.jsx")).default }), handle: { section: "maintenance", record: true, label: "Maintenance" } },
     ] },
   ] },
   { path: "invoices", id: "invoices", handle: { section: "invoices" } },

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import { useRef, useState } from "react";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
@@ -16,7 +17,7 @@ import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts,
 const NOT_SET_VALUE = "not-set";
 const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
-export default function SiteWorkspace({ customer, site, jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, registerNavigationBlocker }) {
+export default function SiteWorkspace({ customer, site, jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile }) {
   const isEditingSite = editing || !site;
   const [initial] = useState(() => buildSiteProfileDraft(site));
   const [draftSite, setDraftSite] = useState(initial);
@@ -26,7 +27,7 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
   const [error, setError] = useState("");
   const submitting = useRef(false);
   const dirty = isEditingSite && (JSON.stringify(draftSite) !== JSON.stringify(initial) || JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET));
-  useEffect(() => registerNavigationBlocker?.(() => dirty || saving), [dirty, saving, registerNavigationBlocker]);
+  const markSaved = useUnsavedChanges(dirty, { busy: saving });
   const activeSite = isEditingSite ? draftSite : site;
   const activeAddress = normalizeSiteAddress(activeSite?.address || "");
   const customerContacts = getCustomerContacts(customer);
@@ -44,6 +45,7 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
     try {
       const saved = await onSaveSite(customer.id, draftSite, site?.address || "");
       if (!saved) { setError("The site could not be saved. Your changes are still here."); return; }
+      markSaved();
       onSaved(saved);
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
     finally { submitting.current = false; setSaving(false); }

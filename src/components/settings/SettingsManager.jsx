@@ -254,7 +254,7 @@ function ExactDocumentPreview({ requestBody }) {
 }
 
 export default function SettingsManager(props) {
-  return <SettingsDraftScope key={`${props.activeSettingsTab}:${props.activeTemplateType}`} navigation={props.settingsNavigation}>
+  return <SettingsDraftScope key={`${props.activeSettingsTab}:${props.activeTemplateType}`}>
     <SettingsContent {...props} />
   </SettingsDraftScope>;
 }
@@ -498,7 +498,7 @@ function SettingsContent({
                 type="button"
                 variant={isActive ? "default" : "outline"}
                 className="rounded-xl"
-                onClick={() => tab.value !== activeSettingsTab && scope.requestNavigation(() => onActiveSettingsTabChange?.(tab.value))}
+                onClick={() => tab.value !== activeSettingsTab && scope.requestAction(() => onActiveSettingsTabChange?.(tab.value))}
               >
                 {tab.label}
               </Button>
@@ -662,7 +662,7 @@ function SettingsContent({
                   <p className="mt-1 text-sm text-text-secondary">Adjust wording, headings, and section text for each document type. Company and bank details come from Preferences.</p>
                 </div>
                 <div className="w-full max-w-[220px]">
-                  <Select value={currentTemplateType} onValueChange={value => value !== currentTemplateType && scope.requestNavigation(() => onActiveTemplateTypeChange(value))}>
+                  <Select value={currentTemplateType} onValueChange={value => value !== currentTemplateType && scope.requestAction(() => onActiveTemplateTypeChange(value))}>
                     <SelectTrigger aria-label="Document template type" className="w-full rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
