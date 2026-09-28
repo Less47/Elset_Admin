@@ -5,10 +5,10 @@ import { AuthLoadingScreen } from "./components/auth/AuthLoadingScreen.jsx";
 
 const App = lazy(() => import("./App.jsx"));
 
-export default function AppEntry() {
+export default function AppEntry({ legalPath }) {
   // Only these two documents bypass the existing application/session boundary.
   // Do not load App or its workspace hooks for a public legal page.
-  const legalDocument = legalDocuments[window.location.pathname.replace(/\/$/, "")];
+  const legalDocument = legalDocuments[legalPath];
   if (legalDocument) return <PublicLegalPage document={legalDocument} />;
 
   return (
