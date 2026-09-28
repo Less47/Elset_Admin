@@ -40,7 +40,7 @@ The editor has a labelled input, live character count, Save, Cancel, and Remove 
 
 SQLite saves update the pill immediately and close the editor. Only the note is merged into client state on success or rollback; the existing whole-workspace response is not used to refresh the board. On failure the previous note returns and the draft is retained for Retry, including failed removals. Duplicate saves for the same job are blocked while pending.
 
-The legacy JSON mode also has a targeted server-side read/merge/write. Its client waits for the response and marks the state synced to avoid triggering a stale broad autosave.
+Job notes use the targeted SQLite API. The former JSON read/merge/write and broad autosave paths have been retired.
 
 ## 6–7. Schema approach and production safety
 

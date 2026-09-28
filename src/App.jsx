@@ -125,7 +125,6 @@ export default function App() {
     setData,
     setIsSendingDocument,
     themeSettings,
-    workspaceStorageMode: session.workspaceStorageMode,
   });
 
   if (session.authStatus === "checking" || (session.isAuthenticated && personalPreferences.loading)) {

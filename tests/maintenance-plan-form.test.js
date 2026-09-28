@@ -1,8 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateWorkspaceSchema } from "../server-workspace-db.js";
@@ -126,19 +122,7 @@ test("legacy frequency reads preserve stored rows, occurrence keys, single excep
   assert.deepEqual(expandMaintenanceOccurrences(annual, "2027-01-01", "2029-12-31").map((entry) => entry.date), ["2027-03-09", "2028-03-09", "2029-03-09"]);
 }, [{ ...input, siteAddress: site.address, frequency: "6 Monthly", recurrence: { segments: [{ id: "old-series", anchorDate: "2027-03-09", frequency: "6 Monthly" }] } }]));
 
-test("JSON workspace server saves use the same site/name authority", () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "elset-maintenance-form-json-"));
-  try {
-    const moduleUrl = new URL("../server-store.js", import.meta.url).href;
-    const script = `import assert from 'node:assert/strict'; const {saveData,saveAuthorizedAppState}=await import(${JSON.stringify(moduleUrl)}); saveData(${JSON.stringify({ customers, jobs: [], maintenancePlans: [] })}); const result=saveAuthorizedAppState({role:'admin'},{maintenancePlans:[${JSON.stringify(input)}]}); assert.equal(result.maintenancePlans[0].planName,'14 Sesame St CAROLINE SPRINGS'); assert.equal(result.maintenancePlans[0].siteId,'sesame'); assert.throws(()=>saveAuthorizedAppState({role:'admin'},{maintenancePlans:[{...${JSON.stringify(input)},siteId:'bay'}]}),/Site does not belong/);`;
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], { env: { ...process.env, ELSET_DATA_DIR: tempDir }, encoding: "utf8", windowsHide: true });
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(tempDir, "app-data.json"))).maintenancePlans[0].siteId, "sesame");
-  } finally {
-    const target = path.resolve(tempDir);
-    if (target.startsWith(path.join(os.tmpdir(), "elset-maintenance-form-json-"))) fs.rmSync(target, { recursive: true, force: true });
-  }
-});
+
 
 test("customer/site identity changes leave the explicitly chosen date unchanged", () => {
   const next = canonicalMaintenancePlanInput({ ...input, customerId: "other", siteId: "bay", nextDueDate: "2029-05-21" }, null, customers);

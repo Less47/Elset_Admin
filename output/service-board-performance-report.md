@@ -16,7 +16,7 @@ Desktop native `dragstart`/`dragover` already performed no React state updates o
 
 ## 2. Optimistic updates and the full interaction trace
 
-Previously, SQLite status changes were not optimistic. Legacy JSON mode already changed local state immediately and retains its existing path.
+Previously, SQLite status changes were not optimistic. Status changes now use the SQLite record API exclusively with the same optimistic queue.
 
 | Step | Previous SQLite path | Updated SQLite path |
 | --- | --- | --- |

@@ -40,7 +40,6 @@ async function withTempWorkspace(callback, fixture = readFixture()) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -547,7 +546,7 @@ test("sent-history routes are idempotent for duplicate stable IDs", async () => 
   });
 });
 
-test("document routes reject invalid values and stay unavailable in JSON mode", async () => {
+test("document routes reject invalid values and fail closed without a workspace database", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {
       const missingJob = await requestJson(baseUrl, "/api/jobs/missing-job/quote", {
@@ -638,7 +637,6 @@ test("document routes reject invalid values and stay unavailable in JSON mode", 
   const tempDir = makeTempDir();
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "json",
   };
 
   try {
@@ -647,10 +645,10 @@ test("document routes reject invalid values and stay unavailable in JSON mode", 
         method: "PUT",
         body: JSON.stringify({
           issueDate: "2026-01-01",
-          items: [{ description: "JSON mode quote", qty: 1, rate: 10 }],
+          items: [{ description: "missing database quote", qty: 1, rate: 10 }],
         }),
       });
-      assert.equal(result.response.status, 409);
+      assert.equal(result.response.status, 500);
 
       const sentHistory = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote/sent-history", {
         method: "POST",
@@ -658,8 +656,9 @@ test("document routes reject invalid values and stay unavailable in JSON mode", 
           history: sentHistoryPayload("sent-json-mode", "quote"),
         }),
       });
-      assert.equal(sentHistory.response.status, 409);
+      assert.equal(sentHistory.response.status, 500);
     });
+    assert.equal(fs.existsSync(path.join(tempDir, "elset-workspace.db")), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

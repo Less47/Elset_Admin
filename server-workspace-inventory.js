@@ -2,7 +2,7 @@ import crypto from "crypto";
 import {
   decimalToScaledInteger,
   moneyToCents,
-} from "./server-workspace-importer.js";
+} from "./server-workspace-financials.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 

@@ -21,7 +21,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const fixturePath = path.join(repoRoot, "fixtures/demo-workspace.json");
 const screenshotDir = path.join(repoRoot, "test-results/document-workspaces");
 const accountPassword = "E2E-document-pass-123";
-const storageMode = process.env.ELSET_DOCUMENT_E2E_STORAGE || "sqlite";
 let tempDataDir = "";
 let baseUrl = "";
 let serverProcess = null;
@@ -100,7 +99,6 @@ async function waitForServer(url) {
 }
 
 function readWorkspaceState() {
-  if (storageMode === "json") return normalizeStoredData(JSON.parse(fs.readFileSync(path.join(tempDataDir, "app-data.json"), "utf8")));
   const db = openWorkspaceDb({
     dbPath: path.join(tempDataDir, "elset-workspace.db"),
     readonly: true,
@@ -154,7 +152,6 @@ async function seedLoginAccounts() {
       ELSET_AUTH_DB_PATH: authDbPath,
       ELSET_DATA_DIR: tempDataDir,
       ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
-      ELSET_WORKSPACE_STORAGE: storageMode,
       FLY_APP_NAME: "",
       NODE_ENV: "test",
       TZ: "Australia/Sydney",
@@ -177,7 +174,6 @@ async function startServer() {
     ELSET_DATA_DIR: tempDataDir,
     ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
     ELSET_FRONTEND_URL: baseUrl,
-    ELSET_WORKSPACE_STORAGE: storageMode,
     FLY_APP_NAME: "",
     NODE_ENV: "test",
     PORT: String(port),
@@ -230,11 +226,8 @@ function documentFixture() {
 test.beforeAll(async()=>{
   tempDataDir=fs.mkdtempSync(path.join(os.tmpdir(),'elset-document-playwright-'));
   fs.mkdirSync(screenshotDir,{recursive:true});
-  if (storageMode === "json") fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(normalizeStoredData(documentFixture())));
-  else {
-    const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
-    try { importWorkspaceJsonData(db,documentFixture()); } finally { db.close(); }
-  }
+  const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
+  try { importWorkspaceJsonData(db,documentFixture()); } finally { db.close(); }
   await seedLoginAccounts();
   await startMailSink();
   await startServer();
@@ -242,7 +235,6 @@ test.beforeAll(async()=>{
 test.beforeEach(()=>{
   rejectMail = false;
   releaseMail();
-  if (storageMode === "json") { fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(normalizeStoredData(documentFixture()))); return; }
   const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
   try {
     db.exec("DELETE FROM deleted_invoices");
@@ -280,11 +272,8 @@ function prepareDeletionInvoice({ sent = false, receipt = false, payments = [] }
   const state = readWorkspaceState();
   const job = state.jobs.find((entry) => entry.id === EXISTING_JOB);
   job.invoice = { ...job.invoice, payments, paidAmount: 0, paymentStatus: "unpaid", sentHistory: sent || receipt ? [{ id: "delete-sent", sentAt: "2026-09-01T00:00:00.000Z", toEmail: job.customerEmail, subject: "Original invoice", messageId: "local-original", emailPurpose: receipt ? "paid-receipt" : "invoice", documentSnapshot: { items: job.invoice.items, payments: [] }, jobSnapshot: { id: job.id, title: job.title, siteSnapshot: { ocNumber: "222222" } }, templateSnapshot: { companyName: "Original Company" } }] : [] };
-  if (storageMode === "json") fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(normalizeStoredData(state)));
-  else {
-    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
-    try { db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
-  }
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try { db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
   return dbJob(EXISTING_JOB);
 }
 async function navigateSection(page, label) {
@@ -303,7 +292,7 @@ for (const scenario of [{ width: 1440, height: 900, sent: false, username: "mobi
       await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
       if (scenario.sent) await expect(dialog).toContainText("Deleting it will not remove the customer's copy.");
       else await expect(dialog).not.toContainText("already been sent");
-      await capture(page, info, `invoice-delete-${storageMode}-${scenario.width}`, false);
+      await capture(page, info, `invoice-delete-sqlite-${scenario.width}`, false);
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
       expect(dbJob(EXISTING_JOB)).toEqual(original);
       expect(writes).toEqual([]);
@@ -315,7 +304,7 @@ for (const scenario of [{ width: 1440, height: 900, sent: false, username: "mobi
       await expect(page.getByRole("textbox", { name: scenario.width < 1280 ? "Search invoices" : "Search billing records", exact: true })).toBeVisible();
       await noModalOrOverflow(page);
       expect(writes.filter((entry) => entry.method === "DELETE")).toHaveLength(1);
-      expect(dbJob(EXISTING_JOB)).toEqual({ ...original, invoice: null, updatedAt: expect.any(String), ...(storageMode === "json" ? { invoiceArchiveRevision: expect.any(String) } : {}) });
+      expect(dbJob(EXISTING_JOB)).toEqual({ ...original, invoice: null, updatedAt: expect.any(String) });
       await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]").filter({ hasText: "#1001" })).toHaveCount(0);
       const [archive] = readWorkspaceState().deletedInvoices;
       expect(archive.invoice).toEqual(original.invoice);
@@ -324,13 +313,14 @@ for (const scenario of [{ width: 1440, height: 900, sent: false, username: "mobi
       await expect(page.getByText("INV-1001", { exact: true })).toBeVisible();
       await expect(page.getByText(original.customerName, { exact: true })).toBeVisible();
       await expect(page.getByText("Amount", { exact: true })).toBeVisible();
-      await capture(page, info, `invoice-recycle-${storageMode}-${scenario.width}`, false);
+      await capture(page, info, `invoice-recycle-sqlite-${scenario.width}`, false);
       await page.getByRole("button", { name: "Restore Invoice", exact: true }).click();
       await expect(page.getByRole("status").filter({ hasText: "Invoice restored" })).toBeVisible();
       expect(dbJob(EXISTING_JOB).invoice).toEqual(original.invoice);
       expect(readWorkspaceState().deletedInvoices).toEqual([]);
       await navigateSection(page, "Invoices");
-      await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]").filter({ hasText: "#1001" })).toHaveCount(1);
+      // Restoring an unsent draft does not issue it or add it to the issued-invoice list.
+      await expect(page.locator(".data-grid-row:visible, [data-mobile-record-card]").filter({ hasText: "#1001" })).toHaveCount(scenario.sent ? 1 : 0);
     } finally { await context.close(); }
   });
 }
@@ -411,25 +401,6 @@ test("invoice deletion is unavailable to technicians and unauthenticated request
   } finally { await context.close(); }
 });
 
-if (storageMode === "json") test("invoice deletion and recovery resist stale JSON autosaves", async ({ browser }) => {
-  prepareDeletionInvoice();
-  const { page, context } = await openWorkspace(browser, { type: "invoice" });
-  try {
-    const before = await (await page.request.get(`${baseUrl}/api/app-state`)).json();
-    const deletion = await (await page.request.delete(`${baseUrl}/api/jobs/${EXISTING_JOB}/invoice`)).json();
-    expect(deletion.ok).toBe(true);
-    const staleSave = await page.request.put(`${baseUrl}/api/app-state`, { data: before.state });
-    expect(staleSave.ok()).toBe(true);
-    expect(dbJob(EXISTING_JOB).invoice).toBeNull();
-    expect(readWorkspaceState().deletedInvoices).toHaveLength(1);
-    const restored = await page.request.post(`${baseUrl}/api/deleted-invoices/${deletion.result.archiveId}/restore`);
-    expect(restored.ok()).toBe(true);
-    await page.request.put(`${baseUrl}/api/app-state`, { data: deletion.state });
-    expect(dbJob(EXISTING_JOB).invoice).not.toBeNull();
-    expect(readWorkspaceState().deletedInvoices).toEqual([]);
-  } finally { await context.close(); }
-});
-
 for (const preset of themePresets) test(`invoice deletion dialog follows ${preset.label} on desktop and mobile`, async ({ browser }, info) => {
   prepareDeletionInvoice({ sent: true });
   for (const width of [1440, 390]) {
@@ -452,12 +423,8 @@ for (const preset of themePresets) test(`invoice deletion dialog follows ${prese
   }
 });
 const save = async (page, type) => {
-  // JSON mode retains its existing debounced workspace autosave. Wait for the
-  // actual write before a test reloads/navigates away or inspects persisted data.
-  const sync = storageMode === "json" ? page.waitForResponse((response) => response.url().endsWith("/api/app-state") && response.request().method() === "PUT") : null;
   await page.getByRole("button", { name: "Save " + (type === "quote" ? "Quote" : "Invoice"), exact: true }).click();
   await expect(editor(page).locator(".document-feedback")).toHaveText("Saved");
-  if (sync) expect((await sync).ok()).toBeTruthy();
 };
 async function noModalOrOverflow(page){
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -626,7 +593,9 @@ test("price list management shares editable snapshots across quotes and invoices
     await settings();
     await page.getByRole("listitem", { name: "Labour revised", exact: true }).getByRole("button", { name: "Archive", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "Item archived" })).toBeVisible();
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
     await page.getByLabel("Price-list status").selectOption("archived");
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("listitem", { name: "Labour revised", exact: true })).toContainText("$155.00");
     await page.goto(`${baseUrl}/jobs/${NEW_JOB}/quote`);
     await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("140");
@@ -812,12 +781,9 @@ for (const type of ["invoice", "quote"]) test(`${type} unsaved PDF requests stay
     id: `payload-photo-${index}`, name: `photo-${index}.jpg`,
     url: "data:image/jpeg;base64," + Buffer.alloc(4 * 1024 * 1024).toString("base64"),
   }));
-  if (storageMode === "json") fs.writeFileSync(path.join(tempDataDir, "app-data.json"), JSON.stringify(state));
-  else {
-    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
-    try { db.prepare("DELETE FROM jobs WHERE id = ?").run(EXISTING_JOB); insertJobTree(db, photoJob); }
-    finally { db.close(); }
-  }
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try { db.prepare("DELETE FROM jobs WHERE id = ?").run(EXISTING_JOB); insertJobTree(db, photoJob); }
+  finally { db.close(); }
   const { context, page, writes } = await openWorkspace(browser, { type });
   try {
     const original = dbJob(EXISTING_JOB);

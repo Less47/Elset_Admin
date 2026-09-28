@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
-import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -136,33 +135,7 @@ test("technicians can edit board notes without gaining general job edit privileg
   }, { role: "technician" }));
 });
 
-test("legacy JSON note endpoint merges current server data and persists the dedicated field", () => {
-  const tempDir = makeTempDir();
-  try {
-    const fixture = readFixture();
-    fs.writeFileSync(path.join(tempDir, "app-data.json"), JSON.stringify(fixture));
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `
-      import assert from 'node:assert/strict';
-      import express from 'express';
-      import { createJobRouter } from './server-job-routes.js';
-      import { loadData } from './server-store.js';
-      const app = express(); app.use(express.json());
-      app.use(createJobRouter({ requireAuth(req, res, next) { req.user = { role: 'admin' }; next(); } }));
-      const server = app.listen(0, '127.0.0.1');
-      await new Promise(resolve => server.once('listening', resolve));
-      try {
-        const before = loadData().jobs[0];
-        const response = await fetch('http://127.0.0.1:' + server.address().port + '/api/jobs/' + before.id + '/service-board-note', {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ serviceBoardNote: '  Legacy note  ', status: 'Stale value' })
-        });
-        assert.equal(response.status, 200, await response.text());
-        const after = loadData().jobs[0];
-        assert.deepEqual(after, { ...before, serviceBoardNote: 'Legacy note', updatedAt: after.updatedAt });
-      } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-    `], { cwd: repoRoot, encoding: "utf8", windowsHide: true, env: { ...process.env, ELSET_DATA_DIR: tempDir, ELSET_WORKSPACE_STORAGE: "json", NODE_ENV: "test", FLY_APP_NAME: "" } });
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-  } finally { fs.rmSync(tempDir, { recursive: true, force: true }); }
-});
+
 
 function readFixture(overrides = {}) {
   const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
@@ -185,7 +158,6 @@ async function withTempWorkspace(callback, fixture = readFixture()) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -899,11 +871,10 @@ test("technicians can use limited status, notes, and photo routes but cannot man
   });
 });
 
-test("job routes remain unavailable in JSON workspace mode", async () => {
+test("job routes fail closed without a workspace database", async () => {
   const tempDir = makeTempDir();
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "json",
   };
 
   try {
@@ -912,11 +883,12 @@ test("job routes remain unavailable in JSON workspace mode", async () => {
         method: "POST",
         body: JSON.stringify({
           customer: { id: "demo-customer-arcadia" },
-          job: { title: "JSON mode job", jobAddress: "10 Example Lane, Sampleton VIC 3000" },
+          job: { title: "missing database job", jobAddress: "10 Example Lane, Sampleton VIC 3000" },
         }),
       });
-      assert.equal(result.response.status, 409);
+      assert.equal(result.response.status, 500);
     });
+    assert.equal(fs.existsSync(path.join(tempDir, "elset-workspace.db")), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

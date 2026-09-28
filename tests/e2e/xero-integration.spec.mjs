@@ -55,7 +55,7 @@ test.beforeAll(async ({ browser }) => {
   baseUrl = `http://127.0.0.1:${port}`;
   const env = { ...process.env, NODE_ENV: "test", FLY_APP_NAME: "", TZ: "Australia/Sydney",
     ELSET_DATA_DIR: dataDir, ELSET_AUTH_DB_PATH: path.join(dataDir, "auth.db"),
-    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"), ELSET_WORKSPACE_STORAGE: "sqlite",
+    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"),
     BETTER_AUTH_URL: baseUrl, ELSET_FRONTEND_URL: baseUrl, ELSET_API_PORT: String(port), PORT: String(port),
     ELSET_TEST_XERO: "1", XERO_WEBHOOK_KEY: "xero-e2e-signature-only", XERO_CLIENT_ID: "fixture-client", XERO_CLIENT_SECRET: "fixture-secret", XERO_REDIRECT_URI: `http://localhost:${port}/api/integrations/xero/callback`, ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex"), SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "" };
   const seed = spawnSync(process.execPath, ["--input-type=module", "-e", `

@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { loadData, saveData } from "../server-store.js";
+import fs from "node:fs";
+import path from "node:path";
+import { normalizeStoredData } from "../server-store.js";
+// Offline synthetic fixture generator. Import the result explicitly into a new test database.
 
 const DEMO_EMAIL_DOMAIN = "demo.elset.test";
 const DEFAULT_CUSTOMER_COUNT = 50;
@@ -712,7 +715,11 @@ function isDemoDeletedJob(record, demoCustomerIds) {
 
 const customerCount = parseCountArg("customers", DEFAULT_CUSTOMER_COUNT);
 const jobCount = parseCountArg("jobs", DEFAULT_JOB_COUNT);
-const data = loadData();
+const outputArg = process.argv.find(arg => arg.startsWith("--output="))?.slice(9);
+if (!outputArg) throw new Error("Specify --output=path/to/demo-workspace.json. This offline helper does not edit the live workspace.");
+const outputPath = path.resolve(outputArg);
+if (fs.existsSync(outputPath)) throw new Error("Refusing to overwrite an existing fixture. Choose a new --output path.");
+const data = normalizeStoredData(JSON.parse(fs.readFileSync(new URL("../fixtures/demo-workspace.json", import.meta.url), "utf8")));
 const staffMembers = Array.isArray(data.staff) && data.staff.length > 0 ? data.staff : [
   { id: "tech-1", name: "Massimo" },
   { id: "tech-2", name: "Domenic" },
@@ -745,11 +752,12 @@ const nextData = {
   deletedJobs: baseDeletedJobs,
 };
 
-const saved = saveData(nextData);
+const saved = normalizeStoredData(nextData);
+fs.writeFileSync(outputPath, JSON.stringify(saved, null, 2), { flag: "wx" });
 const savedDemoCustomers = saved.customers.filter(isDemoCustomer);
 const savedDemoCustomerIds = new Set(savedDemoCustomers.map((customer) => customer.id));
 const savedDemoJobs = saved.jobs.filter((job) => savedDemoCustomerIds.has(job.customerId));
 
 console.log(
-  `Saved ${savedDemoCustomers.length} demo customers and ${savedDemoJobs.length} demo jobs to data/app-data.json.`
+  `Saved ${savedDemoCustomers.length} demo customers and ${savedDemoJobs.length} demo jobs to ${outputPath}.`
 );

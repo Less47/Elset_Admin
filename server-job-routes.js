@@ -20,7 +20,7 @@ import {
   WorkspaceJobError,
 } from "./server-workspace-jobs.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode, loadWorkspaceState, saveWorkspaceState } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -40,11 +40,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function openSqliteWorkspaceDb(env) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode !== "sqlite") {
-    throw new WorkspaceJobError("Job record endpoints are available only in SQLite workspace mode.", 409);
-  }
-  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
+  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
 function sendSuccess(req, res, result, env) {
@@ -125,18 +121,8 @@ export function createJobRouter({
           throw new WorkspaceJobError("Job note is required (use null to remove it).");
         }
         const serviceBoardNote = normalizeServiceBoardNote(req.body.serviceBoardNote);
-        let result;
-        if (getWorkspaceStorageMode(env) === "sqlite") {
-          db = openSqliteWorkspaceDb(env);
-          result = updateJobDetails(db, req.params.id, { serviceBoardNote });
-        } else {
-          // Read/merge/write synchronously against current server state in legacy mode.
-          const state = loadWorkspaceState({ env });
-          const job = state.jobs.find((entry) => entry.id === req.params.id);
-          if (!job) throw new WorkspaceJobError("Job not found.", 404);
-          result = { ...job, serviceBoardNote, updatedAt: new Date().toISOString() };
-          saveWorkspaceState({ ...state, jobs: state.jobs.map((entry) => entry.id === job.id ? result : entry) }, { env });
-        }
+        db = openSqliteWorkspaceDb(env);
+        const result = updateJobDetails(db, req.params.id, { serviceBoardNote });
         return sendSuccess(req, res, { id: result.id, serviceBoardNote: result.serviceBoardNote }, env);
       } catch (error) {
         return res.status(getStatusCode(error)).json({ error: getErrorMessage(error, "Unable to save the job note.") });

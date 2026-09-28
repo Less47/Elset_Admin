@@ -1,34 +1,22 @@
 import { useLocation, useMatches, useNavigate } from "react-router";
 import { recordLinkState } from "@/lib/record-link-state";
 import { useCallback, useRef, useState } from "react";
-import { applyPrimarySiteUpdate } from "@/lib/customer-profile";
 import { createJobStatusQueue, mergeJobStatusFields, requestJobStatusUpdate } from "./workspace-job-status";
 import { normalizeServiceBoardNote } from "@/lib/service-board-note";
-import { effectiveMaintenancePlan, expandMaintenanceOccurrences, maintenanceSchedule } from "@/lib/maintenance-recurrence";
+import { effectiveMaintenancePlan } from "@/lib/maintenance-recurrence";
 import { siteAddressMetadata, updatedSiteAddressMetadata } from "@/lib/site-location";
-import { canonicalMaintenancePlanInput, maintenancePlanIdentity } from "@/lib/maintenance-plan";
+import { canonicalMaintenancePlanInput } from "@/lib/maintenance-plan";
 import { calendarUndoRequest } from "@/components/calendar/calendar-undo";
 import {
   addDaysToDateInput,
-  buildContactSnapshot,
-  buildMaintenanceJobDescription,
-  getCustomerBillingContact,
-  getNextJobNumber,
-  getNextMaintenanceDueDate,
-  getCustomerSitePrimaryContact,
   normalizeCustomerRecord,
-  normalizeCustomerSiteProfiles,
   normalizeDocument,
   normalizeInventoryRecord,
-  normalizeJobRecord,
   normalizeJobContactSnapshot,
   normalizeMaintenancePlanRecord,
-  normalizeSiteAccessNotes,
   normalizeSiteAddress,
   normalizeSiteProfileRecord,
-  normalizeStaffRecord,
   slugDate,
-  syncJobWithCustomer,
   toDateInputValue,
 } from "@/lib/app-support";
 import {
@@ -40,7 +28,6 @@ import {
   normalizeQuoteTemplate,
 } from "@/lib/quote-template";
 import {
-  isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
@@ -63,14 +50,11 @@ export function useWorkspaceActions({
   setData,
   setIsSendingDocument,
   themeSettings,
-  workspaceStorageMode = "json",
 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const match = useMatches().at(-1);
   const linkState = recordLinkState(location, match, data.jobs);
-  const useSqliteApi = isSqliteWorkspaceMode(workspaceStorageMode);
-  const useCustomerSqliteApi = useSqliteApi;
   const documentSendInFlightRef = useRef(false);
   const invoiceArchiveInFlightRef = useRef(false);
   const boardNoteSavesRef = useRef(new Set());
@@ -262,186 +246,50 @@ export function useWorkspaceActions({
     return addDaysToDateInput(toDateInputValue(new Date()), 1);
   }
 
-  function getNextTomorrowPlanningOrder(jobs, tomorrowDate) {
-    return jobs.reduce((maxOrder, job) => {
-      if (job.serviceBoardTomorrowDate !== tomorrowDate) return maxOrder;
-
-      const nextOrder = Number.isFinite(Number(job.serviceBoardTomorrowOrder))
-        ? Number(job.serviceBoardTomorrowOrder)
-        : 0;
-
-      return Math.max(maxOrder, nextOrder);
-    }, 0) + 1;
-  }
-
   async function createJob({ job, customerMode, customer, siteInput = null }) {
     if (!canManageBusiness) return;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: "/api/jobs",
-        method: "POST",
-        body: {
-          job,
-          customerMode,
-          customer,
-          siteInput,
-        },
-        errorMessage: "Unable to create the job.",
-      });
-      return saved.ok ? saved.result : null;
-    }
-
-    let customerRecord = customer;
-    let customers = data.customers;
-    const now = new Date().toISOString();
-    const normalizedSiteInput = siteInput
-      ? normalizeSiteProfileRecord({
-          ...siteInput,
-          updatedAt: now,
-          createdAt: siteInput.createdAt || now,
-        })
-      : null;
-
-    if (customerMode === "new") {
-      customerRecord = normalizeCustomerRecord({
-        id: crypto.randomUUID(),
-        ...customer,
-        address: normalizedSiteInput?.address || "",
-        sites: normalizedSiteInput ? [normalizedSiteInput] : [],
-        createdAt: now,
-      });
-      customers = [...data.customers, customerRecord];
-    } else if (customer?.id) {
-      const existingCustomer = data.customers.find((entry) => entry.id === customer.id) || customer;
-
-      if (normalizedSiteInput) {
-        customerRecord = normalizeCustomerRecord({
-          ...existingCustomer,
-          sites: normalizeCustomerSiteProfiles(
-            [
-              ...normalizeCustomerSiteProfiles(existingCustomer.sites, existingCustomer.address, existingCustomer.siteAccessNotes).filter(
-                (site) => site.address.toLowerCase() !== normalizedSiteInput.address.toLowerCase()
-              ),
-              normalizedSiteInput,
-            ],
-            existingCustomer.address,
-            []
-          ),
-          createdAt: existingCustomer.createdAt,
-        });
-        customers = data.customers.map((entry) => (entry.id === customerRecord.id ? customerRecord : entry));
-      } else {
-        customerRecord = existingCustomer;
-      }
-    }
-
-    const jobAddress = normalizeSiteAddress(job.jobAddress || normalizedSiteInput?.address || customerRecord.address);
-    const billingContact = buildContactSnapshot(job.billingContact, "Billing contact")
-      || buildContactSnapshot(getCustomerBillingContact(customerRecord), "Billing contact");
-    const onsiteContact = buildContactSnapshot(job.onsiteContact, "On-site contact")
-      || buildContactSnapshot(getCustomerSitePrimaryContact(customerRecord, jobAddress), "On-site contact");
-    const requesterContact = buildContactSnapshot(job.requesterContact, "Requester");
-
-    const newJob = normalizeJobRecord({
-      id: crypto.randomUUID(),
-      jobNumber: getNextJobNumber(data.jobs),
-      title: job.title,
-      description: job.description,
-      urgency: job.urgency,
-      status: "To Do",
-      scheduledDate: toDateInputValue(job.scheduledDate),
-      assignedTechnicianId: job.assignedTechnicianId || "",
-      assignedTechnicianName: job.assignedTechnicianName || "",
-      customerId: customerRecord.id,
-      customerName: customerRecord.name,
-      customerEmail: customerRecord.email || billingContact?.email || "",
-      customerPhone: customerRecord.phone || billingContact?.phone || "",
-      jobAddress,
-      ocNumber: String(job.ocNumber || "").trim(),
-      requesterContact,
-      onsiteContact,
-      billingContact,
-      createdAt: now,
-      updatedAt: now,
-      notes: [],
-      photos: [],
-      quote: null,
-      invoice: null,
+    const saved = await saveJobApiRequest({
+      path: "/api/jobs",
+      method: "POST",
+      body: {
+        job,
+        customerMode,
+        customer,
+        siteInput,
+      },
+      errorMessage: "Unable to create the job.",
     });
-
-    setData({
-      ...data,
-      customers,
-      jobs: [newJob, ...data.jobs],
-    });
-    return newJob;
+    return saved.ok ? saved.result : null;
   }
 
   async function handleCreateStaff(staffInput) {
     if (!canManageBusiness) return null;
 
-    if (useSqliteApi) {
-      const createdStaff = {
-        id: crypto.randomUUID(),
-        ...staffInput,
-        createdAt: new Date().toISOString(),
-      };
-      const saved = await saveStaffApiRequest({
-        path: staffPath(),
-        method: "POST",
-        body: { staff: createdStaff },
-        errorMessage: "Unable to create the staff member.",
-      });
-      return saved.ok ? saved.result : null;
-    }
-
-    const createdStaff = normalizeStaffRecord({
+    const createdStaff = {
       id: crypto.randomUUID(),
       ...staffInput,
       createdAt: new Date().toISOString(),
+    };
+    const saved = await saveStaffApiRequest({
+      path: staffPath(),
+      method: "POST",
+      body: { staff: createdStaff },
+      errorMessage: "Unable to create the staff member.",
     });
-
-    setData((prev) => ({
-      ...prev,
-      staff: [createdStaff, ...prev.staff.filter((entry) => entry.id !== createdStaff.id)],
-    }));
-
-    return createdStaff;
+    return saved.ok ? saved.result : null;
   }
 
   async function handleUpdateStaff(staffId, updates) {
     if (!canManageBusiness) return null;
 
-    if (useSqliteApi) {
-      const saved = await saveStaffApiRequest({
-        path: staffPath(staffId),
-        method: "PATCH",
-        body: { staff: updates },
-        errorMessage: "Unable to save the staff member.",
-      });
-      return saved.ok ? saved.result : null;
-    }
-
-    const updatedStaff = normalizeStaffRecord({
-      ...(data.staff.find((entry) => entry.id === staffId) || {}),
-      ...updates,
+    const saved = await saveStaffApiRequest({
+      path: staffPath(staffId),
+      method: "PATCH",
+      body: { staff: updates },
+      errorMessage: "Unable to save the staff member.",
     });
-
-    setData((prev) => {
-      const staff = prev.staff.map((entry) => (
-        entry.id === staffId
-          ? updatedStaff
-          : entry
-      ));
-
-      return {
-        ...prev,
-        staff,
-      };
-    });
-
-    return updatedStaff;
+    return saved.ok ? saved.result : null;
   }
 
   async function handleCreateInventoryItem(partInput) {
@@ -454,47 +302,25 @@ export function useWorkspaceActions({
       updatedAt: new Date().toISOString(),
     });
 
-    if (useSqliteApi) {
-      const saved = await saveInventoryApiRequest({
-        path: inventoryPath(),
-        method: "POST",
-        body: { item: createdPart },
-        errorMessage: "Unable to create the inventory item.",
-      });
-      return saved.ok ? (saved.result || true) : false;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      inventoryItems: [createdPart, ...(prev.inventoryItems || []).filter((entry) => entry.id !== createdPart.id)],
-    }));
-
-    return true;
+    const saved = await saveInventoryApiRequest({
+      path: inventoryPath(),
+      method: "POST",
+      body: { item: createdPart },
+      errorMessage: "Unable to create the inventory item.",
+    });
+    return saved.ok ? (saved.result || true) : false;
   }
 
   async function handleUpdateInventoryItem(partId, updates) {
     if (!canManageBusiness) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveInventoryApiRequest({
-        path: inventoryPath(partId),
-        method: "PATCH",
-        body: { item: updates },
-        errorMessage: "Unable to save the inventory item.",
-      });
-      return saved.ok ? (saved.result || true) : false;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      inventoryItems: (prev.inventoryItems || []).map((part) =>
-        part.id === partId
-          ? normalizeInventoryRecord({ ...part, ...updates, updatedAt: new Date().toISOString() })
-          : part
-      ),
-    }));
-
-    return true;
+    const saved = await saveInventoryApiRequest({
+      path: inventoryPath(partId),
+      method: "PATCH",
+      body: { item: updates },
+      errorMessage: "Unable to save the inventory item.",
+    });
+    return saved.ok ? (saved.result || true) : false;
   }
 
   async function handleDeleteInventoryItem(partId) {
@@ -506,21 +332,12 @@ export function useWorkspaceActions({
     const confirmed = window.confirm(`Delete ${part.name} from parts inventory?`);
     if (!confirmed) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveInventoryApiRequest({
-        path: inventoryPath(partId),
-        method: "DELETE",
-        errorMessage: "Unable to delete the inventory item.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      inventoryItems: (prev.inventoryItems || []).filter((entry) => entry.id !== partId),
-    }));
-
-    return true;
+    const saved = await saveInventoryApiRequest({
+      path: inventoryPath(partId),
+      method: "DELETE",
+      errorMessage: "Unable to delete the inventory item.",
+    });
+    return saved.ok;
   }
 
   async function handleCreateMaintenancePlan(planInput) {
@@ -540,23 +357,14 @@ export function useWorkspaceActions({
       updatedAt: now,
     });
 
-    if (useSqliteApi) {
-      const saved = await saveMaintenanceApiRequest({
-        path: maintenancePath(),
-        method: "POST",
-        body: { plan: createdPlan },
-        errorMessage: "Unable to create the maintenance plan.",
-        throwOnError: true,
-      });
-      return saved.ok ? (saved.result || true) : false;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      maintenancePlans: [createdPlan, ...(prev.maintenancePlans || []).filter((entry) => entry.id !== createdPlan.id)],
-    }));
-
-    return createdPlan;
+    const saved = await saveMaintenanceApiRequest({
+      path: maintenancePath(),
+      method: "POST",
+      body: { plan: createdPlan },
+      errorMessage: "Unable to create the maintenance plan.",
+      throwOnError: true,
+    });
+    return saved.ok ? (saved.result || true) : false;
   }
 
   async function handleUpdateMaintenancePlan(planId, updates) {
@@ -564,7 +372,6 @@ export function useWorkspaceActions({
 
     const existingPlan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
     if (!existingPlan) return false;
-    if (!useSqliteApi && updates.dateChange) throw new Error("Recurring date changes require SQLite workspace mode.");
 
     const customer = data.customers.find((entry) => entry.id === updates.customerId);
     if (!customer) {
@@ -572,31 +379,14 @@ export function useWorkspaceActions({
       return false;
     }
 
-    if (useSqliteApi) {
-      const saved = await saveMaintenanceApiRequest({
-        path: maintenancePath(planId),
-        method: "PATCH",
-        body: { plan: { ...updates, revision: updates.revision ?? existingPlan.maintenanceRevision ?? 0 } },
-        errorMessage: "Unable to save the maintenance plan.",
-        throwOnError: true,
-      });
-      return saved.ok ? (saved.result || true) : false;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      maintenancePlans: (prev.maintenancePlans || []).map((plan) =>
-        plan.id === planId
-          ? normalizeMaintenancePlanRecord({
-              ...plan,
-              ...canonicalMaintenancePlanInput(updates, plan, prev.customers),
-              updatedAt: new Date().toISOString(),
-            })
-          : plan
-      ),
-    }));
-
-    return true;
+    const saved = await saveMaintenanceApiRequest({
+      path: maintenancePath(planId),
+      method: "PATCH",
+      body: { plan: { ...updates, revision: updates.revision ?? existingPlan.maintenanceRevision ?? 0 } },
+      errorMessage: "Unable to save the maintenance plan.",
+      throwOnError: true,
+    });
+    return saved.ok ? (saved.result || true) : false;
   }
 
   async function handleDeleteMaintenancePlan(planId) {
@@ -614,21 +404,12 @@ export function useWorkspaceActions({
     );
     if (!confirmed) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveMaintenanceApiRequest({
-        path: maintenancePath(planId),
-        method: "DELETE",
-        errorMessage: "Unable to delete the maintenance plan.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      maintenancePlans: (prev.maintenancePlans || []).filter((entry) => entry.id !== planId),
-    }));
-
-    return true;
+    const saved = await saveMaintenanceApiRequest({
+      path: maintenancePath(planId),
+      method: "DELETE",
+      errorMessage: "Unable to delete the maintenance plan.",
+    });
+    return saved.ok;
   }
 
   function handleOpenJob(job) {
@@ -664,87 +445,28 @@ export function useWorkspaceActions({
       return { job: existingOpenJob, duplicate: true };
     }
 
-    if (useSqliteApi) {
-      const saved = await saveMaintenanceApiRequest({
-        path: maintenancePath(planId, "/generate-job"),
-        method: "POST",
-        body: { occurrenceKey: occurrence?.key, revision: occurrence?.revision ?? plan.maintenanceRevision ?? 0 },
-        errorMessage: "Unable to generate the maintenance job.",
-        throwOnError: true,
-      });
-      if (!saved.ok) return false;
-      if (openJob && saved.result?.job) {
-        handleOpenJob(saved.result.job);
-      }
-      return saved.result || true;
-    }
-
-    const now = new Date().toISOString();
-    const jobAddress = plan.siteAddress || customer.address;
-    const billingContact = buildContactSnapshot(getCustomerBillingContact(customer), "Billing contact");
-    const onsiteContact = buildContactSnapshot(getCustomerSitePrimaryContact(customer, jobAddress), "On-site contact");
-    const newJob = normalizeJobRecord({
-      id: crypto.randomUUID(),
-      jobNumber: getNextJobNumber(data.jobs),
-      title: plan.planName,
-      description: buildMaintenanceJobDescription(plan),
-      urgency: "Medium",
-      status: "To Do",
-      scheduledDate: dueDate,
-      assignedTechnicianId: "",
-      assignedTechnicianName: "",
-      customerId: customer.id,
-      customerName: customer.name,
-      customerEmail: customer.email || billingContact?.email || "",
-      customerPhone: customer.phone || billingContact?.phone || "",
-      jobAddress,
-      requesterContact: null,
-      onsiteContact,
-      billingContact,
-      maintenancePlanId: plan.id,
-      maintenancePlanName: plan.planName,
-      maintenanceDueDate: dueDate,
-      maintenanceOccurrenceKey: occurrence?.key || "",
-      createdAt: now,
-      updatedAt: now,
-      notes: [],
-      photos: [],
-      quote: null,
-      invoice: null,
+    const saved = await saveMaintenanceApiRequest({
+      path: maintenancePath(planId, "/generate-job"),
+      method: "POST",
+      body: { occurrenceKey: occurrence?.key, revision: occurrence?.revision ?? plan.maintenanceRevision ?? 0 },
+      errorMessage: "Unable to generate the maintenance job.",
+      throwOnError: true,
     });
-
-    setData((prev) => ({
-      ...prev,
-      jobs: [newJob, ...prev.jobs],
-      maintenancePlans: (prev.maintenancePlans || []).map((entry) =>
-        entry.id === plan.id
-          ? normalizeMaintenancePlanRecord({
-              ...entry,
-              lastGeneratedAt: now,
-              lastGeneratedJobId: newJob.id,
-              recurrence: maintenanceSchedule(entry),
-              nextDueDate: getNextMaintenanceDueDate(dueDate, entry.frequency),
-              updatedAt: now,
-            })
-          : entry
-      ),
-    }));
-
-    if (openJob) handleOpenJob(newJob);
-    return true;
+    if (!saved.ok) return false;
+    if (openJob && saved.result?.job) {
+      handleOpenJob(saved.result.job);
+    }
+    return saved.result || true;
   }
 
   const handleLoadMaintenanceOccurrences = useCallback(async (from, to, signal) => {
-    if (!useSqliteApi) return (data.maintenancePlans || []).flatMap((plan) => expandMaintenanceOccurrences(plan, from, to, data.jobs)
-      .map((entry) => ({ ...entry, customerName: data.customers.find((customer) => customer.id === plan.customerId)?.name || "Unknown customer" })));
     const response = await fetchWithAuth(`/api/maintenance-occurrences?from=${from}&to=${to}`, { signal });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Unable to load maintenance dates.");
     return payload.occurrences;
-  }, [fetchWithAuth, useSqliteApi, data.maintenancePlans, data.jobs, data.customers]);
+  }, [fetchWithAuth]);
 
   async function handleRescheduleMaintenance(occurrence, date, scope) {
-    if (!useSqliteApi) throw new Error("Recurring date changes require SQLite workspace mode.");
     const saved = await saveMaintenanceApiRequest({
       path: maintenancePath(occurrence.planId, scope === "occurrence" ? "/occurrences?response=calendar" : "/schedule"),
       method: "PATCH", throwOnError: true,
@@ -760,29 +482,19 @@ export function useWorkspaceActions({
   async function handleScheduleJob(jobId, scheduledDate, { onError, recordOnly = false, completedMaintenanceCorrection = false, expectedScheduledDate } = {}) {
     if (!canManageBusiness) return false;
 
-    if (recordOnly && !useSqliteApi) {
-      onError?.(new Error("Scheduling requires the job record API, which is unavailable in this workspace storage mode."));
-      return false;
-    }
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, recordOnly ? "/schedule?response=calendar" : "/schedule"),
-        method: "PATCH",
-        body: { scheduledDate: toDateInputValue(scheduledDate), ...(expectedScheduledDate !== undefined ? { expectedScheduledDate } : {}), ...(completedMaintenanceCorrection ? { completedMaintenanceCorrection: true } : {}) },
-        errorMessage: "Unable to update the job schedule.",
-        onError,
-      });
-      return saved.ok ? (recordOnly ? saved.result : true) : false;
-    }
-
-    updateJob(jobId, { scheduledDate: toDateInputValue(scheduledDate) });
-    return true;
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId, recordOnly ? "/schedule?response=calendar" : "/schedule"),
+      method: "PATCH",
+      body: { scheduledDate: toDateInputValue(scheduledDate), ...(expectedScheduledDate !== undefined ? { expectedScheduledDate } : {}), ...(completedMaintenanceCorrection ? { completedMaintenanceCorrection: true } : {}) },
+      errorMessage: "Unable to update the job schedule.",
+      onError,
+    });
+    return saved.ok ? (recordOnly ? saved.result : true) : false;
   }
 
   async function calendarRescheduleRequest({ sourceDate, scheduledDate, jobs } = {}) {
     if (!canManageBusiness) throw new Error("You do not have permission to reschedule jobs.");
-    if (!useSqliteApi) throw new Error("Bulk rescheduling requires the job record API.");
     const payload = await requestWorkspaceUpdate({
       fetchWithAuth,
       path: jobs ? "/api/jobs/reschedule-day" : `/api/jobs/reschedule-day?sourceDate=${encodeURIComponent(sourceDate)}`,
@@ -823,7 +535,7 @@ export function useWorkspaceActions({
   }
 
   async function handleUndoCalendarChange(entry) {
-    if (!canManageBusiness || !useSqliteApi) throw new Error("Calendar Undo requires access to the job scheduling API.");
+    if (!canManageBusiness) throw new Error("Calendar Undo requires access to the job scheduling API.");
     try {
       const payload = await requestWorkspaceUpdate({ fetchWithAuth, ...calendarUndoRequest(entry), errorMessage: "Unable to undo the Calendar change. Try again." });
       applyServerState(payload.state);
@@ -878,24 +590,13 @@ export function useWorkspaceActions({
       id: paymentInput?.id || crypto.randomUUID(),
     };
 
-    if (useSqliteApi) {
-      const saved = await saveDocumentApiRequest({
-        path: documentPath(jobId, "invoice", "/payments"),
-        method: "POST",
-        body: { payment },
-        errorMessage: "Unable to add the invoice payment.",
-      });
-      return saved.ok;
-    }
-
-    if (!job.invoice) return false;
-
-    const nextInvoice = normalizeDocument("invoice", {
-      ...job.invoice,
-      payments: [...(job.invoice.payments || []), payment],
+    const saved = await saveDocumentApiRequest({
+      path: documentPath(jobId, "invoice", "/payments"),
+      method: "POST",
+      body: { payment },
+      errorMessage: "Unable to add the invoice payment.",
     });
-    updateJob(jobId, { invoice: nextInvoice });
-    return true;
+    return saved.ok;
   }
 
   async function handleEditInvoicePayment(jobId, paymentId, updates) {
@@ -905,7 +606,6 @@ export function useWorkspaceActions({
     if (!job || !paymentId) return false;
 
     const existingPayment = (job.invoice?.payments || []).find((payment) => payment.id === paymentId);
-    if (!existingPayment && !useSqliteApi) return false;
 
     const payment = {
       ...(existingPayment || {}),
@@ -913,22 +613,13 @@ export function useWorkspaceActions({
       id: paymentId,
     };
 
-    if (useSqliteApi) {
-      const saved = await saveDocumentApiRequest({
-        path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
-        method: "PATCH",
-        body: { payment },
-        errorMessage: "Unable to update the invoice payment.",
-      });
-      return saved.ok;
-    }
-
-    const nextInvoice = normalizeDocument("invoice", {
-      ...job.invoice,
-      payments: (job.invoice.payments || []).map((entry) => (entry.id === paymentId ? payment : entry)),
+    const saved = await saveDocumentApiRequest({
+      path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
+      method: "PATCH",
+      body: { payment },
+      errorMessage: "Unable to update the invoice payment.",
     });
-    updateJob(jobId, { invoice: nextInvoice });
-    return true;
+    return saved.ok;
   }
 
   async function handleDeleteInvoicePayment(jobId, paymentId) {
@@ -936,23 +627,13 @@ export function useWorkspaceActions({
 
     const job = data.jobs.find((entry) => entry.id === jobId);
     if (!job || !paymentId) return false;
-    if (!job.invoice && !useSqliteApi) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveDocumentApiRequest({
-        path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
-        method: "DELETE",
-        errorMessage: "Unable to delete the invoice payment.",
-      });
-      return saved.ok;
-    }
-
-    const nextInvoice = normalizeDocument("invoice", {
-      ...job.invoice,
-      payments: (job.invoice.payments || []).filter((payment) => payment.id !== paymentId),
+    const saved = await saveDocumentApiRequest({
+      path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
+      method: "DELETE",
+      errorMessage: "Unable to delete the invoice payment.",
     });
-    updateJob(jobId, { invoice: nextInvoice });
-    return true;
+    return saved.ok;
   }
 
   async function syncInvoicePayments(job, nextInvoice) {
@@ -994,23 +675,18 @@ export function useWorkspaceActions({
     if (!normalizedDocument) return false;
     const documentToSave = documentType === "invoice" ? ensureStablePaymentIds(normalizedDocument) : normalizedDocument;
 
-    if (useSqliteApi) {
-      const saved = await saveDocumentApiRequest({
-        path: documentPath(jobId, documentType),
-        method: "PUT",
-        body: { [documentType]: documentToSave },
-        errorMessage: `Unable to save the ${documentType}.`,
-      });
-      if (!saved.ok) return false;
+    const saved = await saveDocumentApiRequest({
+      path: documentPath(jobId, documentType),
+      method: "PUT",
+      body: { [documentType]: documentToSave },
+      errorMessage: `Unable to save the ${documentType}.`,
+    });
+    if (!saved.ok) return false;
 
-      if (documentType === "invoice") {
-        return syncInvoicePayments(job, documentToSave);
-      }
-
-      return true;
+    if (documentType === "invoice") {
+      return syncInvoicePayments(job, documentToSave);
     }
 
-    updateJob(jobId, { [documentType]: documentToSave });
     return true;
   }
 
@@ -1050,17 +726,12 @@ export function useWorkspaceActions({
     const documentType = type === "invoice" ? "invoice" : "quote";
     if (!job[documentType]) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveDocumentApiRequest({
-        path: documentPath(jobId, documentType),
-        method: "DELETE",
-        errorMessage: `Unable to delete the ${documentType}.`,
-      });
-      return saved.ok;
-    }
-
-    updateJob(jobId, { [documentType]: null });
-    return true;
+    const saved = await saveDocumentApiRequest({
+      path: documentPath(jobId, documentType),
+      method: "DELETE",
+      errorMessage: `Unable to delete the ${documentType}.`,
+    });
+    return saved.ok;
   }
 
   async function handleUpdateInvoicePayment(jobId, updates) {
@@ -1076,28 +747,18 @@ export function useWorkspaceActions({
       }
     });
 
-    if (useSqliteApi) {
-      if (Object.keys(invoiceUpdates).length === 0) {
-        window.alert("This invoice change is not supported in SQLite mode yet.");
-        return false;
-      }
-
-      const saved = await saveDocumentApiRequest({
-        path: documentPath(jobId, "invoice"),
-        method: "PATCH",
-        body: { invoice: invoiceUpdates },
-        errorMessage: "Unable to update the invoice.",
-      });
-      return saved.ok;
+    if (Object.keys(invoiceUpdates).length === 0) {
+      window.alert("This invoice change is not supported.");
+      return false;
     }
 
-    const nextInvoice = normalizeDocument("invoice", {
-      ...job.invoice,
-      ...updates,
+    const saved = await saveDocumentApiRequest({
+      path: documentPath(jobId, "invoice"),
+      method: "PATCH",
+      body: { invoice: invoiceUpdates },
+      errorMessage: "Unable to update the invoice.",
     });
-
-    updateJob(jobId, { invoice: nextInvoice });
-    return true;
+    return saved.ok;
   }
 
   function updateJob(jobId, changes) {
@@ -1120,7 +781,7 @@ export function useWorkspaceActions({
       ...previous,
       jobs: previous.jobs.map((entry) => entry.id === jobId ? { ...entry, serviceBoardNote: note } : entry),
     }));
-    if (useSqliteApi) mergeNote(serviceBoardNote);
+    mergeNote(serviceBoardNote);
     try {
       const payload = await requestWorkspaceUpdate({
         fetchWithAuth,
@@ -1129,11 +790,9 @@ export function useWorkspaceActions({
         body: { serviceBoardNote },
         errorMessage: "Unable to save the job note.",
       });
-      // Merge only this field: another in-flight job update must keep its own fields.
-      if (useSqliteApi) mergeNote(payload.result.serviceBoardNote);
-      else applyServerState(payload.state); // Mark legacy state synced; do not trigger a broad autosave.
+      mergeNote(payload.result.serviceBoardNote);
     } catch (error) {
-      if (useSqliteApi) mergeNote(previousNote);
+      mergeNote(previousNote);
       throw error;
     } finally {
       boardNoteSavesRef.current.delete(jobId);
@@ -1153,54 +812,23 @@ export function useWorkspaceActions({
 
     if (!confirmJobStatusChange(job, nextStatus)) return false;
 
-    if (useSqliteApi) {
-      return queueJobStatus({
-        job, nextStatus,
-        save: (status, expectedStatus) => requestJobStatusUpdate({ fetchWithAuth, jobId, status, expectedStatus }),
-        merge: (fields, expected) => setData((previous) => mergeJobStatusFields(previous, jobId, fields, expected)),
-        onSaved: ({ maintenancePlan }) => {
-          if (!maintenancePlan) return;
-          setData((previous) => ({ ...previous, maintenancePlans: previous.maintenancePlans.map((plan) => {
-            if (plan.id !== maintenancePlan.id || (plan.maintenanceRevision || 0) > maintenancePlan.maintenanceRevision) return plan;
-            const { completedOccurrences, ...fields } = maintenancePlan;
-            const completed = new Map(completedOccurrences.map((entry) => [entry.key, entry.completedAt]));
-            return effectiveMaintenancePlan({ ...plan, ...fields,
-              occurrenceExceptions: (plan.occurrenceExceptions || []).map((entry) => completed.has(entry.key) ? { ...entry, completedAt: completed.get(entry.key) } : entry),
-            }, previous.jobs);
-          }) }));
-        },
-        onError: (error) => window.alert(error instanceof Error ? error.message : "Unable to update the job status."),
-      });
-    }
-
-    const now = new Date().toISOString();
-    const shouldClearTomorrowPlan = nextStatus === "Completed";
-    setData((prev) => ({
-      ...prev,
-      jobs: prev.jobs.map((entry) =>
-        entry.id === jobId
-          ? {
-              ...entry,
-              status: nextStatus,
-              updatedAt: now,
-              ...(shouldClearTomorrowPlan
-                ? {
-                    serviceBoardTomorrowDate: "",
-                    serviceBoardTomorrowOrder: null,
-                  }
-                : {}),
-            }
-          : entry
-      ),
-      maintenancePlans: nextStatus === "Completed" && job.maintenancePlanId
-        ? (prev.maintenancePlans || []).map((plan) =>
-            plan.id === job.maintenancePlanId
-              ? normalizeMaintenancePlanRecord({ ...plan, lastCompletedAt: now, updatedAt: now })
-              : plan
-          )
-        : prev.maintenancePlans,
-    }));
-    return true;
+    return queueJobStatus({
+      job, nextStatus,
+      save: (status, expectedStatus) => requestJobStatusUpdate({ fetchWithAuth, jobId, status, expectedStatus }),
+      merge: (fields, expected) => setData((previous) => mergeJobStatusFields(previous, jobId, fields, expected)),
+      onSaved: ({ maintenancePlan }) => {
+        if (!maintenancePlan) return;
+        setData((previous) => ({ ...previous, maintenancePlans: previous.maintenancePlans.map((plan) => {
+          if (plan.id !== maintenancePlan.id || (plan.maintenanceRevision || 0) > maintenancePlan.maintenanceRevision) return plan;
+          const { completedOccurrences, ...fields } = maintenancePlan;
+          const completed = new Map(completedOccurrences.map((entry) => [entry.key, entry.completedAt]));
+          return effectiveMaintenancePlan({ ...plan, ...fields,
+            occurrenceExceptions: (plan.occurrenceExceptions || []).map((entry) => completed.has(entry.key) ? { ...entry, completedAt: completed.get(entry.key) } : entry),
+          }, previous.jobs);
+        }) }));
+      },
+      onError: (error) => window.alert(error instanceof Error ? error.message : "Unable to update the job status."),
+    });
   }
 
   async function handlePlanJobForTomorrow(jobId) {
@@ -1208,80 +836,24 @@ export function useWorkspaceActions({
 
     const tomorrowDate = getTomorrowPlanningDate();
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, "/tomorrow"),
-        method: "POST",
-        body: { tomorrowDate },
-        errorMessage: "Unable to add the job to tomorrow.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => {
-      const existingJob = prev.jobs.find((entry) => entry.id === jobId);
-      if (!existingJob) return prev;
-      if (existingJob.serviceBoardTomorrowDate === tomorrowDate && existingJob.scheduledDate === tomorrowDate) return prev;
-
-      const nextOrder = getNextTomorrowPlanningOrder(prev.jobs, tomorrowDate);
-      const now = new Date().toISOString();
-
-      return {
-        ...prev,
-        jobs: prev.jobs.map((entry) =>
-          entry.id === jobId
-            ? {
-                ...entry,
-                serviceBoardTomorrowDate: tomorrowDate,
-                serviceBoardTomorrowOrder:
-                  entry.serviceBoardTomorrowDate === tomorrowDate && Number.isFinite(Number(entry.serviceBoardTomorrowOrder))
-                    ? Number(entry.serviceBoardTomorrowOrder)
-                    : nextOrder,
-                scheduledDate: tomorrowDate,
-                updatedAt: now,
-              }
-            : entry
-        ),
-      };
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId, "/tomorrow"),
+      method: "POST",
+      body: { tomorrowDate },
+      errorMessage: "Unable to add the job to tomorrow.",
     });
-
-    return true;
+    return saved.ok;
   }
 
   async function handleRemoveJobFromTomorrow(jobId) {
     if (!jobId) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, "/tomorrow"),
-        method: "DELETE",
-        errorMessage: "Unable to remove the job from tomorrow.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => {
-      const existingJob = prev.jobs.find((entry) => entry.id === jobId);
-      if (!existingJob?.serviceBoardTomorrowDate) return prev;
-      const now = new Date().toISOString();
-
-      return {
-        ...prev,
-        jobs: prev.jobs.map((entry) =>
-          entry.id === jobId
-            ? {
-                ...entry,
-                serviceBoardTomorrowDate: "",
-                serviceBoardTomorrowOrder: null,
-                scheduledDate: "",
-                updatedAt: now,
-              }
-            : entry
-        ),
-      };
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId, "/tomorrow"),
+      method: "DELETE",
+      errorMessage: "Unable to remove the job from tomorrow.",
     });
-
-    return true;
+    return saved.ok;
   }
 
   async function handleRemoveAllJobsFromTomorrow() {
@@ -1294,39 +866,13 @@ export function useWorkspaceActions({
     );
     if (!confirmed) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: "/api/jobs/tomorrow",
-        method: "DELETE",
-        body: { tomorrowDate },
-        errorMessage: "Unable to clear tomorrow's plan.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => {
-      const hasTomorrowJobs = prev.jobs.some((entry) => entry.serviceBoardTomorrowDate === tomorrowDate);
-      if (!hasTomorrowJobs) return prev;
-
-      const now = new Date().toISOString();
-
-      return {
-        ...prev,
-        jobs: prev.jobs.map((entry) =>
-          entry.serviceBoardTomorrowDate === tomorrowDate
-            ? {
-                ...entry,
-                serviceBoardTomorrowDate: "",
-                serviceBoardTomorrowOrder: null,
-                scheduledDate: "",
-                updatedAt: now,
-              }
-            : entry
-        ),
-      };
+    const saved = await saveJobApiRequest({
+      path: "/api/jobs/tomorrow",
+      method: "DELETE",
+      body: { tomorrowDate },
+      errorMessage: "Unable to clear tomorrow's plan.",
     });
-
-    return true;
+    return saved.ok;
   }
 
   async function handleUpdateJobDetails(jobId, updates) {
@@ -1337,12 +883,7 @@ export function useWorkspaceActions({
 
     const isStatusChanging = Boolean(updates.status && updates.status !== job.status);
     if (isStatusChanging) {
-      if (useSqliteApi) {
-        if (!confirmJobStatusChange(job, updates.status)) return false;
-      } else {
-        const statusUpdated = await handleStatusChange(jobId, updates.status);
-        if (!statusUpdated) return false;
-      }
+      if (!confirmJobStatusChange(job, updates.status)) return false;
     }
 
     const nextUpdates = { ...updates };
@@ -1362,22 +903,13 @@ export function useWorkspaceActions({
       nextUpdates.billingContact = normalizeJobContactSnapshot(nextUpdates.billingContact, "Billing contact");
     }
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId),
-        method: "PATCH",
-        body: { job: nextUpdates },
-        errorMessage: "Unable to save the job details.",
-      });
-      if (!saved.ok) return false;
-
-      return true;
-    }
-
-    delete nextUpdates.status;
-    if (Object.keys(nextUpdates).length > 0) {
-      updateJob(jobId, nextUpdates);
-    }
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId),
+      method: "PATCH",
+      body: { job: nextUpdates },
+      errorMessage: "Unable to save the job details.",
+    });
+    if (!saved.ok) return false;
 
     return true;
   }
@@ -1393,24 +925,12 @@ export function useWorkspaceActions({
     );
     if (!confirmed) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId),
-        method: "DELETE",
-        errorMessage: "Unable to delete the job.",
-      });
-      if (!saved.ok) return false;
-      return true;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      jobs: prev.jobs.filter((entry) => entry.id !== jobId),
-      deletedJobs: [
-        { deletedAt: new Date().toISOString(), job },
-        ...prev.deletedJobs.filter((entry) => entry.job.id !== jobId),
-      ],
-    }));
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId),
+      method: "DELETE",
+      errorMessage: "Unable to delete the job.",
+    });
+    if (!saved.ok) return false;
     return true;
   }
 
@@ -1419,28 +939,18 @@ export function useWorkspaceActions({
     const noteText = String(text || "").trim();
     if (!noteText) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, "/notes"),
-        method: "POST",
-        body: {
-          note: {
-            text: noteText,
-            author,
-          },
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId, "/notes"),
+      method: "POST",
+      body: {
+        note: {
+          text: noteText,
+          author,
         },
-        errorMessage: "Unable to add the job note.",
-      });
-      return saved.ok;
-    }
-
-    updateJob(jobId, {
-      notes: [
-        ...((data.jobs.find((entry) => entry.id === jobId)?.notes) || []),
-        { id: crypto.randomUUID(), author, text: noteText, createdAt: new Date().toISOString() },
-      ],
+      },
+      errorMessage: "Unable to add the job note.",
     });
-    return true;
+    return saved.ok;
   }
 
   async function handleAddJobPhotos(jobId, photos = []) {
@@ -1448,41 +958,27 @@ export function useWorkspaceActions({
     const nextPhotos = Array.isArray(photos) ? photos.filter(Boolean) : [];
     if (nextPhotos.length === 0) return false;
 
-    if (useSqliteApi) {
-      for (const photo of nextPhotos) {
-        const saved = await saveJobApiRequest({
-          path: jobPath(jobId, "/photos"),
-          method: "POST",
-          body: { photo },
-          errorMessage: "Unable to add the job photo.",
-        });
-        if (!saved.ok) return false;
-      }
-      return true;
+    for (const photo of nextPhotos) {
+      const saved = await saveJobApiRequest({
+        path: jobPath(jobId, "/photos"),
+        method: "POST",
+        body: { photo },
+        errorMessage: "Unable to add the job photo.",
+      });
+      if (!saved.ok) return false;
     }
-
-    updateJob(jobId, {
-      photos: [...((data.jobs.find((entry) => entry.id === jobId)?.photos) || []), ...nextPhotos],
-    });
     return true;
   }
 
   async function handleDeleteJobPhoto(jobId, photo) {
     if (!jobId || !photo?.id) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, `/photos/${encodeURIComponent(photo.id)}`),
-        method: "DELETE",
-        errorMessage: "Unable to delete the job photo.",
-      });
-      return saved.ok;
-    }
-
-    updateJob(jobId, {
-      photos: ((data.jobs.find((entry) => entry.id === jobId)?.photos) || []).filter((entry) => entry.id !== photo.id),
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId, `/photos/${encodeURIComponent(photo.id)}`),
+      method: "DELETE",
+      errorMessage: "Unable to delete the job photo.",
     });
-    return true;
+    return saved.ok;
   }
 
   function handleOpenCustomerProfile(customerId) {
@@ -1532,24 +1028,16 @@ export function useWorkspaceActions({
       createdAt,
     });
 
-    if (useCustomerSqliteApi) {
-      const saved = await saveCustomerApiRequest({
-        path: "/api/customers",
-        method: "POST",
-        body: { customer: createdCustomer },
-        errorMessage: "Unable to create the customer.",
-      });
-      if (!saved.ok) return null;
+    const saved = await saveCustomerApiRequest({
+      path: "/api/customers",
+      method: "POST",
+      body: { customer: createdCustomer },
+      errorMessage: "Unable to create the customer.",
+    });
+    if (!saved.ok) return null;
 
-      const savedCustomer = saved.result || createdCustomer;
-      return savedCustomer;
-    }
-
-    setData((prev) => ({
-      ...prev,
-      customers: [createdCustomer, ...prev.customers.filter((entry) => entry.id !== createdCustomer.id)],
-    }));
-    return createdCustomer;
+    const savedCustomer = saved.result || createdCustomer;
+    return savedCustomer;
   }
 
   async function handleSaveSiteProfile(customerId, siteInput, previousAddress = "") {
@@ -1559,109 +1047,37 @@ export function useWorkspaceActions({
     const normalizedSite = normalizeSiteProfileRecord({ ...siteInput, _inferredProfile: false });
     if (!normalizedSite) return false;
 
-    if (useCustomerSqliteApi) {
-      const customer = data.customers.find((entry) => entry.id === customerId);
-      if (!customer) {
-        window.alert("Customer not found.");
-        return false;
-      }
-
-      const previousAddressKey = normalizedPreviousAddress.toLowerCase();
-      const existingSite = (customer.sites || []).find((site) =>
-        site.id === normalizedSite.id
-        || (previousAddressKey && normalizeSiteAddress(site.address).toLowerCase() === previousAddressKey)
-      );
-      const siteForSave = {
-        ...normalizedSite,
-        ...updatedSiteAddressMetadata(existingSite, normalizedSite),
-        id: existingSite?.id || normalizedSite.id,
-      };
-      const saved = await saveCustomerApiRequest({
-        path: existingSite
-          ? customerPath(customerId, `/sites/${encodeURIComponent(existingSite.id)}`)
-          : customerPath(customerId, "/sites"),
-        method: existingSite ? "PATCH" : "POST",
-        body: {
-          site: siteForSave,
-          previousAddress: normalizedPreviousAddress,
-        },
-        errorMessage: "Unable to save the site profile.",
-      });
-      if (!saved.ok) return false;
-
-      const savedSite = saved.result || siteForSave;
-      return savedSite;
+    const customer = data.customers.find((entry) => entry.id === customerId);
+    if (!customer) {
+      window.alert("Customer not found.");
+      return false;
     }
 
-    setData((prev) => {
-      const customer = prev.customers.find((entry) => entry.id === customerId);
-      if (!customer) return prev;
-
-      const currentSites = normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes);
-      const existingSite =
-        currentSites.find((site) => site.id === normalizedSite.id || site.address.toLowerCase() === normalizedPreviousAddress.toLowerCase()) || null;
-      const currentCustomerAddress = normalizeSiteAddress(customer.address);
-      const isPrimarySite =
-        Boolean(currentCustomerAddress)
-        && currentCustomerAddress.toLowerCase() === (normalizedPreviousAddress || normalizedSite.address).toLowerCase();
-      const nextSite = normalizeSiteProfileRecord({
-        ...(existingSite || {}),
-        ...normalizedSite,
-        _inferredProfile: false,
-        ...updatedSiteAddressMetadata(existingSite, normalizedSite),
-        id: normalizedSite.id,
-        createdAt:
-          existingSite?.createdAt || normalizedSite.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      const nextCustomerAddress = isPrimarySite ? nextSite.address : customer.address;
-      const nextSites = normalizeCustomerSiteProfiles(
-        [
-          ...currentSites.filter(
-            (site) =>
-              site.id !== nextSite.id
-              && site.address.toLowerCase() !== normalizedPreviousAddress.toLowerCase()
-              && site.address.toLowerCase() !== nextSite.address.toLowerCase()
-          ),
-          nextSite,
-        ],
-        nextCustomerAddress,
-        []
-      );
-      const nextCustomer = normalizeCustomerRecord({
-        ...customer,
-        address: nextCustomerAddress,
-        sites: nextSites,
-        createdAt: customer.createdAt,
-      });
-
-      const shouldSyncAddress =
-        normalizedPreviousAddress
-        && normalizedPreviousAddress.toLowerCase() !== nextSite.address.toLowerCase();
-      const jobs = shouldSyncAddress
-        ? prev.jobs.map((job) =>
-            job.customerId === customerId && normalizeSiteAddress(job.jobAddress).toLowerCase() === normalizedPreviousAddress.toLowerCase()
-              ? { ...job, jobAddress: nextSite.address, updatedAt: new Date().toISOString() }
-              : job
-          )
-        : prev.jobs;
-      const maintenancePlans = shouldSyncAddress
-        ? (prev.maintenancePlans || []).map((plan) =>
-            plan.customerId === customerId && normalizeSiteAddress(plan.siteAddress).toLowerCase() === normalizedPreviousAddress.toLowerCase()
-              ? { ...maintenancePlanIdentity({ ...plan, siteAddress: nextSite.address }, [nextCustomer]), updatedAt: new Date().toISOString() }
-              : plan
-          )
-        : prev.maintenancePlans;
-
-      return {
-        ...prev,
-        customers: prev.customers.map((entry) => (entry.id === customerId ? nextCustomer : entry)),
-        jobs,
-        maintenancePlans,
-      };
+    const previousAddressKey = normalizedPreviousAddress.toLowerCase();
+    const existingSite = (customer.sites || []).find((site) =>
+      site.id === normalizedSite.id
+      || (previousAddressKey && normalizeSiteAddress(site.address).toLowerCase() === previousAddressKey)
+    );
+    const siteForSave = {
+      ...normalizedSite,
+      ...updatedSiteAddressMetadata(existingSite, normalizedSite),
+      id: existingSite?.id || normalizedSite.id,
+    };
+    const saved = await saveCustomerApiRequest({
+      path: existingSite
+        ? customerPath(customerId, `/sites/${encodeURIComponent(existingSite.id)}`)
+        : customerPath(customerId, "/sites"),
+      method: existingSite ? "PATCH" : "POST",
+      body: {
+        site: siteForSave,
+        previousAddress: normalizedPreviousAddress,
+      },
+      errorMessage: "Unable to save the site profile.",
     });
+    if (!saved.ok) return false;
 
-    return normalizedSite;
+    const savedSite = saved.result || siteForSave;
+    return savedSite;
   }
 
   async function handleDeleteSiteProfile(customerId, site) {
@@ -1674,44 +1090,18 @@ export function useWorkspaceActions({
     );
     if (!confirmed) return false;
 
-    if (useCustomerSqliteApi) {
-      const siteId = site.siteProfileId || site.id;
-      if (!siteId) {
-        window.alert("Site profile not found.");
-        return false;
-      }
-
-      const saved = await saveCustomerApiRequest({
-        path: customerPath(customerId, `/sites/${encodeURIComponent(siteId)}`),
-        method: "DELETE",
-        errorMessage: "Unable to delete the site profile.",
-      });
-      if (!saved.ok) return false;
-
-      return true;
+    const siteId = site.siteProfileId || site.id;
+    if (!siteId) {
+      window.alert("Site profile not found.");
+      return false;
     }
 
-    setData((prev) => {
-      const customer = prev.customers.find((entry) => entry.id === customerId);
-      if (!customer) return prev;
-
-      const targetAddress = normalizeSiteAddress(site.address).toLowerCase();
-      const nextCustomer = normalizeCustomerRecord({
-        ...customer,
-        sites: normalizeCustomerSiteProfiles(customer.sites, customer.address, customer.siteAccessNotes).filter(
-          (entry) => entry.id !== site.siteProfileId && entry.address.toLowerCase() !== targetAddress
-        ),
-        siteAccessNotes: normalizeSiteAccessNotes(customer.siteAccessNotes).filter(
-          (entry) => entry.address.toLowerCase() !== targetAddress
-        ),
-        createdAt: customer.createdAt,
-      });
-
-      return {
-        ...prev,
-        customers: prev.customers.map((entry) => (entry.id === customerId ? nextCustomer : entry)),
-      };
+    const saved = await saveCustomerApiRequest({
+      path: customerPath(customerId, `/sites/${encodeURIComponent(siteId)}`),
+      method: "DELETE",
+      errorMessage: "Unable to delete the site profile.",
     });
+    if (!saved.ok) return false;
 
     return true;
   }
@@ -1934,29 +1324,16 @@ export function useWorkspaceActions({
           templateSnapshot: template,
         }),
         persistHistory: async ({ historyEntry }) => {
-          const documentToSave = {
-            ...doc,
-            sentHistory: [
-              ...(doc.sentHistory || []),
-              historyEntry,
-            ],
-          };
+          const savedDocument = await handleSaveDocument(selectedFreshJob.id, docType, doc);
+          if (!savedDocument) return false;
 
-          if (useSqliteApi) {
-            const savedDocument = await handleSaveDocument(selectedFreshJob.id, docType, doc);
-            if (!savedDocument) return false;
-
-            const savedHistory = await saveDocumentApiRequest({
-              path: documentPath(selectedFreshJob.id, docType, "/sent-history"),
-              method: "POST",
-              body: { history: historyEntry },
-              errorMessage: `Email was sent, but the ${docType} send history could not be saved.`,
-            });
-            return savedHistory.ok;
-          }
-
-          updateJob(selectedFreshJob.id, { [docType]: normalizeDocument(docType, documentToSave) });
-          return true;
+          const savedHistory = await saveDocumentApiRequest({
+            path: documentPath(selectedFreshJob.id, docType, "/sent-history"),
+            method: "POST",
+            body: { history: historyEntry },
+            errorMessage: `Email was sent, but the ${docType} send history could not be saved.`,
+          });
+          return savedHistory.ok;
         },
       });
     } finally {
@@ -1968,50 +1345,13 @@ export function useWorkspaceActions({
   async function handleUpdateCustomer(customerId, updates) {
     if (!canManageBusiness) return false;
 
-    if (useCustomerSqliteApi) {
-      const saved = await saveCustomerApiRequest({
-        path: customerPath(customerId),
-        method: "PATCH",
-        body: { customer: updates },
-        errorMessage: "Unable to save the customer.",
-      });
-      return saved.ok ? (saved.result || true) : false;
-    }
-
-    const { primarySite, ...customerFields } = updates;
-    // Validate before scheduling the state update so the form can show errors.
-    const currentCustomer = data.customers.find((entry) => entry.id === customerId);
-    if (!currentCustomer) return false;
-    if (primarySite !== undefined) applyPrimarySiteUpdate(currentCustomer, primarySite);
-    setData((prev) => {
-      const previousCustomer = prev.customers.find((customer) => customer.id === customerId);
-      const customers = prev.customers.map((customer) =>
-        customer.id === customerId
-          ? normalizeCustomerRecord({ ...(primarySite === undefined ? customer : applyPrimarySiteUpdate(customer, primarySite)), ...customerFields, id: customer.id, createdAt: customer.createdAt })
-          : customer
-      );
-      const updatedCustomer = customers.find((customer) => customer.id === customerId);
-      if (!updatedCustomer) return prev;
-      const billingContact = getCustomerBillingContact(updatedCustomer);
-      const jobs = prev.jobs.map((job) =>
-        job.customerId === customerId
-          ? {
-              ...job,
-              customerName: updatedCustomer.name,
-              customerEmail: updatedCustomer.email || billingContact?.email || "",
-              customerPhone: updatedCustomer.phone || billingContact?.phone || "",
-              ...(primarySite !== undefined && normalizeSiteAddress(job.jobAddress).toLowerCase() === normalizeSiteAddress(previousCustomer.address).toLowerCase()
-                ? { jobAddress: updatedCustomer.address } : {}),
-            }
-          : job
-      );
-      const maintenancePlans = primarySite === undefined ? prev.maintenancePlans : (prev.maintenancePlans || []).map((plan) =>
-        plan.customerId === customerId && normalizeSiteAddress(plan.siteAddress).toLowerCase() === normalizeSiteAddress(previousCustomer.address).toLowerCase()
-          ? maintenancePlanIdentity({ ...plan, siteAddress: updatedCustomer.address }, customers) : plan);
-      return { ...prev, customers, jobs, maintenancePlans };
+    const saved = await saveCustomerApiRequest({
+      path: customerPath(customerId),
+      method: "PATCH",
+      body: { customer: updates },
+      errorMessage: "Unable to save the customer.",
     });
-
-    return true;
+    return saved.ok ? (saved.result || true) : false;
   }
 
   async function handleDeleteCustomer(customerId) {
@@ -2029,36 +1369,12 @@ export function useWorkspaceActions({
     );
     if (!confirmed) return false;
 
-    if (useCustomerSqliteApi) {
-      const saved = await saveCustomerApiRequest({
-        path: customerPath(customerId),
-        method: "DELETE",
-        errorMessage: "Unable to delete the customer.",
-      });
-      if (!saved.ok) return false;
-
-      return true;
-    }
-
-    setData((prev) => {
-      const deletedAt = new Date().toISOString();
-      const relatedJobsForDelete = prev.jobs.filter((job) => job.customerId === customerId);
-
-      return {
-        ...prev,
-        customers: prev.customers.filter((entry) => entry.id !== customerId),
-        maintenancePlans: (prev.maintenancePlans || []).filter((entry) => entry.customerId !== customerId),
-        jobs: prev.jobs.filter((job) => job.customerId !== customerId),
-        deletedCustomers: [
-          { deletedAt, customer },
-          ...prev.deletedCustomers.filter((entry) => entry.customer.id !== customerId),
-        ],
-        deletedJobs: [
-          ...relatedJobsForDelete.map((job) => ({ deletedAt, job })),
-          ...prev.deletedJobs.filter((entry) => !relatedJobsForDelete.some((job) => job.id === entry.job.id)),
-        ],
-      };
+    const saved = await saveCustomerApiRequest({
+      path: customerPath(customerId),
+      method: "DELETE",
+      errorMessage: "Unable to delete the customer.",
     });
+    if (!saved.ok) return false;
 
     return true;
   }
@@ -2066,93 +1382,23 @@ export function useWorkspaceActions({
   async function handleRestoreDeletedJob(jobId) {
     if (!canManageBusiness) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: jobPath(jobId, "/restore"),
-        method: "POST",
-        errorMessage: "Unable to restore the job.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => {
-      const deletedRecord = prev.deletedJobs.find((entry) => entry.job.id === jobId);
-      if (!deletedRecord) return prev;
-
-      let customers = prev.customers;
-      let deletedCustomers = prev.deletedCustomers;
-      let customer = prev.customers.find((entry) => entry.id === deletedRecord.job.customerId) || null;
-
-      if (!customer) {
-        const deletedCustomerRecord = prev.deletedCustomers.find((entry) => entry.customer.id === deletedRecord.job.customerId);
-        if (deletedCustomerRecord) {
-          customer = normalizeCustomerRecord(deletedCustomerRecord.customer);
-          customers = [customer, ...prev.customers.filter((entry) => entry.id !== customer.id)];
-          deletedCustomers = prev.deletedCustomers.filter((entry) => entry.customer.id !== customer.id);
-        } else {
-          customer = normalizeCustomerRecord({
-            id: deletedRecord.job.customerId,
-            name: deletedRecord.job.customerName,
-            email: deletedRecord.job.customerEmail,
-            phone: deletedRecord.job.customerPhone,
-            address: deletedRecord.job.jobAddress,
-            createdAt: deletedRecord.job.createdAt,
-          });
-          customers = [customer, ...prev.customers.filter((entry) => entry.id !== customer.id)];
-        }
-      }
-
-      const restoredJobBase = syncJobWithCustomer(deletedRecord.job, customer);
-      const restoredJob = {
-        ...restoredJobBase,
-        jobNumber: prev.jobs.some((entry) => entry.jobNumber === restoredJobBase.jobNumber && entry.id !== restoredJobBase.id)
-          ? getNextJobNumber(prev.jobs)
-          : restoredJobBase.jobNumber,
-        updatedAt: new Date().toISOString(),
-      };
-
-      return {
-        ...prev,
-        customers,
-        deletedCustomers,
-        jobs: [restoredJob, ...prev.jobs.filter((entry) => entry.id !== restoredJob.id)],
-        deletedJobs: prev.deletedJobs.filter((entry) => entry.job.id !== jobId),
-      };
+    const saved = await saveJobApiRequest({
+      path: jobPath(jobId, "/restore"),
+      method: "POST",
+      errorMessage: "Unable to restore the job.",
     });
-
-    return true;
+    return saved.ok;
   }
 
   async function handleRestoreDeletedCustomer(customerId) {
     if (!canManageBusiness) return false;
 
-    if (useCustomerSqliteApi) {
-      const saved = await saveCustomerApiRequest({
-        path: customerPath(customerId, "/restore"),
-        method: "POST",
-        errorMessage: "Unable to restore the customer.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => {
-      const deletedRecord = prev.deletedCustomers.find((entry) => entry.customer.id === customerId);
-      if (!deletedRecord) return prev;
-
-      const restoredCustomer = normalizeCustomerRecord(deletedRecord.customer);
-      return {
-        ...prev,
-        customers: [restoredCustomer, ...prev.customers.filter((entry) => entry.id !== customerId)],
-        jobs: prev.jobs.map((job) =>
-          job.customerId === customerId
-            ? syncJobWithCustomer(job, restoredCustomer)
-            : job
-        ),
-        deletedCustomers: prev.deletedCustomers.filter((entry) => entry.customer.id !== customerId),
-      };
+    const saved = await saveCustomerApiRequest({
+      path: customerPath(customerId, "/restore"),
+      method: "POST",
+      errorMessage: "Unable to restore the customer.",
     });
-
-    return true;
+    return saved.ok;
   }
 
   async function handleEmptyDeletedJobs() {
@@ -2161,17 +1407,12 @@ export function useWorkspaceActions({
     const confirmed = window.confirm("Empty the deleted jobs recycle bin? This cannot be undone.");
     if (!confirmed) return false;
 
-    if (useSqliteApi) {
-      const saved = await saveJobApiRequest({
-        path: "/api/deleted-jobs",
-        method: "DELETE",
-        errorMessage: "Unable to empty deleted jobs.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({ ...prev, deletedJobs: [] }));
-    return true;
+    const saved = await saveJobApiRequest({
+      path: "/api/deleted-jobs",
+      method: "DELETE",
+      errorMessage: "Unable to empty deleted jobs.",
+    });
+    return saved.ok;
   }
 
   async function handleEmptyDeletedCustomers() {
@@ -2180,21 +1421,16 @@ export function useWorkspaceActions({
     const confirmed = window.confirm("Empty the deleted customers recycle bin? This cannot be undone.");
     if (!confirmed) return false;
 
-    if (useCustomerSqliteApi) {
-      const saved = await saveCustomerApiRequest({
-        path: "/api/deleted-customers",
-        method: "DELETE",
-        errorMessage: "Unable to empty deleted customers.",
-      });
-      return saved.ok;
-    }
-
-    setData((prev) => ({ ...prev, deletedCustomers: [] }));
-    return true;
+    const saved = await saveCustomerApiRequest({
+      path: "/api/deleted-customers",
+      method: "DELETE",
+      errorMessage: "Unable to empty deleted customers.",
+    });
+    return saved.ok;
   }
 
   async function handleWorkspaceLogoChange(file) {
-    if (!canManageBusiness || !useSqliteApi) throw new Error("Workspace branding is not available for this account or storage mode.");
+    if (!canManageBusiness) throw new Error("Workspace branding is not available for this account or storage mode.");
     const response = await fetchWithAuth("/api/settings/workspace-logo", file
       ? { method: "PUT", headers: { "Content-Type": file.type }, body: file }
       : { method: "DELETE" });

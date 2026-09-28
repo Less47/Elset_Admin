@@ -8,7 +8,7 @@ Ordinary Settings edits now remain in a local draft until **Save changes**. The 
 
 | Section | Previously | Now |
 | --- | --- | --- |
-| Preferences: company, bank and email | Debounced field writes in SQLite; broad autosave after changing application state in JSON mode | One explicit save submits all changed preference fields |
+| Preferences: company, bank and email | Earlier field autosaves (retired) | One explicit save submits all changed preference fields |
 | Preferences: Workspace Branding | File selection uploaded immediately; confirmed removal deleted immediately | File selection/removal stages a local preview; the section Save applies it |
 | Document Templates: quote and invoice | Field changes and Reset immediately persisted | Draft wording and Reset; explicit Save; switching document type is guarded |
 | UI Settings: themes, colours, layout, Reset UI | Immediate preview and debounced persistence | Local preview; explicit personal preference save; discard restores saved appearance |
@@ -26,7 +26,7 @@ Company settings remain shared. Appearance remains personal to the signed-in acc
 
 `useSettingsPersistence` calls existing targeted APIs. SQLite preference writes merge only the acknowledged patch into current application state. Template writes merge only the template. Personal saves validate and canonicalize colours through the existing preference schema. The retired Settings autosave hook and old field/template save handlers were removed.
 
-Legacy JSON settings use their existing full-state endpoint, explicitly on Save. Pending broad autosave is cancelled and an older in-flight autosave finishes first. Draft edits never enter shared application state. The browser transport regression uses a stubbed legacy JSON response, including save failure/retry; SQLite and provider regressions use isolated local servers and databases.
+Settings now saves exclusively through record-specific APIs. The full-state endpoint and legacy transport test have been retired. Draft edits never enter shared application state before explicit Save. SQLite and provider regressions use isolated local servers and databases.
 
 ## Navigation and unload protection
 
@@ -102,7 +102,7 @@ Other uncommitted changes already present in the workspace were preserved.
 - **165 distinct browser tests passed across suite runs and focused reruns.** The four complete Settings/add-on/provider suites initially had 157 passes and one test failure; six navigation regressions passed and the additional legacy transport test failed. Both failures were corrected and their focused rerun passed (2/2). The first was a browser cancellation expectation; the second was a noncanonical legacy fixture contact. Existing behavioural assertions were retained.
 - Browser command prefix: `npx playwright test --config=playwright.config.mjs --tsconfig=tsconfig.app.json --workers=1 --reporter=line`.
 - Complete suites: `theme-settings.spec.mjs`, `job-costing.spec.mjs`, `quickbooks-integration.spec.mjs`, `xero-integration.spec.mjs`.
-- Additional regressions: customer/site dirty forms, customer browser history, document navigation/reload/sign-out, price-list editing/discard, and legacy JSON Settings transport.
+- Additional regressions: customer/site dirty forms, customer browser history, document navigation/reload/sign-out, price-list editing/discard.
 - New coverage includes initial clean state, revert-to-clean, zero writes before Save, grouped writes, failed-save retry, edits during requests, click-time capture across resources, partial-resource failure, unload listener lifecycle, native reload warning, tab/sidebar/history guards, theme restoration, provider status/commands, template switching, and per-account isolation.
 - Desktop branding/Save placement and mobile colour controls were visually inspected from browser screenshots. Responsive screenshot and overflow checks cover the existing theme/provider matrices.
 

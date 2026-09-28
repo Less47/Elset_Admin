@@ -1,7 +1,3 @@
-export function isSqliteWorkspaceMode(mode) {
-  return String(mode || "").trim().toLowerCase() === "sqlite";
-}
-
 export async function requestWorkspaceUpdate({
   fetchWithAuth,
   path,

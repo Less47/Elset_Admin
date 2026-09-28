@@ -8,7 +8,7 @@ The existing read-only account query and JSON fallback now aggregate every eligi
 
 Eligibility retains ELSET's existing invoice-send-history or positive-payment evidence. It excludes quotes, unissued/unpaid drafts, explicit draft/unfinished/incomplete/invalid/archive metadata, inactive/deleted records, missing/invalid issue dates, missing/invalid lines, and nonpositive invoices. The current document is counted once by invoice ID; ServiceM8 references, send-history snapshots, cached totals and provider mappings are not additional invoices or revenue sources. No issuance, import, payment, job-costing or provider behavior was changed.
 
-Outstanding still uses the authoritative sum of remaining per-invoice balances. Normally this equals invoiced minus received; existing overpayments stay attached to their invoice and do not settle another invoice without an allocation. Existing SQLite/JSON rounding and legacy JSON paid markers are preserved.
+Outstanding still uses the authoritative sum of remaining per-invoice balances. Normally this equals invoiced minus received; existing overpayments stay attached to their invoice and do not settle another invoice without an allocation. Existing SQLite rounding and historical paid-marker compatibility are preserved.
 
 Files changed for this addition: `server-customer-account.js`, `src/lib/invoice-account.js`, `src/hooks/useCustomerAccount.js`, `src/components/customers/CustomerAccount.jsx`, `src/components/customers/CustomerWorkspace.css`, `tests/customer-account.test.js`, `tests/e2e/customer-account.spec.mjs`, and this report. No schema changes, provider queries, stored customer totals, graphs, date filters, integration changes or production access were added.
 
@@ -38,7 +38,7 @@ SQLite uses the existing `invoiceFinancialsFromRows` calculation, extracted with
 - `GET /api/customers/:id/account-summary?today=YYYY-MM-DD`: authenticated admin/office access; `Cache-Control: no-store`. Uses the normal DB resolver and an existing-file, read-only connection without migrations. Missing customers return 404; unavailable data returns 503 rather than a false zero. Invalid dates return 400.
 - Response: customer ID, as-of date, outstanding cents, open count, overdue count, oldest overdue days, up to five open invoice rows and `hasMore`. All open invoices contribute to totals. Paid history and other customers' records are not returned.
 - The optional `today` is the browser's local calendar date, preserving the existing UI's date boundary when the server runs in another timezone. Overdue means positive eligible balance and a valid saved due date strictly before today. Missing/invalid due dates are not overdue. Day differences use calendar dates, avoiding daylight-saving hour errors.
-- Legacy JSON mode derives the section from existing in-memory jobs; it adds no workspace fetch. The existing application still performs its normal initial workspace load.
+- The runtime always uses the SQLite account-summary API; the former in-memory account fallback is retired.
 
 ## UI and refresh
 
@@ -56,7 +56,7 @@ SQLite uses the existing `invoiceFinancialsFromRows` calculation, extracted with
 - Overpayment remains attached to its invoice and does not reduce another invoice's receivable.
 - A positive recorded deposit counts even when invoice send history is absent, matching the existing Deposit Paid/Partially Paid semantics.
 - Legacy JSON `paymentStatus: Paid` without payment rows is honored; cached totals/paid amounts are not used as a separate balance source.
-- Existing SQLite arithmetic rounds each scaled line to cents; the existing JSON/browser helper rounds the subtotal. Fractional-line inputs can therefore produce a pre-existing one-cent difference between server financials and the editor. This change preserves the server's authoritative SQLite calculation and the legacy JSON helper rather than changing invoice amounts globally.
+- Existing SQLite arithmetic rounds each scaled line to cents; the existing JSON/browser helper rounds the subtotal. Fractional-line inputs can therefore produce a pre-existing one-cent difference between server financials and the editor. This change preserves the server's authoritative SQLite calculation and historical calculation helpers for offline validation rather than changing invoice amounts globally.
 - Saved missing due dates remain missing in this summary. Existing editor normalization can supply a default date; the summary does not invent an authoritative due date.
 
 ## Files changed

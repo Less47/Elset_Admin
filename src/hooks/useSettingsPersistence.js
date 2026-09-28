@@ -11,12 +11,9 @@ export function useSettingsPersistence({ session, personal, setData }) {
       // The settings API preserves text and trims email fields. A successful
       // targeted write acknowledges that patch, not unrelated snapshot values.
       for (const key of Object.keys(patch)) if (key.endsWith("Email")) patch[key] = patch[key].trim();
-      let saved;
-      if (session.workspaceStorageMode === "sqlite") {
-        await requestSettingsWorkspaceUpdate({ fetchWithAuth: session.fetchWithAuth, path: "/api/settings", method: "PATCH", body: { settings: patch }, errorMessage: "Preference changes could not be saved." });
-        saved = { ...baseline, ...patch };
-        setData(previous => ({ ...previous, settings: { ...previous.settings, ...Object.fromEntries(Object.keys(patch).map(key => [key, saved[key]])) } }));
-      } else saved = (await session.saveLegacySettings({ settings: patch })).settings;
+      await requestSettingsWorkspaceUpdate({ fetchWithAuth: session.fetchWithAuth, path: "/api/settings", method: "PATCH", body: { settings: patch }, errorMessage: "Preference changes could not be saved." });
+      const saved = { ...baseline, ...patch };
+      setData(previous => ({ ...previous, settings: { ...previous.settings, ...Object.fromEntries(Object.keys(patch).map(key => [key, saved[key]])) } }));
       return pickSettings(saved, preferenceSettingKeys);
     },
     async appearance(draft, baseline) {
@@ -24,7 +21,6 @@ export function useSettingsPersistence({ session, personal, setData }) {
     },
     async template(type, draft) {
       const normalized = normalizeDocumentTemplate(draft, type), key = type === "invoice" ? "invoiceTemplate" : "quoteTemplate";
-      if (session.workspaceStorageMode !== "sqlite") return (await session.saveLegacySettings({ [key]: normalized }))[key];
       const payload = await requestSettingsWorkspaceUpdate({ fetchWithAuth: session.fetchWithAuth, path: `/api/document-templates/${type}`, method: "PUT", body: { template: normalized } });
       const saved = payload.state[key];
       setData(previous => ({ ...previous, [key]: saved }));

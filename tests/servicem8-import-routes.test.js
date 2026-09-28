@@ -64,7 +64,6 @@ async function withTempWorkspace(callback, fixture = null) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -473,36 +472,5 @@ test("ServiceM8 import endpoint rejects technicians", async () => {
       assert.equal(response.response.status, 403);
       assert.equal(getDbState(dbPath).customers.length, 0);
     }, { role: "technician" });
-  });
-});
-
-test("JSON mode ServiceM8 import keeps the legacy merge-and-save path", async () => {
-  const snapshot = readServiceM8Fixture();
-  let savedState = null;
-  const initialState = readWorkspaceFixture({
-    customers: [],
-    jobs: [],
-  });
-  const routeOptions = {
-    loadWorkspaceStateFn: () => initialState,
-    saveWorkspaceStateFn: (nextData) => {
-      savedState = nextData;
-      return nextData;
-    },
-    getAuthorizedWorkspaceStateFn: () => savedState || initialState,
-  };
-
-  await withMockedServiceM8(snapshot, async () => {
-    await withServer({ ELSET_WORKSPACE_STORAGE: "json" }, async (baseUrl) => {
-      const apply = await requestJson(baseUrl, "/api/admin/servicem8-import/apply", {
-        method: "POST",
-        body: JSON.stringify({ apiKey: "synthetic-api-key" }),
-      });
-
-      assert.equal(apply.response.status, 200, apply.payload.error || JSON.stringify(apply.payload));
-      assert.equal(savedState.customers.length, 1);
-      assert.equal(savedState.jobs.length, 1);
-      assert.equal(apply.payload.state.customers[0].id, "servicem8-company-svc-company-alpha");
-    }, {}, routeOptions);
   });
 });

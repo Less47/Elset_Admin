@@ -1,5 +1,5 @@
 import express from "express";
-import { openUserPreferencesDb, getUserUiPreferences, patchUserUiPreferences, readLegacyAppearance } from "./server-user-ui-preferences.js";
+import { openUserPreferencesDb, getUserUiPreferences, patchUserUiPreferences, readWorkspaceAppearance } from "./server-user-ui-preferences.js";
 import { UserUiPreferenceError } from "./src/lib/user-ui-preferences.js";
 
 export function createUserPreferencesRouter({ requireAuth, env = process.env } = {}) {
@@ -15,7 +15,7 @@ export function createUserPreferencesRouter({ requireAuth, env = process.env } =
         if (!req.user?.id) throw new UserUiPreferenceError("Authentication required.", 401);
         if (Object.keys(req.query).length) throw new UserUiPreferenceError("Preference queries do not accept user IDs or other parameters.");
         db = openUserPreferencesDb({ env });
-        const fallback = () => readLegacyAppearance(env);
+        const fallback = () => readWorkspaceAppearance(env);
         const preferences = write
           ? patchUserUiPreferences(db, req.user.id, req.body, fallback)
           : getUserUiPreferences(db, req.user.id, fallback);

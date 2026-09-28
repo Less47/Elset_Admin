@@ -276,7 +276,6 @@ function SettingsContent({
   onPreviewServiceM8Import,
   onApplyServiceM8Import,
   backupSummary,
-  workspaceStorageMode = "json",
   canManageWorkspaceSettings = true,
   workspaceAddons,
   fetchWithAuth,
@@ -297,7 +296,6 @@ function SettingsContent({
   const themeSaveState = { ...(activeSettingsTab === "ui" ? appearance : preferences), scope: activeSettingsTab === "ui" ? "theme" : "preferences" };
   const onRetryThemeSave = () => void scope.group.save();
   const currentTemplateType = activeTemplateType === "invoice" ? "invoice" : "quote";
-  const isSqliteBackupMode = String(workspaceStorageMode || "").trim().toLowerCase() === "sqlite";
   const [downloadStatus, setDownloadStatus] = useState("idle");
   const [downloadMessage, setDownloadMessage] = useState("");
   const [restoreStatus, setRestoreStatus] = useState("idle");
@@ -352,12 +350,11 @@ function SettingsContent({
       { key: "staff", label: "Staff", value: backupSummary?.staff || 0 },
       { key: "inventoryItems", label: "Inventory Items", value: backupSummary?.inventoryItems || 0 },
       { key: "maintenancePlans", label: "Maintenance Plans", value: backupSummary?.maintenancePlans || 0 },
-      { key: "userAccounts", label: "Login Accounts", value: backupSummary?.userAccounts || 0 },
       { key: "deletedJobs", label: "Deleted Jobs", value: backupSummary?.deletedJobs || 0 },
       { key: "deletedCustomers", label: "Deleted Customers", value: backupSummary?.deletedCustomers || 0 },
     ];
-    return isSqliteBackupMode ? cards.filter((item) => item.key !== "userAccounts") : cards;
-  }, [backupSummary, isSqliteBackupMode]);
+    return cards;
+  }, [backupSummary]);
   const serviceM8SummaryCards = useMemo(() => serviceM8Summary ? ([
     { key: "customer-create", label: "Customers To Create", value: serviceM8Summary.customers?.create || 0 },
     { key: "customer-update", label: "Customers To Update", value: serviceM8Summary.customers?.update || 0 },
@@ -506,14 +503,12 @@ function SettingsContent({
           })}
         </div>
       </div>
-
-      {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available={isSqliteBackupMode} fetchWithAuth={fetchWithAuth} /> : null}
+      {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available fetchWithAuth={fetchWithAuth} /> : null}
       {canManageWorkspaceSettings && activeSettingsTab === "price-list" ? <PriceListSettings fetchWithAuth={fetchWithAuth} /> : null}
-
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="grid gap-4">
-            <WorkspaceBranding url={normalizedSettings.workspaceLogoUrl} onChange={onWorkspaceLogoChange} enabled={isSqliteBackupMode} />
+            <WorkspaceBranding url={normalizedSettings.workspaceLogoUrl} onChange={onWorkspaceLogoChange} enabled />
             <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -651,7 +646,6 @@ function SettingsContent({
           </div>
         </div>
       )}
-
       {canManageWorkspaceSettings && activeSettingsTab === "templates" && (
         <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="grid gap-4">
@@ -734,7 +728,6 @@ function SettingsContent({
           </Card>
         </div>
       )}
-
       {activeSettingsTab === "ui" && (
         <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <p className="text-sm text-text-secondary 2xl:col-span-2">Personal appearance — saved to your account across devices. These choices do not change anyone else's view.</p>
@@ -844,7 +837,6 @@ function SettingsContent({
           <WorkspacePreview settings={normalizedSettings} />
         </div>
       )}
-
       {canManageWorkspaceSettings && activeSettingsTab === "backup" && (
         <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="grid gap-4">
@@ -853,9 +845,7 @@ function SettingsContent({
                 <div>
                   <CardTitle className="text-lg">Download Full Backup</CardTitle>
                   <p className="mt-1 text-sm text-text-secondary">
-                    {isSqliteBackupMode
-                      ? "Save a SQLite workspace backup bundle with customers, jobs, staff, templates, settings, and deleted records."
-                      : "Save a JSON copy of the shared workspace, including customers, jobs, staff, templates, settings, and login accounts."}
+                    {"Save a SQLite workspace backup bundle with customers, jobs, staff, templates, settings, and deleted records."}
                   </p>
                 </div>
                 <Badge className={isAdmin ? "bg-status-success-surface text-status-success" : "bg-status-warning-surface text-status-warning"}>
@@ -864,9 +854,7 @@ function SettingsContent({
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="rounded-2xl border border-border bg-muted p-3 text-sm text-text-secondary">
-                  {isSqliteBackupMode
-                    ? "Login accounts, active sessions, SMTP credentials, API keys, and environment secrets are left out of SQLite workspace backups."
-                    : "Active session tokens are left out of the file for security, but the backup still includes the core workspace records and saved login accounts."}
+                  Login accounts, active sessions, and environment secrets are excluded. Encrypted accounting connection details are included in the workspace backup.
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -893,7 +881,7 @@ function SettingsContent({
                   </p>
                 ) : !isAdmin ? (
                   <p className="text-sm text-status-warning">
-                    Sign in with an admin account to download a full backup file from this screen.
+                    Sign in with an admin account to download a workspace backup file from this screen.
                   </p>
                 ) : null}
               </CardContent>
@@ -904,9 +892,7 @@ function SettingsContent({
                 <div>
                   <CardTitle className="text-lg">Restore From Backup</CardTitle>
                   <p className="mt-1 text-sm text-text-secondary">
-                    {isSqliteBackupMode
-                      ? "Upload a SQLite workspace backup JSON bundle to replace the current shared workspace snapshot."
-                      : "Upload a previously downloaded backup JSON file to replace the current shared workspace snapshot."}
+                    {"Upload a SQLite workspace backup JSON bundle to replace the current shared workspace snapshot."}
                   </p>
                 </div>
                 <Badge className={isAdmin ? "bg-status-warning-surface text-status-warning" : "bg-surface-raised text-text-secondary"}>
@@ -915,9 +901,7 @@ function SettingsContent({
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="rounded-2xl border border-status-warning-border bg-status-warning-surface p-3 text-sm text-status-warning">
-                  {isSqliteBackupMode
-                    ? "This will overwrite workspace records only. Login accounts, sessions, SMTP credentials, API keys, and environment settings are not restored."
-                    : "This will overwrite customers, jobs, staff, settings, templates, deleted records, and saved login accounts on the shared server."}
+                  {"This will overwrite workspace records only. Login accounts, sessions, SMTP credentials, API keys, and environment settings are not restored."}
                 </div>
 
                 <FormField label="Backup JSON file">
@@ -994,9 +978,7 @@ function SettingsContent({
 
                 <form className="grid gap-4" onSubmit={handleBackupRestore}>
                   <div className="rounded-2xl border border-status-warning-border bg-status-warning-surface p-3 text-sm text-status-warning">
-                    {isSqliteBackupMode
-                      ? "This replaces the SQLite workspace snapshot only. Login accounts and secrets are left untouched."
-                      : "This replaces customers, jobs, staff, templates, deleted records, and saved login accounts with the uploaded backup file."}
+                    {"This replaces the SQLite workspace snapshot only. Login accounts and secrets are left untouched."}
                   </div>
 
                   {restoreFile ? (
@@ -1229,7 +1211,7 @@ function SettingsContent({
                 Download backups regularly after major admin changes like bulk customer imports, maintenance plan updates, or template edits.
               </div>
               <div className="rounded-2xl border border-border bg-muted p-3">
-                Store the JSON file somewhere secure because it contains customer records, operational history, and login account data.
+                Store the backup file somewhere secure because it contains customer records, operational history, and encrypted accounting connection details.
               </div>
               <div className="rounded-2xl border border-border bg-muted p-3">
                 The file is exported directly from the server-side data store, so it reflects the shared workspace rather than only your current browser state.

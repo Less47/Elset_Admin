@@ -240,7 +240,7 @@ function readMobileRecordFixture() {
     urgency: "Low",
     scheduledDate: "2026-02-05",
     quote: null,
-    invoice: null,
+    invoice: { ...fixture.jobs[0].invoice, id: "mobile-long-invoice" },
     maintenancePlanId: "",
     maintenancePlanName: "",
     createdAt: "2026-02-01T00:00:00.000Z",
@@ -404,7 +404,6 @@ async function seedLoginAccounts() {
       ELSET_AUTH_DB_PATH: authDbPath,
       ELSET_DATA_DIR: tempDataDir,
       ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
-      ELSET_WORKSPACE_STORAGE: "sqlite",
       FLY_APP_NAME: "",
       NODE_ENV: "test",
       TZ: "Australia/Sydney",
@@ -427,7 +426,6 @@ async function startServer() {
     ELSET_DATA_DIR: tempDataDir,
     ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
     ELSET_FRONTEND_URL: baseUrl,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
     FLY_APP_NAME: "",
     NODE_ENV: "test",
     PORT: String(port),
@@ -1117,7 +1115,8 @@ test("mobile page controls keep records primary and preserve live filter state",
     await expect(invoiceControls.getByLabel("Sort invoices")).toBeVisible();
     const invoiceRecords = page.getByRole("list", { name: "Invoice records" });
     await expect(invoiceRecords.getByRole("button", { name: /^Open Job #/ }).first()).toBeVisible();
-    await expect(invoiceRecords.getByRole("button", { name: /^Create invoice for Job #/ }).first()).toBeVisible();
+    await expect(invoiceRecords.getByRole("button", { name: /^Open invoice editor for Job #/ }).first()).toBeVisible();
+    await expect(invoiceRecords.getByRole("button", { name: /^Create invoice for Job #/ })).toHaveCount(0);
     await capture(page, testInfo, "responsive-invoices-mobile-390x844.png", "Invoices compact mobile controls");
     await invoiceControls.getByRole("button", { name: "Filters", exact: true }).click();
     filters = page.getByRole("dialog", { name: "Filters" });
@@ -1125,7 +1124,7 @@ test("mobile page controls keep records primary and preserve live filter state",
     await expect(filters.getByRole("combobox", { name: "Status filter" })).toBeVisible();
     await chooseSelectOption(page, "Status filter", "Overdue");
     await filters.getByRole("button", { name: "Done" }).click();
-    await expect(page.locator("[data-result-summary]")).toHaveText("1 invoice · 1 billing record");
+    await expect(page.locator("[data-result-summary]")).toHaveText("1 invoice");
     await expect(page.locator('[data-mobile-record-card][data-record-id="demo-job-1001"]')).toBeVisible();
     await expect(page.locator("[data-mobile-record-card]")).toHaveCount(1);
     await assertNoHorizontalOverflow(page);
@@ -1241,12 +1240,12 @@ test("phone database pages use contained record cards with visible identities, s
     },
     {
       section: "Invoices",
-      recordSelector: '[data-record-id="mobile-job-high-priority"]',
-      identity: "Urgent safety edge repair",
-      status: "Not invoiced",
+      recordSelector: '[data-record-id="demo-job-1001"]',
+      identity: "Arcadia Example Apartments",
+      status: "Overdue",
       statusIsBadge: true,
-      action: "Create Invoice",
-      expectedTexts: ["Job #1002", "Arcadia Example Apartments", "10 Example Lane", "Client ref OC-DEMO-001", "Total", "$0.00", "No invoice", "Job"],
+      action: "Open Invoice Editor",
+      expectedTexts: ["Job #1001", "Arcadia Example Apartments", "10 Example Lane", "Client ref OC-DEMO-001", "Total", "$550.00", "Payment", "Job"],
       longRecordSelector: '[data-record-id="mobile-job-long-record"]',
     },
     {
@@ -1291,7 +1290,7 @@ test("phone database pages use contained record cards with visible identities, s
     await page.clock.setFixedTime(new Date("2026-09-17T02:00:00Z"));
     const fixture = readMobileRecordFixture();
     await page.route("**/api/app-state", (route) => route.request().method() === "GET"
-      ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+      ? route.fulfill({ json: { state: fixture } })
       : route.continue());
 
     try {
@@ -1403,9 +1402,8 @@ test("phone database pages use contained record cards with visible identities, s
         await expect(sentInvoiceCard.getByRole("button", { name: "Open Job #1001", exact: true })).toHaveCount(1);
         await expect(sentInvoiceCard.getByRole("button", { name: "Open sent invoice for Job #1001", exact: true })).toHaveCount(1);
         await expect(sentInvoiceCard.getByRole("button", { name: "Open invoice editor for Job #1001", exact: true })).toHaveCount(1);
-        const createInvoice = page.locator('[data-mobile-record-card][data-record-id="mobile-job-high-priority"]').locator("button", { hasText: "Create Invoice" });
-        await expect(createInvoice).toHaveCount(1);
-        await createInvoice.click();
+        await expect(page.locator('[data-mobile-record-card][data-record-id="mobile-job-high-priority"]')).toHaveCount(0);
+        await sentInvoiceCard.getByRole("button", { name: "Open invoice editor for Job #1001", exact: true }).click();
         await expect(page.locator('[data-document-workspace="invoice"]')).toHaveCount(1);
         await expect(page.getByRole("dialog")).toHaveCount(0);
         await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
@@ -1469,7 +1467,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
     const page = await context.newPage();
     const fixture = readMobileRecordFixture();
     await page.route("**/api/app-state", (route) => route.request().method() === "GET"
-      ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+      ? route.fulfill({ json: { state: fixture } })
       : route.continue());
 
     try {
@@ -2059,7 +2057,7 @@ test("Service Board cards respect column padding across tablet, desktop, and mob
     let fixture = readAugmentedFixture();
     // Keep long-text stress data isolated from the shared workflow fixtures and APIs.
     await page.route("**/api/app-state", (route) => route.request().method() === "GET"
-      ? route.fulfill({ json: { state: fixture, storageMode: "sqlite" } })
+      ? route.fulfill({ json: { state: fixture } })
       : route.continue());
     try {
       await loginAs(page, "mobileadmin", viewport.width < 1024);
@@ -2134,6 +2132,12 @@ test("visual density preserves touch targets, focus, and card gutters at every r
     const page = await context.newPage();
     try {
       await loginAs(page, "mobileadmin", mobile);
+      if (viewport.width >= 768) {
+        // View choices persist per account; make this list-layout check independent of earlier tests.
+        for (const status of ["To Do", "In Progress", "Completed"]) {
+          await page.getByRole("button", { name: `${status} List view`, exact: true }).click();
+        }
+      }
       const firstCard = page.locator(viewport.width < 768 ? "[data-mobile-job-id]" : '[draggable="true"] > [data-slot="card"]').first();
       await expect(firstCard).toHaveCSS("border-top-width", "1px");
       if (viewport.width >= 768) {

@@ -141,7 +141,6 @@ async function seedAdminLogin() {
       ...process.env,
       ELSET_AUTH_DB_PATH: authDbPath,
       ELSET_DATA_DIR: tempDataDir,
-      ELSET_WORKSPACE_STORAGE: "sqlite",
       NODE_ENV: "test",
     },
     maxBuffer: 1024 * 1024,
@@ -162,7 +161,6 @@ async function startServer() {
     ELSET_AUTH_DB_PATH: path.join(tempDataDir, "auth.db"),
     ELSET_DATA_DIR: tempDataDir,
     ELSET_FRONTEND_URL: baseUrl,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
     NODE_ENV: "test",
     PORT: String(port),
   };

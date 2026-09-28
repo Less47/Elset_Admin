@@ -17,7 +17,6 @@ The repository's API default is port **3101** (`server-auth.js` / server startup
 Use a separate local data directory and the development Intuit values. These are templates, not real credentials:
 
 ```dotenv
-ELSET_WORKSPACE_STORAGE=sqlite
 ELSET_DATA_DIR=./data-quickbooks-sandbox
 ELSET_WORKSPACE_DB_PATH=./data-quickbooks-sandbox/elset-workspace.db
 ELSET_AUTH_DB_PATH=./data-quickbooks-sandbox/auth.db

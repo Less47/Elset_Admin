@@ -155,7 +155,6 @@ async function withTempWorkspace(callback, fixture = readFixture()) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -419,7 +418,7 @@ test("staff delete rolls back when the archive write fails", async () => {
   }, readRelationshipFixture());
 });
 
-test("staff routes allow office users, reject technicians, and stay unavailable in JSON mode", async () => {
+test("staff routes allow office users, reject technicians, and fail closed without a workspace database", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {
       const result = await requestJson(baseUrl, "/api/staff", {
@@ -445,7 +444,6 @@ test("staff routes allow office users, reject technicians, and stay unavailable 
   const tempDir = makeTempDir();
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "json",
   };
 
   try {
@@ -456,8 +454,9 @@ test("staff routes allow office users, reject technicians, and stay unavailable 
           staff: staffMember({ id: "json-mode-staff-member" }),
         }),
       });
-      assert.equal(result.response.status, 409);
+      assert.equal(result.response.status, 500);
     });
+    assert.equal(fs.existsSync(path.join(tempDir, "elset-workspace.db")), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

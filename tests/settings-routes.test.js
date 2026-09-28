@@ -39,7 +39,6 @@ async function withTempWorkspace(callback, fixture = readFixture()) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -359,7 +358,7 @@ test("settings reset routes restore shared preferences and reject global appeara
   });
 });
 
-test("settings routes enforce permissions, preserve JSON mode, and leave auth records untouched", async () => {
+test("settings routes enforce permissions, fail closed without a workspace database, and leave auth records untouched", async () => {
   await withTempWorkspace(async ({ env, tempDir }) => {
     await withServer(env, async (baseUrl) => {
       const officeResult = await requestJson(baseUrl, "/api/settings", {
@@ -383,17 +382,17 @@ test("settings routes enforce permissions, preserve JSON mode, and leave auth re
   const tempDir = makeTempDir();
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "json",
   };
 
   try {
     await withServer(env, async (baseUrl) => {
       const result = await requestJson(baseUrl, "/api/settings", {
         method: "PATCH",
-        body: JSON.stringify({ settings: { companyName: "JSON Mode Business" } }),
+        body: JSON.stringify({ settings: { companyName: "Missing DB Business" } }),
       });
-      assert.equal(result.response.status, 409);
+      assert.equal(result.response.status, 500);
     });
+    assert.equal(fs.existsSync(path.join(tempDir, "elset-workspace.db")), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

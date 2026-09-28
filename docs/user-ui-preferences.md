@@ -4,7 +4,7 @@ Implementation and verification report, 9 September 2026. All verification used 
 
 ## 1. Existing architecture
 
-The audit and classification were reported before implementation. `SettingsManager` had a shared Preferences tab (company, bank and email fields) and a UI Settings tab (11 colours, sidebar width and density). Both read `data.settings`, persisted in workspace SQLite `settings(key, value_json, updated_at)` or legacy `app-data.json`. `PATCH /api/settings` returned the authorized workspace; `/api/settings/reset` and document-template routes also operated on shared settings.
+The audit and classification were reported before implementation. `SettingsManager` had a shared Preferences tab (company, bank and email fields) and a UI Settings tab (11 colours, sidebar width and density). Both read `data.settings`, persisted in workspace SQLite `settings(key, value_json, updated_at)` (historically also a JSON file before runtime retirement). `PATCH /api/settings` returned the authorized workspace; `/api/settings/reset` and document-template routes also operated on shared settings.
 
 `useThemeSettingsSave` already provided immediate drafts, a single active save, 400 ms visual debounce and 600 ms company-text debounce. `useThemePalette` applied CSS variables to the app and document root. Customer/Site List/Grid and Service Board display choices were React state, without server persistence. Browser storage contained legacy workspace/migration data (`gateflow-demo-v1`), not a dedicated preference cache.
 
@@ -29,7 +29,7 @@ The 14 shared fields remain `companyName`, `companyAbn`, `companyAcn`, `companyE
 
 ## 4. Database choice
 
-Preferences live in a dedicated ELSET-owned table in the existing auth database, resolved with `ELSET_AUTH_DB_PATH` or `ELSET_DATA_DIR/auth.db`. This follows the authenticated account and works in both SQLite and legacy JSON workspace modes. Creating a workspace SQLite file solely for preferences could otherwise switch an existing JSON installation's storage mode. No Better Auth core columns, tables, triggers, foreign keys or `user_version` are changed.
+Preferences live in a dedicated ELSET-owned table in the existing auth database, resolved with `ELSET_AUTH_DB_PATH` or `ELSET_DATA_DIR/auth.db`. This follows the authenticated account independently of shared workspace data. Workspace runtime storage is SQLite-only. No Better Auth core columns, tables, triggers, foreign keys or `user_version` are changed.
 
 The existing Fly data backup includes `auth.db` and its WAL/SHM files, so it includes these preferences. Workspace-only SQLite exports intentionally exclude auth data and therefore do not carry personal preferences. No backup/deployment script was run or changed.
 
@@ -92,7 +92,7 @@ The retired `boardHiddenColumns` preference is ignored when reading existing row
 
 ## 7. API endpoints
 
-`GET /api/user-preferences` returns `{ "ok": true, "preferences": { ... } }` for the current account. `PATCH /api/user-preferences` accepts a narrow flat patch such as `{ "actionColor": "#FF8800" }`, merges it transactionally with that account's stored values and returns normalized preferences. Responses use `Cache-Control: private, no-store`. Neither operation returns/replaces app state. Existing records require only a small auth-database read/write; initial fallback reads only appearance rows from workspace SQLite, or the existing legacy JSON file when in JSON mode.
+`GET /api/user-preferences` returns `{ "ok": true, "preferences": { ... } }` for the current account. `PATCH /api/user-preferences` accepts a narrow flat patch such as `{ "actionColor": "#FF8800" }`, merges it transactionally with that account's stored values and returns normalized preferences. Responses use `Cache-Control: private, no-store`. Neither operation returns/replaces app state. Existing records require only a small auth-database read/write; initial fallback reads only appearance rows from workspace SQLite.
 
 ## 8. Secure identity
 
@@ -106,7 +106,7 @@ Logged-out screens use safe defaults and make no preference request. Auth identi
 
 ## 10. Legacy transition
 
-Global appearance values remain as a migration fallback. `PATCH /api/settings` rejects personal keys, including mixed company/appearance patches; the old global UI reset rejects requests. Legacy broad JSON workspace saves preserve existing appearance fields. Personal controls always use the new endpoint, including in JSON mode. Explicit business backup/import behavior remains intact. Reset UI Settings resets this account's 14 appearance values, leaving page/board choices under their existing controls.
+Global appearance values remain as a migration fallback. `PATCH /api/settings` rejects personal keys, including mixed company/appearance patches; the old global UI reset rejects requests. Broad workspace saves are removed. Personal controls always use the account-specific endpoint. Explicit business backup/import behavior remains intact. Reset UI Settings resets this account's 14 appearance values, leaving page/board choices under their existing controls.
 
 ## 11. Save strategy
 
@@ -142,7 +142,7 @@ A changed the genuine shared company name; B reloaded and saw it while retaining
 
 ## 16. Tests added
 
-Seven storage/API/legacy tests and three client-store tests cover strict validation, additive migration, fallback, uniqueness, partial merge, account isolation, reopened database connections, spoofing/anonymous rejection, shared business settings, JSON compatibility, coalescing, one active write, stale responses, account teardown and retry. Seven browser scenarios add real-auth migration, concurrent accounts/fresh sessions/restart, sign-out isolation, page/board preferences, 20-selection stress, technician access and failed-load recovery. Existing theme tests now verify the targeted personal endpoint; existing shared-setting and technician-navigation expectations were updated to match the intended behavior.
+Seven storage/API/legacy tests and three client-store tests cover strict validation, additive migration, fallback, uniqueness, partial merge, account isolation, reopened database connections, spoofing/anonymous rejection, shared business settings, historical normalization, coalescing, one active write, stale responses, account teardown and retry. Seven browser scenarios add real-auth migration, concurrent accounts/fresh sessions/restart, sign-out isolation, page/board preferences, 20-selection stress, technician access and failed-load recovery. Existing theme tests now verify the targeted personal endpoint; existing shared-setting and technician-navigation expectations were updated to match the intended behavior.
 
 ## 17. Exact verification results
 

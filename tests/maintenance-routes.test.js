@@ -112,7 +112,6 @@ async function withTempWorkspace(callback, fixture = fixtureWithMaintenance()) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -413,7 +412,7 @@ test("customer archive and restore preserves related maintenance plans in SQLite
   });
 });
 
-test("maintenance routes reject invalid relationships and stay unavailable in JSON mode", async () => {
+test("maintenance routes reject invalid relationships and fail closed without a workspace database", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {
       const missingCustomer = await requestJson(baseUrl, "/api/maintenance-plans", {
@@ -458,7 +457,6 @@ test("maintenance routes reject invalid relationships and stay unavailable in JS
   const tempDir = makeTempDir();
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "json",
   };
 
   try {
@@ -469,8 +467,9 @@ test("maintenance routes reject invalid relationships and stay unavailable in JS
           plan: maintenancePlan({ id: "json-mode-plan" }),
         }),
       });
-      assert.equal(result.response.status, 409);
+      assert.equal(result.response.status, 500);
     });
+    assert.equal(fs.existsSync(path.join(tempDir, "elset-workspace.db")), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

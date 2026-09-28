@@ -190,7 +190,7 @@ For missing configuration, the application operator supplies the server variable
 
 Automated coverage creates two synthetic workspace databases using the same application key and confirms distinct tenants, credentials, configuration, mappings and OAuth state; cross-workspace token decryption is rejected.
 
-Database backups include encrypted credentials and integration history. Store backups securely and retain the matching encryption key separately. JSON workspace exports intentionally omit integration credentials/history. Restoring an old database can restore stale rotating credentials; reconnect if needed. Automated key rotation is not part of V1.
+Database backups include encrypted credentials and integration history. Store backups securely and retain the matching encryption key separately. Settings backup bundles embed the workspace SQLite snapshot, including encrypted integration credentials/history. Restoring an old database can restore stale rotating credentials; reconnect if needed. Automated key rotation is not part of V1.
 
 ## Operational limits
 

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import Database from "better-sqlite3";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -21,9 +22,7 @@ import {
   assertProductionWorkspaceStorageReady,
   getAuthorizedWorkspaceState,
   getWorkspaceReadinessStatus,
-  getWorkspaceStorageMode,
   loadWorkspaceState,
-  saveAuthorizedWorkspaceState,
 } from "../server-workspace-storage.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -206,7 +205,6 @@ test("loads app state from SQLite when a workspace database exists", () => {
     db.close();
 
     const env = { ELSET_DATA_DIR: tempDir };
-    assert.equal(getWorkspaceStorageMode(env), "sqlite");
     const state = loadWorkspaceState({ env });
     assert.equal(state.customers.length, 1);
     assert.equal(state.jobs.length, 1);
@@ -218,23 +216,7 @@ test("loads app state from SQLite when a workspace database exists", () => {
   }
 });
 
-test("production storage guard requires explicit migration when non-empty JSON exists without SQLite", () => {
-  const tempDir = makeTempDir();
-  try {
-    fs.copyFileSync(fixturePath, path.join(tempDir, "app-data.json"));
 
-    assert.throws(
-      () => getWorkspaceStorageMode({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" }),
-      /SQLite workspace migration required/
-    );
-    assert.equal(
-      getWorkspaceStorageMode({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production", ELSET_WORKSPACE_STORAGE: "json" }),
-      "json"
-    );
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
-});
 
 test("production workspace readiness refuses empty or absent persistent storage", () => {
   const tempDir = makeTempDir();
@@ -242,17 +224,17 @@ test("production workspace readiness refuses empty or absent persistent storage"
   try {
     assert.throws(
       () => assertProductionWorkspaceStorageReady({ ELSET_DATA_DIR: missingDir, NODE_ENV: "production" }),
-      /Persistent workspace data directory does not exist/
+      /Workspace database not found/
     );
 
     assert.throws(
       () => assertProductionWorkspaceStorageReady({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" }),
-      /Production workspace storage is not initialized/
+      /Workspace database not found/
     );
 
     const readiness = getWorkspaceReadinessStatus({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" });
     assert.equal(readiness.ok, false);
-    assert.match(readiness.error, /Production workspace storage is not initialized/);
+    assert.match(readiness.error, /Workspace database not found/);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -268,40 +250,18 @@ test("production workspace readiness accepts a migrated SQLite workspace", () =>
     db.close();
 
     const status = assertProductionWorkspaceStorageReady({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" });
-    assert.equal(status.mode, "sqlite");
+    assert.equal(status.sqliteExists, true);
     assert.equal(status.dbPath, dbPath);
 
     const readiness = getWorkspaceReadinessStatus({ ELSET_DATA_DIR: tempDir, NODE_ENV: "production" });
     assert.equal(readiness.ok, true);
-    assert.equal(readiness.storage.mode, "sqlite");
+    assert.equal(readiness.storage.sqliteExists, true);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test("production JSON rollback mode requires an existing non-empty JSON workspace", () => {
-  const tempDir = makeTempDir();
-  try {
-    assert.throws(
-      () => assertProductionWorkspaceStorageReady({
-        ELSET_DATA_DIR: tempDir,
-        ELSET_WORKSPACE_STORAGE: "json",
-        NODE_ENV: "production",
-      }),
-      /Production JSON rollback mode requires an existing non-empty workspace JSON file/
-    );
 
-    fs.copyFileSync(fixturePath, path.join(tempDir, "app-data.json"));
-    const status = assertProductionWorkspaceStorageReady({
-      ELSET_DATA_DIR: tempDir,
-      ELSET_WORKSPACE_STORAGE: "json",
-      NODE_ENV: "production",
-    });
-    assert.equal(status.mode, "json");
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
-});
 
 test("production auth startup guard does not create a container-local auth directory", () => {
   const tempDir = makeTempDir();
@@ -356,7 +316,6 @@ test("auth startup does not rewrite app-data.json when workspace storage is SQLi
         BETTER_AUTH_SECRET: "synthetic-test-secret",
         ELSET_AUTH_DB_PATH: path.join(tempDir, "auth.db"),
         ELSET_DATA_DIR: tempDir,
-        ELSET_WORKSPACE_STORAGE: "sqlite",
         NODE_ENV: "test",
       },
     });
@@ -368,22 +327,7 @@ test("auth startup does not rewrite app-data.json when workspace storage is SQLi
   }
 });
 
-test("sqlite mode rejects broad workspace writes", () => {
-  const tempDir = makeTempDir();
-  const dbPath = path.join(tempDir, "elset-workspace.db");
-  try {
-    const db = openWorkspaceDb({ dbPath });
-    importWorkspaceJsonData(db, readFixture());
-    db.close();
 
-    assert.throws(
-      () => saveAuthorizedWorkspaceState({ role: "admin" }, readFixture(), { env: { ELSET_DATA_DIR: tempDir } }),
-      /Broad workspace saves are disabled/
-    );
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
-});
 
 test("non-dry migration command creates a JSON backup and SQLite database in a temp data directory", () => {
   const tempDir = makeTempDir();
@@ -437,6 +381,18 @@ test("workspace SQLite backup command creates a validated backup with metadata a
     });
     assert.equal(migrate.status, 0, migrate.stderr);
 
+    const authPath = path.join(tempDir, "auth.db");
+    const missingAuthBackup = spawnSync(process.execPath, [
+      path.join(repoRoot, "scripts", "backup-workspace-sqlite.mjs"),
+      "--data-dir", tempDir, "--include-auth", "--output", path.join(tempDir, "missing-auth-backups"),
+    ], { cwd: repoRoot, encoding: "utf8", env: { ...process.env, ELSET_AUTH_DB_PATH: authPath } });
+    assert.notEqual(missingAuthBackup.status, 0);
+    assert.match(missingAuthBackup.stderr, /Requested authentication database does not exist/);
+    assert.equal(fs.existsSync(authPath), false);
+    const auth = new Database(authPath);
+    auth.exec("CREATE TABLE user(id TEXT PRIMARY KEY); INSERT INTO user VALUES ('synthetic-user');");
+    auth.close();
+
     const backup = spawnSync(process.execPath, [
       path.join(repoRoot, "scripts", "backup-workspace-sqlite.mjs"),
       "--data-dir",
@@ -445,6 +401,7 @@ test("workspace SQLite backup command creates a validated backup with metadata a
     ], {
       cwd: repoRoot,
       encoding: "utf8",
+      env: { ...process.env, ELSET_AUTH_DB_PATH: authPath },
     });
 
     assert.equal(backup.status, 0, backup.stderr);
@@ -460,6 +417,10 @@ test("workspace SQLite backup command creates a validated backup with metadata a
     assert.equal(metadata.workspace.summary.counts.customers, 1);
     assert.ok(fs.existsSync(metadata.workspace.path));
     assert.ok(fs.existsSync(`${metadata.workspace.path}.sha256`));
+    assert.ok(fs.existsSync(`${metadata.auth.path}.sha256`));
+    const copiedAuth = new Database(metadata.auth.path, { readonly: true });
+    try { assert.equal(copiedAuth.prepare("SELECT id FROM user").get().id, "synthetic-user"); }
+    finally { copiedAuth.close(); }
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

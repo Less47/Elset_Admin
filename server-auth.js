@@ -8,12 +8,10 @@ import { fromNodeHeaders } from "better-auth/node";
 import { admin, username } from "better-auth/plugins";
 import { fileURLToPath } from "url";
 import { assertSafeLocalAuthEnvironment } from "./scripts/local-auth-cli-helpers.mjs";
-import { loadData, saveData } from "./server-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const AUTH_MIGRATION_VERSION = "better-auth-v1";
 const AUTH_MIN_PASSWORD_LENGTH = 6;
 const SYNTHETIC_EMAIL_DOMAIN = "auth.elset.local";
 const WORKSPACE_ROLE_VALUES = new Set(["admin", "office", "technician"]);
@@ -21,7 +19,6 @@ const AUTH_ROLE_VALUES = new Set(["admin", "user"]);
 const env = globalThis.process?.env || {};
 const DATA_DIR = path.resolve(env.ELSET_DATA_DIR || path.join(__dirname, "data"));
 const AUTH_DB_PATH = path.resolve(env.ELSET_AUTH_DB_PATH || path.join(DATA_DIR, "auth.db"));
-const WORKSPACE_DB_PATH = path.resolve(env.ELSET_WORKSPACE_DB_PATH || path.join(DATA_DIR, "elset-workspace.db"));
 const DEFAULT_API_PORT = Number(env.ELSET_API_PORT || env.PORT || 3101);
 const DEFAULT_FRONTEND_PORT = Number(env.ELSET_FRONTEND_PORT || 5173);
 
@@ -49,13 +46,6 @@ function assertProductionAuthStorageReady() {
   }
 
   fs.accessSync(authDir, fs.constants.R_OK | fs.constants.W_OK);
-}
-
-function shouldRunLegacyJsonAuthMigration() {
-  const workspaceMode = String(env.ELSET_WORKSPACE_STORAGE || "").trim().toLowerCase();
-  if (workspaceMode === "json") return true;
-  if (workspaceMode === "sqlite") return false;
-  return !fs.existsSync(WORKSPACE_DB_PATH);
 }
 
 function ensureAuthDirectory() {
@@ -489,50 +479,10 @@ function findMatchingUserForSession(users, currentUser) {
   )) || null;
 }
 
-async function migrateLegacyUsersIfNeeded() {
-  if (!shouldRunLegacyJsonAuthMigration()) {
-    return;
-  }
-
-  const data = loadData();
-  const migrationMeta = data.meta?.authMigration;
-  if (migrationMeta?.version === AUTH_MIGRATION_VERSION) {
-    return;
-  }
-
-  const legacyUsers = Array.isArray(data.users) ? data.users : [];
-  if (readAuthUserCount() === 0 && legacyUsers.length > 0) {
-    const nextUsers = legacyUsers
-      .map((user) => normalizeBackupAuthUser({
-        ...user,
-        workspaceRole: user.role,
-      }))
-      .filter(Boolean);
-
-    if (nextUsers.length > 0) {
-      insertAuthUsers(nextUsers, []);
-    }
-  }
-
-  saveData({
-    ...data,
-    users: [],
-    sessions: [],
-    meta: {
-      ...data.meta,
-      authMigration: {
-        version: AUTH_MIGRATION_VERSION,
-        migratedAt: new Date().toISOString(),
-      },
-    },
-  });
-}
-
 export async function ensureAuthReady() {
   if (!authReadyPromise) {
     authReadyPromise = (async () => {
       await ensureAuthSchemaReady();
-      await migrateLegacyUsersIfNeeded();
     })();
   }
 

@@ -1,6 +1,3 @@
-import { buildDocumentReference, calculateInvoiceBalanceDue, calculateInvoicePaidAmount, calculateInvoiceTotal, roundCurrency } from "./quote-template.js";
-import { invoiceHasBeenSent } from "./invoice-deletion.js";
-
 export function invoiceToday(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -83,27 +80,4 @@ export function summarizeInvoiceAccount(customerId, records, { today = invoiceTo
     openInvoiceCount: invoices.length, overdueInvoiceCount: invoices.filter((invoice) => invoice.overdueDays > 0).length,
     oldestOverdueDays: invoices.reduce((days, invoice) => Math.max(days, invoice.overdueDays), 0),
     invoices: invoices.slice(0, limit), hasMore: invoices.length > limit };
-}
-
-// JSON mode already supplies Jobs to Customer Profile. Reuse its invoice helpers
-// without fetching another workspace or persisting a Customer balance.
-export function summarizeJsonCustomerAccount(customerId, jobs = [], options) {
-  const records = [];
-  for (const job of jobs) {
-    const invoice = job.invoice;
-    if (job.customerId !== customerId || isInactiveInvoice(invoice) || (invoice.type && invoice.type !== "invoice")) continue;
-    const items = Array.isArray(invoice.items) ? invoice.items : [];
-    if (!items.length || items.some((item) => !item || !Number.isFinite(Number(item.qty)) || Number(item.qty) <= 0
-      || item.rate === "" || item.rate === null || item.rate === undefined || !Number.isFinite(Number(item.rate)) || Number(item.rate) < 0)) continue;
-    const total = calculateInvoiceTotal(items);
-    let payments = (Array.isArray(invoice.payments) ? invoice.payments : []).filter((payment) => Number(payment?.amount) > 0)
-      .map((payment) => ({ amount: roundCurrency(payment.amount) }));
-    if (!payments.length && String(invoice.paymentStatus || "").toLowerCase() === "paid" && total > 0) payments = [{ amount: total }];
-    const paid = calculateInvoicePaidAmount(payments), balance = calculateInvoiceBalanceDue(items, payments);
-    records.push({ customerId: job.customerId, jobId: job.id, invoiceId: invoice.id || `${job.id}:invoice`,
-      invoiceNumber: buildDocumentReference(job, "invoice"), issueDate: invoice.issueDate, dueDate: invoice.dueDate,
-      totalCents: Math.round(total * 100), paidCents: Math.round(paid * 100), balanceCents: Math.round(balance * 100),
-      sentCount: invoiceHasBeenSent(invoice) ? invoice.sentHistory.length : 0, paymentCount: payments.length, metadata: invoice });
-  }
-  return summarizeInvoiceAccount(customerId, records, options);
 }

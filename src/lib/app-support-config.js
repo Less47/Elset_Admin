@@ -1,7 +1,5 @@
 import { ADMIN_EMAIL } from "@/lib/quote-template";
 
-export const STORAGE_KEY = "gateflow-demo-v1";
-export const AUTH_MIGRATION_KEY = "gateflow-server-migration-v1";
 export const LOGO_SRC = "/elset-logo.png";
 export const RECYCLE_BIN_RETENTION_MS = 1000 * 60 * 60 * 24 * 7;
 export const APP_TEXT_DARK = "#0F172A";

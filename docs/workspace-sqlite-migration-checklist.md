@@ -71,17 +71,16 @@ Use this checklist before moving a real ELSET Admin workspace from `app-data.jso
 - Restore the bundle into another temporary SQLite workspace.
 - Confirm the restore creates `ELSET_DATA_DIR/backups/pre-restore-workspace-sqlite-*`.
 - Confirm customer, site, job, quote, invoice, payment, maintenance, inventory, staff, settings, and deleted-record counts match the backup summary.
-- Confirm login accounts, sessions, SMTP credentials, API keys, OAuth tokens, and environment variables were not restored or changed.
+- Confirm Better Auth login accounts/sessions and environment secrets were not changed. Encrypted integration records are part of the workspace snapshot; retain their encryption key separately for recovery.
 - Confirm a failed or tampered backup leaves the original workspace database in place.
 
-## Rollback
+## Recovery
 
 - Stop the app.
-- Set `ELSET_WORKSPACE_STORAGE=json`.
-- Restart the app.
-- Confirm the old JSON-backed workspace loads.
-- Do not delete the SQLite database until the cause of rollback is understood.
-- Do not delete the original JSON file.
+- Preserve the failed database and restore a verified, compatible SQLite backup.
+- Validate schema, integrity, foreign keys, record counts and financial totals before restarting.
+- Keep authentication recovery separate from workspace recovery.
+- Do not delete the original historical JSON file. Use it only with explicit offline migration tooling.
 
 ## Sign-Off
 

@@ -125,7 +125,7 @@ function CustomerJobsSection({ jobs, onOpenJob, desktop }) {
   );
 }
 
-export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, maintenancePlans = [], onOpenPlan, storageMode = "json", onOpenInvoice, onViewInvoices, tab = "overview", onTabChange, backLabel, onBack, onEdit, onDelete, onOpenSite, onCreateSite, onOpenJob }) {
+export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, maintenancePlans = [], onOpenPlan, onOpenInvoice, onViewInvoices, tab = "overview", onTabChange, backLabel, onBack, onEdit, onDelete, onOpenSite, onCreateSite, onOpenJob }) {
   const desktop = useMediaQuery("(min-width: 64rem)");
   const [deleting, setDeleting] = useState(false);
   const sites = buildCustomerSites(customer, jobs);
@@ -140,7 +140,7 @@ export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, 
     sites: <CustomerSitesSection desktop={desktop} sites={sites} onOpenSite={onOpenSite} onCreateSite={onCreateSite} />,
     maintenance: <CustomerSection desktop={desktop} name="maintenance" title="Maintenance contracts" count={maintenancePlans.length}><ProfileMaintenanceContracts plans={maintenancePlans} jobs={jobs} onOpenPlan={onOpenPlan} /></CustomerSection>,
     contacts: <CustomerContactsSection desktop={desktop} customer={customer} contacts={contacts} sites={sites} />,
-    account: <CustomerSection desktop={desktop} name="account" title="Account" panel><CustomerAccount customerId={customer.id} jobs={accountJobs} storageMode={storageMode} onOpenInvoice={onOpenInvoice} onViewInvoices={onViewInvoices} /></CustomerSection>,
+    account: <CustomerSection desktop={desktop} name="account" title="Account" panel><CustomerAccount customerId={customer.id} jobs={accountJobs} onOpenInvoice={onOpenInvoice} onViewInvoices={onViewInvoices} /></CustomerSection>,
     jobs: <CustomerJobsSection desktop={desktop} jobs={jobs} onOpenJob={onOpenJob} />,
   };
 

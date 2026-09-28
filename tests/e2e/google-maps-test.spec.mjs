@@ -139,7 +139,7 @@ async function mockWorkspace(page, state = markerFixture(), preferences = {}, co
     if (!pathname.startsWith("/api/")) return route.continue();
     calls.push(`${request.method()} ${pathname}`);
     const json = pathname === "/api/auth/me" ? { user: { id: "google-test-user", name: "Map Test", role: "admin" } }
-      : pathname === "/api/app-state" ? { state, storageMode: "sqlite" }
+      : pathname === "/api/app-state" ? { state }
         : pathname === "/api/map/locations" ? { source: "saved-site-coordinates", results: savedResults(state, coordinateResults) }
         : pathname === "/api/user-preferences" ? { preferences }
           : pathname === "/api/admin/user-accounts" ? { users: [] }

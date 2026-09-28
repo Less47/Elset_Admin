@@ -2,7 +2,6 @@ import express from "express";
 import { AccountingService } from "./server-accounting-service.js";
 import { AccountingError, safeAccountingError } from "./server-accounting-errors.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 
 export function createAccountingRouter({ requireAuth, requireRole, getOptionalAuthSession, authorizeOAuthInitiator, env = process.env, fetchImpl } = {}) {
   const router = express.Router();
@@ -13,9 +12,8 @@ export function createAccountingRouter({ requireAuth, requireRole, getOptionalAu
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Referrer-Policy", "no-referrer");
     try {
-      if (getWorkspaceStorageMode(env) !== "sqlite") throw new AccountingError("SQLITE_REQUIRED", "Accounting integrations require SQLite workspace storage.", 409);
       if (mutation && (req.get("X-Accounting-Request") !== "1" || req.get("Sec-Fetch-Site") === "cross-site")) throw new AccountingError("INVALID_ORIGIN", "Accounting actions must be initiated from this application.", 403);
-      db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false });
+      db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
       const service = new AccountingService(db, { providerId: req.params.provider, env, fetchImpl, authorizeOAuthInitiator });
       const result = await operation(service, req);
       if (mutation || callback) req.app.locals.accountingInboxWorker?.wake();

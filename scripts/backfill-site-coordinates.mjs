@@ -38,8 +38,6 @@ export function resolveProductionBackfillDb({ env = process.env, output = consol
   if (dbPath !== path.resolve(PRODUCTION_DB_PATH) || getWorkspaceDataDir(env) !== path.resolve("/app/data")) {
     throw new BackfillCommandError(`Refusing: the application resolver must select ${PRODUCTION_DB_PATH} on the persistent volume.`);
   }
-  const storage = String(env.ELSET_WORKSPACE_STORAGE || "").trim().toLowerCase();
-  if (storage && storage !== "sqlite") throw new BackfillCommandError("Refusing: the application must use SQLite workspace storage.");
   try {
     if (!filesystem.statSync(dbPath).isFile()) throw new Error();
     if (filesystem.realpathSync(dbPath) !== dbPath) throw new Error();

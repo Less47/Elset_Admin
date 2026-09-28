@@ -1,6 +1,5 @@
 import express from "express";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 import { WorkspaceAddonError } from "./server-workspace-addons.js";
 import { createJobCostEntry, deleteJobCostEntry, getJobCostingSummary, updateJobCostEntry, WorkspaceJobCostingError } from "./server-workspace-job-costing.js";
 
@@ -12,8 +11,7 @@ export function createJobCostingRouter({ requireAuth, requireRole, env = globalT
     let db;
     res.setHeader("Cache-Control", "no-store");
     try {
-      if (getWorkspaceStorageMode(env) !== "sqlite") throw new WorkspaceJobCostingError("Job Costing requires SQLite workspace storage.", 409);
-      db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), readonly, migrate: false });
+      db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), readonly, migrate: false, fileMustExist: true });
       return res.json({ ok: true, result: operation(db, req) });
     } catch (error) {
       return res.status(error.statusCode || 500).json({

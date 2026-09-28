@@ -120,7 +120,6 @@ async function seedLoginAccounts() {
       ELSET_AUTH_DB_PATH: authDbPath,
       ELSET_DATA_DIR: tempDataDir,
       ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
-      ELSET_WORKSPACE_STORAGE: "sqlite",
       FLY_APP_NAME: "",
       NODE_ENV: "test",
       TZ: "Australia/Sydney",
@@ -143,7 +142,6 @@ async function startServer(existingPort) {
     ELSET_DATA_DIR: tempDataDir,
     ELSET_WORKSPACE_DB_PATH: path.join(tempDataDir, "elset-workspace.db"),
     ELSET_FRONTEND_URL: baseUrl,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
     FLY_APP_NAME: "",
     NODE_ENV: "test",
     PORT: String(port),
@@ -854,55 +852,7 @@ function restoreOriginalPreferences() {
     preferenceSettingKeys.map((key) => [key, originalRecords.preferences[key] ?? defaultThemeSettings[key]])
   ));
 }
-test("explicit settings legacy JSON transport never autosaves drafts and keeps failed saves editable", async ({ browser }) => {
-  const a = await openSettings(browser, 1440, 900, "Preferences");
-  let persisted = structuredClone(readWorkspaceState()), attempts = 0, fail = true;
-  // Use stable legacy contact snapshots; the SQLite fixture deliberately leaves
-  // some null for the client's separate legacy-contact normalization path.
-  persisted.jobs = persisted.jobs.map(job => ({ ...job, billingContact: job.billingContact || {
-    id: `legacy-billing-${job.id}`, name: job.customerName, role: "Billing contact",
-    phone: job.customerPhone, email: job.customerEmail, notes: "",
-  } }));
-  const originalJobs = structuredClone(persisted.jobs);
-  await a.page.route("**/api/app-state", async route => {
-    if (route.request().method() === "PUT") {
-      attempts++;
-      if (fail) return route.fulfill({ status: 503, json: { error: "Legacy save failed" } });
-      persisted = route.request().postDataJSON();
-      return route.fulfill({ json: { state: persisted, storageMode: "json" } });
-    }
-    const response = await route.fetch();
-    return route.fulfill({ response, json: { ...await response.json(), storageMode: "json", state: persisted } });
-  });
-  try {
-    await a.page.reload();
-    await navigate(a.page, "Settings", 1440);
-    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
-    await expect(saveButton(a.page)).toBeDisabled();
-    const original = persisted.settings.companyName;
-    await preferenceInput(a.page, "companyName").fill("Legacy explicit save");
-    await preferenceInput(a.page, "companyPhone").fill("0400000999");
-    await a.page.waitForTimeout(700);
-    expect(attempts).toBe(0);
-    expect(persisted.settings.companyName).toBe(original);
-    await saveButton(a.page).click();
-    await expect(a.page.getByRole("alert").first()).toContainText("Legacy save failed");
-    await expect(saveButton(a.page)).toBeEnabled();
-    await expect(preferenceInput(a.page, "companyName")).toHaveValue("Legacy explicit save");
-    fail = false;
-    await saveButton(a.page).click();
-    await expect(saveButton(a.page)).toBeDisabled();
-    expect(attempts).toBe(2);
-    expect(persisted.settings).toMatchObject({ companyName: "Legacy explicit save", companyPhone: "0400000999" });
-    expect(persisted.jobs).toEqual(originalJobs);
-    expect(await unloadCount(a.page)).toBe(0);
-    await a.page.reload();
-    expect(a.dialogs).toEqual([]);
-    await navigate(a.page, "Settings", 1440);
-    await a.page.locator(".floating-page-toolbar").getByRole("button", { name: "Preferences", exact: true }).click();
-    await expect(preferenceInput(a.page, "companyName")).toHaveValue("Legacy explicit save");
-  } finally { await a.context.close(); }
-});
+
 test("explicit settings templates guard document type changes and save all wording together", async ({ browser }) => {
   const a = await openSettings(browser, 1440, 900, "Document Templates");
   const original = readWorkspaceState().quoteTemplate;

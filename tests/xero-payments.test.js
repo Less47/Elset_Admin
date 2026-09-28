@@ -27,7 +27,7 @@ async function fixture(t, { manual = 0, total = 1100, file = false } = {}) {
     sentHistory: [{ id: "sent", sentAt: "2026-09-01", toEmail: "demo@example.test" }], payments: manual ? [{ id: "manual", amount: manual, date: "2026-09-02" }] : [] });
   updateWorkspaceAddons(db, { xero: true });
   const mock = createXeroMock();
-  const env = { NODE_ENV: "test", ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath, XERO_CLIENT_ID: "fixture", XERO_CLIENT_SECRET: "fixture-secret", XERO_REDIRECT_URI: "http://localhost:3101/api/integrations/xero/callback", XERO_WEBHOOK_KEY: "fixture-signing-key", ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };
+  const env = { NODE_ENV: "test", ELSET_WORKSPACE_DB_PATH: dbPath, XERO_CLIENT_ID: "fixture", XERO_CLIENT_SECRET: "fixture-secret", XERO_REDIRECT_URI: "http://localhost:3101/api/integrations/xero/callback", XERO_WEBHOOK_KEY: "fixture-signing-key", ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };
   const service = new AccountingService(db, { env, fetchImpl: mock.fetch, authorizeOAuthInitiator: async () => true });
   await consent(service);
   await service.configure({ salesAccountId: "sales-id", taxMappings: { taxable: "OUTPUT" } });

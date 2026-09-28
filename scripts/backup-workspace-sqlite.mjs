@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import Database from "better-sqlite3";
 import { getWorkspaceDataDir, getWorkspaceDbPath } from "../server-workspace-db.js";
-import { sha256Hex, summarizeWorkspaceDb } from "../server-workspace-importer.js";
+import { backupSqliteDatabase, validateWorkspaceBackupDatabaseFile, writeChecksumSidecar } from "../server-workspace-backup.js";
 
 function parseArgs(argv) {
   const options = {
@@ -51,39 +51,6 @@ function timestampSlug() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
-function writeChecksum(filePath) {
-  const checksum = sha256Hex(fs.readFileSync(filePath));
-  fs.writeFileSync(`${filePath}.sha256`, `${checksum}  ${path.basename(filePath)}\n`, "utf8");
-  return checksum;
-}
-
-async function backupSqliteDatabase(sourcePath, destinationPath) {
-  const db = new Database(sourcePath, { readonly: true });
-  try {
-    await db.backup(destinationPath);
-  } finally {
-    db.close();
-  }
-}
-
-function validateWorkspaceBackup(backupPath) {
-  const db = new Database(backupPath, { readonly: true });
-  try {
-    db.pragma("foreign_keys = ON");
-    const foreignKeyErrors = db.prepare("PRAGMA foreign_key_check").all();
-    if (foreignKeyErrors.length > 0) {
-      throw new Error(`Backup foreign-key validation failed: ${JSON.stringify(foreignKeyErrors)}`);
-    }
-
-    return {
-      schemaVersion: db.pragma("user_version", { simple: true }),
-      summary: summarizeWorkspaceDb(db),
-    };
-  } finally {
-    db.close();
-  }
-}
-
 function copyRuntimeFiles(dataDir, backupDir) {
   const runtimeDirs = ["uploads", "generated-documents"];
   const copied = [];
@@ -119,22 +86,27 @@ async function main() {
 
   const workspaceBackupPath = path.join(backupDir, path.basename(sourceDbPath));
   await backupSqliteDatabase(sourceDbPath, workspaceBackupPath);
-  const workspaceChecksum = writeChecksum(workspaceBackupPath);
-  const validation = validateWorkspaceBackup(workspaceBackupPath);
+  const workspaceChecksum = writeChecksumSidecar(workspaceBackupPath);
+  const validation = validateWorkspaceBackupDatabaseFile(workspaceBackupPath);
 
   const copiedFiles = options.includeFiles ? copyRuntimeFiles(dataDir, backupDir) : [];
   let authBackup = null;
 
   if (options.includeAuth) {
     const authDbPath = path.resolve(process.env.ELSET_AUTH_DB_PATH || path.join(dataDir, "auth.db"));
-    if (fs.existsSync(authDbPath)) {
-      const authBackupPath = path.join(backupDir, path.basename(authDbPath));
-      await backupSqliteDatabase(authDbPath, authBackupPath);
-      authBackup = {
-        path: authBackupPath,
-        sha256: writeChecksum(authBackupPath),
-      };
-    }
+    if (!fs.existsSync(authDbPath)) throw new Error(`Requested authentication database does not exist: ${authDbPath}`);
+    const authBackupPath = path.join(backupDir, path.basename(authDbPath));
+    await backupSqliteDatabase(authDbPath, authBackupPath);
+    const authDb = new Database(authBackupPath, { readonly: true, fileMustExist: true });
+    try {
+      if (authDb.pragma("integrity_check").some(row => Object.values(row)[0] !== "ok") || authDb.pragma("foreign_key_check").length) {
+        throw new Error("Authentication backup validation failed.");
+      }
+    } finally { authDb.close(); }
+    authBackup = {
+      path: authBackupPath,
+      sha256: writeChecksumSidecar(authBackupPath),
+    };
   }
 
   const metadata = {

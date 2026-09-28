@@ -11,7 +11,7 @@ import {
   WorkspaceMaintenanceError,
 } from "./server-workspace-maintenance.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -31,11 +31,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function openSqliteWorkspaceDb(env) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode !== "sqlite") {
-    throw new WorkspaceMaintenanceError("Maintenance record endpoints are available only in SQLite workspace mode.", 409);
-  }
-  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
+  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
 function sendSuccess(req, res, result, env) {

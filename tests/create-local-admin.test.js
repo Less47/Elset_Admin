@@ -31,7 +31,6 @@ function buildChildEnv(tempDir, overrides = {}) {
     NODE_ENV: "test",
     ELSET_DATA_DIR: tempDir,
     ELSET_AUTH_DB_PATH: path.join(tempDir, "auth.db"),
-    ELSET_WORKSPACE_STORAGE: "sqlite",
     BETTER_AUTH_SECRET: "local-admin-test-secret-at-least-32-characters",
     ELSET_TEST_SERVER_AUTH_URL: serverAuthUrl,
     ...overrides,

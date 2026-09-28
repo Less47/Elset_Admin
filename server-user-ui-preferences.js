@@ -2,8 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
-import { getWorkspaceDataDir, getWorkspaceDbPath } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getWorkspaceDbPath } from "./server-workspace-db.js";
 import { appearanceSettingKeys, normalizeUserUiPreferences, validateUserUiPreferencePatch, UserUiPreferenceError } from "./src/lib/user-ui-preferences.js";
 
 const repoDir = path.dirname(fileURLToPath(import.meta.url));
@@ -47,16 +46,12 @@ export function openUserPreferencesDb({ env = process.env, migrate = false } = {
   } catch (error) { db.close(); throw error; }
 }
 
-export function readLegacyAppearance(env = process.env) {
-  if (getWorkspaceStorageMode(env) === "sqlite") {
-    const db = new Database(getWorkspaceDbPath(env), { readonly: true, fileMustExist: true });
-    try {
-      const rows = db.prepare(`SELECT key, value_json FROM settings WHERE key IN (${appearanceSettingKeys.map(() => "?").join(",")})`).all(...appearanceSettingKeys);
-      return Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value_json)]));
-    } finally { db.close(); }
-  }
-  const filename = path.join(getWorkspaceDataDir(env), "app-data.json");
-  return fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, "utf8")).settings || {} : {};
+export function readWorkspaceAppearance(env = process.env) {
+  const db = new Database(getWorkspaceDbPath(env), { readonly: true, fileMustExist: true });
+  try {
+    const rows = db.prepare(`SELECT key, value_json FROM settings WHERE key IN (${appearanceSettingKeys.map(() => "?").join(",")})`).all(...appearanceSettingKeys);
+    return Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.value_json)]));
+  } finally { db.close(); }
 }
 
 function assertUserId(userId) {

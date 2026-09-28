@@ -1,203 +1,69 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import fs from "node:fs";
+import path from "node:path";
+import { normalizeStoredData } from "./server-store.js";
 import {
-  getAuthorizedAppState as getAuthorizedJsonAppState,
-  loadData,
-  normalizeStoredData,
-  saveAuthorizedAppState as saveAuthorizedJsonAppState,
-  saveData,
-} from "./server-store.js";
-import {
-  assertWorkspaceIntegrity,
-  assertWorkspaceSchema,
-  getWorkspaceDataDir,
-  getWorkspaceDbPath,
-  openWorkspaceDb,
-  migrateWorkspaceSchema,
+  assertWorkspaceIntegrity, assertWorkspaceSchema, getWorkspaceDataDir,
+  getWorkspaceDbPath, openWorkspaceDb, migrateWorkspaceSchema, readWorkspaceSchemaVersion,
 } from "./server-workspace-db.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function getJsonDataPath(env = globalThis.process?.env || {}) {
-  return path.join(getWorkspaceDataDir(env), "app-data.json");
-}
-
-function countJsonBusinessRecords(data) {
-  return (
-    (Array.isArray(data?.staff) ? data.staff.length : 0)
-    + (Array.isArray(data?.customers) ? data.customers.length : 0)
-    + (Array.isArray(data?.jobs) ? data.jobs.length : 0)
-    + (Array.isArray(data?.inventoryItems) ? data.inventoryItems.length : 0)
-    + (Array.isArray(data?.maintenancePlans) ? data.maintenancePlans.length : 0)
-    + (Array.isArray(data?.deletedJobs) ? data.deletedJobs.length : 0)
-    + (Array.isArray(data?.deletedCustomers) ? data.deletedCustomers.length : 0)
-    + (Array.isArray(data?.deletedInvoices) ? data.deletedInvoices.length : 0)
-  );
-}
-
-function hasNonEmptyJsonWorkspace(jsonPath) {
-  if (!fs.existsSync(jsonPath)) return false;
-
-  try {
-    const contents = fs.readFileSync(jsonPath, "utf8");
-    if (!contents.trim()) return false;
-    return countJsonBusinessRecords(JSON.parse(contents)) > 0;
-  } catch {
-    return true;
-  }
-}
-
-function isProductionRuntime(env = globalThis.process?.env || {}) {
-  return env.NODE_ENV === "production" || Boolean(env.FLY_APP_NAME);
-}
-
-function assertFlyDataDir(env, dataDir) {
-  if (!env.FLY_APP_NAME) return;
-
-  const expectedFlyDataDir = path.resolve("/app/data");
-  if (path.resolve(dataDir) !== expectedFlyDataDir) {
-    throw new Error(
-      `Fly runtime must use ELSET_DATA_DIR=${expectedFlyDataDir}. Current value resolves to ${dataDir}.`
-    );
-  }
-}
-
-function assertExistingWritableDirectory(directoryPath, label) {
-  if (!fs.existsSync(directoryPath)) {
-    throw new Error(`${label} does not exist at ${directoryPath}. Confirm the persistent volume is mounted before starting.`);
-  }
-
-  const stats = fs.statSync(directoryPath);
-  if (!stats.isDirectory()) {
-    throw new Error(`${label} is not a directory at ${directoryPath}.`);
-  }
-
-  fs.accessSync(directoryPath, fs.constants.R_OK | fs.constants.W_OK);
-}
-
 function assertExistingWorkspaceDatabase(dbPath) {
   if (!fs.existsSync(dbPath)) {
-    throw new Error(
-      `SQLite workspace database does not exist at ${dbPath}. Run npm run migrate:workspace during the planned maintenance window.`
-    );
+    throw new Error(`Workspace database not found at ${dbPath}. Refusing to start without the SQLite workspace database. Restore a verified SQLite backup before starting the application.`);
   }
+}
+
+function validateWorkspaceLocation(env) {
+  const storage = getWorkspaceStorageStatus(env);
+  if (env.FLY_APP_NAME && path.resolve(storage.dataDir) !== path.resolve("/app/data")) {
+    throw new Error(`Fly runtime must use ELSET_DATA_DIR=/app/data. Current value resolves to ${storage.dataDir}.`);
+  }
+  assertExistingWorkspaceDatabase(storage.dbPath);
+  if (env.NODE_ENV === "production" || env.FLY_APP_NAME) {
+    if (!fs.statSync(storage.dataDir).isDirectory()) throw new Error(`Persistent workspace data path is not a directory: ${storage.dataDir}`);
+    fs.accessSync(storage.dataDir, fs.constants.R_OK | fs.constants.W_OK);
+  }
+  return storage;
 }
 
 export function assertSqliteWorkspaceReady(dbPath) {
   assertExistingWorkspaceDatabase(dbPath);
-  const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false });
+  const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false, fileMustExist: true });
   try {
     assertWorkspaceIntegrity(db);
     return assertWorkspaceSchema(db);
-  } finally {
-    db.close();
-  }
+  } finally { db.close(); }
 }
 
-export function getWorkspaceStorageMode(env = globalThis.process?.env || {}) {
-  const explicitMode = String(env.ELSET_WORKSPACE_STORAGE || "").trim().toLowerCase();
-  if (explicitMode === "json" || explicitMode === "sqlite") {
-    return explicitMode;
-  }
-
-  const dbPath = getWorkspaceDbPath(env);
-  if (fs.existsSync(dbPath)) {
-    return "sqlite";
-  }
-
-  const jsonPath = getJsonDataPath(env);
-  if (isProductionRuntime(env) && hasNonEmptyJsonWorkspace(jsonPath)) {
-    throw new Error(
-      `SQLite workspace migration required. Found existing JSON workspace at ${jsonPath}, `
-      + `but no SQLite workspace database at ${dbPath}. Run npm run migrate:workspace after taking a verified backup, `
-      + "or set ELSET_WORKSPACE_STORAGE=json temporarily for the documented rollback mode."
-    );
-  }
-
-  return "json";
-}
-
-function getValidatedWorkspaceStorageStatus(env) {
-  const dataDir = getWorkspaceDataDir(env);
-  const dbPath = getWorkspaceDbPath(env);
-  const jsonPath = getJsonDataPath(env);
-  const explicitMode = String(env.ELSET_WORKSPACE_STORAGE || "").trim().toLowerCase();
-
-  if (!isProductionRuntime(env)) {
-    return getWorkspaceStorageStatus(env);
-  }
-
-  assertFlyDataDir(env, dataDir);
-  assertExistingWritableDirectory(dataDir, "Persistent workspace data directory");
-
-  if (explicitMode === "json") {
-    if (!hasNonEmptyJsonWorkspace(jsonPath)) {
-      throw new Error(
-        `Production JSON rollback mode requires an existing non-empty workspace JSON file at ${jsonPath}.`
-      );
-    }
-    return getWorkspaceStorageStatus(env);
-  }
-
-  if (explicitMode === "sqlite") {
-    assertExistingWorkspaceDatabase(dbPath);
-    return getWorkspaceStorageStatus(env);
-  }
-
-  const mode = getWorkspaceStorageMode(env);
-  if (mode !== "sqlite") {
-    throw new Error(
-      `Production workspace storage is not initialized. Expected SQLite workspace database at ${dbPath}.`
-    );
-  }
-
-  assertExistingWorkspaceDatabase(dbPath);
-  return getWorkspaceStorageStatus(env);
-}
-
-export function assertProductionWorkspaceStorageReady(env = globalThis.process?.env || {}) {
-  const storage = getValidatedWorkspaceStorageStatus(env);
-  if (isProductionRuntime(env) && storage.mode === "sqlite") assertSqliteWorkspaceReady(storage.dbPath);
+// Readiness is read-only and validates every environment, including development.
+export function assertProductionWorkspaceStorageReady(env = process.env) {
+  const storage = validateWorkspaceLocation(env);
+  assertSqliteWorkspaceReady(storage.dbPath);
   return storage;
 }
 
-// Called once by the normal application machine, where the persistent volume is mounted.
-// Health/readiness checks continue to use the read-only assertion above.
-export function initializeWorkspaceStorage(env = globalThis.process?.env || {}, { log = console.info } = {}) {
-  const storage = getValidatedWorkspaceStorageStatus(env);
-  if (storage.mode !== "sqlite") return storage;
-  const db = openWorkspaceDb({ dbPath: storage.dbPath, migrate: false, fileMustExist: isProductionRuntime(env) });
+// Only application startup upgrades existing, supported schemas. It never creates a workspace.
+export function initializeWorkspaceStorage(env = process.env, { log = console.info } = {}) {
+  const storage = validateWorkspaceLocation(env);
+  const db = openWorkspaceDb({ dbPath: storage.dbPath, migrate: false, fileMustExist: true });
   let migrated = false;
   try {
+    assertWorkspaceIntegrity(db);
+    readWorkspaceSchemaVersion(db);
     migrateWorkspaceSchema(db, { onMigration: ({ fromVersion, toVersion }) => {
       if (!migrated) log(`Workspace database schema: ${fromVersion}`);
       log(`Migrating workspace schema ${fromVersion} -> ${toVersion}`);
       migrated = true;
     } });
-  } finally {
-    db.close();
-  }
+  } finally { db.close(); }
   const { schemaVersion } = assertSqliteWorkspaceReady(storage.dbPath);
   if (migrated) log(`Workspace schema migration complete: ${schemaVersion}`);
-  return getWorkspaceStorageStatus(env);
+  return storage;
 }
 
-export function getWorkspaceReadinessStatus(env = globalThis.process?.env || {}) {
-  try {
-    const storage = assertProductionWorkspaceStorageReady(env);
-    return {
-      ok: true,
-      storage,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Workspace storage is not ready.",
-    };
-  }
+export function getWorkspaceReadinessStatus(env = process.env) {
+  try { return { ok: true, storage: assertProductionWorkspaceStorageReady(env) }; }
+  catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Workspace storage is not ready." }; }
 }
 
 function filterAuthorizedState(data, user) {
@@ -237,59 +103,19 @@ function filterAuthorizedState(data, user) {
   };
 }
 
-export function loadWorkspaceState({ env = globalThis.process?.env || {} } = {}) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode === "json") {
-    return loadData();
-  }
-
-  const db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), readonly: true, migrate: false });
-  try {
-    return normalizeStoredData(loadWorkspaceStateFromDb(db));
-  } finally {
-    db.close();
-  }
+export function loadWorkspaceState({ env = process.env } = {}) {
+  const dbPath = getWorkspaceDbPath(env);
+  assertExistingWorkspaceDatabase(dbPath);
+  const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false, fileMustExist: true });
+  try { return normalizeStoredData(loadWorkspaceStateFromDb(db)); }
+  finally { db.close(); }
 }
 
-export function getAuthorizedWorkspaceState(user, { env = globalThis.process?.env || {} } = {}) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode === "json") {
-    return getAuthorizedJsonAppState(user);
-  }
-
+export function getAuthorizedWorkspaceState(user, { env = process.env } = {}) {
   return filterAuthorizedState(loadWorkspaceState({ env }), user);
 }
 
-export function saveAuthorizedWorkspaceState(user, incomingState, { env = globalThis.process?.env || {} } = {}) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode === "json") {
-    return saveAuthorizedJsonAppState(user, incomingState);
-  }
-
-  throw new Error("Broad workspace saves are disabled in SQLite mode. Use record-specific workspace endpoints.");
-}
-
-export function saveWorkspaceState(nextData, { env = globalThis.process?.env || {} } = {}) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode === "json") {
-    return saveData(nextData);
-  }
-
-  throw new Error("Broad workspace replacement is disabled in SQLite mode.");
-}
-
-export function getWorkspaceStorageStatus(env = globalThis.process?.env || {}) {
-  const dataDir = getWorkspaceDataDir(env);
+export function getWorkspaceStorageStatus(env = process.env) {
   const dbPath = getWorkspaceDbPath(env);
-  const jsonPath = getJsonDataPath(env);
-  return {
-    mode: getWorkspaceStorageMode(env),
-    dataDir,
-    dbPath,
-    jsonPath,
-    sqliteExists: fs.existsSync(dbPath),
-    jsonExists: fs.existsSync(jsonPath),
-    jsonHasBusinessRecords: hasNonEmptyJsonWorkspace(jsonPath),
-    rollbackMode: "Set ELSET_WORKSPACE_STORAGE=json to temporarily use the legacy JSON store.",
-  };
+  return { dataDir: getWorkspaceDataDir(env), dbPath, sqliteExists: fs.existsSync(dbPath) };
 }

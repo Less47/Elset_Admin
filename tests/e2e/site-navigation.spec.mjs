@@ -44,7 +44,7 @@ async function mockWorkspace(context, state, preferences = {}) {
     if (!pathname.startsWith("/api/")) return route.continue();
     calls.push(`${route.request().method()} ${pathname}`);
     const json = pathname === "/api/auth/me" ? { user: { id: "navigation-test-user", name: "Navigation Test", role: "admin" } }
-      : pathname === "/api/app-state" ? { state, storageMode: "sqlite" }
+      : pathname === "/api/app-state" ? { state }
         : pathname === "/api/map/locations" ? { source: "saved-site-coordinates", results: [] }
           : pathname === "/api/user-preferences" ? { preferences }
             : pathname === "/api/admin/user-accounts" ? { users: [] } : null;

@@ -12,6 +12,8 @@ Install dependencies:
 npm install
 ```
 
+An existing SQLite workspace is required before starting a server. For a new synthetic test workspace, explicitly import `fixtures/demo-workspace.json` into a new local directory with the [offline migration tool](#offline-json-to-sqlite-migration), and set `ELSET_DATA_DIR` to that directory. Startup never creates or imports workspace data automatically.
+
 Start the full dev stack:
 
 ```bash
@@ -88,22 +90,23 @@ Google Maps at `/map` and all address pickers use `VITE_GOOGLE_MAPS_API_KEY`. Pu
 
 The Fly app stores live workspace data on the `elset_admin_data` volume mounted at `/app/data`.
 
-Create a local raw backup from Fly:
+Create a validated local snapshot backup from Fly:
 
 ```bash
 npm run backup:fly
 ```
 
-That downloads `app-data.json`, `auth.db`, `auth.db-wal`, and `auth.db-shm` into `backups/`, then creates a `.tar.gz` archive with a SHA-256 checksum. The `backups/` folder is ignored by git.
+This selects one started machine with the /app/data volume (or requires --machine=<id> if ambiguous), creates independent SQLite online backups of elset-workspace.db and auth.db in a private temporary directory, then downloads that snapshot from the same machine. It includes uploads/ and generated-documents/ when present. Metadata, per-file SHA-256 checksums, workspace schema/integrity/foreign-key/count/financial validation, and auth integrity/count validation accompany the backup. Local validation must pass before the .tar.gz archive and its SHA-256 file are reported as successful. Backups are gitignored.
+
+The databases are individually consistent; the two databases and copied external files do not share one transaction. Pause writes when a coordinated recovery point is needed. Fly secrets and environment variables are not exported. Protect the full backup as production data: it includes authentication records and encrypted integration credentials. Temporary snapshot cleanup only removes the generated /tmp/elset-fly-backup-* directory. See [the SQLite-only runtime report](docs/sqlite-only-runtime-report.md) for recovery and verification details.
 
 ## Workspace Storage
 
-Runtime workspace data must not be committed to Git. The live JSON workspace, SQLite databases, uploaded files, generated documents, temporary PDFs, and backups are ignored by `.gitignore` and excluded from Docker builds by `.dockerignore`.
+Runtime workspace data must not be committed to Git. Historical JSON files, SQLite databases, uploaded files, generated documents, temporary PDFs, and backups are ignored by `.gitignore` and excluded from Docker builds by `.dockerignore`.
 
 Current runtime paths:
 
-- Legacy workspace JSON: `ELSET_DATA_DIR/app-data.json`
-- New workspace SQLite database: `ELSET_DATA_DIR/elset-workspace.db`
+- Runtime workspace database: `ELSET_DATA_DIR/elset-workspace.db`
 - Better Auth database: `ELSET_DATA_DIR/auth.db`
 
 On Fly, `ELSET_DATA_DIR` resolves to `/app/data`, which is the persistent volume. Locally, it defaults to `./data`.
@@ -114,9 +117,13 @@ The committed development fixture is synthetic only:
 fixtures/demo-workspace.json
 ```
 
-Application startup must not treat that fixture as live business data. Copy it into a temporary `ELSET_DATA_DIR` only for tests or demos.
+Application startup never loads that fixture. Use the explicit offline importer to create a temporary SQLite workspace for tests or demos.
 
-## SQLite Workspace Migration
+SQLite is the sole live workspace runtime. Missing, corrupt, unknown, or incompatible databases fail startup/readiness. The server never creates an empty replacement or falls back to a JSON file. Supported older SQLite schemas still upgrade transactionally at startup. GET /api/app-state reads SQLite; record-specific APIs handle writes. Broad PUT /api/app-state is unavailable.
+
+Historical app-data.json files can only be processed by explicit offline migration/import tooling. Preserve the existing production file; do not delete it as part of this retirement.
+
+## Offline JSON to SQLite Migration
 
 Dry-run a migration without writing a database:
 
@@ -135,6 +142,8 @@ Run a local migration:
 ```bash
 npm run migrate:workspace
 ```
+
+Stop the target application before an offline migration. The normal server never invokes the importer. Development/test helpers must explicitly create their SQLite workspace before starting. For a synthetic local workspace, use --source fixtures/demo-workspace.json --data-dir <new-temporary-directory>. The demo:data generator also operates offline and requires --output=<new-json-file>; import its output into a separate test database explicitly.
 
 The migration command:
 
@@ -176,9 +185,9 @@ Include externally stored runtime files such as uploads and generated documents:
 npm run backup:workspace -- --include-files
 ```
 
-The backup command uses SQLite's backup API, writes checksums, records schema/version metadata, validates foreign keys, and prints a small count summary. It does not connect to Fly.io.
+The backup command uses SQLite's backup API, writes checksums, records schema/version metadata, validates workspace integrity/schema/foreign keys and auth integrity when included, and prints a small count summary. It does not connect to Fly.io.
 
-When the app is running in SQLite mode, the Settings > Data Backup screen downloads an uploadable JSON bundle that contains only the workspace SQLite database plus metadata and checksums. It does not include Better Auth login accounts, sessions, SMTP credentials, API keys, OAuth tokens, or environment variables.
+The Settings > Data Backup screen downloads an uploadable JSON bundle containing the workspace SQLite database plus metadata and checksums. It excludes Better Auth login accounts/sessions and environment secrets such as SMTP passwords and encryption keys. Encrypted integration credentials stored in the workspace database are included; keep the bundle secure and retain the original encryption key separately for recovery.
 
 Restore a SQLite workspace backup from the Settings > Data Backup screen only after testing the file somewhere safe. The SQLite restore path:
 
@@ -191,28 +200,9 @@ Restore a SQLite workspace backup from the Settings > Data Backup screen only af
 - removes stale SQLite WAL/SHM/journal files during the swap
 - rolls back to the pre-restore database if replacement or verification fails
 
-The legacy JSON restore path remains available only when `ELSET_WORKSPACE_STORAGE=json` is active. SQLite restore never overwrites `auth.db` or secrets.
+SQLite workspace restore never overwrites auth.db. Historical JSON workspace backups must be converted using offline migration tooling; the application does not offer a live JSON restore endpoint.
 
-## SQLite Rollout And Rollback
-
-The old JSON-backed store remains available temporarily as a rollback mode.
-
-Storage mode rules:
-
-- `ELSET_WORKSPACE_STORAGE=json` uses the legacy JSON store.
-- `ELSET_WORKSPACE_STORAGE=sqlite` uses `elset-workspace.db`.
-- If no mode is set and `elset-workspace.db` exists, the server reads from SQLite.
-- If no mode is set in production and a non-empty `app-data.json` exists without `elset-workspace.db`, the server refuses to start with a migration-required message.
-
-This prevents the app from silently starting with an empty SQLite database over an existing JSON workspace.
-
-Rollback after a failed SQLite validation:
-
-```bash
-ELSET_WORKSPACE_STORAGE=json npm run server
-```
-
-Keep the original `app-data.json` until the SQLite migration has been validated and signed off.
+For recovery, stop the application and use a verified SQLite backup compatible with the application version. Preserve both the failed database and historical JSON files for investigation; do not switch datastore engines.
 
 ## Git History Cleanup
 

@@ -8,7 +8,7 @@ import { buildCustomerSites, normalizeSiteAddress } from "@/lib/app-support";
 
 export default function CustomerPages() {
   const { workspaceActions: actions, data, session } = useOutletContext();
-  const { canManageBusiness, workspaceStorageMode: storageMode } = session;
+  const { canManageBusiness } = session;
   const { customerId, siteId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -59,13 +59,13 @@ export default function CustomerPages() {
   }
   return <CustomerWorkspace key={customer.id} customer={customer} jobs={jobs} tab={tab} onTabChange={setTab} backLabel={backLabel}
     maintenancePlans={contracts} onOpenPlan={actions.handleOpenMaintenancePlan}
-    accountJobs={data.jobs} storageMode={storageMode}
+    accountJobs={data.jobs}
     onOpenInvoice={async (jobId) => {
       const job = data.jobs.find((entry) => entry.id === jobId && entry.customerId === customer.id && entry.invoice);
       if (job) navigate(`/jobs/${encodeURIComponent(jobId)}/invoice`, { state: linkState });
       // A live summary can discover an invoice created in another session.
       // Reload the existing editor route to hydrate that newly available record.
-      else if (storageMode === "sqlite") {
+      else {
         await navigate(`/jobs/${encodeURIComponent(jobId)}/invoice`, { state: linkState });
         window.location.reload();
       }

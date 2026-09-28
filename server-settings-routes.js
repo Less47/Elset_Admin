@@ -7,7 +7,7 @@ import {
   WorkspaceSettingsError,
 } from "./server-workspace-settings.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
 import { userUiPreferenceKeys } from "./src/lib/user-ui-preferences.js";
 
 function getRequestBody(req, key) {
@@ -28,11 +28,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function openSqliteWorkspaceDb(env) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode !== "sqlite") {
-    throw new WorkspaceSettingsError("Settings endpoints are available only in SQLite workspace mode.", 409);
-  }
-  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
+  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
 function sendSuccess(req, res, result, env) {

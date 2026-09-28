@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import express from "express";
 import { processAccountingInbox, createAccountingInboxWorker } from "./server-accounting-webhooks.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 
 export function verifyXeroSignature(raw, signature, key) {
   if (!key || !Buffer.isBuffer(raw) || typeof signature !== "string" || !/^[A-Za-z0-9+/]{43}=$/.test(signature)) return false;
@@ -50,7 +49,6 @@ export function registerXeroWebhook(app, { env = process.env, fetchImpl, worker 
     try { payload = JSON.parse(req.body.toString("utf8")); } catch { return res.status(400).end(); }
     let db;
     try {
-      if (getWorkspaceStorageMode(env) !== "sqlite") return res.status(503).end();
       db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
       db.pragma("busy_timeout=1000");
       persistXeroEvents(db, payload);

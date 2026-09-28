@@ -55,7 +55,7 @@ export default function AddonsSettings({ workspaceAddons, available, fetchWithAu
         {!accounting ? <AddonDetails addon={addon} open={details === addon.key} onOpenChange={(open) => setDetails(open ? addon.key : "")} returnFocusRef={detailTrigger} /> : null}
       </article>;
     })}</div>
-    {!available ? <p id="addon-storage-requirement" className="text-sm text-text-secondary">Add-ons require SQLite workspace storage. This workspace is using legacy JSON storage.</p> : null}
+    {!available ? <p id="addon-storage-requirement" className="text-sm text-text-secondary">Add-ons are unavailable for this workspace.</p> : null}
     {error && !form.error ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-status-danger"><span>{error}</span><Button variant="outline" size="sm" disabled={saving} onClick={() => void refresh()}>Retry</Button></div> : null}
     <p role="status" className="text-sm text-text-secondary">{loading ? "Loading add-ons…" : saving ? "Saving add-ons…" : notice}</p>
     <Dialog open={Boolean(disableAddon)} onOpenChange={(open) => { if (!open && !saving) setDisableAddon(null); }}>

@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import express from "express";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 import { createAccountingInboxWorker, processAccountingInbox } from "./server-accounting-webhooks.js";
 
 class InvalidQuickBooksWebhook extends Error {}
@@ -74,7 +73,7 @@ export function registerQuickBooksWebhook(app, { env = process.env, fetchImpl, w
     try { body = JSON.parse(req.body.toString("utf8")); } catch { return res.status(400).end(); }
     let db, inserted;
     try {
-      if (getWorkspaceStorageMode(env) !== "sqlite" || !["sandbox", "production"].includes(env.QUICKBOOKS_ENVIRONMENT)) return res.status(503).end();
+      if (!["sandbox", "production"].includes(env.QUICKBOOKS_ENVIRONMENT)) return res.status(503).end();
       db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
       db.pragma("busy_timeout=1000");
       const saved = db.prepare("SELECT provider_environment FROM workspace_integrations WHERE provider='quickbooks'").get();

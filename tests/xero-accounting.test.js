@@ -433,7 +433,7 @@ test("authenticated routes enforce roles, request origin, server gating and work
     fs.rmSync(directory, { recursive: true, force: true });
   });
   const { db, env, mock } = fixture(t, path.join(directory, "workspace.db"));
-  const routeEnv = { ...env, ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: path.join(directory, "workspace.db") };
+  const routeEnv = { ...env, ELSET_WORKSPACE_DB_PATH: path.join(directory, "workspace.db") };
   const app = express(); app.use(express.json());
   app.use(createAccountingRouter({ env: routeEnv, fetchImpl: mock.fetch,
     requireAuth: (req, res, next) => { if (!req.get("x-user")) return res.sendStatus(401); req.user = { id: req.get("x-user"), role: req.get("x-role") }; req.authSession = { id: "route-session" }; next(); },

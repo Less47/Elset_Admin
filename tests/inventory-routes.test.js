@@ -59,7 +59,6 @@ async function withTempWorkspace(callback, fixture = readFixture()) {
 
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -353,7 +352,7 @@ test("inventory delete rolls back when the archive write fails", async () => {
   });
 });
 
-test("inventory routes reject technicians and stay unavailable in JSON mode", async () => {
+test("inventory routes reject technicians and fail closed without a workspace database", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {
       const result = await requestJson(baseUrl, "/api/inventory-items", {
@@ -369,7 +368,6 @@ test("inventory routes reject technicians and stay unavailable in JSON mode", as
   const tempDir = makeTempDir();
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "json",
   };
 
   try {
@@ -380,8 +378,9 @@ test("inventory routes reject technicians and stay unavailable in JSON mode", as
           item: inventoryItem({ id: "json-mode-inventory-item" }),
         }),
       });
-      assert.equal(result.response.status, 409);
+      assert.equal(result.response.status, 500);
     });
+    assert.equal(fs.existsSync(path.join(tempDir, "elset-workspace.db")), false);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

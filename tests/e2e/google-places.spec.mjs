@@ -43,7 +43,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await missingKeyServer?.close(); await server?.close(); });
 test.afterEach(() => { db?.close(); db = null; });
 
-async function workspace(page, { mode = "sqlite", midnight = false } = {}) {
+async function workspace(page, { midnight = false } = {}) {
   db = openWorkspaceDb({ dbPath: ":memory:" });
   const data = structuredClone(fixture);
   const primary = data.customers[0].sites[0];
@@ -58,29 +58,25 @@ async function workspace(page, { mode = "sqlite", midnight = false } = {}) {
     calls.push(`${req.method()} ${pathname}`);
     if (req.method() === "GET") {
       const json = pathname === "/api/auth/me" ? { user: { id: "places-test", name: "Places Test", role: "admin" } }
-        : pathname === "/api/app-state" ? { state, storageMode: mode }
+        : pathname === "/api/app-state" ? { state }
           : pathname === "/api/user-preferences" ? { preferences }
             : pathname === "/api/map/locations" ? { source: "saved-site-coordinates", results: [] }
               : pathname === "/api/admin/user-accounts" ? { users: [] } : null;
       if (json) return route.fulfill({ json });
     }
-    if (mode === "json" && req.method() === "PUT" && pathname === "/api/app-state") {
-      state = normalizeStoredData(req.postDataJSON());
-      return route.fulfill({ json: { ok: true, state } });
-    }
-    if (mode === "sqlite" && req.method() === "POST" && pathname === "/api/jobs") {
+    if (req.method() === "POST" && pathname === "/api/jobs") {
       const result = createJob(db, req.postDataJSON());
       state = loadWorkspaceStateFromDb(db);
       return route.fulfill({ json: { ok: true, result, state } });
     }
-    if (mode === "sqlite" && req.method() === "PATCH" && /^\/api\/jobs\/[^/]+$/.test(pathname)) {
+    if (req.method() === "PATCH" && /^\/api\/jobs\/[^/]+$/.test(pathname)) {
       const body = req.postDataJSON();
       const result = updateJobDetails(db, pathname.split("/").at(-1), body.job || body);
       state = loadWorkspaceStateFromDb(db);
       return route.fulfill({ json: { ok: true, result, state } });
     }
     const match = pathname.match(/^\/api\/customers(?:\/([^/]+))?(?:\/sites(?:\/([^/]+))?)?$/);
-    if (mode === "sqlite" && match && ["POST", "PATCH"].includes(req.method())) {
+    if (match && ["POST", "PATCH"].includes(req.method())) {
       const body = req.postDataJSON();
       const result = pathname.includes("/sites")
         ? match[2] ? updateCustomerSite(db, match[1], match[2], body.site) : createCustomerSite(db, match[1], body.site)
@@ -166,15 +162,15 @@ for (const mode of ["selection", "missing-key", "unavailable"]) test(`Job Detail
   expect(app.calls.some((call) => /address\/autocomplete|map\/geocode/.test(call))).toBe(false);
 });
 
-for (const mode of ["sqlite", "json"]) test(`Create Customer saves primary Site metadata through ${mode} and survives reload`, async ({ page }) => {
-  const app = await workspace(page, { mode }); await mockPlaces(page);
+test("Create Customer saves primary Site metadata through SQLite and survives reload", async ({ page }) => {
+  const app = await workspace(page); await mockPlaces(page);
   await page.goto(`${baseUrl}/customers/new`);
-  await page.getByLabel("Customer / company name").fill(`Places Customer ${mode}`);
+  await page.getByLabel("Customer / company name").fill(`Places Customer SQLite`);
   await choose(page);
-  await page.screenshot({ path: path.join(shots, `customer-selected-${mode}.png`), fullPage: true });
+  await page.screenshot({ path: path.join(shots, `customer-selected-sqlite.png`), fullPage: true });
   await page.getByRole("button", { name: "Create Customer", exact: true }).click();
-  await expect.poll(() => app.state().customers.find((c) => c.name === `Places Customer ${mode}`)?.sites[0]?.latitude).toBe(selected.latitude);
-  const customer = app.state().customers.find((c) => c.name === `Places Customer ${mode}`);
+  await expect.poll(() => app.state().customers.find((c) => c.name === `Places Customer SQLite`)?.sites[0]?.latitude).toBe(selected.latitude);
+  const customer = app.state().customers.find((c) => c.name === `Places Customer SQLite`);
   expect(customer.sites[0]).toMatchObject(selected);
   expect(customer.latitude).toBeUndefined();
   expect(app.calls.some((call) => /address\/autocomplete|map\/geocode/.test(call))).toBe(false);

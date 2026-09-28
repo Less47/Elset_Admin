@@ -35,9 +35,7 @@ import {
 import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
-  AUTH_MIGRATION_KEY,
   RECYCLE_BIN_RETENTION_MS,
-  STORAGE_KEY,
   contentDensityOptions,
   customerTypeOptions,
   defaultStaffMembers,
@@ -53,10 +51,8 @@ import {
 export {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
-  AUTH_MIGRATION_KEY,
   LOGO_SRC,
   RECYCLE_BIN_RETENTION_MS,
-  STORAGE_KEY,
   contentDensityOptions,
   customerTypeOptions,
   defaultStaffMembers,
@@ -605,20 +601,6 @@ export const seedData = {
 
 export function slugDate() {
   return new Date().toISOString().slice(0, 10);
-}
-
-export function countBusinessRecords(state) {
-  if (!state || typeof state !== "object") return 0;
-  return (
-    (Array.isArray(state.staff) ? state.staff.length : 0) +
-    (Array.isArray(state.customers) ? state.customers.length : 0) +
-    (Array.isArray(state.inventoryItems) ? state.inventoryItems.length : 0) +
-    (Array.isArray(state.maintenancePlans) ? state.maintenancePlans.length : 0) +
-    (Array.isArray(state.jobs) ? state.jobs.length : 0) +
-    (Array.isArray(state.deletedJobs) ? state.deletedJobs.length : 0) +
-    (Array.isArray(state.deletedCustomers) ? state.deletedCustomers.length : 0) +
-    (Array.isArray(state.deletedInvoices) ? state.deletedInvoices.length : 0)
-  );
 }
 
 export function readFileAsDataUrl(file) {
@@ -1855,105 +1837,8 @@ export function normalizeAppState(savedState) {
 }
 
 export function getInitialState() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return normalizeAppState(JSON.parse(saved));
-  } catch {
-    // Ignore invalid persisted state and fall back to seeded demo data.
-  }
-
-  const [c1, c2] = seedData.customers;
-  const demoJobs = [
-    {
-      id: crypto.randomUUID(),
-      jobNumber: 1,
-      title: "Sliding gate motor fault",
-      description: "Gate intermittently stops halfway. Inspect motor, control board, and limit settings.",
-      urgency: "High",
-      status: "To Do",
-      assignedTechnicianId: "",
-      assignedTechnicianName: "",
-      customerId: c1.id,
-      customerName: c1.name,
-      customerEmail: c1.email,
-      customerPhone: c1.phone,
-      jobAddress: c1.address,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      notes: [],
-      photos: [],
-      quote: null,
-      invoice: null,
-    },
-    {
-      id: crypto.randomUUID(),
-      jobNumber: 2,
-      title: "Boom gate annual service",
-      description: "Preventive maintenance and safety inspection for entry boom gate.",
-      urgency: "Medium",
-      status: "In Progress",
-      assignedTechnicianId: "",
-      assignedTechnicianName: "",
-      customerId: c2.id,
-      customerName: c2.name,
-      customerEmail: c2.email,
-      customerPhone: c2.phone,
-      jobAddress: c2.address,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      notes: [{ id: crypto.randomUUID(), author: "Office", text: "On site. Found worn hinge and weak battery backup.", createdAt: new Date().toISOString() }],
-      photos: [],
-      quote: {
-        type: "quote",
-        issueDate: slugDate(),
-        notes: "Valid for 14 days.",
-        sentHistory: [],
-        items: [
-          { id: crypto.randomUUID(), description: "Battery backup replacement", qty: 1, rate: 220 },
-          { id: crypto.randomUUID(), description: "Service labour", qty: 1.5, rate: 135 },
-        ],
-      },
-      invoice: null,
-    },
-  ];
-
-  return {
-    staff: seedData.staff.map(normalizeStaffRecord),
-    customers: seedData.customers.map((customer) => normalizeCustomerRecord(customer)),
-    maintenancePlans: (seedData.maintenancePlans || []).map(normalizeMaintenancePlanRecord),
-    jobs: assignJobNumbers(demoJobs.map(normalizeJobRecord)),
-    deletedJobs: [],
-    deletedCustomers: [],
-    deletedInvoices: [],
-    quoteTemplate: normalizeQuoteTemplate(seedData.quoteTemplate),
-    invoiceTemplate: normalizeInvoiceTemplate(seedData.invoiceTemplate),
-    settings: normalizeThemeSettings(seedData.settings),
-  };
-}
-
-export function getLegacyPersistedState() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? normalizeAppState(JSON.parse(saved)) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function hasCompletedServerMigration() {
-  try {
-    return localStorage.getItem(AUTH_MIGRATION_KEY) === "done";
-  } catch {
-    return false;
-  }
-}
-
-export function markServerMigrationComplete() {
-  try {
-    localStorage.setItem(AUTH_MIGRATION_KEY, "done");
-  } catch {
-    // Ignore local storage write issues.
-  }
+  // Authentication and GET /api/app-state are the only source of workspace records.
+  return normalizeAppState({ staff: [], customers: [], jobs: [], inventoryItems: [], maintenancePlans: [] });
 }
 
 export function createTemplatePreviewFixture(type) {

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { moneyToCents } from "./server-workspace-importer.js";
+import { moneyToCents } from "./server-workspace-financials.js";
 import { createJob } from "./server-workspace-jobs.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";

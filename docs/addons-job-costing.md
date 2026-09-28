@@ -14,7 +14,7 @@ All work is local. Nothing has been committed, pushed, deployed, or applied to p
 - An absent key means the registry's disabled default. Migration does not need to populate or rewrite existing settings.
 - `src/lib/addons.js` owns `ADDONS`, `ADDON_LIST`, normalization, and `isAddonEnabled(addons, key)`. Each registry entry supplies its name, description, includes list, and disable-confirmation text. Future modules can use the same catalogue and persistence shape.
 - `useWorkspaceAddons` reads and updates the server state, refreshes on workspace/navigation changes and window focus, and checks visible sessions every 30 seconds. It does not persist availability in browser storage or personal preferences. Session-scoped requests prevent a late response from a previous account replacing the current account's state.
-- The focused add-ons endpoint validates known registry keys and boolean values. The generic settings PATCH rejects `addons`, so it cannot bypass that validation. Existing shared settings reset groups do not contain this key. Broad workspace saves remain prohibited in SQLite mode.
+- The focused add-ons endpoint validates known registry keys and boolean values. The generic settings PATCH rejects `addons`, so it cannot bypass that validation. Existing shared settings reset groups do not contain this key. Broad workspace saves are unavailable.
 
 ### Settings UI and disable behaviour
 
@@ -112,7 +112,7 @@ Cost write fields are `category`, `description`, `quantity`, `unitCostCents`, `s
 
 The summary includes `jobId`, `revenueCents`, `quotedCents`, `invoicedCents`, `paidCents`, `outstandingCents`, `totalCostCents`, `grossProfitCents`, `marginPercent`, `quoteCount`, `invoiceCount`, `varianceCents`, `categories`, and `entries`.
 
-Legacy JSON mode reports disabled add-ons and does not permit module mutations. Job Costing uses the production SQLite persistence path.
+All add-ons and Job Costing use the SQLite runtime. A missing workspace database fails startup.
 
 ## Migration, preservation and activity
 
@@ -122,7 +122,7 @@ Migration 8 adds only `job_cost_entries`, `idx_job_cost_job_date(job_id, cost_da
 
 The existing Job/customer recycle-bin flows physically remove Jobs after archiving them. Their new hooks preserve cost rows in the existing deleted-Job archive metadata and restore those rows when the Job is restored, even while Job Costing is disabled. The ServiceM8 import's Job replacement also snapshots/restores existing costs within its transaction.
 
-SQLite backup/restore bundles contain the complete database, including cost rows, archive metadata, and add-on state; backup validation now requires the cost table. Ordinary frontend workspace/Job projections intentionally omit cost data. The legacy JSON workspace projection is not a Job Costing backup format.
+SQLite backup/restore bundles contain the complete database, including cost rows, archive metadata, and add-on state; backup validation now requires the cost table. Ordinary frontend workspace/Job projections intentionally omit cost data. Frontend workspace projections are not a Job Costing backup format.
 
 The application has no general persisted Job activity ledger for arbitrary operational events. This change retains entry creator and timestamps rather than creating a new activity framework or logging full financial payloads.
 

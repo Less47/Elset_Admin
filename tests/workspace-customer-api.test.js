@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  isSqliteWorkspaceMode,
   requestCustomerWorkspaceUpdate,
   requestDocumentWorkspaceUpdate,
   requestInventoryWorkspaceUpdate,
@@ -14,12 +13,7 @@ import {
 } from "../src/hooks/workspace-customer-api.js";
 import { sendDocumentAndPersistHistory } from "../src/hooks/document-send-workflow.js";
 
-test("detects SQLite workspace mode explicitly", () => {
-  assert.equal(isSqliteWorkspaceMode("sqlite"), true);
-  assert.equal(isSqliteWorkspaceMode(" SQLite "), true);
-  assert.equal(isSqliteWorkspaceMode("json"), false);
-  assert.equal(isSqliteWorkspaceMode(""), false);
-});
+
 
 test("customer API helper sends record-specific JSON requests", async () => {
   const calls = [];

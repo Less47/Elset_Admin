@@ -73,7 +73,7 @@ function withFixture(t, { version = 4, seed = true } = {}) {
       if (seed) seedRecords(db);
     })();
   } finally { db.close(); }
-  return { tempDir, dbPath, env: { NODE_ENV: "production", FLY_APP_NAME: "", ELSET_DATA_DIR: tempDir, ELSET_WORKSPACE_DB_PATH: dbPath, ELSET_WORKSPACE_STORAGE: "sqlite" } };
+  return { tempDir, dbPath, env: { NODE_ENV: "production", FLY_APP_NAME: "", ELSET_DATA_DIR: tempDir, ELSET_WORKSPACE_DB_PATH: dbPath, } };
 }
 
 function inspect(dbPath, callback, readonly = true) {
@@ -207,7 +207,7 @@ test("production initialization upgrades genuine v4, preserves all existing rows
   assert.equal(getWorkspaceReadinessStatus(env).ok, false);
   assert.equal(inspect(dbPath, readWorkspaceSchemaVersion), 4, "health checks must not migrate");
   const logs = [];
-  assert.equal(initializeWorkspaceStorage(env, { log: (line) => logs.push(line) }).mode, "sqlite");
+  assert.equal(initializeWorkspaceStorage(env, { log: (line) => logs.push(line) }).sqliteExists, true);
   assert.deepEqual(logs, ["Workspace database schema: 4", "Migrating workspace schema 4 -> 5", "Migrating workspace schema 5 -> 6", "Migrating workspace schema 6 -> 7", "Migrating workspace schema 7 -> 8", "Migrating workspace schema 8 -> 9", "Migrating workspace schema 9 -> 10", "Migrating workspace schema 10 -> 11", "Migrating workspace schema 11 -> 12", "Migrating workspace schema 12 -> 13", "Workspace schema migration complete: 13"]);
   assert.deepEqual(assertSqliteWorkspaceReady(dbPath), { schemaVersion: 13 });
   assert.equal(getWorkspaceReadinessStatus(env).ok, true);
@@ -303,7 +303,7 @@ test("fresh databases bootstrap to complete v13 metadata; missing production sto
   fresh.close();
   assert.deepEqual(assertSqliteWorkspaceReady(freshPath), { schemaVersion: 13 });
   const missingPath = path.join(tempDir, "missing.db");
-  assert.throws(() => initializeWorkspaceStorage({ ...env, ELSET_WORKSPACE_DB_PATH: missingPath }, { log() {} }), /database does not exist/);
+  assert.throws(() => initializeWorkspaceStorage({ ...env, ELSET_WORKSPACE_DB_PATH: missingPath }, { log() {} }), /Workspace database not found/);
   assert.equal(fs.existsSync(missingPath), false);
 });
 
@@ -360,7 +360,7 @@ test("normal production server startup upgrades v4 before listening and serves h
       try {
         const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) });
         const health = await response.json();
-        healthy = response.ok && health.ok && health.storage.mode === "sqlite";
+        healthy = response.ok && health.ok && health.storage.sqliteExists === true;
         if (healthy) break;
       } catch { /* Startup may still be initializing authentication. */ }
       await delay(50);

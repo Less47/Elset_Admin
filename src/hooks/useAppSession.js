@@ -1,22 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import {
-  isSqliteWorkspaceMode,
   requestServiceM8ImportUpdate,
   requestWorkspaceRestoreUpdate,
 } from "@/hooks/workspace-customer-api";
 import {
-  shouldAttemptBroadWorkspaceAutosave,
-  shouldRunRecycleBinClientPrune,
-} from "@/hooks/workspace-autosave";
-import {
-  countBusinessRecords,
-  getLegacyPersistedState,
-  hasCompletedServerMigration,
-  markServerMigrationComplete,
   normalizeAppState,
-  purgeExpiredRecycleBinState,
-  seedData,
+  getInitialState,
 } from "@/lib/app-support";
 
 function buildFallbackBackupFilename() {
@@ -70,19 +60,13 @@ function getServiceM8ImportError(response, payload, responseError, fallback) {
   return fallback;
 }
 
-export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
+export function useAppSession({ onResetWorkspaceChromeRef, setData }) {
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState("checking");
   const [authError, setAuthError] = useState("");
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [adminUserAccounts, setAdminUserAccounts] = useState([]);
   const [adminUserAccountsError, setAdminUserAccountsError] = useState("");
-  const [workspaceStorageMode, setWorkspaceStorageMode] = useState("json");
-  const lastSyncedDataRef = useRef("");
-  const saveTimeoutRef = useRef(null);
-  const legacySaveRef = useRef(Promise.resolve());
-  const syncErrorRef = useRef("");
-  const hasLoadedServerStateRef = useRef(false);
 
   const isAuthenticated = authStatus === "authenticated" && Boolean(authUser);
   const isAuthenticating = authStatus === "authenticating";
@@ -91,24 +75,15 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
   const canManageBusiness = authUser?.role === "admin" || authUser?.role === "office";
 
   const clearSessionState = useCallback((message = "", { resetWorkspace = true } = {}) => {
-    if (saveTimeoutRef.current) {
-      window.clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-
-    hasLoadedServerStateRef.current = false;
-    lastSyncedDataRef.current = "";
-    syncErrorRef.current = "";
     setAuthError(message);
     setAuthUser(null);
     setAuthStatus("logged_out");
-    setWorkspaceStorageMode("json");
     setLoginForm((prev) => ({ ...prev, password: "" }));
     setAdminUserAccounts([]);
     setAdminUserAccountsError("");
 
     if (resetWorkspace) {
-      setData(normalizeAppState(seedData));
+      setData(getInitialState());
       onResetWorkspaceChromeRef.current?.();
     }
   }, [onResetWorkspaceChromeRef, setData]);
@@ -125,21 +100,10 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
 
   const applyServerWorkspaceState = useCallback((incomingState) => {
     const nextState = normalizeAppState(incomingState);
-    hasLoadedServerStateRef.current = true;
-    lastSyncedDataRef.current = JSON.stringify(nextState);
-    syncErrorRef.current = "";
     setData(nextState);
     setAuthError("");
     return nextState;
   }, [setData]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        window.clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (authStatus !== "checking") {
@@ -158,15 +122,12 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         if (meResponse.status === 401) {
           if (cancelled) return;
 
-          hasLoadedServerStateRef.current = false;
-          lastSyncedDataRef.current = "";
-          syncErrorRef.current = "";
           setAuthUser(null);
           setAdminUserAccounts([]);
           setAdminUserAccountsError("");
           setAuthStatus("logged_out");
           setAuthError("");
-          setData(normalizeAppState(seedData));
+          setData(getInitialState());
           return;
         }
 
@@ -177,41 +138,14 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         const user = mePayload.user;
         const stateResponse = await fetchWithAuth("/api/app-state", { method: "GET" });
         const statePayload = await stateResponse.json().catch(() => ({}));
-        if (!stateResponse.ok) {
+        if (!stateResponse.ok || !statePayload.state) {
           throw new Error(statePayload.error || "Failed to load the shared workspace data.");
-        }
-
-        const nextStorageMode = statePayload.storageMode === "sqlite" ? "sqlite" : "json";
-        let nextState = normalizeAppState(statePayload.state);
-
-        if (nextStorageMode !== "sqlite" && user?.role !== "technician" && !hasCompletedServerMigration()) {
-          const legacyState = getLegacyPersistedState();
-          if (legacyState && countBusinessRecords(legacyState) > countBusinessRecords(nextState)) {
-            const migrateResponse = await fetchWithAuth("/api/app-state", {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(legacyState),
-            });
-            const migratePayload = await migrateResponse.json().catch(() => ({}));
-            if (!migrateResponse.ok) {
-              throw new Error(migratePayload.error || "Failed to migrate your existing browser data to the shared server.");
-            }
-
-            nextState = normalizeAppState(migratePayload.state);
-          }
-
-          markServerMigrationComplete();
         }
 
         if (cancelled) return;
 
-        hasLoadedServerStateRef.current = true;
-        lastSyncedDataRef.current = JSON.stringify(nextState);
-        syncErrorRef.current = "";
+        const nextState = normalizeAppState(statePayload.state);
         setData(nextState);
-        setWorkspaceStorageMode(nextStorageMode);
         setAuthUser(user);
         setAuthStatus("authenticated");
         setAuthError("");
@@ -229,99 +163,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       cancelled = true;
     };
   }, [authStatus, clearSessionState, fetchWithAuth, setData]);
-
-  useEffect(() => {
-    if (!shouldRunRecycleBinClientPrune({ authStatus, workspaceStorageMode })) return undefined;
-
-    const intervalId = window.setInterval(() => {
-      setData((prev) => purgeExpiredRecycleBinState(prev));
-    }, 1000 * 60 * 30);
-
-    return () => window.clearInterval(intervalId);
-  }, [authStatus, setData, workspaceStorageMode]);
-
-  useEffect(() => {
-    if (isSqliteWorkspaceMode(workspaceStorageMode)) {
-      if (saveTimeoutRef.current) {
-        window.clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
-      return undefined;
-    }
-
-    if (authStatus !== "authenticated" || !hasLoadedServerStateRef.current) {
-      return undefined;
-    }
-
-    const nextData = purgeExpiredRecycleBinState(data);
-    if (nextData !== data) {
-      setData(nextData);
-      return undefined;
-    }
-
-    const serialized = JSON.stringify(nextData);
-    if (serialized === lastSyncedDataRef.current) {
-      return undefined;
-    }
-
-    if (!shouldAttemptBroadWorkspaceAutosave({
-      authStatus,
-      hasLoadedServerState: hasLoadedServerStateRef.current,
-      workspaceStorageMode,
-      serializedState: serialized,
-      lastSyncedState: lastSyncedDataRef.current,
-    })) {
-      return undefined;
-    }
-
-    if (saveTimeoutRef.current) {
-      window.clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = window.setTimeout(() => {
-      legacySaveRef.current = legacySaveRef.current.then(async () => {
-        try {
-          const response = await fetchWithAuth("/api/app-state", {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: serialized,
-          });
-          const payload = await response.json().catch(() => ({}));
-
-          if (!response.ok) {
-            if (response.status === 401) {
-              throw new Error("Your session expired. Please sign in again.");
-            }
-
-            throw new Error(payload.error || "Failed to save the latest changes to the shared workspace.");
-          }
-
-          lastSyncedDataRef.current = serialized;
-          syncErrorRef.current = "";
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Failed to save the latest changes to the shared workspace.";
-
-          if (/session expired|sign in again|authentication required/i.test(message)) {
-            clearSessionState(message);
-            return;
-          }
-
-          if (syncErrorRef.current !== message) {
-            window.alert(message);
-            syncErrorRef.current = message;
-          }
-        }
-      });
-    }, 500);
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        window.clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [authStatus, clearSessionState, data, fetchWithAuth, setData, workspaceStorageMode]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {
@@ -458,7 +299,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
 
   async function handleDownloadBackup() {
     if (!isAdmin) {
-      return { ok: false, error: "Only admins can download a full backup." };
+      return { ok: false, error: "Only admins can download a workspace backup." };
     }
 
     try {
@@ -498,7 +339,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
 
   async function handleRestoreBackup(file, password) {
     if (!isAdmin) {
-      return { ok: false, error: "Only admins can restore a full backup." };
+      return { ok: false, error: "Only admins can restore a workspace backup." };
     }
 
     if (!file) {
@@ -519,9 +360,7 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
         throw new Error("The selected file is not valid JSON.");
       }
 
-      let payload = null;
-      if (isSqliteWorkspaceMode(workspaceStorageMode)) {
-        payload = await requestWorkspaceRestoreUpdate({
+      const payload = await requestWorkspaceRestoreUpdate({
           fetchWithAuth,
           path: "/api/admin/workspace-restore",
           method: "POST",
@@ -531,55 +370,13 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
           },
           errorMessage: "Unable to restore the workspace backup.",
         });
-      } else {
-        const response = await fetchWithAuth("/api/admin/data-backup/restore", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            backupData: parsedBackup,
-            restorePassword: password,
-          }),
-        });
-        payload = await response.json().catch(() => ({}));
-
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.error || "Unable to restore the backup file.");
-        }
-      }
-
       if (!payload?.state) {
         throw new Error("The restore completed without returning the refreshed workspace state.");
       }
 
       const nextState = normalizeAppState(payload.state);
-      hasLoadedServerStateRef.current = true;
-      lastSyncedDataRef.current = JSON.stringify(nextState);
-      syncErrorRef.current = "";
       setData(nextState);
       setAuthError("");
-
-      if (payload.sessionPreserved === false) {
-        const nextMessage = payload.message || "Backup restored. Sign in again to continue.";
-        setAuthUser(null);
-        setAuthStatus("logged_out");
-        setAuthError(nextMessage);
-        setAdminUserAccounts([]);
-        setAdminUserAccountsError("");
-
-        return {
-          ok: true,
-          message: nextMessage,
-          sessionPreserved: false,
-        };
-      }
-
-      const nextAccounts = Array.isArray(payload.accounts) ? payload.accounts : adminUserAccounts;
-      const nextUser = payload.user || authUser;
-      setAuthUser(nextUser);
-      setAdminUserAccounts(nextUser?.role === "admin" ? nextAccounts : []);
-      setAdminUserAccountsError("");
 
       return {
         ok: true,
@@ -661,9 +458,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
       });
 
       const nextState = normalizeAppState(payload.state);
-      hasLoadedServerStateRef.current = true;
-      lastSyncedDataRef.current = JSON.stringify(nextState);
-      syncErrorRef.current = "";
       setData(nextState);
       setAuthError("");
 
@@ -681,21 +475,6 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
 
       return { ok: false, error: message };
     }
-  }
-
-  async function saveLegacySettings(patch) {
-    if (!canManageBusiness || workspaceStorageMode !== "json") throw new Error("Shared settings cannot be saved in this session.");
-    if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
-    const nextState = { ...data, ...patch, ...(patch.settings ? { settings: { ...data.settings, ...patch.settings } } : {}) };
-    // Finish any older legacy autosave first so it cannot overwrite this Save.
-    const write = legacySaveRef.current.then(async () => {
-      const response = await fetchWithAuth("/api/app-state", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nextState) });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload.state) throw new Error(payload.error || "Settings could not be saved. Please retry.");
-      return applyServerWorkspaceState(payload.state);
-    });
-    legacySaveRef.current = write.catch(() => {});
-    return write;
   }
 
   return {
@@ -720,7 +499,5 @@ export function useAppSession({ data, onResetWorkspaceChromeRef, setData }) {
     isAuthenticated,
     isTechnician,
     loginForm,
-    workspaceStorageMode,
-    saveLegacySettings,
   };
 }

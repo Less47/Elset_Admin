@@ -1,6 +1,5 @@
 import express from "express";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 import { readWorkspaceLogo, saveWorkspaceLogo, validateWorkspaceLogo, WorkspaceLogoError } from "./server-workspace-logo.js";
 import { WORKSPACE_LOGO_MAX_BYTES, WORKSPACE_LOGO_TYPES } from "./src/lib/workspace-logo.js";
 
@@ -9,8 +8,7 @@ export function createWorkspaceLogoRouter({ requireAuth, requireRole, env = proc
   const endpoint = "/api/settings/workspace-logo";
   const editors = requireRole(["admin", "office"]);
   function openDb() {
-    if (getWorkspaceStorageMode(env) !== "sqlite") throw new WorkspaceLogoError("Workspace branding requires SQLite workspace storage.", 409);
-    return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
+    return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
   }
   const handle = (operation) => async (req, res, next) => {
     let db;

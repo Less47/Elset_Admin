@@ -24,7 +24,7 @@ The implementation and controlled checks are complete. **Live autocomplete verif
 
 8. **Stale coordinates.** Material manual changes clear the canonical coordinate pair and any previous structured components. Casing/whitespace-only changes preserve metadata. Selecting another address replaces it with that result's metadata. Explicit cleared coordinates also prevent the map from falling back to stale job/legacy coordinate aliases. A cache result for the current address may still be used. Untouched legacy records do not acquire empty metadata simply by being normalized.
 
-9. **Customer flows.** Create Customer saves the selected primary Site through the existing customer-creation action in both SQLite and JSON modes. Edit Customer remains account/contact-only and continues linking to the Site profile. Customer search remains entirely ELSET data.
+9. **Customer flows.** Create Customer saves the selected primary Site through the existing customer-creation action through the SQLite record APIs. Edit Customer remains account/contact-only and continues linking to the Site profile. Customer search remains entirely ELSET data.
 
 10. **Site flows and preservation.** Create/Edit Site share the same picker. Opening a form does not query Google or clear coordinates. Save/reload retains selected metadata. The audit also found that existing Site drafts discarded `label`, and repeat SQLite normalization nested optional metadata; both preservation paths were corrected. Contacts, assets, OC numbers, ownership, primary-address handling and existing address-reference synchronization are retained. Maintenance continues selecting an existing Site and using the unchanged naming function: `14 Sesame Street CAROLINE SPRINGS`, with the entire suburb. Recurrence logic was not changed.
 
@@ -79,7 +79,7 @@ The implementation and controlled checks are complete. **Live autocomplete verif
 15. **Screenshot paths.** Captured under `test-results/google-places/` (ignored artifacts). Customer selection, edited Site, mobile Midnight dropdown, live fallback, and saved-fixture live map screenshots were visually inspected.
 
     - `customer-selected-sqlite.png` — controlled Places selection, Create Customer.
-    - `customer-selected-json.png` — same flow in JSON mode.
+    - Historical JSON screenshot variant retired; creation now uses SQLite only.
     - `site-edited.png` — edited Site with complete Brighton East suburb.
     - `manual-fallback.png` — simulated provider failure with manual save available.
     - `mobile-midnight-suggestions-390x844.png` — touch-tested unit result, dark dropdown and visible attribution.

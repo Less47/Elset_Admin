@@ -35,7 +35,7 @@ Before either mode reads Sites, the entry point:
 
 1. Resolves the DB with the application's normal resolver and prints `Resolved workspace DB: ...`.
 2. Requires Linux, `FLY_APP_NAME=elset-admin`, and `FLY_MACHINE_ID`.
-3. Requires the resolver to select `/app/data/elset-workspace.db`, the data directory to be `/app/data`, and storage to be SQLite (or the app's automatic existing-SQLite mode).
+3. Requires the resolver to select `/app/data/elset-workspace.db`, the data directory to be `/app/data`, and the existing SQLite workspace to be present.
 4. Checks the expected file exists, is a regular file, and resolves to the same physical path.
 5. Opens it with `fileMustExist: true`, `migrate: false`, and first validates the existing application schema on a read-only connection. Missing, empty, incompatible or unknown databases are refused. It never initializes or migrates a schema.
 

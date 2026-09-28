@@ -1,17 +1,13 @@
 import crypto from "crypto";
 import express from "express";
 import {
-  applyServiceM8ImportPlan,
-  buildAndApplyServiceM8Import,
   previewServiceM8Import,
 } from "./server-servicem8-importer.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
 import { applyServiceM8ImportPlanToSqlite, ServiceM8SqliteImportError } from "./server-workspace-servicem8-import.js";
 import {
   getAuthorizedWorkspaceState,
-  getWorkspaceStorageMode,
   loadWorkspaceState,
-  saveWorkspaceState,
 } from "./server-workspace-storage.js";
 
 const SERVICE_M8_IMPORT_PREVIEW_TTL_MS = 1000 * 60 * 20;
@@ -65,9 +61,7 @@ export function createServiceM8ImportRouter({
   requireAuth,
   requireRole,
   loadWorkspaceStateFn = loadWorkspaceState,
-  saveWorkspaceStateFn = saveWorkspaceState,
   getAuthorizedWorkspaceStateFn = getAuthorizedWorkspaceState,
-  syncManagedUserNamesWithStaffFn = () => {},
 } = {}) {
   const router = express.Router();
   const authMiddleware = requireAuth || ((_req, _res, next) => next());
@@ -99,53 +93,24 @@ export function createServiceM8ImportRouter({
   router.post("/api/admin/servicem8-import/apply", ...middleware, async (req, res) => {
     let db = null;
     try {
-      const mode = getWorkspaceStorageMode(env);
       const cachedPlan = takeServiceM8ImportPreview(req.user, req.body?.previewId);
       const shouldDryRun = Boolean(req.body?.dryRun || req.body?.validateOnly);
 
-      if (mode === "sqlite") {
-        const plan = cachedPlan || await previewServiceM8Import({
-          apiKey: req.body?.apiKey,
-          existingData: loadWorkspaceStateFn({ env }),
-          options: req.body?.options,
-        });
+      const plan = cachedPlan || await previewServiceM8Import({
+        apiKey: req.body?.apiKey,
+        existingData: loadWorkspaceStateFn({ env }),
+        options: req.body?.options,
+      });
 
-        db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
-        const result = applyServiceM8ImportPlanToSqlite(db, plan, { dryRun: shouldDryRun });
-
-        res.setHeader("Cache-Control", "no-store");
-        return res.json({
-          ok: true,
-          importedAt: result.importedAt,
-          dryRun: result.dryRun,
-          summary: result.summary,
-          state: getAuthorizedWorkspaceStateFn(req.user, { env }),
-        });
-      }
-
-      const existingData = loadWorkspaceStateFn({ env });
-      const { plan, nextData } = cachedPlan
-        ? {
-            plan: cachedPlan,
-            nextData: applyServiceM8ImportPlan(existingData, cachedPlan),
-          }
-        : await buildAndApplyServiceM8Import({
-            apiKey: req.body?.apiKey,
-            existingData,
-            options: req.body?.options,
-          });
-      const savedData = shouldDryRun ? existingData : saveWorkspaceStateFn(nextData, { env });
-
-      if (!shouldDryRun) {
-        syncManagedUserNamesWithStaffFn(savedData.staff);
-      }
+      db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
+      const result = applyServiceM8ImportPlanToSqlite(db, plan, { dryRun: shouldDryRun });
 
       res.setHeader("Cache-Control", "no-store");
       return res.json({
         ok: true,
-        importedAt: plan.importedAt,
-        dryRun: shouldDryRun,
-        summary: plan.summary,
+        importedAt: result.importedAt,
+        dryRun: result.dryRun,
+        summary: result.summary,
         state: getAuthorizedWorkspaceStateFn(req.user, { env }),
       });
     } catch (error) {

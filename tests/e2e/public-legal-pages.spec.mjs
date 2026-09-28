@@ -35,7 +35,7 @@ test.beforeAll(async () => {
   const env = {
     ...process.env, NODE_ENV: "test", FLY_APP_NAME: "", TZ: "Australia/Sydney",
     ELSET_DATA_DIR: dataDir, ELSET_AUTH_DB_PATH: path.join(dataDir, "auth.db"),
-    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"), ELSET_WORKSPACE_STORAGE: "sqlite",
+    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"),
     BETTER_AUTH_URL: baseUrl, BETTER_AUTH_SECRET: crypto.randomBytes(32).toString("hex"),
     ELSET_FRONTEND_URL: baseUrl, ELSET_API_PORT: String(port), PORT: String(port), ELSET_DISABLE_STATIC: "false",
     QUICKBOOKS_CLIENT_ID: "", QUICKBOOKS_CLIENT_SECRET: "", XERO_CLIENT_ID: "", XERO_CLIENT_SECRET: "",

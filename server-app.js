@@ -11,12 +11,9 @@ import { documentSendErrorMessage } from "./src/lib/document-send-status.js";
 import {
   auth,
   authorizeAccountingOAuthInitiator,
-  getAuthBackupUsers,
   getManagedUserAccounts,
   getRequestAuthSession,
-  restoreAuthBackup,
   saveManagedUserAccount,
-  syncManagedUserNamesWithStaff,
   verifyUserPassword,
 } from "./server-auth.js";
 import {
@@ -27,11 +24,8 @@ import {
 import {
   getAuthorizedWorkspaceState,
   getWorkspaceReadinessStatus,
-  getWorkspaceStorageMode,
   getWorkspaceStorageStatus,
   loadWorkspaceState,
-  saveAuthorizedWorkspaceState,
-  saveWorkspaceState,
 } from "./server-workspace-storage.js";
 import { registerCustomerRoutes } from "./server-customer-routes.js";
 import { registerDocumentRoutes } from "./server-document-routes.js";
@@ -60,7 +54,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.join(__dirname, "dist");
 const envPath = path.join(__dirname, ".env");
-const BACKUP_FORMAT_VERSION = "elset-backup-v2";
 
 dotenv.config({ path: envPath });
 
@@ -137,40 +130,6 @@ function applyAuthResponseHeaders(res, headers) {
 
     res.setHeader(key, value);
   });
-}
-
-function prepareWorkspaceBackupImportData(backupInput) {
-  if (!backupInput || typeof backupInput !== "object" || Array.isArray(backupInput)) {
-    throw new Error("The uploaded backup must be a JSON object.");
-  }
-
-  const backupFormat = String(backupInput.backup?.format || "").trim();
-  if (backupFormat && !["elset-backup-v1", BACKUP_FORMAT_VERSION].includes(backupFormat)) {
-    throw new Error("This backup file uses an unsupported format.");
-  }
-
-  const {
-    authUsers: _authUsers,
-    backup: _backup,
-    backupData: _backupData,
-    restorePassword: _restorePassword,
-    users: _legacyUsers,
-    sessions: _legacySessions,
-    ...workspaceData
-  } = backupInput;
-
-  return {
-    ...workspaceData,
-    users: [],
-    sessions: [],
-    meta: {
-      ...(workspaceData.meta || {}),
-      authMigration: {
-        version: "better-auth-v1",
-        migratedAt: new Date().toISOString(),
-      },
-    },
-  };
 }
 
 export function createServerApp({ accountingFetch } = {}) {
@@ -306,28 +265,10 @@ export function createServerApp({ accountingFetch } = {}) {
     try {
       return res.json({
         ok: true,
-        storageMode: getWorkspaceStorageMode(),
         state: getAuthorizedWorkspaceState(req.user),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load the shared workspace data.";
-      return res.status(500).json({ error: message });
-    }
-  });
-
-  app.put("/api/app-state", requireAuth, (req, res) => {
-    try {
-      const state = saveAuthorizedWorkspaceState(req.user, req.body);
-      if (req.user.role !== "technician") {
-        syncManagedUserNamesWithStaff(state.staff);
-      }
-
-      return res.json({
-        ok: true,
-        state,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to save the shared workspace data.";
       return res.status(500).json({ error: message });
     }
   });
@@ -348,7 +289,6 @@ export function createServerApp({ accountingFetch } = {}) {
   registerServiceM8ImportRoutes(app, {
     requireAuth,
     requireRole,
-    syncManagedUserNamesWithStaffFn: syncManagedUserNamesWithStaff,
   });
   registerWorkspaceRestoreRoutes(app, {
     requireAuth,
@@ -390,80 +330,13 @@ export function createServerApp({ accountingFetch } = {}) {
 
   app.get("/api/admin/data-backup", requireAuth, requireRole(["admin"]), async (req, res) => {
     try {
-      if (getWorkspaceStorageMode() === "sqlite") {
-        const backup = await createWorkspaceSqliteBackupBundle({ exportedBy: req.user });
-        const payload = JSON.stringify(backup, null, 2);
-
-        res.setHeader("Cache-Control", "no-store");
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.setHeader("Content-Disposition", `attachment; filename="${buildBackupFilename()}"`);
-        return res.status(200).send(payload);
-      }
-
-      const data = loadWorkspaceState();
-      const backup = {
-        ...data,
-        users: [],
-        sessions: [],
-        authUsers: getAuthBackupUsers(),
-        backup: {
-          format: BACKUP_FORMAT_VERSION,
-          exportedAt: new Date().toISOString(),
-          exportedBy: req.user,
-          sourceFiles: {
-            workspace: "app-data.json",
-            auth: "auth.db",
-          },
-        },
-      };
-      const payload = JSON.stringify(backup, null, 2);
-
+      const backup = await createWorkspaceSqliteBackupBundle({ exportedBy: req.user });
       res.setHeader("Cache-Control", "no-store");
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${buildBackupFilename()}"`);
-      return res.status(200).send(payload);
+      return res.status(200).send(JSON.stringify(backup, null, 2));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to generate the backup file.";
-      return res.status(400).json({ error: message });
-    }
-  });
-
-  app.post("/api/admin/data-backup/restore", requireAuth, requireRole(["admin"]), (req, res) => {
-    try {
-      if (getWorkspaceStorageMode() === "sqlite") {
-        return res.status(409).json({
-          error: "Use the SQLite workspace restore endpoint for SQLite backups.",
-        });
-      }
-
-      const restorePassword = String(req.body?.restorePassword || "");
-      const hasWrappedBackup = Object.prototype.hasOwnProperty.call(req.body || {}, "backupData");
-      const backupInput = hasWrappedBackup ? req.body?.backupData : req.body;
-
-      if (!restorePassword) {
-        return res.status(400).json({ error: "Re-enter your admin password to restore a backup." });
-      }
-
-      if (!verifyUserPassword(req.user.id, restorePassword)) {
-        return res.status(403).json({ error: "The admin password you entered is incorrect." });
-      }
-
-      const workspaceData = saveWorkspaceState(prepareWorkspaceBackupImportData(backupInput));
-      const restoredAuth = restoreAuthBackup(backupInput, req.user);
-      syncManagedUserNamesWithStaff(workspaceData.staff);
-      const resolvedUser = restoredAuth.user || req.user;
-      const state = getAuthorizedWorkspaceState(resolvedUser);
-
-      return res.json({
-        ok: true,
-        accounts: getManagedUserAccounts(workspaceData.staff),
-        message: restoredAuth.message,
-        sessionPreserved: restoredAuth.sessionPreserved,
-        state,
-        user: resolvedUser,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to restore the backup file.";
       return res.status(400).json({ error: message });
     }
   });

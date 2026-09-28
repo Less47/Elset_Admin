@@ -11,7 +11,7 @@ import {
   WorkspaceCustomerError,
 } from "./server-workspace-customers.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
 import { getCustomerAccountSummary } from "./server-customer-account.js";
 import { invoiceDate, invoiceToday } from "./src/lib/invoice-account.js";
 
@@ -44,11 +44,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function openSqliteWorkspaceDb(env) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode !== "sqlite") {
-    throw new WorkspaceCustomerError("Customer record endpoints are available only in SQLite workspace mode.", 409);
-  }
-  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
+  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
 function sendSuccess(req, res, result, env) {
@@ -93,7 +89,6 @@ export function createCustomerRouter({
     try {
       const today = req.query.today === undefined ? invoiceToday() : invoiceDate(req.query.today);
       if (!today) return res.status(400).json({ error: "A valid date is required." });
-      if (getWorkspaceStorageMode(env) !== "sqlite") return res.status(409).json({ error: "The account endpoint requires SQLite workspace storage." });
       db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), readonly: true, fileMustExist: true, migrate: false });
       return res.json(getCustomerAccountSummary(db, req.params.id, { today }));
     } catch (error) {

@@ -77,7 +77,6 @@ async function createBackupBundleFromFixture(fixture) {
   const dbPath = importFixtureToDir(tempDir, fixture);
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
   };
 
   try {
@@ -96,7 +95,6 @@ async function withTempWorkspace(fixture, callback) {
   fs.writeFileSync(authDbPath, "synthetic-auth-database", "utf8");
   const env = {
     ELSET_DATA_DIR: tempDir,
-    ELSET_WORKSPACE_STORAGE: "sqlite",
     ELSET_AUTH_DB_PATH: authDbPath,
   };
 
@@ -487,31 +485,5 @@ test("forced restore failures roll back to the original workspace database", asy
     }
   } finally {
     fs.rmSync(source.tempDir, { recursive: true, force: true });
-  }
-});
-
-test("SQLite restore endpoint is unavailable in JSON workspace mode", async () => {
-  const source = await createBackupBundleFromFixture(readFixture());
-  const tempDir = makeTempDir("elset-workspace-restore-json-mode-");
-  try {
-    const env = {
-      ELSET_DATA_DIR: tempDir,
-      ELSET_WORKSPACE_STORAGE: "json",
-    };
-
-    await withServer(env, async (baseUrl) => {
-      const result = await requestJson(baseUrl, "/api/admin/workspace-restore", {
-        method: "POST",
-        body: JSON.stringify({
-          backupData: source.bundle,
-          restorePassword: "correct-password",
-        }),
-      });
-      assert.equal(result.response.status, 409);
-      assert.match(result.payload.error, /SQLite workspace restore endpoint/i);
-    });
-  } finally {
-    fs.rmSync(source.tempDir, { recursive: true, force: true });
-    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

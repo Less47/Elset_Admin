@@ -9,7 +9,7 @@ import {
   getWorkspaceDataDir,
   getWorkspaceDbPath,
 } from "./server-workspace-db.js";
-import { summarizeWorkspaceDb } from "./server-workspace-importer.js";
+import { summarizeWorkspaceDb } from "./server-workspace-summary.js";
 
 export const SQLITE_WORKSPACE_BACKUP_FORMAT = "elset-workspace-sqlite-backup-v1";
 export const MAX_SQLITE_BACKUP_DB_BYTES = 200 * 1024 * 1024;
@@ -156,17 +156,25 @@ function compareSummaryObjects(expected, actual) {
 }
 
 export async function backupSqliteDatabase(sourcePath, destinationPath) {
+  if (path.resolve(sourcePath) === path.resolve(destinationPath)) {
+    throw new Error("A SQLite backup destination must differ from its source.");
+  }
   if (!fs.existsSync(sourcePath)) {
     throw new Error(`Workspace SQLite database does not exist: ${sourcePath}`);
   }
 
   fs.rmSync(destinationPath, { force: true });
-  const db = new Database(sourcePath, { readonly: true });
+  const db = new Database(sourcePath, { readonly: true, fileMustExist: true });
   try {
     await db.backup(destinationPath);
   } finally {
     db.close();
   }
+  // The online backup is self-contained. Use rollback-journal mode on the COPY
+  // so read-only validation/restoration does not create WAL/SHM sidecars.
+  const snapshot = new Database(destinationPath, { fileMustExist: true });
+  try { snapshot.pragma("journal_mode = DELETE"); }
+  finally { snapshot.close(); }
 }
 
 export function validateWorkspaceBackupDatabaseFile(backupPath, { expectedSummary = null, expectedSha256 = "" } = {}) {

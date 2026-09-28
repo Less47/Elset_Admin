@@ -8,9 +8,8 @@ import { openWorkspaceDb } from "../server-workspace-db.js";
 import { getCustomerAccountSummary } from "../server-customer-account.js";
 import { createCustomerRouter } from "../server-customer-routes.js";
 import { importWorkspaceJsonData } from "../server-workspace-importer.js";
-import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
 import { addInvoicePayment, updateInvoicePayment, deleteInvoicePayment, replaceInvoiceForJob, insertInvoiceTree, insertQuoteTree, deleteInvoiceForJob, updateInvoiceForJob, addDocumentSentHistory } from "../server-workspace-documents.js";
-import { invoiceOverdueDays, invoiceStatusFromAmounts, summarizeJsonCustomerAccount } from "../src/lib/invoice-account.js";
+import { invoiceOverdueDays, invoiceStatusFromAmounts } from "../src/lib/invoice-account.js";
 import { money } from "../src/lib/quote-template.js";
 
 const today = "2026-09-15";
@@ -42,10 +41,6 @@ for (const [name, jobs, expected] of [
     const { job, summary } = setup(t);
     jobs.forEach(job);
     assert.equal(summary().outstandingCents, expected);
-  });
-  test(`JSON: ${name}`, () => {
-    const records = jobs.map((record, index) => ({ ...record, id: `job-${index}`, jobNumber: 1000 + index, customerId: "a" }));
-    assert.equal(summarizeJsonCustomerAccount("a", records, { today }).outstandingCents, expected);
   });
 }
 
@@ -155,21 +150,7 @@ test("summary includes every open balance but only five open invoices in its bre
   assert.equal(summary().totalReceivedCents, 220000);
 });
 
-test("JSON legacy paid markers, missing dates and ignored cached totals cannot fabricate balances", () => {
-  const jobs = [
-    { id: "paid", customerId: "a", invoice: invoice({ payments: [], paymentStatus: "Paid" }) },
-    { id: "open", customerId: "a", quote, invoice: invoice({ dueDate: "", total: 99999, balanceDue: 99999 }) },
-    { id: "void", customerId: "a", invoice: invoice({ status: "voided" }) },
-    { id: "quote-slot", customerId: "a", invoice: quote },
-    { id: "other", customerId: "b", invoice: invoice() },
-  ];
-  const result = summarizeJsonCustomerAccount("a", jobs, { today });
-  assert.equal(result.outstandingCents, 11000);
-  assert.equal(result.overdueInvoiceCount, 0);
-  assert.equal(result.invoices[0].dueDate, "");
-  assert.equal(result.invoiceCount, 2);
-  assert.equal(result.totalInvoicedCents, 22000);
-  assert.equal(result.totalReceivedCents, 11000);
+test("invoice status distinguishes absent and fully paid invoices", () => {
   assert.equal(invoiceStatusFromAmounts({ exists: false }).id, "not-invoiced");
   assert.equal(invoiceStatusFromAmounts({ total: 100, balance: 0, paid: 100 }).id, "paid");
 });
@@ -180,7 +161,7 @@ test("account API is authenticated, role-restricted, customer-scoped, read-only 
   const { db, job } = setup(t, dbPath);
   job({ invoice: invoice() }); job({ customerId: "b", invoice: invoice({ items: [{ qty: 1, rate: 9999 }] }) });
   const before = db.serialize();
-  const env = { ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath, ELSET_DATA_DIR: directory };
+  const env = { ELSET_WORKSPACE_DB_PATH: dbPath, ELSET_DATA_DIR: directory };
   const app = express();
   app.use(createCustomerRouter({ env,
     requireAuth: (req, res, next) => { if (!req.headers["x-test-role"]) return res.sendStatus(401); req.user = { role: req.headers["x-test-role"] }; next(); },
@@ -222,69 +203,53 @@ const lifetimeValues = (summary) => ({
   outstanding: summary.outstandingCents, invoices: summary.invoiceCount,
 });
 
-for (const mode of ["SQLite", "JSON"]) {
-  test(`${mode}: lifetime totals include paid, partial and unpaid invoices across jobs/sites, excluding drafts and quotes`, (t) => {
-    const jobs = [
-      { id: "paid", customerId: "a", address: "First site", invoice: invoice({ payments: [{ id: "full", amount: 110, date: today }] }) },
-      { id: "partial", customerId: "a", address: "Second site", invoice: invoice({ items: [{ qty: 1, rate: 200 }], payments: [{ id: "part", amount: 70, date: today }] }) },
-      { id: "unpaid", customerId: "a", address: "Third site", invoice: invoice({ items: [{ qty: 1, rate: 300 }] }) },
-      { id: "draft", customerId: "a", invoice: invoice({ sentHistory: [], items: [{ qty: 1, rate: 9999 }] }) },
-      { id: "quote", customerId: "a", quote },
-      { id: "other", customerId: "b", invoice: invoice({ items: [{ qty: 1, rate: 9999 }] }) },
-    ];
-    let result;
-    if (mode === "SQLite") {
-      const fixture = setup(t);
-      jobs.forEach(fixture.job);
-      const before = fixture.db.serialize();
-      result = fixture.summary();
-      assert.deepEqual(fixture.db.serialize(), before);
-    } else {
-      const before = structuredClone(jobs);
-      result = summarizeJsonCustomerAccount("a", jobs, { today });
-      assert.deepEqual(jobs, before);
-    }
-    assert.deepEqual(lifetimeValues(result), { invoiced: 66000, received: 18000, outstanding: 48000, invoices: 3 });
-    assert.equal(result.openInvoiceCount, 2);
-    assert.equal(result.invoices.length, 2);
-    assert.equal(result.totalInvoicedCents - result.totalReceivedCents, result.outstandingCents);
-  });
+test(`SQLite: lifetime totals include paid, partial and unpaid invoices across jobs/sites, excluding drafts and quotes`, (t) => {
+  const jobs = [
+    { id: "paid", customerId: "a", address: "First site", invoice: invoice({ payments: [{ id: "full", amount: 110, date: today }] }) },
+    { id: "partial", customerId: "a", address: "Second site", invoice: invoice({ items: [{ qty: 1, rate: 200 }], payments: [{ id: "part", amount: 70, date: today }] }) },
+    { id: "unpaid", customerId: "a", address: "Third site", invoice: invoice({ items: [{ qty: 1, rate: 300 }] }) },
+    { id: "draft", customerId: "a", invoice: invoice({ sentHistory: [], items: [{ qty: 1, rate: 9999 }] }) },
+    { id: "quote", customerId: "a", quote },
+    { id: "other", customerId: "b", invoice: invoice({ items: [{ qty: 1, rate: 9999 }] }) },
+  ];
+  let result;
+  const fixture = setup(t);
+  jobs.forEach(fixture.job);
+  const before = fixture.db.serialize();
+  result = fixture.summary();
+  assert.deepEqual(fixture.db.serialize(), before);
+  assert.deepEqual(lifetimeValues(result), { invoiced: 66000, received: 18000, outstanding: 48000, invoices: 3 });
+  assert.equal(result.openInvoiceCount, 2);
+  assert.equal(result.invoices.length, 2);
+  assert.equal(result.totalInvoicedCents - result.totalReceivedCents, result.outstandingCents);
+});
 
-  test(`${mode}: no invoices shows all zero lifetime values`, (t) => {
-    const result = mode === "SQLite" ? setup(t).summary() : summarizeJsonCustomerAccount("a", [], { today });
-    assert.deepEqual(lifetimeValues(result), { invoiced: 0, received: 0, outstanding: 0, invoices: 0 });
-    assert.equal(money(result.totalInvoicedCents / 100), "$0.00");
-  });
+test(`SQLite: no invoices shows all zero lifetime values`, (t) => {
+  const result = setup(t).summary();
+  assert.deepEqual(lifetimeValues(result), { invoiced: 0, received: 0, outstanding: 0, invoices: 0 });
+  assert.equal(money(result.totalInvoicedCents / 100), "$0.00");
+});
 
-  test(`${mode}: explicit drafts, deleted, archived, invalid and incomplete invoices do not count`, (t) => {
-    const excluded = [{ status: "draft" }, { status: "unfinished" }, { deleted: true }, { deletedAt: today }, { status: "void" },
-      { archived: true }, { archivedAt: today }, { status: "archived" }, { invalid: true }, { incomplete: true }, { status: "incomplete" }];
-    let result;
-    if (mode === "SQLite") {
-      const fixture = setup(t);
-      excluded.forEach((extra) => {
-        const id = fixture.job({ invoice: invoice() });
-        fixture.db.prepare("UPDATE invoices SET extra_json=? WHERE job_id=?").run(JSON.stringify(extra), id);
-      });
-      const removed = fixture.job({ invoice: invoice() });
-      deleteInvoiceForJob(fixture.db, removed, { confirmSent: true });
-      assert.equal(fixture.db.prepare("SELECT COUNT(*) n FROM deleted_invoices").get().n, 1);
-      const blank = fixture.job({ invoice: invoice() });
-      fixture.db.prepare("DELETE FROM invoice_line_items WHERE invoice_id=(SELECT id FROM invoices WHERE job_id=?)").run(blank);
-      const undated = fixture.job({ invoice: invoice() });
-      fixture.db.prepare("UPDATE invoices SET issue_date='' WHERE job_id=?").run(undated);
-      fixture.job({ invoice: invoice({ items: [{ qty: 1, rate: 0 }] }) });
-      result = fixture.summary();
-    } else {
-      const jobs = [...excluded, { items: [] }, { issueDate: "" }, { issueDate: "2026-02-30" },
-        { items: [{ qty: 1, rate: 0 }] }, { items: [{ qty: 1, rate: 100 }, { qty: 1, rate: "invalid" }] },
-        { items: [{ qty: 1, rate: 100 }, { qty: 1, rate: "" }] }, { type: "quote" }]
-        .map((extra, index) => ({ id: `invalid-${index}`, customerId: "a", invoice: invoice(extra) }));
-      result = summarizeJsonCustomerAccount("a", jobs, { today });
-    }
-    assert.deepEqual(lifetimeValues(result), { invoiced: 0, received: 0, outstanding: 0, invoices: 0 });
+test(`SQLite: explicit drafts, deleted, archived, invalid and incomplete invoices do not count`, (t) => {
+  const excluded = [{ status: "draft" }, { status: "unfinished" }, { deleted: true }, { deletedAt: today }, { status: "void" },
+    { archived: true }, { archivedAt: today }, { status: "archived" }, { invalid: true }, { incomplete: true }, { status: "incomplete" }];
+  let result;
+  const fixture = setup(t);
+  excluded.forEach((extra) => {
+    const id = fixture.job({ invoice: invoice() });
+    fixture.db.prepare("UPDATE invoices SET extra_json=? WHERE job_id=?").run(JSON.stringify(extra), id);
   });
-}
+  const removed = fixture.job({ invoice: invoice() });
+  deleteInvoiceForJob(fixture.db, removed, { confirmSent: true });
+  assert.equal(fixture.db.prepare("SELECT COUNT(*) n FROM deleted_invoices").get().n, 1);
+  const blank = fixture.job({ invoice: invoice() });
+  fixture.db.prepare("DELETE FROM invoice_line_items WHERE invoice_id=(SELECT id FROM invoices WHERE job_id=?)").run(blank);
+  const undated = fixture.job({ invoice: invoice() });
+  fixture.db.prepare("UPDATE invoices SET issue_date='' WHERE job_id=?").run(undated);
+  fixture.job({ invoice: invoice({ items: [{ qty: 1, rate: 0 }] }) });
+  result = fixture.summary();
+  assert.deepEqual(lifetimeValues(result), { invoiced: 0, received: 0, outstanding: 0, invoices: 0 });
+});
 
 test("historical ServiceM8 import counts each current invoice once, ignoring history snapshots and cached totals", (t) => {
   const fixture = JSON.parse(fs.readFileSync(new URL("../fixtures/demo-workspace.json", import.meta.url)));
@@ -303,9 +268,6 @@ test("historical ServiceM8 import counts each current invoice once, ignoring his
   importWorkspaceJsonData(db, fixture);
   const expected = { invoiced: 33000, received: 33000, outstanding: 0, invoices: 1 };
   assert.deepEqual(lifetimeValues(getCustomerAccountSummary(db, customer.id)), expected);
-  assert.deepEqual(lifetimeValues(summarizeJsonCustomerAccount(customer.id, loadWorkspaceStateFromDb(db).jobs)), expected);
-  // Repeated projections of the same document must not inflate a lifetime total.
-  assert.deepEqual(lifetimeValues(summarizeJsonCustomerAccount(customer.id, [...fixture.jobs, structuredClone(fixture.jobs[0])])), expected);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM invoices").get().n, 1);
 });
 

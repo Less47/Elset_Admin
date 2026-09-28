@@ -27,7 +27,7 @@ async function fixture(t, { connect = false } = {}) {
     if (db.open) db.close();
     fs.rmSync(directory, { recursive: true, force: true });
   });
-  const env = { NODE_ENV: "test", ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath,
+  const env = { NODE_ENV: "test", ELSET_WORKSPACE_DB_PATH: dbPath,
     QUICKBOOKS_ENVIRONMENT: "sandbox", QUICKBOOKS_CLIENT_ID: "fixture-client", QUICKBOOKS_CLIENT_SECRET: "fixture-secret",
     QUICKBOOKS_REDIRECT_URI: "http://localhost:3101/api/integrations/quickbooks/callback",
     QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN: "fixture-verifier", ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };

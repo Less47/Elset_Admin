@@ -53,7 +53,7 @@ test.beforeAll(async ({ browser }) => {
   baseUrl = `http://127.0.0.1:${port}`;
   const env = { ...process.env, NODE_ENV: "test", FLY_APP_NAME: "", TZ: "Australia/Sydney",
     ELSET_DATA_DIR: dataDir, ELSET_AUTH_DB_PATH: path.join(dataDir, "auth.db"),
-    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"), ELSET_WORKSPACE_STORAGE: "sqlite",
+    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"),
     BETTER_AUTH_URL: baseUrl, ELSET_FRONTEND_URL: baseUrl, ELSET_API_PORT: String(port), PORT: String(port),
     SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "" };
   const seed = spawnSync(process.execPath, ["--input-type=module", "-e", `
@@ -544,21 +544,7 @@ test("failed add-on disable keeps the disabled draft and persisted enabled state
   } finally { await context.close(); }
 });
 
-test("legacy JSON add-on restriction explains its storage requirement beside the switch", async ({ browser }) => {
-  const { context, page } = await open(browser, { preparePage: (page) => page.route("**/api/app-state", async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({ response, json: { ...await response.json(), storageMode: "json" } });
-  }) });
-  try {
-    await settings(page, { expectEnabled: false });
-    const toggle = page.getByRole("switch", { name: "Job Costing enabled" });
-    await expect(page.getByRole("status").filter({ hasText: "Loading add-ons" })).toHaveCount(0);
-    await expect(toggle).toBeDisabled();
-    await expect(toggle).toHaveCSS("cursor", "not-allowed");
-    await expect(page.getByText("Add-ons require SQLite workspace storage. This workspace is using legacy JSON storage.", { exact: true })).toBeVisible();
-    await expect(toggle).toHaveAccessibleDescription(/Add-ons require SQLite workspace storage/);
-  } finally { await context.close(); }
-});
+
 
 test("server disabling during an open cost draft blocks the write and hides costing", async ({ browser }) => {
   const { context, page } = await open(browser, { enabled: true });

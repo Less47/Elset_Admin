@@ -15,7 +15,7 @@ Calendar is a month grid with a mini-calendar, scheduling queue and Day Inspecto
 | Generate maintenance job; `maintenanceActions.generate` | POST `/api/maintenance-plans/:id/generate-job` | Creates a job, occurrence fact and generation/cache fields | Busy state, followed by authoritative state and range refresh |
 | Open Job / Open Plan | Navigation only | Subsequent edits belong to the other workspace | No Calendar scheduling mutation |
 
-Permissions already require admin/office in the Calendar workspace and scheduling APIs. Targeted scheduling APIs require SQLite; Calendar already rejects legacy JSON writes. There is no general job scheduling activity ledger. Maintenance activity is derived from sparse exception snapshots; completed corrections already append history, whereas ordinary occurrence moves previously replaced the displayed move.
+Permissions already require admin/office in the Calendar workspace and scheduling APIs. Targeted scheduling APIs use the SQLite runtime. There is no general job scheduling activity ledger. Maintenance activity is derived from sparse exception snapshots; completed corrections already append history, whereas ordinary occurrence moves previously replaced the displayed move.
 
 ## Scope decisions
 
@@ -60,7 +60,7 @@ Ordinary occurrence moves and their inverse now append `occurrenceMoves` in the 
 
 The permanent outline Undo button sits with Calendar toolbar controls. It uses `Undo2`, an accessible name of **Undo last calendar change**, a short current-action tooltip, existing semantic theme tokens and a native disabled state when history is empty or a scheduling request/confirmation is pending. Phone layouts show the icon; tablet/desktop also show **Undo**. Existing toolbar rows, grid density, mini-calendar and queue layouts remain intact.
 
-Calendar and every inverse endpoint retain the existing admin/office permissions. No general undo endpoint, new permission, database migration or storage architecture change was added. Legacy JSON workspaces retain the existing restriction on Calendar scheduling APIs.
+Calendar and every inverse endpoint retain the existing admin/office permissions. No general undo endpoint, new permission, database migration or storage architecture change was added. All runtime Calendar writes use record-specific SQLite APIs.
 
 ## Files changed
 

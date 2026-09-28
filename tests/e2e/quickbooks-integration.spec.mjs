@@ -54,7 +54,7 @@ test.beforeAll(async ({ browser }) => {
   baseUrl = `http://127.0.0.1:${port}`;
   const env = { ...process.env, NODE_ENV: "test", FLY_APP_NAME: "", TZ: "Australia/Sydney",
     ELSET_DATA_DIR: dataDir, ELSET_AUTH_DB_PATH: path.join(dataDir, "auth.db"),
-    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"), ELSET_WORKSPACE_STORAGE: "sqlite",
+    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"),
     BETTER_AUTH_URL: baseUrl, ELSET_FRONTEND_URL: baseUrl, ELSET_API_PORT: String(port), PORT: String(port),
     ELSET_TEST_QUICKBOOKS: "1", QUICKBOOKS_ENVIRONMENT: "sandbox", QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN: "quickbooks-e2e-signature-only", QUICKBOOKS_CLIENT_ID: "fixture-client", QUICKBOOKS_CLIENT_SECRET: "fixture-secret", QUICKBOOKS_REDIRECT_URI: `http://localhost:${port}/api/integrations/quickbooks/callback`, ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex"), SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "" };
   const seed = spawnSync(process.execPath, ["--input-type=module", "-e", `
@@ -209,6 +209,7 @@ for (const width of [390, 1440]) test(`price-list mapping state and fallback wor
     const created = await context.request.post(`${baseUrl}/api/price-list-items`, { data: { name: "Labour", description: "Current catalog description", unitPrice: 999, unit: "hour" } });
     expect(created.ok()).toBeTruthy(); const { item } = await created.json();
     withDb(db => db.prepare("UPDATE invoice_line_items SET extra_json=? WHERE invoice_id=(SELECT id FROM invoices WHERE job_id='costing-job')").run(JSON.stringify({ priceListItemId: item.id })));
+    await page.getByRole("dialog", { name: "QuickBooks Online", exact: true }).getByRole("button", { name: "Done", exact: true }).click();
     await page.getByRole("button", { name: "Items & Price List", exact: true }).last().click();
     await expect(page.getByRole("listitem", { name: "Labour", exact: true })).toContainText("Not mapped — will create/match on first sync");
     await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
@@ -269,7 +270,7 @@ for (const width of [390, 820, 1440]) test(`searchable sales items and explicit 
     await page.reload(); await connection.getByRole("button", { name: "Configure", exact: true }).click();
     await expect(connection.locator('[data-quickbooks-selected-item="1599"]')).toContainText("Batteries");
     await connection.getByRole("button", { name: 'Create "ELSET Services" in QuickBooks', exact: true }).click();
-    const create = page.getByRole("dialog");
+    const create = page.getByRole("dialog", { name: 'Create "ELSET Services" in QuickBooks', exact: true });
     await expect(create.getByRole("button", { name: "Create sales item", exact: true })).toBeDisabled();
     await expect(create.getByLabel("Income account for ELSET Services")).toHaveValue("");
     await expect(create.getByRole("option", { name: "Unrelated expense" })).toHaveCount(0);
@@ -284,8 +285,9 @@ for (const width of [390, 820, 1440]) test(`searchable sales items and explicit 
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(connection).toContainText("QuickBooks configuration saved.");
     await connection.getByRole("button", { name: 'Use "ELSET Services"', exact: true }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Use existing ELSET Services", exact: true }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const reuse = page.getByRole("dialog", { name: 'Use "ELSET Services"', exact: true });
+    await reuse.getByRole("button", { name: "Use existing ELSET Services", exact: true }).click();
+    await expect(reuse).toHaveCount(0);
     await expect(connection).toContainText("Reused existing ELSET Services · Service Income");
     await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
     await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");

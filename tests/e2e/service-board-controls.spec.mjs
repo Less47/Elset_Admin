@@ -513,7 +513,7 @@ test.beforeAll(async ({ browser }) => {
   const env = {
     ...process.env, NODE_ENV: "test", FLY_APP_NAME: "", TZ: "Australia/Sydney",
     ELSET_DATA_DIR: dataDir, ELSET_AUTH_DB_PATH: path.join(dataDir, "auth.db"),
-    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"), ELSET_WORKSPACE_STORAGE: "sqlite",
+    ELSET_WORKSPACE_DB_PATH: path.join(dataDir, "elset-workspace.db"),
     BETTER_AUTH_URL: baseUrl, ELSET_FRONTEND_URL: baseUrl, ELSET_API_PORT: String(port), PORT: String(port),
     SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "",
   };

@@ -3,7 +3,6 @@ import Database from "better-sqlite3";
 import { AccountingService } from "./server-accounting-service.js";
 import { safeAccountingError } from "./server-accounting-errors.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getWorkspaceStorageMode } from "./server-workspace-storage.js";
 import { pendingQuickBooksCompany } from "./server-quickbooks-oauth.js";
 
 const retryable = new Set(["RATE_LIMITED", "PROVIDER_UNAVAILABLE", "EXTERNAL_CHANGING", "INTEGRATION_BUSY", "INTEGRATION_ERROR"]);
@@ -91,7 +90,7 @@ export async function processAccountingInbox(db, { providerId = "xero", env = pr
 export function createAccountingInboxWorker({ env = process.env, fetchImpl } = {}) {
   let running = false, stopped = false, timer, wakeAgain = false;
   const schedule = (delay = 0) => {
-    if (stopped || getWorkspaceStorageMode(env) !== "sqlite") return;
+    if (stopped) return;
     if (running) { wakeAgain = true; return; }
     clearTimeout(timer);
     timer = setTimeout(async () => {

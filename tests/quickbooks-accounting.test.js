@@ -33,7 +33,7 @@ function fixture(t, { file = false, manual = false, draft = false } = {}) {
   insertInvoiceTree(db, "job", { ...invoice, id: "invoice" }); insertInvoiceTree(db, "job-b", { ...invoice, id: "invoice-b", payments: [] });
   updateWorkspaceAddons(db, { quickbooks: true });
   const mock = createQuickBooksMock();
-  const env = { NODE_ENV: "test", ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath,
+  const env = { NODE_ENV: "test", ELSET_WORKSPACE_DB_PATH: dbPath,
     QUICKBOOKS_CLIENT_ID: "fixture-client", QUICKBOOKS_CLIENT_SECRET: "fixture-secret", QUICKBOOKS_REDIRECT_URI: "http://localhost:3101/api/integrations/quickbooks/callback",
     QUICKBOOKS_ENVIRONMENT: "sandbox", QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN: "fixture-verifier", ACCOUNTING_INTEGRATION_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };
   const authorizeOAuthInitiator = async (row) => row.user_id === "admin" && row.session_hash === digest("session");

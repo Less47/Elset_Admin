@@ -30,7 +30,7 @@ Implementation report — 10 September 2026. Changes are local and uncommitted. 
 
 14. **Migration.** SQLite migration 5, `maintenance-recurrence-exceptions`, adds the sparse table and indexes and updates schema metadata. No existing table or record is deleted/rebuilt by the migration. Anchors, segment history, active state, price presence and monotonic maintenance revisions use the established extensible plan JSON storage. Export/import and archive/restore preserve the new metadata. Tests cover upgrading an existing v4 database and applying the migration twice. The migration has not been applied to the operational workspace by this task.
 
-15. **API changes.** Existing admin/office authorization and SQLite storage guards are reused. Calendar range reads return only occurrence data; mutations retain the existing `{ ok, result, state }` response convention.
+15. **API changes.** Existing admin/office authorization is retained; the SQLite database must exist. Calendar range reads return only occurrence data; mutations retain the existing `{ ok, result, state }` response convention.
 
     | Operation | Contract |
     | --- | --- |
@@ -41,7 +41,7 @@ Implementation report — 10 September 2026. Changes are local and uncommitted. 
     | `POST /api/maintenance-plans/:id/generate-job` | Requires occurrence identity and revision; duplicate identity returns its existing job. |
     | `POST /api/maintenance-plans/:id/complete-cycle` | Explicit occurrence completion requires identity/revision; the legacy aggregate-only completion path does not consume the next visit. |
 
-    Date writes reject stale revisions with HTTP 409 and run inside SQLite transactions. No broad workspace-save endpoint was added. Persisted recurring-date editing requires SQLite workspace mode, consistent with existing Calendar job scheduling; JSON mode reports this requirement instead of silently applying a different recurrence rule.
+    Date writes reject stale revisions with HTTP 409 and run inside SQLite transactions. No broad workspace-save endpoint was added. Persisted recurring-date editing uses the same SQLite runtime as Calendar job scheduling.
 
 16. **Files changed.** New files:
 

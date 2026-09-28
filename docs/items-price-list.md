@@ -14,7 +14,7 @@ An item has `id`, `name`, `description`, optional `code` (SKU), `unit`, `unitPri
 
 Schema **13**, migration `workspace-price-list-items`, adds one `price_list_items` table and one status/name index. Money is stored as integer cents. The existing transaction-based startup migration applies it once, with rollback on failure. No quote/invoice tables or historical financial rows are changed. Catalog mutations update individual items and check `updatedAt` to reject stale edits. There is no hard-delete endpoint.
 
-Legacy JSON workspaces store the same catalog under server-owned `priceListItems`. Normal workspace autosaves preserve it. JSON-to-SQLite import retains the catalog and IDs; current-schema SQLite backups include it. The existing backup restore policy still requires a matching schema version; this change does not redesign restoration of older SQLite backup bundles.
+The live catalog uses record-specific SQLite APIs. Explicit offline JSON-to-SQLite import retains historical catalog records and IDs; current-schema SQLite backups include it. The existing backup restore policy still requires a matching schema version; this change does not redesign restoration of older SQLite backup bundles.
 
 ## Snapshot, GST and accounting behaviour
 
@@ -50,7 +50,7 @@ Application:
 
 Tests:
 
-- `tests/price-list.test.js` — catalog, snapshots, history, migration rollback, backups, API roles/isolation, legacy JSON, provider sync and PDFs.
+- `tests/price-list.test.js` — catalog, snapshots, history, migration rollback, backups, API roles/isolation, historical import, provider sync and PDFs.
 - `tests/e2e/document-workspaces.spec.mjs` — blank defaults, management workflow, shared catalog, manual edits, archive exclusion, current-value selection and responsive picker.
 - Schema-version expectations updated in `tests/accounting-webhook-leases.test.js`, `tests/maintenance-recurrence.test.js`, `tests/quickbooks-migration.test.js`, `tests/workspace-migration.test.js`, `tests/workspace-schema-upgrade.test.js`, `tests/xero-accounting.test.js` and `tests/xero-payments.test.js`.
 

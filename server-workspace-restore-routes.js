@@ -1,5 +1,5 @@
 import express from "express";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode } from "./server-workspace-storage.js";
+import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
 import {
   WorkspaceRestoreError,
   restoreWorkspaceSqliteBackupPayload,
@@ -33,12 +33,6 @@ export function createWorkspaceRestoreRouter({
 
   router.post("/api/admin/workspace-restore", authMiddleware, adminMiddleware, async (req, res) => {
     try {
-      if (getWorkspaceStorageMode(env) !== "sqlite") {
-        return res.status(409).json({
-          error: "The SQLite workspace restore endpoint is available only in SQLite workspace mode.",
-        });
-      }
-
       const restorePassword = String(req.body?.restorePassword || "");
       if (!restorePassword) {
         return res.status(400).json({ error: "Re-enter your admin password to restore a backup." });

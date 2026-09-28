@@ -144,7 +144,7 @@ test("authenticated catalog API isolates workspaces, enforces roles and never of
   });
   const directory = temporary(t), dbPath = path.join(directory, "workspace.db");
   db = database(t, dbPath);
-  const env = { ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath };
+  const env = { ELSET_WORKSPACE_DB_PATH: dbPath };
   const app = express(); app.use(express.json());
   app.use(createPriceListRouter({ env,
     requireAuth: (req, res, next) => { if (!req.headers["x-role"]) return res.sendStatus(401); req.user = { role: req.headers["x-role"] }; next(); },
@@ -167,19 +167,7 @@ test("authenticated catalog API isolates workspaces, enforces roles and never of
   const other = database(t); assert.deepEqual(listPriceListItems(other), []);
 });
 
-test("legacy JSON catalog API retains unrelated state while editing and archiving", async (t) => {
-  let data = { jobs: [{ id: "historic", invoice: { items: [{ description: "Unchanged", qty: 2, rate: 30 }] } }], settings: { keep: true } };
-  const before = structuredClone(data);
-  const app = express(); app.use(express.json());
-  app.use(createPriceListRouter({ env: { ELSET_WORKSPACE_STORAGE: "json" }, requireAuth: (_req, _res, next) => next(), requireRole: () => (_req, _res, next) => next(), jsonStore: { loadData: () => structuredClone(data), saveData: (next) => { data = next; } } }));
-  const server = app.listen(0, "127.0.0.1"); await new Promise((resolve) => server.once("listening", resolve));
-  t.after(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); });
-  const url = `http://127.0.0.1:${server.address().port}/api/price-list-items`, headers = { "Content-Type": "application/json" };
-  const { item } = await (await fetch(url, { method: "POST", headers, body: JSON.stringify(itemInput) })).json();
-  const response = await fetch(`${url}/${item.id}`, { method: "PATCH", headers, body: JSON.stringify({ updatedAt: item.updatedAt, unitPrice: 155, archived: true }) });
-  assert.equal(response.status, 200); assert.deepEqual(data.jobs, before.jobs); assert.deepEqual(data.settings, before.settings);
-  assert.equal(data.priceListItems[0].unitPrice, 155); assert.deepEqual((await (await fetch(url)).json()).items, []);
-});
+
 
 for (const provider of ["xero", "quickbooks"]) test(`${provider} sync uses stored invoice snapshots after price-list edit/archive and creates no provider items`, async (t) => {
   const db = database(t), item = createPriceListItem(db, itemInput), line = priceListItemToLine(item);

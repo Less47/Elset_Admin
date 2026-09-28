@@ -3,7 +3,6 @@ import test from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import Database from "better-sqlite3";
 import express from "express";
 import { createUserPreferencesRouter } from "../server-user-preferences-routes.js";
@@ -17,7 +16,7 @@ import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
 
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "elset-user-preferences-"));
-  const env = { ELSET_DATA_DIR: dir, ELSET_WORKSPACE_STORAGE: "sqlite" };
+  const env = { ELSET_DATA_DIR: dir, };
   const db = openWorkspaceDb({ dbPath: path.join(dir, "elset-workspace.db") });
   const data = JSON.parse(fs.readFileSync(new URL("../fixtures/demo-workspace.json", import.meta.url), "utf8"));
   data.settings = { ...data.settings, actionColor: "#123456", companyName: "Shared company" };
@@ -105,10 +104,8 @@ test("fresh users get fallback without a row; partial upserts isolate users and 
   } finally { db?.close(); f.cleanup(); }
 });
 
-async function withApi(run, mode = "sqlite") {
+async function withApi(run) {
   const f = fixture();
-  f.env.ELSET_WORKSPACE_STORAGE = mode;
-  if (mode === "json") fs.writeFileSync(path.join(f.dir, "app-data.json"), JSON.stringify({ settings: { actionColor: "#654321" } }));
   const app = express();
   app.use(express.json());
   const users = { a: { id: "opaque-user-A", role: "admin" }, b: { id: "opaque-user-B", role: "office" }, tech: { id: "opaque-tech", role: "technician" } };
@@ -166,43 +163,3 @@ test("shared company settings stay shared while global theme writes and reset ar
     assert.deepEqual(loadWorkspaceStateFromDb(db).jobs, original.jobs);
   } finally { db.close(); }
 }));
-
-test("legacy JSON installations also persist account preferences in the auth database", async () => withApi(async (api, f) => {
-  const before = fs.readFileSync(path.join(f.dir, "app-data.json"));
-  assert.equal((await api("a")).body.preferences.actionColor, "#654321");
-  await api("a", "PATCH", { actionColor: "#abc" });
-  assert.equal((await api("a")).body.preferences.actionColor, "#AABBCC");
-  assert.equal((await api("b")).body.preferences.actionColor, "#654321");
-  assert.deepEqual(fs.readFileSync(path.join(f.dir, "app-data.json")), before);
-}, "json"));
-
-test("legacy broad workspace saves preserve the global appearance fallback while sharing company changes", () => {
-  const f = fixture();
-  try {
-    const data = JSON.parse(fs.readFileSync(new URL("../fixtures/demo-workspace.json", import.meta.url), "utf8"));
-    data.settings = { ...data.settings, actionColor: "#123456" };
-    fs.writeFileSync(path.join(f.dir, "app-data.json"), JSON.stringify(data));
-    const script = `
-      import assert from "node:assert/strict";
-      const { getAuthorizedAppState, saveAuthorizedAppState } = await import(${JSON.stringify(new URL("../server-store.js", import.meta.url).href)});
-      const a = { id: "A", role: "admin" };
-      const original = getAuthorizedAppState(a);
-      const incoming = structuredClone(original);
-      incoming.settings.actionColor = "#FF8800";
-      incoming.settings.contentDensity = "compact";
-      incoming.settings.companyName = "Shared JSON company";
-      saveAuthorizedAppState(a, incoming);
-      const b = getAuthorizedAppState({ id: "B", role: "office" });
-      assert.equal(b.settings.actionColor, "#123456");
-      assert.equal(b.settings.contentDensity, original.settings.contentDensity);
-      assert.equal(b.settings.companyName, "Shared JSON company");
-      assert.deepEqual(b.jobs, original.jobs);
-      assert.deepEqual(b.customers, original.customers);
-    `;
-    const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
-      env: { ...process.env, ...f.env, ELSET_WORKSPACE_STORAGE: "json", NODE_ENV: "test", FLY_APP_NAME: "" },
-      encoding: "utf8",
-    });
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-  } finally { f.cleanup(); }
-});

@@ -19,7 +19,7 @@ async function withWorkspace(callback) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "elset-logo-test-"));
   const dbPath = path.join(root, "elset-workspace.db");
   const db = openWorkspaceDb({ dbPath });
-  try { return await callback({ root, dbPath, db, env: { ELSET_DATA_DIR: root, ELSET_WORKSPACE_STORAGE: "sqlite" } }); }
+  try { return await callback({ root, dbPath, db, env: { ELSET_DATA_DIR: root, } }); }
   finally {
     db.close();
     const target = path.resolve(root);

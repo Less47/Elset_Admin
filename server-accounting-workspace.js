@@ -1,6 +1,6 @@
 // The existing product's financial model is adapted here, never inside providers.
 import { invoiceFinancialsFromRows } from "./server-workspace-documents.js";
-import { lineTotalCentsFromScaled, gstCentsFromSubtotal } from "./server-workspace-importer.js";
+import { lineTotalCentsFromScaled, gstCentsFromSubtotal } from "./server-workspace-financials.js";
 import { buildDocumentReference, GST_RATE } from "./src/lib/quote-template.js";
 import { invoiceDate, isQualifyingActualInvoice } from "./src/lib/invoice-account.js";
 import { AccountingError } from "./server-accounting-errors.js";

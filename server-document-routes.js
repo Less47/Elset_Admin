@@ -13,8 +13,7 @@ import {
   WorkspaceDocumentError,
 } from "./server-workspace-documents.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState, getWorkspaceStorageMode, loadWorkspaceState, saveWorkspaceState } from "./server-workspace-storage.js";
-import { deleteJsonInvoice, restoreJsonInvoice } from "./server-invoice-archive.js";
+import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -34,11 +33,7 @@ function getErrorMessage(error, fallback) {
 }
 
 function openSqliteWorkspaceDb(env) {
-  const mode = getWorkspaceStorageMode(env);
-  if (mode !== "sqlite") {
-    throw new WorkspaceDocumentError("Document record endpoints are available only in SQLite workspace mode.", 409);
-  }
-  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env) });
+  return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
 function sendSuccess(req, res, result, env) {
@@ -67,19 +62,12 @@ function handleDocumentRoute(operation, env) {
   };
 }
 
-function handleInvoiceArchiveRoute(operation, jsonOperation, env) {
+function handleInvoiceArchiveRoute(operation, env) {
   return (req, res) => {
     let db;
     try {
-      let result;
-      if (getWorkspaceStorageMode(env) === "json") {
-        const updated = jsonOperation(loadWorkspaceState({ env }), req);
-        saveWorkspaceState(updated.state, { env });
-        result = updated.result;
-      } else {
-        db = openSqliteWorkspaceDb(env);
-        result = operation(db, req);
-      }
+      db = openSqliteWorkspaceDb(env);
+      const result = operation(db, req);
       return sendSuccess(req, res, result, env);
     } catch (error) {
       const statusCode = getStatusCode(error);
@@ -136,7 +124,6 @@ export function createDocumentRouter({
     ...middleware,
     handleInvoiceArchiveRoute(
       (db, req) => deleteInvoiceForJob(db, req.params.id, { confirmSent: req.body?.confirmSent, deletedBy: req.user.id }),
-      (state, req) => deleteJsonInvoice(state, req.params.id, { confirmSent: req.body?.confirmSent, deletedBy: req.user.id }),
       env
     )
   );
@@ -146,7 +133,6 @@ export function createDocumentRouter({
     ...middleware,
     handleInvoiceArchiveRoute(
       (db, req) => restoreDeletedInvoice(db, req.params.id),
-      (state, req) => restoreJsonInvoice(state, req.params.id),
       env
     )
   );

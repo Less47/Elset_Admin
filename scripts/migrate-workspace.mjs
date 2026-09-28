@@ -44,6 +44,7 @@ function printHelp() {
 Usage:
   npm run migrate:workspace -- [--dry-run] [--source path/to/app-data.json] [--db path/to/elset-workspace.db] [--data-dir path]
 
+Offline migration/recovery only: stop the target application first. The normal server never runs this importer.
 This command never connects to Fly.io and never deletes or renames the source JSON file.
 `.trim());
 }

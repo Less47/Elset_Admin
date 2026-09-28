@@ -23,7 +23,7 @@ function fixture(t, enabled = "xero") {
     db.prepare(`INSERT INTO integration_webhook_events(id,provider,external_tenant_id,event_category,event_type,external_resource_id,event_sequence,event_date,received_at)
       VALUES(?,?,'fixture-tenant','INVOICE','UPDATE','unmapped-fixture','1','fixture','fixture')`).run(provider, provider);
   }
-  const env = { ELSET_WORKSPACE_STORAGE: "sqlite", ELSET_WORKSPACE_DB_PATH: dbPath, QUICKBOOKS_ENVIRONMENT: "sandbox" };
+  const env = { ELSET_WORKSPACE_DB_PATH: dbPath, QUICKBOOKS_ENVIRONMENT: "sandbox" };
   const logs = [];
   t.mock.method(console, "error", (...values) => logs.push(values));
   const worker = createAccountingInboxWorker({ env, fetchImpl() { assert.fail("Unmapped events must not call providers"); } });

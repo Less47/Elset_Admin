@@ -4,8 +4,8 @@ import { useCustomerAccount } from "@/hooks/useCustomerAccount";
 import { money } from "@/lib/quote-template";
 import { formatDate } from "@/lib/app-support";
 
-export default function CustomerAccount({ customerId, jobs, storageMode, onOpenInvoice, onViewInvoices }) {
-  const { summary, loading, error, retry } = useCustomerAccount(customerId, jobs, storageMode);
+export default function CustomerAccount({ customerId, jobs, onOpenInvoice, onViewInvoices }) {
+  const { summary, loading, error, retry } = useCustomerAccount(customerId, jobs);
   if (loading) return <p className="py-2 text-sm text-text-secondary" role="status">Loading account…</p>;
   if (error) return <div className="flex flex-wrap items-center justify-between gap-2 text-sm" role="alert">
     <span>Account balance unavailable.</span><Button variant="outline" size="sm" onClick={retry}>Retry</Button>

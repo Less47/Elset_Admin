@@ -1,17 +1,17 @@
 # Fly SQLite Deployment Runbook
 
-This runbook is for the controlled production move from the legacy workspace JSON file to the SQLite workspace database. It uses placeholders for production identifiers and secrets. Replace placeholders only during the maintenance window.
+This runbook retains the explicit offline steps for the historical JSON-to-SQLite migration. Production already uses SQLite; normal application startup never imports JSON. Do not repeat historical migration against an existing live workspace. It uses placeholders for production identifiers and secrets. Replace placeholders only during the maintenance window.
 
 Local configuration currently expects:
 
 - Fly volume mount path: `/app/data`
-- Workspace JSON source: `/app/data/app-data.json`
+- Historical offline migration source: `/app/data/app-data.json`
 - Workspace SQLite database: `/app/data/elset-workspace.db`
 - Better Auth database: `/app/data/auth.db`
 - SQLite backup directory: `/app/data/backups`
 - Runtime file directories, when used: `/app/data/uploads` and `/app/data/generated-documents`
 
-The workspace database and Better Auth database are separate files. Do not restore workspace backups over `auth.db`, and do not store SMTP credentials, API keys, OAuth tokens, sessions, or passwords in the workspace database.
+The workspace database and Better Auth database are separate files. Workspace restore must not overwrite `auth.db`. Workspace snapshots include encrypted integration credentials; preserve the corresponding encryption key separately. Environment secrets and Better Auth login records are not part of a Settings workspace backup.
 
 ## 1. Pre-Maintenance Checks
 
@@ -57,7 +57,7 @@ Confirm staff are logged out and no one is creating jobs, invoices, payments, im
 
 ## 3. Verified Backup Procedure
 
-If production is still JSON-backed before the migration, create and verify a raw JSON/auth backup first:
+For the current SQLite production architecture, create and verify a workspace/auth snapshot backup first:
 
 Local / Fly read-only:
 
@@ -126,7 +126,7 @@ flyctl ssh console -a <fly-app-name> -s
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-The health response must report `ok: true` and `storage.mode: sqlite`. If `/app/data` is missing, empty, read-only, mounted at the wrong path, or missing `elset-workspace.db`, startup and health must fail.
+The health response must report `ok: true` and `storage.dbPath` pointing to the mounted SQLite workspace. If `/app/data` is missing, empty, read-only, mounted at the wrong path, or missing `elset-workspace.db`, startup and health must fail.
 
 ## 7. Count, Total, And Integrity Checks
 
@@ -173,35 +173,19 @@ Remove only the temporary smoke-test records through the app.
 
 Rollback before allowing normal use if:
 
-- Health does not report SQLite mode.
+- Health does not report ok: true with the expected SQLite database path.
 - Login fails for known valid staff.
 - Counts or financial totals do not match the migration report.
 - Foreign-key or integrity checks fail.
 - Quotes, invoices, payments, jobs, customers, or sites are missing.
-- The app attempts a broad `PUT /api/app-state` in SQLite mode.
+- The app attempts a broad `PUT /api/app-state` request.
 - More than one Fly machine can write to the SQLite database.
 
 ## 10. Rollback Procedure
 
-Preferred rollback preserves the migrated SQLite database for investigation and starts the previous JSON-backed workspace explicitly.
+Stop the application before recovery. Preserve the failed SQLite database for investigation and restore a verified SQLite backup compatible with the selected application version. Verify schema, integrity, foreign keys and business totals before resuming use. Workspace-only recovery must not overwrite auth.db.
 
-Fly mutating:
-
-```bash
-flyctl machines stop <machine-id> -a <fly-app-name>
-flyctl secrets set ELSET_WORKSPACE_STORAGE=json -a <fly-app-name>
-flyctl machines start <machine-id> -a <fly-app-name>
-```
-
-Fly read-only:
-
-```bash
-flyctl logs -a <fly-app-name>
-flyctl ssh console -a <fly-app-name> -s
-curl -fsS http://127.0.0.1:8080/api/health
-```
-
-Do not delete `/app/data/elset-workspace.db`. Do not delete `/app/data/app-data.json`. Do not deploy older JSON-only code over a migrated workspace unless `ELSET_WORKSPACE_STORAGE=json` is set and the JSON file has been verified.
+Do not delete /app/data/app-data.json. Retain it for explicit offline historical migration/recovery only. Datastore switching and live JSON restore are not supported.
 
 ## 11. Post-Deployment Monitoring
 

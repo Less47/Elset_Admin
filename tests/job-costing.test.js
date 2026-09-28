@@ -324,7 +324,7 @@ test("authenticated targeted APIs share persisted enablement and enforce roles, 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "elset-job-costing-"));
   const db = setup(t, path.join(dir, "elset-workspace.db"));
   t.after(() => { if (db.open) db.close(); assert.ok(path.resolve(dir).startsWith(path.join(os.tmpdir(), "elset-job-costing-"))); fs.rmSync(dir, { recursive: true, force: true }); });
-  const request = await startServer(t, { ELSET_DATA_DIR: dir, ELSET_WORKSPACE_STORAGE: "sqlite" });
+  const request = await startServer(t, { ELSET_DATA_DIR: dir, });
   const route = "/api/jobs/job/costing";
   assert.equal((await request(route, { role: "" })).status, 401);
   assert.equal((await request("/api/settings/addons", { role: "" })).status, 401);

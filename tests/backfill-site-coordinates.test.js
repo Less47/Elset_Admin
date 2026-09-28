@@ -58,7 +58,6 @@ test("Fly preflight uses the normal resolver, prints the path before inspection,
   for (const override of [
     { platform: "win32" }, { env: { ...env, FLY_APP_NAME: "another-app" } }, { env: { ...env, FLY_MACHINE_ID: "" } },
     { env: { ...env, ELSET_WORKSPACE_DB_PATH: "/app/data/empty.db" } }, { env: { ...env, ELSET_DATA_DIR: "/tmp" } },
-    { env: { ...env, ELSET_WORKSPACE_STORAGE: "json" } },
   ]) assert.throws(() => resolveProductionBackfillDb({ ...options, ...override }), /Refusing|inside the deployed/);
   for (const broken of [
     { statSync: () => { throw new Error("ENOENT"); } },

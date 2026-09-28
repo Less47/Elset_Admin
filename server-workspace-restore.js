@@ -43,6 +43,7 @@ function checkpointWorkspaceDatabase(dbPath) {
     dbPath,
     readonly: false,
     migrate: false,
+    fileMustExist: true,
     allowDuringRestore: true,
   });
   try {
