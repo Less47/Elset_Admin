@@ -12,18 +12,16 @@ function readSource(relativePath) {
 }
 
 test("substantial job workflows use URL-backed pages instead of job dialogs", () => {
-  const appSource = readSource("src/App.jsx");
+  const pagesSource = readSource("src/components/jobs/JobRoutePages.jsx");
   const customerPagesSource = readSource("src/components/customers/CustomerPages.jsx");
-  const navigationSource = readSource("src/hooks/useWorkspaceNavigation.js");
-
-  assert.match(appSource, /<CreateJobPage/);
-  assert.match(appSource, /<JobDetailsPage/);
-  assert.match(navigationSource, /\/jobs\/new/);
-  assert.match(navigationSource, /\/jobs\/\$\{encodeURIComponent\(job\.id\)\}/);
+  assert.match(pagesSource, /<CreateJobPage/);
+  assert.match(pagesSource, /<JobDetailsPage/);
+  assert.match(readSource("src/App.jsx"), /<Outlet/);
+  assert.match(pagesSource, /useParams\(\)/);
   assert.doesNotMatch(customerPagesSource, /JobFormDialog|JobDetailsDialog|JobEditDialog/);
 });
 
-test("all existing job-opening surfaces retain the centralized page navigator", () => {
+test("existing job-opening business actions navigate through React Router", () => {
   const shellSource = readSource("src/components/app/WorkspaceShell.jsx");
   const customerPagesSource = readSource("src/components/customers/CustomerPages.jsx");
   const actionsSource = readSource("src/hooks/useWorkspaceActions.js");
@@ -42,7 +40,8 @@ test("all existing job-opening surfaces retain the centralized page navigator", 
 
   assert.match(customerPagesSource, /<CustomerWorkspace[\s\S]*?onOpenJob=\{actions.handleOpenJob\}/);
   assert.match(customerPagesSource, /<SiteWorkspace[\s\S]*?onOpenJob=\{actions.handleOpenJob\}/);
-  assert.match(actionsSource, /function handleOpenJob\(job\)[\s\S]*?onNavigateToJob\?\.\(job\)/);
+  assert.match(actionsSource, /function handleOpenJob\(job\)[\s\S]*?navigate\(`/);
+  assert.match(actionsSource, /useNavigate\(\)/);
 });
 
 test("Create Job continues to use the record-specific jobs endpoint", () => {

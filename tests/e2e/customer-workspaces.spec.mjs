@@ -279,6 +279,120 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 const customerPath = `/customers/${fixtureCustomerId}`;
+
+test("React Router loads and refreshes every workspace URL directly", async ({ page }) => {
+  await login(page, { pathname: "/customers" });
+  await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();
+  await apiJson(page, "POST", "/api/maintenance-plans", { plan: {
+    id: "router-smoke-plan", customerId: fixtureCustomerId, siteId: "demo-site-front-entry",
+    frequency: "quarterly", nextDueDate: "2027-01-15", active: true,
+  } });
+  const sitePath = `${customerPath}/sites/demo-site-front-entry`;
+  const pages = [
+    ["/", "[data-service-board-status]"], ["/customers", '[aria-label="New Customer"]'],
+    ["/customers/new", ".record-workspace"], [customerPath, ".record-workspace"],
+    [customerPath + "/edit", ".record-workspace"], [customerPath + "/sites/new", ".record-workspace"],
+    [sitePath, ".record-workspace"], [sitePath + "/edit", ".record-workspace"],
+    ["/jobs/new", ".record-workspace"], ["/jobs/demo-job-1001", ".record-workspace"],
+    ["/jobs/demo-job-1001/quote", '[data-document-workspace="quote"]'],
+    ["/jobs/demo-job-1001/invoice", '[data-document-workspace="invoice"]'],
+    ["/maintenance", "[data-maintenance-dashboard]"], ["/maintenance/new", "[data-maintenance-editor]"],
+    ["/maintenance/router-smoke-plan", ".record-workspace"],
+    ["/maintenance/router-smoke-plan/edit", "[data-maintenance-editor]"],
+    ["/invoices", '[data-desktop-record-results]'],
+    [`/invoices?customerId=${fixtureCustomerId}`, "[data-invoice-customer-filter]"],
+    ["/map", "[data-google-map-workspace]"], ["/settings", ".floating-page-toolbar"],
+  ];
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  for (const [pathname, selector] of pages) await test.step(pathname, async () => {
+    await page.goto(baseUrl + pathname);
+    if (pathname === "/customers") await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();
+    else await expect(page.locator(selector).first()).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(baseUrl + pathname);
+    if (pathname === "/customers") await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();
+    else await expect(page.locator(selector).first()).toBeVisible();
+    await expect(page.getByText(/This (job|customer|site) could not be found|maintenance plan was not found/)).toHaveCount(0);
+  });
+  expect(errors).toEqual([]);
+  await apiJson(page, "DELETE", "/api/maintenance-plans/router-smoke-plan");
+});
+
+test("React Router restores Service Board scroll and focus through Job and Invoice Back/Forward", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  const job = page.getByRole("button", { name: /^Open Job #5006\b/ });
+  await job.scrollIntoViewIfNeeded();
+  const scrollY = await page.evaluate(() => window.scrollY);
+  expect(scrollY).toBeGreaterThan(100);
+  await job.click();
+  await expect(page).toHaveURL(baseUrl + "/jobs/layout-job-6");
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
+  await page.getByRole("button", { name: "Open Invoice Editor", exact: true }).click();
+  await expect(page).toHaveURL(baseUrl + "/jobs/layout-job-6/invoice");
+  await page.getByRole("button", { name: "Back to Job #5006", exact: true }).click();
+  await expect(page).toHaveURL(baseUrl + "/jobs/layout-job-6");
+  await page.getByRole("button", { name: "Back to Service Board", exact: true }).click();
+  await expect(page).toHaveURL(baseUrl + "/");
+  await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - scrollY)).toBeLessThan(20);
+  await expect(job).toBeFocused();
+  await page.goForward();
+  await expect(page).toHaveURL(baseUrl + "/jobs/layout-job-6");
+  await page.goForward();
+  await expect(page).toHaveURL(baseUrl + "/jobs/layout-job-6/invoice");
+  await page.goBack();
+  await page.goBack();
+  await expect(page).toHaveURL(baseUrl + "/");
+  await expect.poll(async () => Math.abs(await page.evaluate(() => window.scrollY) - scrollY)).toBeLessThan(20);
+});
+
+test("React Router preserves sections sharing the root URL through refresh and history", async ({ page }) => {
+  await login(page);
+  const nav = page.getByRole("navigation", { name: "Application", exact: true });
+  for (const label of ["Sites", "Calendar", "Job History", "Staff", "Parts Inventory", "Statistics", "Recycle Bin"]) {
+    await nav.getByRole("button", { name: label, exact: true }).click();
+    await expect(page).toHaveURL(baseUrl + "/");
+    await page.reload();
+    await expect(nav.getByRole("button", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
+  }
+  await page.goBack();
+  await expect(nav.getByRole("button", { name: "Statistics", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.goForward();
+  await expect(nav.getByRole("button", { name: "Recycle Bin", exact: true })).toHaveAttribute("aria-current", "page");
+});
+
+test("React Router direct record fallbacks and technician restrictions remain enforced", async ({ page }) => {
+  await login(page, { username: "technician", pathname: "/jobs/new" });
+  await expect(page.getByText("You do not have permission to create jobs.")).toBeVisible();
+  for (const pathname of ["/customers/new", customerPath, `${customerPath}/sites/demo-site-front-entry/edit`, "/maintenance/new", "/maintenance/router-smoke-plan/edit", "/jobs/demo-job-1001/quote", "/jobs/demo-job-1001/invoice"]) {
+    await page.goto(baseUrl + pathname);
+    await expect(page.getByText(/You do not have permission/)).toBeVisible();
+  }
+  await page.goto(baseUrl + "/jobs/demo-job-1001");
+  await page.getByRole("button", { name: "Back to Service Board", exact: true }).click();
+  await expect(page).toHaveURL(baseUrl + "/");
+});
+
+test("React Router direct nested pages use deterministic Back destinations", async ({ page }) => {
+  await login(page, { pathname: customerPath });
+  await expect(page.locator(".record-workspace")).toBeVisible();
+  const sitePath = `${customerPath}/sites/demo-site-front-entry`;
+  for (const [from, to, label] of [
+    [sitePath + "/edit", sitePath, "Site Profile"], [sitePath, customerPath, "Customer Profile"],
+    [customerPath + "/sites/new", customerPath, "Customer Profile"],
+    [customerPath + "/edit", customerPath, "Customer Profile"], [customerPath, "/customers", "Customers"],
+    ["/jobs/demo-job-1001/invoice", "/jobs/demo-job-1001", "Job #1001"],
+    ["/jobs/demo-job-1001", "/", "Service Board"], ["/jobs/new", "/", "Service Board"],
+    ["/maintenance/new", "/maintenance", "Maintenance"],
+  ]) {
+    await page.goto(baseUrl + from);
+    await page.getByRole("button", { name: `Back to ${label}`, exact: true }).click();
+    await expect(page).toHaveURL(baseUrl + to);
+  }
+});
+
 test("short secondary pages do not scroll and their header remains edge to edge while long pages scroll", async ({ page }) => {
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -523,7 +637,10 @@ test("Customer dirty forms guard Cancel, browser Back and reload without losing 
   await field.fill(original + " change");
   await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
   await prompt.getByRole("button", { name: "Keep editing" }).click();
+  await expect(prompt).toHaveCount(0);
   await field.fill(original);
+  await expect(field).toHaveValue(original);
+
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page).toHaveURL(baseUrl + customerPath);
   await expect(prompt).toHaveCount(0);
@@ -684,6 +801,7 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   await page.getByRole("tab", { name: /^Gates/ }).click();
   await expect(page.getByRole("tabpanel")).toContainText("Synthetic entry gate");
   await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
+  await expect(page).toHaveURL(siteUrl + "/edit");
   await page.reload();
   await page.getByPlaceholder("Search this site address").fill("32 Synthetic Avenue, Testville VIC 3999");
   await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();

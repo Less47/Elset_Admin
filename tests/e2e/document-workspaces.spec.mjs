@@ -734,7 +734,7 @@ test("job entry points, Back, Forward and dirty-draft navigation preserve real h
   }
 });
 
-test("Invoices create and edit actions keep their origin through refresh and history", async ({ browser }) => {
+test("Invoices edit actions keep their origin through refresh and history", async ({ browser }) => {
   for (const width of [390, 1440]) {
     const { context, page } = await openWorkspace(browser, { width, height: 900 });
     try {
@@ -745,10 +745,10 @@ test("Invoices create and edit actions keep their origin through refresh and his
       }
       await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Invoices", exact: true }).click();
       await expect(page).toHaveURL(baseUrl + "/invoices");
-      const row = width < 768 ? page.locator(`[data-mobile-record-card][data-record-id="${NEW_JOB}"]`) : page.locator(".data-grid-row", { hasText: "Job #1200" });
-      const exists = Boolean(dbJob(NEW_JOB).invoice);
-      await row.getByRole("button", { name: width < 768 ? `${exists ? "Open invoice editor" : "Create invoice"} for Job #1200` : exists ? "Editor" : "Create", exact: true }).click();
-      await expect(editor(page)).toHaveAttribute("data-document-mode", exists ? "edit" : "create");
+      // The invoice list contains issued invoices; creation is covered from Job Details.
+      const row = width < 768 ? page.locator(`[data-mobile-record-card][data-record-id="${EXISTING_JOB}"]`) : page.locator(".data-grid-row", { hasText: "Job #1001" });
+      await row.getByRole("button", { name: width < 768 ? "Open invoice editor for Job #1001" : "Editor", exact: true }).click();
+      await expect(editor(page)).toHaveAttribute("data-document-mode", "edit");
       await save(page, "invoice");
       await page.reload();
       await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
@@ -769,7 +769,7 @@ test("Invoices create and edit actions keep their origin through refresh and his
         await page.getByLabel("Work completed", { exact: true }).fill("Forward draft");
         await page.goForward();
         const prompt = page.getByRole("dialog", { name: "Discard unsaved changes?" });
-        await expect(page).toHaveURL(`${baseUrl}/jobs/${NEW_JOB}/invoice`);
+        await expect(page).toHaveURL(`${baseUrl}/jobs/${EXISTING_JOB}/invoice`);
         await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
         await expect(page.getByLabel("Work completed", { exact: true })).toHaveValue("Forward draft");
         await page.goForward();

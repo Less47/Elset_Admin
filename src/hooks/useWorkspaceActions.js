@@ -60,10 +60,8 @@ export function useWorkspaceActions({
   docType,
   fetchWithAuth,
   selectedFreshJob,
-  selectedJob,
   setData,
   setIsSendingDocument,
-  setSelectedJob,
   themeSettings,
   workspaceStorageMode = "json",
 }) {
@@ -635,7 +633,6 @@ export function useWorkspaceActions({
 
   function handleOpenJob(job) {
     if (!job) return;
-    setSelectedJob(job);
     if (match.id === "job-details" && match.params.jobId === job.id) return;
     navigate(`/jobs/${encodeURIComponent(job.id)}`, {
       replace: match.id === "job-details", state: match.id === "job-details" ? location.state : linkState,
@@ -1403,8 +1400,6 @@ export function useWorkspaceActions({
         errorMessage: "Unable to delete the job.",
       });
       if (!saved.ok) return false;
-
-      setSelectedJob(null);
       return true;
     }
 
@@ -1416,7 +1411,6 @@ export function useWorkspaceActions({
         ...prev.deletedJobs.filter((entry) => entry.job.id !== jobId),
       ],
     }));
-    setSelectedJob(null);
     return true;
   }
 
@@ -2043,9 +2037,6 @@ export function useWorkspaceActions({
       });
       if (!saved.ok) return false;
 
-      if (selectedJob?.customerId === customerId) {
-        setSelectedJob(null);
-      }
       return true;
     }
 
@@ -2069,9 +2060,6 @@ export function useWorkspaceActions({
       };
     });
 
-    if (selectedJob?.customerId === customerId) {
-      setSelectedJob(null);
-    }
     return true;
   }
 

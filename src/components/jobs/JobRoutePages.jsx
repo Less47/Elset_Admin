@@ -6,7 +6,7 @@ import { RecordWorkspace, WorkspaceMessage } from "@/components/workspace/Record
 import { readFileAsDataUrl } from "@/lib/app-support";
 
 export function CreateJobRoute() {
-  const { session, data, workspaceActions, setSelectedJob } = useOutletContext();
+  const { session, data, workspaceActions } = useOutletContext();
   const location = useLocation();
   const navigate = useNavigate();
   const backLabel = location.state?.returnTo?.label || "Service Board";
@@ -20,7 +20,6 @@ export function CreateJobRoute() {
             staff={data.staff}
             onCancel={onBack}
             onCreated={(job) => {
-              setSelectedJob(job);
               navigate(`/jobs/${encodeURIComponent(job.id)}`, { replace: true, state: location.state });
             }}
             onSave={workspaceActions.createJob}

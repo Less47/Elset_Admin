@@ -1,8 +1,11 @@
+// Section content stays in WorkspaceShell; record pages render through its Outlet.
+function SectionRoute() { return null; }
+
 // The route tree is shared by the browser router and route-matching tests.
 export const workspaceRoutes = [
-  { index: true, id: "home" },
+  { index: true, id: "home", Component: SectionRoute },
   { path: "customers", children: [
-    { index: true, id: "customers", handle: { section: "customers" } },
+    { index: true, id: "customers", Component: SectionRoute, handle: { section: "customers" } },
     { path: "new", id: "create-customer", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customers" } },
     { path: ":customerId", children: [
       { index: true, id: "customer-details", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customer Profile" } },
@@ -25,15 +28,15 @@ export const workspaceRoutes = [
     ] },
   ] },
   { path: "maintenance", children: [
-    { index: true, id: "maintenance", handle: { section: "maintenance" } },
+    { index: true, id: "maintenance", Component: SectionRoute, handle: { section: "maintenance" } },
     { path: "new", id: "create-maintenance", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenancePlanPage.jsx")).default }), handle: { section: "maintenance", record: true } },
     { path: ":planId", children: [
       { index: true, id: "maintenance-details", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenancePlanPage.jsx")).default }), handle: { section: "maintenance", record: true, label: "Maintenance" } },
       { path: "edit", id: "edit-maintenance", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenancePlanPage.jsx")).default }), handle: { section: "maintenance", record: true, label: "Maintenance" } },
     ] },
   ] },
-  { path: "invoices", id: "invoices", handle: { section: "invoices" } },
-  { path: "map", id: "map", handle: { section: "map" } },
-  { path: "settings", id: "settings", handle: { section: "settings" } },
-  { path: "*", id: "fallback", handle: { section: "service-board" } },
+  { path: "invoices", id: "invoices", Component: SectionRoute, handle: { section: "invoices" } },
+  { path: "map", id: "map", Component: SectionRoute, handle: { section: "map" } },
+  { path: "settings", id: "settings", Component: SectionRoute, handle: { section: "settings" } },
+  { path: "*", id: "fallback", Component: SectionRoute, handle: { section: "service-board" } },
 ];

@@ -138,17 +138,18 @@ test("invoice-only account totals, dates, ordering, navigation and customer filt
     await account.getByRole("button", { name: "View all invoices", exact: true }).click();
     await expect(page).toHaveURL(`${baseUrl}/invoices?customerId=account-a`);
     await expect(page.locator("[data-invoice-customer-filter]")).toContainText("Account Example Customer");
-    await expect(page.locator(".data-grid-row:visible")).toHaveCount(5);
+    // The existing invoice list excludes the unsent draft (3005) and quote-only jobs.
+    await expect(page.locator(".data-grid-row:visible")).toHaveCount(4);
     await expect(page.locator(".data-grid-row:visible").filter({ hasText: "Other Invoice Customer" })).toHaveCount(0);
     await page.reload();
-    await expect(page.locator(".data-grid-row:visible")).toHaveCount(5);
+    await expect(page.locator(".data-grid-row:visible")).toHaveCount(4);
     await page.goBack();
     await expect(page).toHaveURL(`${baseUrl}/customers/account-a`);
     await page.goForward();
     await expect(page.locator("[data-invoice-customer-filter]")).toBeVisible();
     await page.getByRole("button", { name: "Clear customer filter", exact: true }).click();
     await expect(page).toHaveURL(`${baseUrl}/invoices`);
-    await expect(page.locator(".data-grid-row:visible")).toHaveCount(8);
+    await expect(page.locator(".data-grid-row:visible")).toHaveCount(5);
   } finally { await context.close(); }
 });
 

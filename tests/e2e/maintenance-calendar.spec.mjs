@@ -497,6 +497,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900], [1280, 720], [1024, 76
     expect(saved.nextDueDate).toBe("2027-03-09");
     expect(writes.filter((request) => request.method() === "POST")).toHaveLength(1);
     await page.getByRole("button", { name: "Edit Plan", exact: true }).click();
+    await expect(page).toHaveURL(/\/maintenance\/[^/]+\/edit$/);
     await page.reload();
     await expect(customer).toHaveValue("Northside Apartments");
     await expect(frequency).toHaveValue("six-monthly");

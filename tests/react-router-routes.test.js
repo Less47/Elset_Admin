@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { matchRoutes } from "react-router";
 import { workspaceRoutes } from "../src/routes.js";
+import { recordLinkState } from "../src/lib/record-link-state.js";
 
 const cases = [
   ["/", "home"], ["/customers", "customers"], ["/customers/new", "create-customer"],
@@ -19,4 +20,20 @@ for (const [url, id, params] of cases) test(`React Router matches ${url}`, () =>
   const match = matchRoutes(workspaceRoutes, url).at(-1);
   assert.equal(match.route.id, id);
   if (params) assert.deepEqual(match.params, params);
+});
+
+test("record return state retains invoice queries and the source section", () => {
+  const location = { pathname: "/invoices", search: "?customerId=one%2Ftwo", state: null };
+  const matched = matchRoutes(workspaceRoutes, location).at(-1);
+  assert.deepEqual(recordLinkState(location, { ...matched, handle: matched.route.handle }), {
+    sourceSection: "invoices", returnTo: { path: "/invoices?customerId=one%2Ftwo", label: "Invoices" },
+  });
+});
+
+test("nested document links return to the Job while retaining its Map origin", () => {
+  const location = { pathname: "/jobs/job-one", search: "", state: { sourceSection: "map" } };
+  const matched = matchRoutes(workspaceRoutes, location).at(-1);
+  assert.deepEqual(recordLinkState(location, { ...matched, handle: matched.route.handle }, [{ id: "job-one", jobNumber: 123 }]), {
+    sourceSection: "map", returnTo: { path: "/jobs/job-one", label: "Job #123" },
+  });
 });

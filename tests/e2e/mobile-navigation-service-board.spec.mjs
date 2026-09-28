@@ -586,7 +586,8 @@ async function assertDesktopBoardSpacing(page) {
 }
 
 async function assertRecordWorkspaceTop(page, desktop) {
-  const expectedHeaderTop = desktop ? 16 : 0;
+  // Record headers already meet the workspace edge on desktop and mobile.
+  const expectedHeaderTop = 0;
   await expect.poll(async () => {
     const headerTop = await page.locator(".record-workspace-header").evaluate((header) => header.getBoundingClientRect().top);
     return Math.abs(headerTop - expectedHeaderTop);

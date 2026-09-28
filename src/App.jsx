@@ -18,7 +18,6 @@ import { statuses } from "@/lib/job-status";
 
 export default function App() {
   const [data, setData] = useState(getInitialState);
-  const [selectedJob, setSelectedJob] = useState(null);
   const [isSendingDocument, setIsSendingDocument] = useState(false);
   const [invoiceNotice, setInvoiceNotice] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState("quote");
@@ -45,7 +44,6 @@ export default function App() {
     setData,
   });
   const resetWorkspaceChrome = useCallback(() => {
-    setSelectedJob(null);
     setIsSendingDocument(false);
     setInvoiceNotice("");
     setActiveTemplateType("quote");
@@ -76,7 +74,6 @@ export default function App() {
   const effectiveActiveSettingsTab = session.isTechnician ? "ui" : activeSettingsTab;
   const recordRoute = Boolean(jobId);
   const routeSelectedJob = recordRoute ? data.jobs.find((job) => job.id === jobId) || null : null;
-  const selectedJobForView = recordRoute ? routeSelectedJob : selectedJob;
 
   const personalPreferences = useUserUiPreferences({
     fetchWithAuth: session.fetchWithAuth,
@@ -114,7 +111,7 @@ export default function App() {
     data,
     isTechnician: session.isTechnician,
     officeSearch,
-    selectedJob: selectedJobForView,
+    selectedJob: routeSelectedJob,
     serviceBoardFullScreen,
     showHighUrgencyOnly,
   });
@@ -125,10 +122,8 @@ export default function App() {
     docType: match.handle?.documentType || "quote",
     fetchWithAuth: session.fetchWithAuth,
     selectedFreshJob: workspaceViewModel.selectedFreshJob,
-    selectedJob: selectedJobForView,
     setData,
     setIsSendingDocument,
-    setSelectedJob,
     themeSettings,
     workspaceStorageMode: session.workspaceStorageMode,
   });
@@ -196,7 +191,7 @@ export default function App() {
         }}
         workspacePage={workspacePageOpen ? <Outlet context={{
           session, data, setData, workspaceActions, workspaceViewModel, workspaceAddons,
-          setSelectedJob, setInvoiceNotice, isSendingDocument,
+          setInvoiceNotice, isSendingDocument,
         }} /> : null}
         personalPreferences={personalPreferences}
         workspaceAddons={workspaceAddons}
