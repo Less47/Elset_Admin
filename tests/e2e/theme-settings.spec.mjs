@@ -272,6 +272,34 @@ test("rounded edges preview globally, save per account and survive reload", asyn
     await page.reload();
     await page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
     await expect(checkbox).not.toBeChecked();
+    await navigate(page, "Service Board", 1440);
+    const desktopJob = page.locator('[data-service-board-job-id="demo-job-1001"]');
+    const expectRound = async (elements) => {
+      await expect(elements.first()).toBeVisible();
+      for (const element of await elements.all()) {
+        expect(await element.evaluate(el => {
+          const { width, height } = el.getBoundingClientRect();
+          return parseFloat(getComputedStyle(el).borderTopLeftRadius) >= Math.min(width, height) / 2;
+        })).toBe(true);
+      }
+    };
+    for (const mode of ["List", "Grid", "Compact"]) {
+      await page.getByRole("button", { name: `To Do ${mode} view`, exact: true }).click();
+      await expect(desktopJob).toBeVisible();
+      await expect(desktopJob.locator('[data-slot="card"]')).toHaveCSS("border-radius", "0px");
+      await expectRound(desktopJob.getByTitle(/^Invoice value/));
+      await expectRound(desktopJob.getByTitle("Overdue", { exact: true }));
+      if (mode !== "Grid") await expectRound(desktopJob.getByText("Medium", { exact: true }));
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileJob = page.locator('[data-mobile-job-id="demo-job-1001"]');
+    await expect(mobileJob).toBeVisible();
+    await expect(mobileJob).toHaveCSS("border-radius", "0px");
+    await expectRound(mobileJob.getByTitle("Invoice value", { exact: true }));
+    await expectRound(mobileJob.getByTitle("Overdue", { exact: true }));
+    await expectRound(mobileJob.getByText("Medium", { exact: true }));
+    await expect(mobileJob.getByRole("button", { name: "Move Job #1001", exact: true })).toHaveCSS("border-radius", "0px");
+    await page.setViewportSize({ width: 1440, height: 900 });
     await navigate(page, "Customers", 1440);
     await page.getByRole("button", { name: /^Filters/ }).click();
     const dialog = page.getByRole("dialog", { name: "Filters", exact: true });

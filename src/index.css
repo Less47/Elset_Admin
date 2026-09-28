@@ -12,6 +12,13 @@
   :root[data-rounded-edges="false"] *::after {
     border-radius: 0 !important;
   }
+
+  /* Job-card pills and markers keep their shape independently of panel corners. */
+  :root[data-rounded-edges="false"]
+    :is([data-service-board-job-id], [data-mobile-job-id], [data-tomorrow-job-id])
+    :is(.rounded-full, [data-slot="badge"]) {
+    border-radius: calc(infinity * 1px) !important;
+  }
 }
 
 /* Grid notes and prices share the existing price pill's edge alignment. */
