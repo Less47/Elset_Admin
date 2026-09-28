@@ -14,6 +14,7 @@ import { createAccountingInboxWorker } from "../server-accounting-webhooks.js";
 import { parseQuickBooksEvents, persistQuickBooksEvents, registerQuickBooksWebhook } from "../server-quickbooks-webhooks.js";
 import { getCustomerAccountSummary } from "../server-customer-account.js";
 import { createQuickBooksMock } from "./helpers/quickbooks-mock.js";
+import { createDocumentRouter } from "../server-document-routes.js";
 import { quickBooksCloudEvent, quickBooksCloudEvents } from "./helpers/quickbooks-webhooks.js";
 
 async function fixture(t, { connect = false } = {}) {
@@ -47,6 +48,18 @@ async function fixture(t, { connect = false } = {}) {
   return { get db() { return db; }, env, mock, service,
     reopen() { db.close(); db = openWorkspaceDb({ dbPath, migrate: false, fileMustExist: true }); },
     worker() { const worker = createAccountingInboxWorker({ env, fetchImpl: mock.fetch }); workers.push(worker); return worker; },
+    async documents(worker) {
+      const app = express(); app.locals.accountingInboxWorker = worker; app.use(express.json());
+      app.use(createDocumentRouter({ env,
+        requireAuth(req, res, next) { if (!req.headers["x-test-role"]) return res.sendStatus(401); req.user = { id: "fixture-user", role: req.headers["x-test-role"] }; next(); },
+        requireRole: roles => (req, res, next) => roles.includes(req.user.role) ? next() : res.sendStatus(403),
+      }));
+      const server = app.listen(0, "127.0.0.1"); servers.push(server);
+      await new Promise(resolve => server.once("listening", resolve));
+      return (method, body, id = "", role = "office") => fetch(`http://127.0.0.1:${server.address().port}/api/jobs/job/invoice/payments${id ? `/${id}` : ""}`, {
+        method, ...(body ? { body: JSON.stringify(body) } : {}), headers: { "Content-Type": "application/json", ...(role ? { "X-Test-Role": role } : {}) },
+      });
+    },
     async receiver(worker = { wake() {} }) {
       const app = express();
       registerQuickBooksWebhook(app, { env, worker });
@@ -296,4 +309,54 @@ test("HTTP acknowledgement does not wait for QuickBooks, and a provider failure 
   await waitFor(() => eventRow(f.db, input.id)?.status === "PROCESSED");
   row = eventRow(f.db, input.id); assert.equal(row.attempt_count, 2);
   assert.equal(receipt(f.db).length, 1); assert.equal(receipt(f.db)[0].amount_cents, 50000);
+});
+
+test("document payment routes automatically wake the shared worker for authorised CRUD and immediate webhook echoes", async t => {
+  const f = await fixture(t, { connect: true });
+  const worker = f.worker(), mutate = await f.documents(worker), send = await f.receiver(worker);
+  for (const role of ["technician", ""]) {
+    const response = await mutate("POST", { id: "blocked", amount: 100, date: "2026-09-21" }, "", role);
+    assert.equal(response.status, role ? 403 : 401);
+  }
+  assert.equal(f.db.prepare("SELECT count(*) n FROM integration_payment_outbox").get().n, 0);
+  f.mock.afterPaymentWrite = async payment => {
+    f.mock.afterPaymentWrite = null;
+    assert.equal((await send([quickBooksCloudEvent({ id: "immediate-echo", type: "qbo.payment.created.v1", intuitentityid: payment.Id })])).status, 200);
+  };
+  assert.equal((await mutate("POST", { id: "local", amount: 600, date: "2026-09-21" })).status, 200);
+  await waitFor(() => f.mock.payments.length === 1 && eventRow(f.db, "immediate-echo")?.status === "PROCESSED");
+  assert.equal(receipt(f.db).length, 1); assert.equal(receipt(f.db)[0].id, "local"); assert.equal(f.mock.invoices[0].Balance, 500);
+  const externalId = f.mock.payments[0].Id;
+  assert.equal((await mutate("PATCH", { amount: 700, date: "2026-09-22" }, "local", "admin")).status, 200);
+  await waitFor(() => f.mock.payments[0].TotalAmt === 700 && f.db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='local'").get().status === "SYNCED");
+  assert.equal(f.mock.payments[0].Id, externalId); assert.equal(f.mock.invoices[0].Balance, 400);
+  assert.equal((await mutate("DELETE", null, "local", "technician")).status, 403);
+  assert.equal((await mutate("DELETE", null, "local")).status, 200);
+  await waitFor(() => f.mock.payments.length === 0 && f.db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='local'").get().status === "SYNCED");
+  assert.equal(receipt(f.db).length, 0); assert.equal(f.mock.invoices[0].Balance, 1100);
+  assert.ok(!f.mock.calls.some(call => /\/send(?:\?|$)|\/email(?:\?|$)/.test(call.url)));
+});
+
+test("local HTTP save succeeds during QBO failure and the worker retries the retained payment", async t => {
+  const f = await fixture(t, { connect: true }), worker = f.worker(), mutate = await f.documents(worker);
+  f.mock.failNext = { path: "/payment", method: "POST", status: 503 };
+  const response = await mutate("POST", { id: "local", amount: 600, date: "2026-09-21" });
+  assert.equal(response.status, 200); assert.equal((await response.json()).result.invoice.payments[0].amount, 600);
+  const status = () => f.db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='local'").get().status;
+  await waitFor(() => status() === "RETRYABLE");
+  assert.equal(receipt(f.db)[0].amount_cents, 60000); assert.equal(f.mock.payments.length, 0);
+  f.db.exec("UPDATE integration_payment_outbox SET retry_at=0"); worker.wake();
+  await waitFor(() => status() === "SYNCED");
+  assert.equal(f.mock.payments.length, 1); assert.equal(receipt(f.db).length, 1);
+});
+
+test("startup resumes an interrupted outbound payment using its original durable request", async t => {
+  const f = await fixture(t, { connect: true });
+  // Persist a local save while the request-time worker is absent, then reopen.
+  const mutate = await f.documents({ wake() {} });
+  assert.equal((await mutate("POST", { id: "startup-local", amount: 400, date: "2026-09-21" })).status, 200);
+  f.db.exec("UPDATE integration_payment_outbox SET status='PROCESSING',attempt_count=1");
+  f.reopen(); const worker = f.worker(); worker.start();
+  await waitFor(() => f.db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='startup-local'").get().status === "SYNCED");
+  assert.equal(f.mock.payments.length, 1); assert.equal(receipt(f.db).length, 1); assert.equal(f.mock.invoices[0].Balance, 700);
 });

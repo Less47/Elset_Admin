@@ -9,6 +9,7 @@ import { paymentSyncStatus, reconcileInvoicePayments, reconcilePaymentGroup } fr
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 import { assertInvoiceAccountingOwner } from "./server-accounting-payment-policy.js";
 import { resolveQuickBooksLineItems } from "./server-accounting-price-list.js";
+import { processPaymentOutbox } from "./server-accounting-payment-outbox.js";
 import { acceptQuickBooksCallback, pendingQuickBooksCompany, quickBooksOAuthDiagnostic, resolveQuickBooksCompanySwitch } from "./server-quickbooks-oauth.js";
 
 export class AccountingService {
@@ -39,7 +40,7 @@ export class AccountingService {
       environment: row?.provider_environment || this.provider.environment || "", providerName: this.provider.name,
       ...(this.provider.id === "quickbooks" ? { pendingCompanySwitch: pendingQuickBooksCompany(this) } : {}),
       paymentSync: row?.status !== "CONNECTED" ? "NOT_CONNECTED" : JSON.parse(row.granted_scopes).includes(this.provider.paymentScope) ? "CONNECTED" : "PAYMENT_PERMISSION_REQUIRED",
-      syncBehaviour: "Manual invoices; webhook and manual payment reconciliation" };
+      syncBehaviour: this.provider.id === "quickbooks" ? "Automatic bidirectional payments; manual reconciliation available" : "Manual invoices; webhook and manual payment reconciliation" };
   }
   async work(action, { allowDisabled = false, recordFailure = true } = {}) {
     if (!allowDisabled) requireWorkspaceAddon(this.db, this.provider.id);
@@ -53,7 +54,7 @@ export class AccountingService {
         return await action();
       } catch (cause) {
         const error = safeAccountingError(cause);
-        if (recordFailure && error.code !== "COMPANY_SWITCH_PENDING" && this.store.integration()) this.store.update({ last_error_at: new Date().toISOString(), safe_error_message: error.message,
+        if (recordFailure && !["COMPANY_SWITCH_PENDING", "OUTBOUND_PAYMENT_PENDING"].includes(error.code) && this.store.integration()) this.store.update({ last_error_at: new Date().toISOString(), safe_error_message: error.message,
           ...(error.code === "NEEDS_REAUTHORIZATION" ? { status: "NEEDS_REAUTHORIZATION" } : {}),
           ...(error.retryAfter ? { retry_after: Date.now() + error.retryAfter * 1000 } : {}) });
         throw error;
@@ -268,7 +269,9 @@ export class AccountingService {
       error: customerAccountingMessage(latest?.safe_error_message || (latest?.status === "SYNCING" && !locked ? "The previous request was interrupted. Retry to reconcile its result." : "")) };
   }
   syncInvoice(jobId) {
-    return this.work(async () => {
+    return this.work(() => this.syncInvoiceUnlocked(jobId));
+  }
+  async syncInvoiceUnlocked(jobId) {
       const source = readAccountingInvoice(this.db, jobId);
       if (!source.eligible) throw new AccountingError("INVOICE_INELIGIBLE", source.reason, 409);
       const tenant = this.store.integration()?.external_tenant_id || "";
@@ -332,7 +335,9 @@ export class AccountingService {
         this.store.log(tenant, "invoice", source.id, "sync", error.code === "NEEDS_REAUTHORIZATION" ? "NEEDS_REAUTHORIZATION" : error.statusCode === 409 ? "CONFLICT" : "FAILED", "", error);
         throw error;
       }
-    });
   }
-  syncPayments(jobId, options) { return this.provider.multipleInvoicePayments ? reconcilePaymentGroup(this, jobId, options) : reconcileInvoicePayments(this, jobId, options); }
+  async syncPayments(jobId, options = {}) {
+    if (this.provider.id === "quickbooks" && !options.inboundOnly) await processPaymentOutbox(this, { jobId, manual: true, limit: 100 });
+    return this.provider.multipleInvoicePayments ? reconcilePaymentGroup(this, jobId, options) : reconcileInvoicePayments(this, jobId, options);
+  }
 }

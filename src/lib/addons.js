@@ -2,8 +2,8 @@
 export const ADDONS = Object.freeze({
   quickbooks: Object.freeze({
     key: "quickbooks", name: "QuickBooks Online", category: "Accounting",
-    description: "Sync customers and issued invoices with QuickBooks Online. Receive invoice payments from QuickBooks.",
-    includes: ["Manual invoice sync", "Incoming payment sync"],
+    description: "Sync customers and invoices with QuickBooks Online. Enter payments in either system with automatic synchronisation.",
+    includes: ["Invoice sync", "Automatic payment sync"],
     disableDescription: "QuickBooks controls and syncing will stop. The connection, configuration, mappings and history will be preserved. Use Disconnect to remove the connection.",
     defaultEnabled: false,
   }),

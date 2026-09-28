@@ -10,6 +10,7 @@ import { invoiceDeletionRestriction, invoiceHasBeenSent } from "./src/lib/invoic
 import { buildDocumentReference } from "./src/lib/quote-template.js";
 import { invoiceStatusFromAmounts } from "./src/lib/invoice-account.js";
 import { assertLocalPaymentAllowed } from "./server-accounting-payment-policy.js";
+import { queueQuickBooksPayment } from "./server-accounting-payment-intents.js";
 
 const QUANTITY_SCALE = 1_000_000;
 
@@ -46,7 +47,7 @@ const documentKnownKeys = new Set([
   "paymentManagement",
 ]);
 const lineItemKnownKeys = new Set(["id", "description", "qty", "quantity", "rate", "unitPrice", "total"]);
-const paymentKnownKeys = new Set(["id", "amount", "date", "paidAt", "method", "reference", "notes", "createdAt", "source"]);
+const paymentKnownKeys = new Set(["id", "amount", "date", "paidAt", "method", "reference", "notes", "createdAt", "source", "expectedPayment"]);
 const historyKnownKeys = new Set([
   "id",
   "sentAt",
@@ -240,6 +241,15 @@ function normalizePayment(input, invoiceId, { existing = null, requireId = true 
     createdAt,
     extra: pickExtra(input, paymentKnownKeys),
   };
+}
+
+function assertPaymentUnchanged(existing, expected) {
+  if (expected === undefined) return;
+  assertPlainObject(expected, "Previous payment");
+  if (existing.amount_cents !== moneyToSafeCents(expected.amount, "Previous payment amount", { positive: true })
+    || existing.date !== normalizeDateInput(expected.date, "Previous payment date")) {
+    throw new WorkspaceDocumentError("This payment changed since you opened the invoice. Refresh and review the latest payment before saving your changes.", 409);
+  }
 }
 
 function normalizeSentHistoryEntry(input, kind, documentId, jobId, { requireSourceId = false, index = 0 } = {}) {
@@ -802,6 +812,7 @@ export function addInvoicePayment(db, jobIdInput, input) {
     updateJobTouchedAt(db, jobId, updatedAt);
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
+    queueQuickBooksPayment(db, jobId, invoiceRow.id, payment.id);
     return getInvoiceResult(db, jobId, { paymentId: payment.id });
   })();
 }
@@ -817,7 +828,8 @@ export function updateInvoicePayment(db, jobIdInput, paymentIdInput, input) {
     if (!invoiceRow) throw new WorkspaceDocumentError("Invoice not found.", 404);
     assertLocalPaymentAllowed(db, invoiceRow.id);
     const existing = ensurePaymentBelongsToInvoice(db, invoiceRow.id, paymentId);
-    if (existing.source !== "manual") throw new WorkspaceDocumentError("Payments synced from Xero are managed in Xero.", 409);
+    if (existing.source === "xero") throw new WorkspaceDocumentError("Payments synced from Xero are managed in Xero.", 409);
+    assertPaymentUnchanged(existing, input.expectedPayment);
     const payment = normalizePayment({ ...input, id: paymentId }, invoiceRow.id, { existing, requireId: true });
     db.prepare(`
       UPDATE payments
@@ -843,11 +855,12 @@ export function updateInvoicePayment(db, jobIdInput, paymentIdInput, input) {
     updateJobTouchedAt(db, jobId, updatedAt);
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
+    queueQuickBooksPayment(db, jobId, invoiceRow.id, paymentId, existing);
     return getInvoiceResult(db, jobId, { paymentId });
   })();
 }
 
-export function deleteInvoicePayment(db, jobIdInput, paymentIdInput) {
+export function deleteInvoicePayment(db, jobIdInput, paymentIdInput, { expectedPayment } = {}) {
   const jobId = normalizeId(jobIdInput, "Job ID");
   const paymentId = normalizeId(paymentIdInput, "Payment ID");
 
@@ -856,13 +869,16 @@ export function deleteInvoicePayment(db, jobIdInput, paymentIdInput) {
     const invoiceRow = getInvoiceRowForJob(db, jobId);
     if (!invoiceRow) throw new WorkspaceDocumentError("Invoice not found.", 404);
     assertLocalPaymentAllowed(db, invoiceRow.id);
-    if (ensurePaymentBelongsToInvoice(db, invoiceRow.id, paymentId).source !== "manual") throw new WorkspaceDocumentError("Payments synced from Xero are managed in Xero.", 409);
+    const existing = ensurePaymentBelongsToInvoice(db, invoiceRow.id, paymentId);
+    if (existing.source === "xero") throw new WorkspaceDocumentError("Payments synced from Xero are managed in Xero.", 409);
+    assertPaymentUnchanged(existing, expectedPayment);
     const result = db.prepare("DELETE FROM payments WHERE invoice_id = ? AND id = ?").run(invoiceRow.id, paymentId);
     if (result.changes === 0) throw new WorkspaceDocumentError("Payment not found.", 404);
     const updatedAt = nowIso();
     updateJobTouchedAt(db, jobId, updatedAt);
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);
+    queueQuickBooksPayment(db, jobId, invoiceRow.id, paymentId);
     return getInvoiceResult(db, jobId, { paymentId });
   })();
 }

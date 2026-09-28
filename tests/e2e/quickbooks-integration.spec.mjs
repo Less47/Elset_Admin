@@ -89,7 +89,7 @@ test.beforeEach(async ({ request }) => {
   await request.post(`${baseUrl}/__quickbooks-fixture`, { data: { reset: true } });
   withDb((db) => {
   db.prepare("DELETE FROM price_list_items").run();
-  for (const table of ["integration_webhook_events", "integration_external_payments", "integration_invoice_payment_sync", "integration_operations", "integration_locks", "integration_oauth_states", "integration_sync_log", "integration_entity_mappings", "workspace_integrations"]) db.prepare(`DELETE FROM ${table}`).run();
+  for (const table of ["integration_payment_outbox", "integration_webhook_events", "integration_external_payments", "integration_invoice_payment_sync", "integration_operations", "integration_locks", "integration_oauth_states", "integration_sync_log", "integration_entity_mappings", "workspace_integrations"]) db.prepare(`DELETE FROM ${table}`).run();
   db.prepare("DELETE FROM jobs").run();
   for (const job of normalizeStoredData(fixture()).jobs) insertJobTree(db, job);
   db.prepare("INSERT INTO settings(key,value_json,updated_at) VALUES('addons',?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at")
@@ -139,7 +139,7 @@ async function capture(page, info, name, locator) {
 }
 async function syncPayments(context, page, payments) {
   await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: { payments } });
-  await card(page).getByRole("button", { name: "Sync from QuickBooks", exact: true }).click();
+  await card(page).getByRole("button", { name: "Sync with QuickBooks", exact: true }).click();
   await expect(card(page)).toContainText("Payment sync: Up to date");
 }
 test("explicit settings retain provider configuration drafts through status, failure, and guarded commands", async ({ browser }) => {
@@ -332,8 +332,8 @@ test("QuickBooks consent, configuration, invoice, partial/full receipts, correct
       await syncPayments(context, page, payments);
       await expect(page.locator(".document-detail").filter({ has: page.getByText("Balance", { exact: true }) })).toContainText(balance);
     }
-    await expect(page.getByRole("button", { name: "Add Payment", exact: true })).toHaveCount(0);
-    await expect(page.locator(".document-payment input, .document-payment button")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add Payment", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Payment 1 amount", { exact: true })).toHaveValue("450");
     const remote = await (await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: {} })).json();
     expect(remote.customers).toHaveLength(1); expect(remote.invoices).toHaveLength(1); expect(remote.invoices[0].TotalAmt).toBe(1100);
     await capture(page, info, "quickbooks-invoice-reconciled", card(page));
@@ -423,8 +423,8 @@ test("real server processes signed CloudEvents and protects unsaved invoices and
     const response = await fetch(`${baseUrl}/api/integrations/quickbooks/webhook`, { method: "POST", headers: { "Content-Type": "application/cloudevents+json", "intuit-signature": signature }, body: raw });
     expect(response.status).toBe(200); expect(response.headers.get("set-cookie")).toBeNull();
     await expect.poll(() => withDb((db) => db.prepare("SELECT status FROM integration_webhook_events").get().status, { readonly: true, migrate: false })).toBe("PROCESSED");
-    await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await expect(page.locator(".document-payment")).toContainText("QuickBooks payment");
-    await page.getByLabel("Item 1 rate", { exact: true }).fill("1001"); await expect(card(page).getByRole("button", { name: "Sync from QuickBooks" })).toBeDisabled();
+    await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await expect(page.getByLabel("Payment 1 amount", { exact: true })).toHaveValue("500");
+    await page.getByLabel("Item 1 rate", { exact: true }).fill("1001"); await expect(card(page).getByRole("button", { name: "Sync with QuickBooks" })).toBeDisabled();
     await page.evaluate(() => window.dispatchEvent(new Event("focus"))); await expect(page.getByLabel("Item 1 rate", { exact: true })).toHaveValue("1001");
     const technician = await browser.newContext({ storageState: sessions.technician });
     try { expect((await technician.request.get(`${baseUrl}/api/integrations/quickbooks/status`)).status()).toBe(403); } finally { await technician.close(); }
@@ -466,13 +466,83 @@ for (const width of [390, 820, 1440]) for (const preset of themePresets) {
       await connectApi(context); await page.reload();
       await page.getByLabel("QuickBooks connection", { exact: true }).getByRole("button", { name: "Configure", exact: true }).click();
       await expect(page.locator('[data-quickbooks-selected-item="20"]')).toContainText("Service income");
+      await expect(page.getByText("Payments can be entered in ELSET or QuickBooks and sync automatically.", { exact: false })).toBeVisible();
       await capture(page, info, `${preset.id}-settings-${width}`, page.locator('[data-addon="quickbooks"]'));
       await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
       await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
       await syncPayments(context, page, [["900", 500]]);
-      await expect(page.locator(".document-payment")).toContainText("QuickBooks payment"); await expect(page.locator(".document-payment input, .document-payment button")).toHaveCount(0);
+      await expect(page.getByLabel("Payment 1 amount", { exact: true })).toHaveValue("500");
       await capture(page, info, `${preset.id}-invoice-${width}`, card(page));
       await capture(page, info, `${preset.id}-payments-${width}`, page.locator('section[aria-labelledby="document-payments-title"]'));
     } finally { await context.close(); }
   });
 }
+
+for (const [width, mapped, role] of [[1440, true, "admin"], [390, false, "office"]]) test(`automatic ELSET payment CRUD ${mapped ? "mapped" : "with dependencies"} at ${width}px`, async ({ browser }) => {
+  const { context, page } = await open(browser, { width, role });
+  try {
+    await connectApi(context);
+    if (mapped) expect((await context.request.post(`${baseUrl}/api/jobs/costing-job/invoice/integrations/quickbooks/sync`, { headers: { "X-Accounting-Request": "1" }, data: {} })).ok()).toBeTruthy();
+    await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
+    const accountingActions = [];
+    page.on("request", request => { if (request.method() === "POST" && /\/integrations\/quickbooks\/sync/.test(request.url())) accountingActions.push(request.url()); });
+    await expect(page.getByText("Payments sync automatically with QuickBooks.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Add Payment", exact: true }).click();
+    await page.getByLabel("Payment 1 amount", { exact: true }).fill("500");
+    await page.getByLabel("Payment 1 date", { exact: true }).fill("2026-09-18");
+    const save = async () => { await page.getByRole("button", { name: "Save Invoice", exact: true }).filter({ visible: true }).click(); await expect(page.locator(".document-feedback")).toHaveText("Saved"); };
+    await save();
+    const remote = async () => (await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: {} })).json();
+    await expect.poll(async () => (await remote()).payments?.[0]?.TotalAmt).toBe(500);
+    const id = (await remote()).payments[0].Id;
+    await page.getByLabel("Payment 1 amount", { exact: true }).fill("600");
+    await page.getByLabel("Payment 1 date", { exact: true }).fill("2026-09-20"); await save();
+    await expect.poll(async () => (await remote()).payments[0]?.TotalAmt).toBe(600);
+    const updated = await remote(); expect(updated.payments).toHaveLength(1); expect(updated.payments[0].Id).toBe(id); expect(updated.payments[0].TxnDate).toBe("2026-09-20");
+    expect(updated.invoices[0].Balance).toBe(500);
+    await page.getByRole("button", { name: "Remove payment 1", exact: true }).click(); await save();
+    await expect.poll(async () => (await remote()).payments.length).toBe(0);
+    expect((await remote()).invoices[0].Balance).toBe(1100);
+    expect(accountingActions).toEqual([]);
+    await expect(card(page).getByRole("button", { name: "Sync with QuickBooks", exact: true })).toBeVisible();
+    expect(updated.calls.some(call => /\/send(?:\?|$)/.test(call.url))).toBe(false);
+    expect(withDb(db => db.prepare("SELECT count(*) n FROM payments").get().n)).toBe(0);
+  } finally { await context.close(); }
+});
+
+test("webhook changing a payment behind a dirty form rejects the stale edit and preserves both draft and provider receipt", async ({ browser }) => {
+  const { context, page } = await open(browser);
+  try {
+    await connectApi(context); await page.goto(`${baseUrl}/jobs/costing-job/invoice`);
+    await card(page).getByRole("button", { name: "Send to QuickBooks" }).click(); await expect(card(page).getByRole("status")).toHaveText("Synced");
+    await syncPayments(context, page, [["900", 500]]);
+    await page.getByLabel("Payment 1 amount", { exact: true }).fill("600");
+    await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: { payments: [["900", 450]] } });
+    const raw = JSON.stringify([quickBooksCloudEvent({ id: "dirty-payment-event", type: "qbo.payment.updated.v1" })]);
+    const signature = crypto.createHmac("sha256", "quickbooks-e2e-signature-only").update(raw).digest("base64");
+    expect((await context.request.post(`${baseUrl}/api/integrations/quickbooks/webhook`, { data: raw, headers: { "Content-Type": "application/cloudevents+json", "intuit-signature": signature } })).ok()).toBeTruthy();
+    await expect.poll(() => withDb(db => db.prepare("SELECT amount_cents FROM payments").get()?.amount_cents)).toBe(45000);
+    const saved = page.waitForResponse(response => response.request().method() === "PATCH" && /\/payments\//.test(response.url()));
+    await page.getByRole("button", { name: "Save Invoice", exact: true }).filter({ visible: true }).click();
+    expect((await saved).status()).toBe(409);
+    await expect(page.getByLabel("Payment 1 amount", { exact: true })).toHaveValue("600");
+    expect(withDb(db => db.prepare("SELECT amount_cents FROM payments").get().amount_cents)).toBe(45000);
+    expect(withDb(db => db.prepare("SELECT count(*) n FROM integration_payment_outbox").get().n)).toBe(0);
+  } finally { await context.close(); }
+});
+
+test("reenabling the QuickBooks add-on automatically resumes payments entered while it was disabled", async ({ browser }) => {
+  const { context, page } = await open(browser);
+  try {
+    await connectApi(context);
+    expect((await context.request.post(`${baseUrl}/api/jobs/costing-job/invoice/integrations/quickbooks/sync`, { headers: { "X-Accounting-Request": "1" }, data: {} })).ok()).toBeTruthy();
+    expect((await context.request.patch(`${baseUrl}/api/settings/addons`, { data: { quickbooks: false } })).ok()).toBeTruthy();
+    expect((await context.request.post(`${baseUrl}/api/jobs/costing-job/invoice/payments`, { data: { id: "paused-local", amount: 500, date: "2026-09-18" } })).ok()).toBeTruthy();
+    await expect.poll(() => withDb(db => db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='paused-local'").get()?.status)).toBe("PAUSED");
+    expect((await context.request.patch(`${baseUrl}/api/settings/addons`, { data: { quickbooks: true } })).ok()).toBeTruthy();
+    await expect.poll(() => withDb(db => db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='paused-local'").get()?.status)).toBe("SYNCED");
+    const remote = await (await context.request.post(`${baseUrl}/__quickbooks-fixture`, { data: {} })).json();
+    expect(remote.payments).toHaveLength(1); expect(remote.invoices[0].Balance).toBe(600);
+    await page.goto(`${baseUrl}/jobs/costing-job/invoice`); await expect(page.getByLabel("Payment 1 amount", { exact: true })).toHaveValue("500");
+  } finally { await context.close(); }
+});

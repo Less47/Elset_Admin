@@ -116,7 +116,7 @@ export default function AccountingSettings({ provider = "xero", addon, enabled, 
           <option value="" disabled>{quickbooks ? "Select matching tax code" : "Select matching tax rate"}</option>{options.taxRates.filter((tax) => tax.rate === treatment.rate).map((tax) => <option key={tax.id} value={tax.id}>{tax.name} ({tax.rate}%)</option>)}
         </select></div>)}
       </div>
-      <p className="text-xs text-text-secondary">Invoice sync is manual. {name} manages payments on mapped invoices. This workspace invoices in AUD with 10% GST on all lines.</p>
+      <p className="text-xs text-text-secondary">{quickbooks ? "Payments can be entered in ELSET or QuickBooks and sync automatically." : `Invoice sync is manual. ${name} manages payments on mapped invoices.`} This workspace invoices in AUD with 10% GST on all lines.</p>
       {quickbooks ? <p className="text-xs text-text-secondary">Enable custom transaction numbers in QuickBooks to keep ELSET invoice numbers.</p> : null}
       <p className="text-xs text-text-secondary">Use Save changes to save this configuration.</p>
     </form> : null}

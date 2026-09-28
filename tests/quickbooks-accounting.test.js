@@ -7,7 +7,8 @@ import test from "node:test";
 import express from "express";
 import { openWorkspaceDb } from "../server-workspace-db.js";
 import { updateWorkspaceAddons } from "../server-workspace-addons.js";
-import { insertInvoiceTree, addInvoicePayment } from "../server-workspace-documents.js";
+import { insertInvoiceTree, addInvoicePayment, updateInvoicePayment, deleteInvoicePayment } from "../server-workspace-documents.js";
+import { processPaymentOutbox } from "../server-accounting-payment-outbox.js";
 import { AccountingService } from "../server-accounting-service.js";
 import { createAccountingRouter } from "../server-accounting-routes.js";
 import { digest, decryptCredential } from "../server-accounting-crypto.js";
@@ -45,6 +46,13 @@ const consent = async (service, realmId = "123456789") => service.callback({ sta
 async function ready(service) { await consent(service); await service.configure({ itemId: "20", taxMappings: { taxable: "30" } }); }
 const paid = (db, id = "invoice") => db.prepare("SELECT COALESCE(SUM(amount_cents),0) amount FROM payments WHERE invoice_id=?").get(id).amount;
 const allocations = (mock, values) => mock.setPayments(values.map(([id, amount]) => ({ id, allocations: [[mock.invoices[0].Id, amount]] })));
+const outboxRow = (db, id = "local-payment") => db.prepare("SELECT * FROM integration_payment_outbox WHERE local_payment_id=?").get(id);
+const paymentWrites = mock => mock.calls.filter(call => call.method === "POST" && new URL(call.url).pathname.endsWith("/payment"));
+const localPayment = (db, amount = 500, id = "local-payment") => addInvoicePayment(db, "job", { id, amount, date: "2026-09-18", notes: "Local receipt notes" });
+async function flushPayments(f) {
+  await processPaymentOutbox(f.service);
+  await processQuickBooksInbox(f.db, { env: f.env, fetchImpl: f.mock.fetch });
+}
 const event = (mock, { id = crypto.randomUUID(), resource = mock.invoices[0]?.Id, type = "qbo.invoice.updated.v1", realm = mock.realm } = {}) => [quickBooksCloudEvent({ id, type, time: "2026-09-18T01:00:00Z", intuitentityid: resource, intuitaccountid: realm, data: { ignored: "not stored" } })];
 
 function catalogLine(db, name = "Labour", invoiceId = "invoice") {
@@ -648,7 +656,8 @@ test("partial, full, multiple, corrected and removed receipts are idempotent nor
   assert.equal(db.prepare("SELECT status FROM integration_external_payments WHERE external_payment_id='900'").get().status, "REMOVED");
   const projected = loadWorkspaceStateFromDb(db).jobs.find((job) => job.id === "job").invoice;
   assert.equal(projected.paymentManagement, "quickbooks"); assert.equal(projected.payments[0].source, "quickbooks");
-  assert.throws(() => addInvoicePayment(db, "job", { amount: 1, date: "2026-09-18" }), { code: "PAYMENTS_MANAGED_EXTERNALLY" });
+  addInvoicePayment(db, "job", { id: "new-local", amount: 1, date: "2026-09-18" });
+  assert.equal(db.prepare("SELECT status FROM integration_payment_outbox WHERE local_payment_id='new-local'").get().status, "PENDING");
 });
 
 test("one Payment across two invoices imports only each allocation; reallocation commits both atomically", async (t) => {
@@ -733,4 +742,269 @@ test("HTTP callback is public while connect/config/sync remain protected; redire
   assert.equal(created.status, 200); assert.equal((await created.json()).result.salesItem.name, "ELSET Services");
   updateWorkspaceAddons(db, { quickbooks: false });
   assert.equal((await fetch(`${base}/sales-item`, { method: "POST", headers: { "x-test-user": "admin", "X-Accounting-Request": "1", "Content-Type": "application/json" }, body: salesBody })).status, 403);
+});
+
+test("ELSET add/edit/date/delete automatically maps one QBO receipt and reconciles its echoes without emails", async t => {
+  const f = fixture(t); const { db, mock, service } = f; await ready(service); await service.syncInvoice("job");
+  localPayment(db); assert.equal(paid(db), 50000); assert.equal(mock.payments.length, 0);
+  await flushPayments(f);
+  assert.equal(outboxRow(db).status, "SYNCED"); assert.equal(mock.payments.length, 1);
+  const externalId = mock.payments[0].Id;
+  assert.equal(mock.payments[0].CustomerRef.value, mock.customers[0].Id);
+  assert.equal(mock.payments[0].Line[0].LinkedTxn[0].TxnId, mock.invoices[0].Id);
+  assert.equal(mock.invoices[0].Balance, 600);
+  assert.equal(db.prepare("SELECT local_payment_id FROM integration_external_payments").get().local_payment_id, "local-payment");
+  assert.equal(service.invoiceStatus("job").paymentSync.status, "SYNCED");
+  const echo = event(mock, { resource: externalId, type: "qbo.payment.created.v1" });
+  assert.equal(persistQuickBooksEvents(db, echo), 1); assert.equal(persistQuickBooksEvents(db, echo), 0);
+  await flushPayments(f); await flushPayments(f);
+  assert.equal(db.prepare("SELECT count(*) n FROM payments").get().n, 1); assert.equal(paymentWrites(mock).length, 1);
+  updateInvoicePayment(db, "job", "local-payment", { amount: 600, date: "2026-09-20" }); await flushPayments(f);
+  assert.equal(mock.payments.length, 1); assert.equal(mock.payments[0].Id, externalId); assert.equal(mock.payments[0].TxnDate, "2026-09-20");
+  assert.equal(mock.payments[0].TotalAmt, 600); assert.equal(paid(db), 60000); assert.equal(mock.invoices[0].Balance, 500);
+  assert.equal(db.prepare("SELECT notes FROM payments").get().notes, "Local receipt notes");
+  deleteInvoicePayment(db, "job", "local-payment"); await flushPayments(f);
+  assert.equal(mock.payments.length, 0); assert.equal(paid(db), 0); assert.equal(mock.invoices[0].Balance, 1100);
+  assert.equal(db.prepare("SELECT status FROM integration_external_payments").get().status, "REMOVED");
+  assert.equal(outboxRow(db).status, "SYNCED");
+  assert.ok(new URL(paymentWrites(mock).at(-1).url).searchParams.get("operation") === "delete");
+  assert.ok(!mock.calls.some(call => /\/send(?:\?|$)|\/email(?:\?|$)/.test(call.url)));
+  assert.equal(db.prepare("SELECT count(*) n FROM document_send_history").get().n, 2, "Existing synthetic sent history is unchanged");
+});
+
+test("payment entry ensures missing customer and invoice using existing Product/Service sync", async t => {
+  const f = fixture(t, { draft: true }); await ready(f.service); localPayment(f.db);
+  await flushPayments(f);
+  assert.equal(outboxRow(f.db).status, "SYNCED"); assert.equal(f.mock.customers.length, 1); assert.equal(f.mock.invoices.length, 1); assert.equal(f.mock.payments.length, 1);
+  assert.equal(f.mock.invoices[0].Balance, 600);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM document_send_history").get().n, 0);
+  deleteInvoicePayment(f.db, "job", "local-payment"); await flushPayments(f);
+  assert.equal(f.mock.payments.length, 0); assert.equal(f.service.invoiceStatus("job").paymentSync.status, "SYNCED");
+});
+
+test("provider outage retains local payment and durable retry state; retry creates exactly once", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  f.mock.failNext = { path: "/payment", method: "POST", status: 503 };
+  await flushPayments(f);
+  assert.equal(paid(f.db), 50000); assert.equal(outboxRow(f.db).status, "RETRYABLE"); assert.match(outboxRow(f.db).safe_error_message, /temporarily unavailable/);
+  assert.equal(f.service.invoiceStatus("job").paymentSync.status, "RETRYABLE");
+  f.db.exec("UPDATE integration_payment_outbox SET retry_at=0"); await flushPayments(f); await flushPayments(f);
+  assert.equal(f.mock.payments.length, 1); assert.equal(outboxRow(f.db).status, "SYNCED");
+  const writes = paymentWrites(f.mock); assert.equal(writes.length, 2);
+  assert.equal(new URL(writes[0].url).searchParams.get("requestid"), new URL(writes[1].url).searchParams.get("requestid"));
+});
+
+test("accepted create with lost response is reconciled after restart and expired retry window without another POST", async t => {
+  const f = fixture(t, { file: true }); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  f.mock.losePaymentResponse = true; await flushPayments(f);
+  assert.equal(outboxRow(f.db).status, "RETRYABLE"); assert.equal(f.mock.payments.length, 1); assert.equal(paid(f.db), 50000);
+  f.db.exec("UPDATE integration_payment_outbox SET retry_at=0; UPDATE integration_operations SET started_at=0 WHERE entity_type='payment-write'");
+  const reopened = openWorkspaceDb({ dbPath: f.env.ELSET_WORKSPACE_DB_PATH, migrate: false });
+  try {
+    const service = new AccountingService(reopened, { providerId: "quickbooks", env: f.env, fetchImpl: f.mock.fetch });
+    await processPaymentOutbox(service);
+  } finally { reopened.close(); }
+  await flushPayments(f);
+  assert.equal(outboxRow(f.db).status, "SYNCED"); assert.equal(paymentWrites(f.mock).length, 1); assert.equal(paid(f.db), 50000);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM payments").get().n, 1);
+});
+
+test("uncertain absent create outside request window fails closed, while a later local edit cannot replace the dispatched intent", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  f.mock.failNext = { path: "/payment", method: "POST", throw: true }; await flushPayments(f);
+  updateInvoicePayment(f.db, "job", "local-payment", { amount: 600 });
+  f.db.exec("UPDATE integration_operations SET started_at=0 WHERE entity_type='payment-write'"); await flushPayments(f);
+  assert.equal(outboxRow(f.db).error_code, "AMBIGUOUS_WRITE"); assert.equal(paid(f.db), 60000); assert.equal(f.mock.payments.length, 0);
+  assert.equal(paymentWrites(f.mock).length, 1);
+});
+
+test("local edit during accepted create keeps the new revision and synchronises it after recovering the first response", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  f.mock.afterPaymentWrite = () => { f.mock.afterPaymentWrite = null; updateInvoicePayment(f.db, "job", "local-payment", { amount: 600 }); };
+  f.mock.losePaymentResponse = true; await flushPayments(f);
+  assert.equal(paid(f.db), 60000); assert.equal(outboxRow(f.db).revision, 2);
+  await flushPayments(f); await flushPayments(f);
+  assert.equal(outboxRow(f.db).status, "SYNCED"); assert.equal(paid(f.db), 60000); assert.equal(f.mock.payments.length, 1); assert.equal(f.mock.payments[0].TotalAmt, 600);
+});
+
+test("accepted update and delete with lost responses reconcile without repeated mutations", async t => {
+  for (const kind of ["update", "delete"]) await t.test(kind, async sub => {
+    const f = fixture(sub); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db); await flushPayments(f);
+    if (kind === "update") updateInvoicePayment(f.db, "job", "local-payment", { amount: 600 }); else deleteInvoicePayment(f.db, "job", "local-payment");
+    f.mock.losePaymentResponse = true; await flushPayments(f);
+    f.db.exec("UPDATE integration_payment_outbox SET retry_at=0"); await flushPayments(f);
+    assert.equal(outboxRow(f.db).status, "SYNCED"); assert.equal(paymentWrites(f.mock).length, 2);
+    assert.equal(paid(f.db), kind === "update" ? 60000 : 0);
+    assert.equal(f.mock.invoices[0].Balance, kind === "update" ? 500 : 1100);
+  });
+});
+
+test("external edits and stale SyncTokens preserve both changes for review without overwriting", async t => {
+  for (const kind of ["external", "stale"]) await t.test(kind, async sub => {
+    const f = fixture(sub); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db); await flushPayments(f);
+    updateInvoicePayment(f.db, "job", "local-payment", { amount: 600 });
+    if (kind === "external") { f.mock.payments[0].PrivateNote += " external edit"; f.mock.payments[0].SyncToken = "4"; }
+    else f.mock.staleNext = true;
+    await flushPayments(f);
+    assert.equal(outboxRow(f.db).status, "REVIEW_REQUIRED"); assert.equal(outboxRow(f.db).error_code, "EXTERNAL_PAYMENT_CONFLICT");
+    assert.equal(paid(f.db), 60000); assert.equal(f.mock.payments[0].TotalAmt, 500);
+    assert.equal(paymentWrites(f.mock).length, kind === "external" ? 1 : 2);
+    await assert.rejects(f.service.syncPayments("job"), { code: "EXTERNAL_PAYMENT_CONFLICT" });
+  });
+});
+
+test("webhook reconciliation cannot overwrite an ELSET payment edited during provider reads", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); allocations(f.mock, [["900", 500]]); await f.service.syncPayments("job");
+  const localId = f.db.prepare("SELECT id FROM payments").get().id;
+  const original = f.mock.fetch; let edit = true;
+  f.service.provider.fetch = async (...args) => {
+    const response = await original(...args);
+    if (edit && new URL(args[0]).pathname.endsWith("/payment/900")) { edit = false; updateInvoicePayment(f.db, "job", localId, { amount: 600 }); }
+    return response;
+  };
+  await assert.rejects(f.service.syncPayments("job", { inboundOnly: true }), { code: "OUTBOUND_PAYMENT_PENDING" });
+  assert.equal(paid(f.db), 60000); assert.equal(outboxRow(f.db, localId).status, "PENDING");
+  await flushPayments(f); assert.equal(f.mock.payments[0].TotalAmt, 600);
+});
+
+test("local edits and removal of one shared allocation preserve other invoices and unapplied money", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); await f.service.syncInvoice("job-b");
+  f.mock.setPayments([{ id: "900", allocations: [[f.mock.invoices[0].Id, 500], [f.mock.invoices[1].Id, 200]], unapplied: 50 }]);
+  await f.service.syncPayments("job"); const localId = f.db.prepare("SELECT id FROM payments WHERE invoice_id='invoice'").get().id;
+  updateInvoicePayment(f.db, "job", localId, { amount: 600, date: "2026-09-20" }); await flushPayments(f);
+  assert.equal(f.mock.payments[0].TotalAmt, 850); assert.equal(paid(f.db, "invoice-b"), 20000);
+  assert.equal(f.db.prepare("SELECT date FROM payments WHERE invoice_id='invoice-b'").get().date, "2026-09-20");
+  deleteInvoicePayment(f.db, "job", localId); await flushPayments(f);
+  assert.equal(f.mock.payments[0].Id, "900"); assert.equal(f.mock.payments[0].TotalAmt, 250); assert.equal(f.mock.payments[0].UnappliedAmt, 50);
+  assert.equal(paid(f.db), 0); assert.equal(paid(f.db, "invoice-b"), 20000); assert.equal(f.mock.invoices[0].Balance, 1100);
+  assert.equal(f.mock.invoices[1].Balance, 900);
+});
+
+test("QBO corrections and removals of an ELSET-created receipt retain its identity and never queue echoes", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db); await flushPayments(f);
+  const id = f.mock.payments[0].Id;
+  f.mock.setPayments([{ id, allocations: [[f.mock.invoices[0].Id, 450]], TxnDate: "2026-09-19" }]);
+  persistQuickBooksEvents(f.db, event(f.mock, { resource: id, type: "qbo.payment.updated.v1" })); await flushPayments(f);
+  assert.equal(paid(f.db), 45000); assert.equal(f.db.prepare("SELECT id FROM payments").get().id, "local-payment");
+  f.mock.setPayments([]); persistQuickBooksEvents(f.db, event(f.mock, { resource: id, type: "qbo.payment.deleted.v1" })); await flushPayments(f);
+  assert.equal(paid(f.db), 0); assert.equal(paymentWrites(f.mock).length, 1); assert.equal(outboxRow(f.db).revision, 1);
+});
+
+test("company/environment and conflicting invoice mappings never send queued payments elsewhere", async t => {
+  for (const kind of ["company", "environment", "mapping"]) await t.test(kind, async sub => {
+    const f = fixture(sub); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+    if (kind === "company") f.service.store.update({ external_tenant_id: "987654321" });
+    if (kind === "environment") f.service.store.update({ provider_environment: "production" });
+    if (kind === "mapping") f.service.store.map("other-company", "invoice", "invoice", "other-invoice");
+    await flushPayments(f);
+    assert.equal(paid(f.db), 50000); assert.equal(paymentWrites(f.mock).length, 0); assert.equal(outboxRow(f.db).status, "REVIEW_REQUIRED");
+  });
+});
+
+test("local overpayment validation is retained and QBO allocation overpayment is reviewable", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job");
+  for (const amount of [-1, 0, "invalid"]) assert.throws(() => localPayment(f.db, amount));
+  localPayment(f.db, 1200); await flushPayments(f);
+  assert.equal(paid(f.db), 120000, "Existing local accounting allows positive overpayments");
+  assert.equal(outboxRow(f.db).error_code, "PAYMENT_OVERPAYMENT"); assert.equal(paymentWrites(f.mock).length, 0);
+});
+
+test("add then remove before dispatch makes no external payment or prerequisite invoice", async t => {
+  const f = fixture(t); await ready(f.service); localPayment(f.db); deleteInvoicePayment(f.db, "job", "local-payment"); await flushPayments(f);
+  assert.equal(outboxRow(f.db).status, "SYNCED"); assert.equal(f.mock.invoices.length, 0); assert.equal(paymentWrites(f.mock).length, 0);
+});
+
+test("uncertain create followed by an external correction records its identity and never creates a replacement", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  f.mock.losePaymentResponse = true; await flushPayments(f);
+  const payment = f.mock.payments[0]; payment.TotalAmt = 450; payment.Line[0].Amount = 450; payment.SyncToken = "2"; f.mock.refreshBalances();
+  f.db.exec("UPDATE integration_payment_outbox SET retry_at=0"); await flushPayments(f);
+  assert.equal(outboxRow(f.db).error_code, "AMBIGUOUS_WRITE");
+  assert.equal(f.db.prepare("SELECT external_payment_id FROM integration_external_payments").get().external_payment_id, payment.Id);
+  assert.equal(paid(f.db), 50000); assert.equal(paymentWrites(f.mock).length, 1);
+  f.mock.setPayments([]);
+  await assert.rejects(f.service.syncPayments("job"), { code: "AMBIGUOUS_WRITE" });
+  assert.equal(paymentWrites(f.mock).length, 1);
+});
+
+test("paused outbound work resumes after reauthorization or reenable without losing local changes", async t => {
+  for (const kind of ["disconnect", "disabled", "pending-company"]) await t.test(kind, async sub => {
+    const f = fixture(sub); await ready(f.service); await f.service.syncInvoice("job");
+    if (kind === "disconnect") await f.service.disconnect();
+    if (kind === "disabled") updateWorkspaceAddons(f.db, { quickbooks: false });
+    if (kind === "pending-company") {
+      f.mock.realm = "987654321"; await consent(f.service, f.mock.realm);
+    }
+    localPayment(f.db); await processPaymentOutbox(f.service);
+    assert.equal(outboxRow(f.db).status, "PAUSED"); assert.equal(paid(f.db), 50000); assert.equal(paymentWrites(f.mock).length, 0);
+    if (kind === "disconnect") await consent(f.service);
+    if (kind === "disabled") updateWorkspaceAddons(f.db, { quickbooks: true });
+    if (kind === "pending-company") {
+      const pending = f.service.status().pendingCompanySwitch;
+      await f.service.switchCompany(pending.id, false); f.mock.realm = "123456789";
+    }
+    await flushPayments(f); assert.equal(outboxRow(f.db).status, "SYNCED"); assert.equal(f.mock.payments.length, 1);
+  });
+});
+
+test("payment and durable intent roll back together if the queue cannot save", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job");
+  f.db.exec("CREATE TRIGGER reject_payment_intent BEFORE INSERT ON integration_payment_outbox BEGIN SELECT RAISE(ABORT,'fixture queue failure'); END");
+  assert.throws(() => localPayment(f.db), /fixture queue failure/);
+  assert.equal(paid(f.db), 0); assert.equal(outboxRow(f.db), undefined); assert.equal(paymentWrites(f.mock).length, 0);
+});
+
+test("stale edit/delete preconditions cannot overwrite a receipt refreshed by a webhook", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); allocations(f.mock, [["900", 500]]); await f.service.syncPayments("job");
+  const local = loadWorkspaceStateFromDb(f.db).jobs.find(job => job.id === "job").invoice.payments[0];
+  allocations(f.mock, [["900", 450]]); await f.service.syncPayments("job");
+  assert.throws(() => updateInvoicePayment(f.db, "job", local.id, { amount: 600, expectedPayment: local }), /changed since you opened/);
+  assert.throws(() => deleteInvoicePayment(f.db, "job", local.id, { expectedPayment: local }), /changed since you opened/);
+  assert.equal(paid(f.db), 45000); assert.equal(outboxRow(f.db, local.id), undefined);
+});
+
+test("queued shared allocation amount edits preserve another allocation's explicit date change", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); await f.service.syncInvoice("job-b");
+  f.mock.setPayments([{ id: "900", allocations: [[f.mock.invoices[0].Id, 500], [f.mock.invoices[1].Id, 200]] }]); await f.service.syncPayments("job");
+  const a = f.db.prepare("SELECT id FROM payments WHERE invoice_id='invoice'").get().id;
+  const b = f.db.prepare("SELECT id FROM payments WHERE invoice_id='invoice-b'").get().id;
+  updateInvoicePayment(f.db, "job", a, { date: "2026-09-20" });
+  updateInvoicePayment(f.db, "job-b", b, { amount: 300 });
+  // Exercise either queue ordering; neither edit should revert the receipt date.
+  await flushPayments(f);
+  assert.equal(f.mock.payments[0].TxnDate, "2026-09-20"); assert.equal(f.mock.payments[0].TotalAmt, 800);
+  assert.ok(f.db.prepare("SELECT date FROM payments").all().every(row => row.date === "2026-09-20"));
+});
+
+test("conflicting queued dates for a shared receipt require review before either write", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); await f.service.syncInvoice("job-b");
+  f.mock.setPayments([{ id: "900", allocations: [[f.mock.invoices[0].Id, 500], [f.mock.invoices[1].Id, 200]] }]); await f.service.syncPayments("job");
+  const a = f.db.prepare("SELECT id FROM payments WHERE invoice_id='invoice'").get().id;
+  const b = f.db.prepare("SELECT id FROM payments WHERE invoice_id='invoice-b'").get().id;
+  updateInvoicePayment(f.db, "job", a, { date: "2026-09-20" }); updateInvoicePayment(f.db, "job-b", b, { date: "2026-09-21" });
+  await flushPayments(f); assert.equal(paymentWrites(f.mock).length, 0);
+  assert.equal(outboxRow(f.db, a).error_code, "LOCAL_PAYMENT_CONFLICT"); assert.equal(outboxRow(f.db, b).error_code, "LOCAL_PAYMENT_CONFLICT");
+});
+
+test("uncertain retry rechecks invoice identity, content and available balance before repeating a create", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  f.mock.failNext = { path: "/payment", method: "POST", throw: true }; await flushPayments(f);
+  allocations(f.mock, [["900", 800]]); f.db.exec("UPDATE integration_payment_outbox SET retry_at=0"); await flushPayments(f);
+  assert.equal(outboxRow(f.db).error_code, "PAYMENT_OVERPAYMENT"); assert.equal(paymentWrites(f.mock).length, 1); assert.equal(paid(f.db), 50000);
+});
+
+test("outbound provider lock serializes competing workers and preserves a payment-sync ownership conflict", async t => {
+  const f = fixture(t); await ready(f.service); await f.service.syncInvoice("job"); localPayment(f.db);
+  let release, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const blocked = new Promise(resolve => { release = resolve; });
+  f.mock.afterPaymentWrite = async () => { entered(); await blocked; };
+  const first = processPaymentOutbox(f.service); await waiting;
+  const second = new AccountingService(f.db, { providerId: "quickbooks", env: f.env, fetchImpl: f.mock.fetch });
+  await processPaymentOutbox(second); assert.equal(paymentWrites(f.mock).length, 1);
+  release(); await first; await flushPayments(f);
+  assert.equal(f.mock.payments.length, 1); assert.equal(outboxRow(f.db).status, "SYNCED");
+  f.db.exec("UPDATE integration_invoice_payment_sync SET external_tenant_id='another-company'");
+  updateInvoicePayment(f.db, "job", "local-payment", { amount: 600 }); await processPaymentOutbox(f.service);
+  assert.equal(outboxRow(f.db).error_code, "PAYMENT_MAPPING_CONFLICT"); assert.equal(paymentWrites(f.mock).length, 1);
 });

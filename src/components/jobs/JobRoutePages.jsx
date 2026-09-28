@@ -120,7 +120,7 @@ export function DocumentRoute() {
               type={documentType}
               backLabel={location.state?.returnTo?.label || `Job #${routeSelectedJob.jobNumber}`}
               onBack={onBack}
-              onSave={(doc) => workspaceActions.handleSaveDocument(routeSelectedJob.id, documentType, doc)}
+              onSave={(doc, options) => workspaceActions.handleSaveDocument(routeSelectedJob.id, documentType, doc, options)}
               onInvoiceReconciled={(invoice) => setData((current) => ({ ...current, jobs: current.jobs.map((job) => job.id === routeSelectedJob.id ? { ...job, invoice } : job) }))}
               onPreviewDocument={workspaceActions.handlePreviewDocument}
               onSendDocument={workspaceActions.handleSendDocument}

@@ -106,7 +106,7 @@ test("catalog rejects invalid prices, unsupported GST and units without changing
 test("schema 12 to 13 is additive, rolls back on failure and runs once", (t) => {
   const db = database(t);
   const totals = summarizeWorkspaceDb(db).financials;
-  db.exec("DROP TABLE price_list_items; DELETE FROM workspace_schema_migrations WHERE version=13; UPDATE workspace_info SET schema_version=12; PRAGMA user_version=12;");
+  db.exec("DROP TABLE integration_payment_outbox; ALTER TABLE integration_operations DROP COLUMN request_json; ALTER TABLE integration_external_payments DROP COLUMN external_snapshot_json; DROP TABLE price_list_items; DELETE FROM workspace_schema_migrations WHERE version>=13; UPDATE workspace_info SET schema_version=12; PRAGMA user_version=12;");
   const before = loadWorkspaceStateFromDb(db);
   db.exec("CREATE TRIGGER fail_price_list BEFORE INSERT ON workspace_schema_migrations WHEN NEW.version=13 BEGIN SELECT RAISE(ABORT,'test failure'); END;");
   assert.throws(() => migrateWorkspaceSchema(db), /12 -> 13 failed/);
@@ -114,7 +114,7 @@ test("schema 12 to 13 is additive, rolls back on failure and runs once", (t) => 
   assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name='price_list_items'").get(), undefined);
   db.exec("DROP TRIGGER fail_price_list");
   const versions = []; migrateWorkspaceSchema(db, { onMigration: ({ toVersion }) => versions.push(toVersion) });
-  assert.deepEqual(versions, [13]); assert.deepEqual(loadWorkspaceStateFromDb(db), before);
+  assert.deepEqual(versions, [13, 14]); assert.deepEqual(loadWorkspaceStateFromDb(db), before);
   assert.deepEqual(summarizeWorkspaceDb(db).financials, totals); assert.deepEqual(listPriceListItems(db), []);
   migrateWorkspaceSchema(db, { onMigration() { assert.fail("Already applied"); } });
   assert.equal(db.pragma("integrity_check", { simple: true }), "ok"); assert.deepEqual(db.pragma("foreign_key_check"), []);

@@ -14,7 +14,7 @@ export function createQuickBooksMock() {
     const url = new URL(input), method = options.method || "GET";
     const body = options.headers?.["Content-Type"] === "application/json" ? JSON.parse(options.body) : options.body;
     mock.calls.push({ url: url.href, method, body, headers: options.headers });
-    if (mock.failNext && url.pathname.includes(mock.failNext.path)) {
+    if (mock.failNext && url.pathname.includes(mock.failNext.path) && (!mock.failNext.method || mock.failNext.method === method)) {
       const failure = mock.failNext; mock.failNext = null;
       if (failure.wait) await failure.wait;
       if (failure.throw) throw new Error("Fixture network loss");
@@ -38,6 +38,8 @@ export function createQuickBooksMock() {
       if (!values) throw new Error(`Unknown fixture query ${query}`);
       const criterion = query.match(/(?:DisplayName|DocNumber) = '((?:\\.|[^'])*)'/);
       if (criterion) { const value = criterion[1].replaceAll("\\'", "'").replaceAll("\\\\", "\\"); values = values.filter((row) => (entity === "Customer" ? row.DisplayName : row.DocNumber) === value); }
+      const customer = query.match(/CustomerRef = '(\d+)'/);
+      if (customer) values = values.filter(row => row.CustomerRef?.value === customer[1]);
       const offset = Number(query.match(/STARTPOSITION (\d+)/)?.[1] || 1) - 1;
       return json({ QueryResponse: { [entity]: values.slice(offset, offset + 1000) } });
     }
@@ -45,10 +47,40 @@ export function createQuickBooksMock() {
     const values = lists[entity];
     if (!values) throw new Error(`Unknown fixture request ${endpoint}`);
     if (method === "GET") { const row = values.find((row) => row.Id === id); return row ? json({ [entity]: row }) : fault("610"); }
-    if (method !== "POST" || !["Customer", "Invoice", "Item"].includes(entity)) throw new Error("Unsupported fixture write");
+    if (method !== "POST" || !["Customer", "Invoice", "Item", "Payment"].includes(entity)) throw new Error("Unsupported fixture write");
     const requestId = url.searchParams.get("requestid");
     if (!requestId) throw new Error("Fixture requires durable request ID");
     if (requests.has(requestId)) return json(requests.get(requestId));
+    if (entity === "Payment") {
+      const previous = body.Id ? mock.payments.find(row => row.Id === body.Id) : null;
+      if (body.Id && !previous) return fault("610");
+      if (mock.staleNext || previous && previous.SyncToken !== body.SyncToken) {
+        mock.staleNext = false; if (previous) previous.SyncToken = String(Number(previous.SyncToken) + 1); return fault("5010");
+      }
+      let row;
+      if (url.searchParams.get("operation") === "delete") {
+        if (!previous || Object.keys(body).some(key => !["Id", "SyncToken"].includes(key))) throw new Error("Invalid fixture Payment delete");
+        mock.payments = mock.payments.filter(payment => payment.Id !== body.Id);
+        row = { Id: body.Id, status: "Deleted" };
+      } else {
+        if (body.ProcessPayment !== false || !mock.customers.some(customer => customer.Id === body.CustomerRef?.value)) throw new Error("Unsafe fixture Payment write");
+        const applied = body.Line.reduce((sum, line) => {
+          if (line.LinkedTxn.length !== 1 || line.LinkedTxn[0].TxnType !== "Invoice"
+            || !mock.invoices.some(invoice => invoice.Id === line.LinkedTxn[0].TxnId && invoice.CustomerRef.value === body.CustomerRef.value)) throw new Error("Invalid payment linkage");
+          return sum + Math.round(line.Amount * 100);
+        }, 0);
+        if (applied > Math.round(body.TotalAmt * 100)) return fault("6000");
+        row = { ...body, Id: previous?.Id || String(sequence++), SyncToken: String(previous ? Number(previous.SyncToken) + 1 : 0),
+          UnappliedAmt: (Math.round(body.TotalAmt * 100) - applied) / 100, sparse: false,
+          MetaData: { LastUpdatedTime: new Date().toISOString() } };
+        if (previous) Object.assign(previous, row); else mock.payments.push(row);
+      }
+      mock.refreshBalances();
+      requests.set(requestId, structuredClone({ Payment: row }));
+      if (mock.afterPaymentWrite) await mock.afterPaymentWrite(row);
+      if (mock.losePaymentResponse) { mock.losePaymentResponse = false; throw new Error("Fixture payment accepted; response lost"); }
+      return json({ Payment: row });
+    }
     if (entity === "Item") {
       if (body.Id || body.Type !== "Service" || body.Active !== true || !mock.accounts.some(account => account.Id === body.IncomeAccountRef?.value && account.Active && account.AccountType === "Income")) throw new Error("Unsafe fixture item write");
       if (mock.items.some(row => row.Name.trim().toLowerCase() === body.Name.trim().toLowerCase())) return fault("6240");
@@ -80,6 +112,9 @@ export function createQuickBooksMock() {
       TotalAmt: allocations.reduce((sum, [, amount]) => sum + amount, unapplied),
       Line: allocations.map(([invoiceId, amount]) => ({ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }] })),
       MetaData: { LastUpdatedTime: "2026-09-18T01:00:00Z" }, ...rest }));
+    mock.refreshBalances();
+  };
+  mock.refreshBalances = () => {
     for (const invoice of mock.invoices) {
       invoice.LinkedTxn = mock.payments.filter((payment) => payment.Line.some((line) => line.LinkedTxn.some((link) => link.TxnId === invoice.Id)))
         .map((payment) => ({ TxnId: payment.Id, TxnType: "Payment" }));

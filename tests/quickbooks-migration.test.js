@@ -8,7 +8,7 @@ import { accountingSchemaSql } from "../server-accounting-schema.js";
 import { accountingPaymentSchemaSql } from "../server-accounting-payment-schema.js";
 import { migrateWorkspaceSchema, openWorkspaceDb } from "../server-workspace-db.js";
 
-test("committed schema 10 migrates once through 11 and 12 to 13, preserving Xero/business data and rolling back a late failure", (t) => {
+test("committed schema 10 migrates once through 11, 12 and 13 to 14, preserving Xero/business data and rolling back a late failure", (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "qbo-schema-")), dbPath = path.join(directory, "workspace.db");
   let db = new Database(dbPath);
   t.after(() => { if (db.open) db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
@@ -45,6 +45,23 @@ test("committed schema 10 migrates once through 11 and 12 to 13, preserving Xero
   assert.throws(() => db.prepare("INSERT INTO payments(id,invoice_id,created_at,source) VALUES('bad','i','fixture','unknown')").run(), /CHECK/);
   assert.deepEqual(db.pragma("foreign_key_check"), []); assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
   db.close(); db = openWorkspaceDb({ dbPath });
-  assert.equal(db.pragma("user_version", { simple: true }), 13); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
+  assert.equal(db.pragma("user_version", { simple: true }), 14); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
   assert.equal(db.prepare("SELECT encrypted_access_token FROM workspace_integrations").get().encrypted_access_token, "existing-ciphertext");
+});
+
+test("schema 13 to 14 preserves accounting rows and rolls back the entire outbox migration on failure", t => {
+  const db = openWorkspaceDb({ dbPath: ':memory:' }); t.after(() => db.close());
+  db.exec("DROP TABLE integration_payment_outbox; ALTER TABLE integration_external_payments DROP COLUMN external_snapshot_json; ALTER TABLE integration_operations DROP COLUMN request_json; DELETE FROM workspace_schema_migrations WHERE version=14; UPDATE workspace_info SET schema_version=13; PRAGMA user_version=13;");
+  db.exec("INSERT INTO integration_operations SELECT workspace_id,'quickbooks','123','invoice','invoice','hash','existing-key',123,'PENDING' FROM integration_workspace;");
+  const before = db.prepare("SELECT * FROM integration_operations").all();
+  db.exec("CREATE TRIGGER fail_v14 BEFORE INSERT ON workspace_schema_migrations WHEN NEW.version=14 BEGIN SELECT RAISE(ABORT,'fixture migration failure'); END;");
+  assert.throws(() => migrateWorkspaceSchema(db), /13 -> 14 failed/);
+  assert.equal(db.pragma('user_version', { simple: true }), 13);
+  assert.deepEqual(db.prepare("SELECT * FROM integration_operations").all(), before);
+  assert.ok(!db.prepare("SELECT 1 FROM sqlite_schema WHERE name='integration_payment_outbox'").get());
+  db.exec("DROP TRIGGER fail_v14"); const versions = [];
+  migrateWorkspaceSchema(db, { onMigration: ({ toVersion }) => versions.push(toVersion) });
+  assert.deepEqual(versions, [14]); assert.deepEqual(db.prepare("SELECT * FROM integration_operations").all(), before.map(row => ({ ...row, request_json: '' })));
+  migrateWorkspaceSchema(db, { onMigration() { assert.fail('Already migrated'); } });
+  assert.deepEqual(db.pragma('foreign_key_check'), []); assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
 });

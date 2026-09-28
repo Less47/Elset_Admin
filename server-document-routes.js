@@ -50,6 +50,7 @@ function handleDocumentRoute(operation, env) {
     try {
       db = openSqliteWorkspaceDb(env);
       const result = operation(db, req);
+      if (result.paymentId) req.app.locals.accountingInboxWorker?.wake();
       return sendSuccess(req, res, result, env);
     } catch (error) {
       const statusCode = getStatusCode(error);
@@ -161,7 +162,7 @@ export function createDocumentRouter({
   router.delete(
     "/api/jobs/:id/invoice/payments/:paymentId",
     ...middleware,
-    handleDocumentRoute((db, req) => deleteInvoicePayment(db, req.params.id, req.params.paymentId), env)
+    handleDocumentRoute((db, req) => deleteInvoicePayment(db, req.params.id, req.params.paymentId, { expectedPayment: req.body?.expectedPayment }), env)
   );
 
   return router;

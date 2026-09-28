@@ -30,7 +30,7 @@ ACCOUNTING_INTEGRATION_ENCRYPTION_KEY=<64-hex-character-server-key>
 QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN=<development-webhook-verifier-token>
 ```
 
-Reuse the existing accounting encryption key for an existing workspace; replacing it makes saved credentials unreadable. Keep configuration out of source control and backups shared with support. Do not point this test configuration at the real workspace database. Start the local application with `npm run dev`; use the repository's normal local admin/bootstrap and synthetic data workflow for this separate workspace. Schema 11 is applied through the existing startup migration mechanism.
+Reuse the existing accounting encryption key for an existing workspace; replacing it makes saved credentials unreadable. Keep configuration out of source control and backups shared with support. Do not point this test configuration at the real workspace database. Start the local application with `npm run dev`; use the repository's normal local admin/bootstrap and synthetic data workflow for this separate workspace. Schema 14 is applied through the existing startup migration mechanism.
 
 Only `sandbox` or `production` is accepted, with no implicit default. Once a workspace has connected to QuickBooks, its environment is retained even after Disconnect. A different environment requires a separate workspace database; editing the environment value cannot reuse the old credentials or mappings.
 
@@ -73,21 +73,21 @@ Run this with real Sandbox credentials before approving production use. It was *
 5. Verify QuickBooks subtotal **$1,000**, GST **$100**, total **$1,100**. Confirm ELSET reports Synced. Check that ELSET did not call QuickBooks' email/send operation.
 6. Select **Update QuickBooks** without changes. Confirm there is still one invoice. Make a small saved description change and update again; confirm the same external ID and correct SyncToken behavior.
 7. Create/send a second invoice for another Site belonging to the same Customer. Confirm **one Customer, two Invoices**.
-8. In QuickBooks, record a **$500 receipt** against the first invoice. In ELSET select **Sync from QuickBooks**. Verify **Paid $500, Outstanding $600**, a read-only QuickBooks payment row, and the corresponding Customer Account balance.
-9. Repeat Sync from QuickBooks twice. Verify no duplicate receipt and unchanged balance.
-10. Record the final **$600 receipt** in QuickBooks. Sync again. Verify **Paid $1,100, Outstanding $0, Paid** using ELSET's normal status calculation.
-11. Correct the $500 receipt to $450. Sync and verify **Paid $1,050, Outstanding $50**; the existing receipt identity should be retained.
-12. Remove/void that $450 receipt in QuickBooks. Sync and verify only the $600 receipt remains effective and the balance is **$500**. Historical removal evidence remains in the integration history.
-13. Apply a separate receipt across two mapped invoices, then move its allocation from one invoice to the other. Sync either affected invoice. Verify each invoice receives only its allocation and that the total is never counted twice. Include an unapplied amount and an unmapped third invoice; neither should inflate ELSET receipts.
-14. Test a historical manual ELSET payment. QuickBooks reconciliation must require review and retain the manual row. Confirm QuickBooks-owned receipts cannot be added, edited or deleted locally, including after Disconnect.
+8. With the Payment/Invoice webhook subscriptions below configured, record a **$500 receipt** in QuickBooks. Verify ELSET automatically shows **Paid $500, Outstanding $600**, one editable payment row, and the corresponding Customer Account balance. Do not press a manual sync action.
+9. Edit that receipt in ELSET to **$600** and change its date. Save and confirm QuickBooks updates the same Payment ID automatically, leaving **$500 outstanding**. No customer email should be sent.
+10. Remove the payment in ELSET. Verify its QuickBooks Payment is deleted and both invoice balances return to **$1,100**. Repeat with a QuickBooks-originated correction and deletion; signed events must update/remove the existing local row automatically.
+11. Add an ELSET payment to a separate valid invoice that has no QuickBooks customer/invoice mapping. Confirm the existing accounting routines create/reuse the customer, invoice and payment automatically without customer communication.
+12. Simulate a provider outage in mocks. Local saves must succeed with visible pending/retry state; retries and webhook echoes must not duplicate either receipt. A conflicting external edit must produce review state and preserve the local edit.
+13. Apply a receipt across two mapped invoices, then move an allocation in QuickBooks. Verify automatic reconciliation of previous and current allocations. Edit/remove one allocation in ELSET: preserve other allocations and unapplied money; an edited receipt date applies to the whole QuickBooks Payment and its local allocations.
+14. Use **Sync with QuickBooks** twice as a recovery/reconciliation check. Historical manual receipts without an outbound identity still require review; do not bulk-export or match them by amount/date. Disconnect/disable pauses accounting work while retaining local payment changes and their original company.
 15. Change a managed invoice description directly in QuickBooks, then change ELSET and attempt an outbound update. Expect review, preserving the remote edit. Check a voided/deleted invoice is not recreated. Check an unsupported credit memo requires review.
 16. Disconnect and reconnect to the same Sandbox company. Confirm configuration/mappings remain and repeated sync does not duplicate records. A different company must require confirmation; switching environments must fail closed.
 
 Also test awkward cent/quantity combinations. Any Australian tax-rounding difference must be explained and resolved before go-live; V3 does not silently adjust ELSET totals to match QuickBooks.
 
-## 6. Optional Sandbox webhooks
+## 6. Incoming automatic payment webhooks
 
-Manual **Sync from QuickBooks** works without a public tunnel. `localhost` cannot receive normal Intuit webhook deliveries. For live webhook validation, a developer may deliberately configure a secure HTTPS tunnel to the local API; none was created here.
+Payments can be entered in ELSET or QuickBooks. ELSET changes sync automatically through the durable accounting worker. QuickBooks changes require the signed webhook connection below. **Sync with QuickBooks** is a recovery/reconciliation tool and works without a public tunnel. `localhost` cannot receive normal Intuit webhook deliveries. For live webhook validation, a developer may deliberately configure a secure HTTPS tunnel to the local API; none was created here.
 
 In the app's Development webhook settings:
 
@@ -95,7 +95,7 @@ In the app's Development webhook settings:
 2. Register `https://<your-test-tunnel>/api/integrations/quickbooks/webhook`.
 3. Subscribe to **Invoice** and **Payment** changes (create/update/delete/void where offered in the current portal). V3 recognizes `qbo.invoice.*.v1` and `qbo.payment.*.v1` created/updated/deleted/voided notifications. Confirm the enabled subscriptions by making the Sandbox changes above.
 4. Put that environment's **webhook verifier token** in `QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN`, then restart the local server. This is not the OAuth secret.
-5. Create/change a small payment on the intended **Sandbox** invoice. **Do not click Sync from QuickBooks** during this test. Inspect `integration_webhook_events` for the QuickBooks event and its own `external_tenant_id`; confirm it reaches **PROCESSED**, then confirm the invoice and Customer Account update automatically. Test correction and deletion too. Duplicate deliveries must not add another local receipt or queue row. Unrelated company and unmapped invoice events must not attach themselves by invoice number.
+5. Create/change a small payment on the intended **Sandbox** invoice. **Do not click Sync with QuickBooks** during this test. Inspect `integration_webhook_events` for the QuickBooks event and its own `external_tenant_id`; confirm it reaches **PROCESSED**, then confirm the invoice and Customer Account update automatically. Test correction and deletion too. Duplicate deliveries must not add another local receipt or queue row. Unrelated company and unmapped invoice events must not attach themselves by invoice number.
 
 The endpoint checks `intuit-signature` against the exact raw body, validates the batch, saves minimal metadata, acknowledges, then uses the durable worker. It accepts JSON and CloudEvents JSON content types. Each event uses its own `intuitaccountid` and `intuitentityid`; the `data` object is ignored and the worker fetches current API state. New deduplication keys include provider, company, CloudEvent `source` and `id`; earlier inbox keys remain recognized without changing stored rows. Unsupported event types are recorded as IGNORED.
 
@@ -124,3 +124,5 @@ fly secrets set QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN="<production-webhook-verifier-
 Ensure `ACCOUNTING_INTEGRATION_ENCRYPTION_KEY` already exists securely; do not casually replace it. Configure production values in Intuit's production settings, not development settings. Register the callback/webhook/reconnect URLs above and the supported entity subscriptions. After an approved deployment, authorize the intended real company explicitly, verify its identity/currency, configure its own item/GST mapping, and perform a controlled approved invoice/receipt check. No production setup, deployment, commit or push forms part of this implementation task.
 
 See [audit and primary references](quickbooks-v3-audit.md) and [implementation report](quickbooks-v3-report.md).
+
+See [bidirectional payment synchronisation](quickbooks-payment-sync.md) for mutation semantics, concurrency safeguards, migration 14 and limitations.

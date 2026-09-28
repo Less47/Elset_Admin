@@ -103,7 +103,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
   const total = calculateQuoteTotal(docState.items);
   const paymentSummary = type === "invoice" ? getInvoicePaymentSummary(docState) : null;
   const accountingProvider = activeAccountingProvider(addons);
-  const paymentsManaged = ["xero", "quickbooks"].includes(job.invoice?.paymentManagement);
+  const paymentsManaged = job.invoice?.paymentManagement === "xero";
   const paymentProviderName = accountingProviderName(job.invoice?.paymentManagement);
   const invoiceStatus = type === "invoice" ? getInvoiceStatus({ ...job, invoice: docState }) : null;
   const sentCount = docState.sentHistory?.length || 0;
@@ -142,7 +142,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
     setError("");
     setFeedback("");
     try {
-      const saved = await onSave(docState);
+      const saved = await onSave(docState, { paymentBaseline: JSON.parse(baseline).payments });
       if (saved === false) { setError(`Unable to save the ${type}. Your changes are still here.`); return; }
       setBaseline(draftSnapshot(docState));
       setFeedback("Saved");
@@ -242,8 +242,9 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
         {type === "invoice" ? <section className="document-section" aria-labelledby="document-payments-title">
           <div className="document-section-heading"><h2 id="document-payments-title">Payments received</h2>{!paymentsManaged ? <Button type="button" variant="outline" onClick={() => setDocState((prev) => ({ ...prev, payments: [...(prev.payments || []), { id: crypto.randomUUID(), amount: "", date: slugDate(), method: "", reference: "", notes: "" }] }))}><Plus className="h-4 w-4" /> Add Payment</Button> : null}</div>
           {paymentsManaged ? <p className="mb-3 text-sm text-text-secondary">Payments are managed in {paymentProviderName}. Historical manual payments require accounting review before synchronisation.</p> : null}
+          {job.invoice?.paymentManagement === "quickbooks" || accountingProvider === "quickbooks" ? <p className="mb-3 text-sm text-text-secondary">Payments sync automatically with QuickBooks.</p> : null}
           {(docState.payments || []).length === 0 ? <p className="text-sm text-text-secondary">No payments recorded yet.</p> : (docState.payments || []).map((payment, index) => <div className="document-payment" key={payment.id}>
-            {["xero", "quickbooks"].includes(payment.source) || paymentsManaged ? <>
+            {payment.source === "xero" || paymentsManaged ? <>
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{formatDate(payment.date)} · {["xero", "quickbooks"].includes(payment.source) ? `${accountingProviderName(payment.source)} payment` : "Historical manual payment"}</span><strong>{money(payment.amount)}</strong></div>
               {!["xero", "quickbooks"].includes(payment.source) && [payment.method, payment.reference, payment.notes].filter(Boolean).length ? <p className="mt-1 break-words text-sm text-text-secondary">{[payment.method, payment.reference, payment.notes].filter(Boolean).join(" · ")}</p> : null}
             </> : <>

@@ -39,6 +39,7 @@ const expectedWorkspaceTables = [
   "integration_oauth_states",
   "integration_locks",
   "integration_operations",
+  "integration_payment_outbox",
   "quotes",
   "quote_line_items",
   "invoices",

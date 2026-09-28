@@ -3,6 +3,7 @@ import { AccountingError, safeAccountingError } from "./server-accounting-errors
 import { readAccountingInvoice } from "./server-accounting-workspace.js";
 import { requireWorkspaceAddon } from "./server-workspace-addons.js";
 import { assertInvoiceAccountingOwner } from "./server-accounting-payment-policy.js";
+import { assertNoPendingPaymentWrites } from "./server-accounting-payment-intents.js";
 
 const now = () => new Date().toISOString();
 const fail = (message, code = "PAYMENT_STATE_CONFLICT") => { throw new AccountingError(code, message, 409); };
@@ -10,13 +11,15 @@ const snapshot = (invoice) => JSON.stringify(invoice);
 const money = (amount) => `$${(amount / 100).toFixed(2)}`;
 
 export function paymentSyncStatus(service, invoiceId) {
+  const pending = service.db.prepare(`SELECT * FROM integration_payment_outbox WHERE invoice_id=? AND provider=?
+    AND revision>completed_revision ORDER BY CASE WHEN safe_error_message<>'' THEN 0 ELSE 1 END,updated_at DESC LIMIT 1`).get(invoiceId, service.provider.id);
   const row = service.db.prepare("SELECT * FROM integration_invoice_payment_sync WHERE invoice_id=? AND workspace_id=? AND provider=?")
     .get(invoiceId, service.store.workspaceId, service.provider.id);
   const history = service.db.prepare(`SELECT operation,status,safe_error_message AS message,created_at AS createdAt
     FROM integration_sync_log WHERE workspace_id=? AND provider=? AND entity_type='invoice-payment' AND entity_id=? ORDER BY id DESC LIMIT 20`)
     .all(service.store.workspaceId, service.provider.id, invoiceId);
-  return { status: row?.status || "NOT_SYNCED", managed: Boolean(row?.managed), lastSyncedAt: row?.last_synced_at || null,
-    error: row?.safe_error_message || "", history };
+  return { status: pending?.status || row?.status || "NOT_SYNCED", managed: Boolean(row?.managed), lastSyncedAt: row?.last_synced_at || null,
+    error: pending?.safe_error_message || row?.safe_error_message || "", history };
 }
 
 function saveState(service, source, tenant, mapping, status, error, updatedAt = "") {
@@ -40,13 +43,17 @@ export async function reconcileInvoicePayments(service, jobId, { expectedTenant,
     assertInvoiceAccountingOwner(db, source.id, provider.id, tenant);
     const previous = paymentSyncStatus(service, source.id);
     try {
-      if (!source.eligible) fail("This ELSET invoice is no longer eligible for accounting reconciliation.");
+      if (provider.id === "quickbooks") assertNoPendingPaymentWrites(db, source.id);
+      // Removing the only receipt from an unsent, already mapped invoice must
+      // still reconcile its reversal. Other eligibility failures remain guarded.
+      if (!source.eligible && !(provider.id === "quickbooks" && source.reason === "Only sent invoices or invoices with recorded payments can be sent to accounting.")) fail("This ELSET invoice is no longer eligible for accounting reconciliation.");
       if (store.integration()?.status !== "CONNECTED") await service.credentials();
       if (service.status().paymentSync !== "CONNECTED") throw new AccountingError("PAYMENT_PERMISSION_REQUIRED", `${provider.name} needs additional permission to sync payments.`, 409);
       const owned = db.prepare("SELECT * FROM integration_invoice_payment_sync WHERE invoice_id=?").get(source.id);
       if (owned && (owned.provider !== provider.id || owned.external_tenant_id !== tenant || owned.workspace_id !== store.workspaceId || owned.external_invoice_id !== mapping.external_entity_id))
         fail("This invoice has payment history with a different accounting organisation. Review required.");
-      if (db.prepare("SELECT 1 FROM payments WHERE invoice_id=? AND source='manual' LIMIT 1").get(source.id))
+      if (db.prepare(`SELECT 1 FROM payments p WHERE invoice_id=? AND source='manual' AND (?<>'quickbooks' OR NOT EXISTS
+        (SELECT 1 FROM integration_external_payments e WHERE e.local_payment_id=p.id AND e.provider=? AND e.external_tenant_id=?)) LIMIT 1`).get(source.id, provider.id, provider.id, tenant))
         fail(`Existing manual payments require accounting review. They were retained and no ${provider.name} amounts were added.`, "MANUAL_PAYMENT_CONFLICT");
       const context = await service.credentials();
       const organisations = await provider.getOrganisations(context.accessToken, { realmId: context.authorisedTenantId || context.tenantId });
@@ -67,7 +74,9 @@ export async function reconcileInvoicePayments(service, jobId, { expectedTenant,
         if (store.integration()?.status !== "CONNECTED" || store.integration()?.external_tenant_id !== tenant
           || store.mapping(tenant, "invoice", source.id)?.external_entity_id !== mapping.external_entity_id) fail(`The ${provider.name} connection changed. No payments were applied.`);
         if (snapshot(readAccountingInvoice(db, jobId)) !== snapshot(source)) fail("The ELSET invoice changed during reconciliation. Save and sync again.", "LOCAL_EDIT_CONFLICT");
-        if (db.prepare("SELECT 1 FROM payments WHERE invoice_id=? AND source='manual'").get(source.id)) fail("Manual payments changed during reconciliation. Review required.", "MANUAL_PAYMENT_CONFLICT");
+        if (provider.id === "quickbooks") assertNoPendingPaymentWrites(db, source.id);
+        if (db.prepare(`SELECT 1 FROM payments p WHERE invoice_id=? AND source='manual' AND (?<>'quickbooks' OR NOT EXISTS
+          (SELECT 1 FROM integration_external_payments e WHERE e.local_payment_id=p.id AND e.provider=? AND e.external_tenant_id=?))`).get(source.id, provider.id, provider.id, tenant)) fail("Manual payments changed during reconciliation. Review required.", "MANUAL_PAYMENT_CONFLICT");
         const existing = db.prepare("SELECT * FROM integration_external_payments WHERE workspace_id=? AND provider=? AND external_tenant_id=? AND invoice_id=?")
           .all(store.workspaceId, provider.id, tenant, source.id);
         const beforePaid = db.prepare("SELECT COALESCE(SUM(amount_cents),0) amount FROM payments WHERE invoice_id=?").get(source.id).amount;
@@ -79,12 +88,12 @@ export async function reconcileInvoicePayments(service, jobId, { expectedTenant,
             .get(provider.id, tenant, payment.id, source.id);
           if (old && (old.invoice_id !== source.id || old.workspace_id !== store.workspaceId || old.external_invoice_id !== mapping.external_entity_id)) fail(`This ${provider.name} payment is already mapped to another invoice. Review required.`, "PAYMENT_MAPPING_CONFLICT");
           const localId = old?.local_payment_id || crypto.randomUUID(), timestamp = now();
-          db.prepare(`INSERT INTO integration_external_payments VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,?)
+          db.prepare(`INSERT INTO integration_external_payments(workspace_id,provider,external_tenant_id,external_payment_id,invoice_id,external_invoice_id,local_payment_id,amount_cents,payment_date,status,external_updated_at,created_at,updated_at,external_snapshot_json) VALUES(?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,?,?)
             ON CONFLICT(workspace_id,provider,external_tenant_id,external_payment_id,invoice_id) DO UPDATE SET amount_cents=excluded.amount_cents,
-            payment_date=excluded.payment_date,status='ACTIVE',external_updated_at=excluded.external_updated_at,updated_at=excluded.updated_at`)
-            .run(store.workspaceId, provider.id, tenant, payment.id, source.id, mapping.external_entity_id, localId, payment.amountCents, payment.date, payment.updatedAt, old?.created_at || timestamp, timestamp);
+            payment_date=excluded.payment_date,status='ACTIVE',external_updated_at=excluded.external_updated_at,updated_at=excluded.updated_at,external_snapshot_json=excluded.external_snapshot_json`)
+            .run(store.workspaceId, provider.id, tenant, payment.id, source.id, mapping.external_entity_id, localId, payment.amountCents, payment.date, payment.updatedAt, old?.created_at || timestamp, timestamp, payment.snapshot ? JSON.stringify(payment.snapshot) : "");
           const local = db.prepare("SELECT * FROM payments WHERE id=?").get(localId);
-          if (local && (local.invoice_id !== source.id || local.source !== provider.id)) fail("The local payment identity conflicts. Review required.");
+          if (local && (local.invoice_id !== source.id || (local.source !== provider.id && !(provider.id === "quickbooks" && old && local.source === "manual")))) fail("The local payment identity conflicts. Review required.");
           db.prepare(`INSERT INTO payments(id,invoice_id,amount_cents,date,method,reference,notes,created_at,extra_json,source)
             VALUES(?,?,?,?,?,'','',?,'{}',?) ON CONFLICT(id) DO UPDATE SET amount_cents=excluded.amount_cents,date=excluded.date`)
             .run(localId, source.id, payment.amountCents, payment.date, provider.name, old?.created_at || timestamp, provider.id);
@@ -93,7 +102,7 @@ export async function reconcileInvoicePayments(service, jobId, { expectedTenant,
             audit("payment-updated", `${provider.name} payment updated: ${money(old.amount_cents)} to ${money(payment.amountCents)} (${payment.date})`, payment.id);
         }
         for (const old of existing.filter((row) => row.status === "ACTIVE" && !payments.some((payment) => payment.id === row.external_payment_id))) {
-          db.prepare("DELETE FROM payments WHERE id=? AND invoice_id=? AND source=?").run(old.local_payment_id, source.id, provider.id);
+          db.prepare("DELETE FROM payments WHERE id=? AND invoice_id=? AND (source=? OR (?='quickbooks' AND source='manual'))").run(old.local_payment_id, source.id, provider.id, provider.id);
           db.prepare("UPDATE integration_external_payments SET status='REMOVED',updated_at=? WHERE local_payment_id=?").run(now(), old.local_payment_id);
           audit("payment-removed", `${provider.name} payment removed/reversed: ${money(old.amount_cents)}`, old.external_payment_id);
         }
@@ -103,7 +112,7 @@ export async function reconcileInvoicePayments(service, jobId, { expectedTenant,
         db.prepare("UPDATE workspace_info SET updated_at=? WHERE id=1").run(now());
         store.update({ last_success_at: now(), safe_error_message: "", retry_after: 0 });
       };
-      if (batch) { batch.push({ apply, context, external, mapping, source }); return; }
+      if (batch) { batch.push({ apply, context, external, mapping, source, payments }); return; }
       db.transaction(apply)();
       return service.invoiceStatus(jobId);
     } catch (cause) {
@@ -158,6 +167,11 @@ export function reconcilePaymentGroup(service, jobId, options = {}) {
     for (const prepared of batch) {
       if (snapshot(prepared.external) !== snapshot(await provider.getInvoice(prepared.context, prepared.mapping.external_entity_id))) {
         throw new AccountingError("EXTERNAL_CHANGING", "QuickBooks changed during allocation reconciliation. Retry shortly.", 503, 30);
+      }
+      for (const payment of prepared.payments) {
+        if (payment.snapshot && snapshot(payment.snapshot) !== snapshot(await provider.getPayment(prepared.context, payment.id))) {
+          throw new AccountingError("EXTERNAL_CHANGING", "QuickBooks changed during allocation reconciliation. Retry shortly.", 503, 30);
+        }
       }
     }
     db.transaction(() => { for (const prepared of batch) prepared.apply(); })();

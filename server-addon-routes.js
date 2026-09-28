@@ -11,7 +11,9 @@ export function createAddonRouter({ requireAuth, requireRole, env = globalThis.p
     res.setHeader("Cache-Control", "no-store");
     try {
       db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), readonly: !update, migrate: false, fileMustExist: true });
-      return res.json({ ok: true, result: update ? updateWorkspaceAddons(db, req.body) : getWorkspaceAddons(db) });
+      const result = update ? updateWorkspaceAddons(db, req.body) : getWorkspaceAddons(db);
+      if (update && Object.hasOwn(req.body || {}, "quickbooks")) req.app.locals.accountingInboxWorker?.wake();
+      return res.json({ ok: true, result });
     } catch (error) {
       return res.status(error.statusCode || 500).json({ error: error instanceof WorkspaceAddonError ? error.message : "Unable to access workspace add-ons." });
     } finally { db?.close(); }

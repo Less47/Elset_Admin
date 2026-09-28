@@ -62,7 +62,7 @@ Reuses the shared durable operation UUID as Intuit `requestid`. Before an uncert
 
 ## 15. Payment ownership
 
-Historical Invoice mappings establish provider ownership. Server-side manual payment CRUD is blocked and imported receipts are read-only in the UI, even after disabling/disconnecting. Invoices already mapped to another provider or realm cannot be exported or reconciled under the new connection. Historical manual receipts are retained and require review.
+Historical Invoice mappings establish provider/company ownership. QuickBooks payments can now be added, edited and removed in ELSET, with durable automatic outbound synchronisation; QuickBooks changes reconcile automatically through webhooks. Disconnecting/disabling pauses synchronisation while retaining local changes. Xero receipts remain externally managed. Invoices mapped to another provider/company cannot be exported under the new connection. Historical manual receipts without an outbound identity remain reviewable. See [the payment sync implementation](quickbooks-payment-sync.md).
 
 ## 16. Payment reconciliation
 

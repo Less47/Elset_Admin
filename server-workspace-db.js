@@ -6,12 +6,13 @@ import { assertWorkspaceWritable } from "./server-workspace-restore-lock.js";
 import { accountingSchemaSql } from "./server-accounting-schema.js";
 import { accountingPaymentSchemaSql } from "./server-accounting-payment-schema.js";
 import { accountingV3SchemaSql } from "./server-accounting-v3-schema.js";
+import { accountingPaymentOutboxSchemaSql } from "./server-accounting-payment-outbox-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 13;
+export const WORKSPACE_SCHEMA_VERSION = 14;
 
 const migrations = [
   {
@@ -564,6 +565,7 @@ const migrations = [
       UPDATE workspace_info SET schema_version=13 WHERE id=1;
     `,
   },
+  { version: 14, name: "quickbooks-payment-outbox", sql: accountingPaymentOutboxSchemaSql },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -607,6 +609,10 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 14) {
+    db.prepare("SELECT external_snapshot_json FROM integration_external_payments LIMIT 0").all();
+    db.prepare("SELECT request_json FROM integration_operations LIMIT 0").all();
+  }
   if (version >= 12) db.prepare("SELECT lease_owner FROM integration_webhook_events LIMIT 0").all();
   if (version >= 11) {
     db.prepare("SELECT provider_environment,credential_metadata_json FROM workspace_integrations LIMIT 0").all();

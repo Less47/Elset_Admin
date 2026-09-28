@@ -599,7 +599,7 @@ export function useWorkspaceActions({
     return saved.ok;
   }
 
-  async function handleEditInvoicePayment(jobId, paymentId, updates) {
+  async function handleEditInvoicePayment(jobId, paymentId, updates, expectedPayment) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
@@ -611,6 +611,7 @@ export function useWorkspaceActions({
       ...(existingPayment || {}),
       ...updates,
       id: paymentId,
+      expectedPayment: getPaymentComparable(expectedPayment || existingPayment),
     };
 
     const saved = await saveDocumentApiRequest({
@@ -622,7 +623,7 @@ export function useWorkspaceActions({
     return saved.ok;
   }
 
-  async function handleDeleteInvoicePayment(jobId, paymentId) {
+  async function handleDeleteInvoicePayment(jobId, paymentId, expectedPayment) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
@@ -631,21 +632,22 @@ export function useWorkspaceActions({
     const saved = await saveDocumentApiRequest({
       path: documentPath(jobId, "invoice", `/payments/${encodeURIComponent(paymentId)}`),
       method: "DELETE",
+      body: { expectedPayment: getPaymentComparable(expectedPayment || job.invoice?.payments?.find(payment => payment.id === paymentId)) },
       errorMessage: "Unable to delete the invoice payment.",
     });
     return saved.ok;
   }
 
-  async function syncInvoicePayments(job, nextInvoice) {
+  async function syncInvoicePayments(job, nextInvoice, paymentBaseline) {
     const currentInvoice = normalizeDocument("invoice", job.invoice);
-    const currentPayments = currentInvoice?.payments || [];
+    const currentPayments = paymentBaseline || currentInvoice?.payments || [];
     const nextPayments = nextInvoice.payments || [];
     const currentById = new Map(currentPayments.map((payment) => [payment.id, payment]));
     const nextById = new Map(nextPayments.map((payment) => [payment.id, payment]));
 
     for (const payment of currentPayments) {
       if (!nextById.has(payment.id)) {
-        const deleted = await handleDeleteInvoicePayment(job.id, payment.id);
+        const deleted = await handleDeleteInvoicePayment(job.id, payment.id, payment);
         if (!deleted) return false;
       }
     }
@@ -656,7 +658,7 @@ export function useWorkspaceActions({
         const added = await handleAddInvoicePayment(job.id, payment);
         if (!added) return false;
       } else if (hasPaymentChanged(currentPayment, payment)) {
-        const edited = await handleEditInvoicePayment(job.id, payment.id, payment);
+        const edited = await handleEditInvoicePayment(job.id, payment.id, payment, currentPayment);
         if (!edited) return false;
       }
     }
@@ -664,7 +666,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  async function handleSaveDocument(jobId, type, doc) {
+  async function handleSaveDocument(jobId, type, doc, { paymentBaseline } = {}) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
@@ -684,7 +686,7 @@ export function useWorkspaceActions({
     if (!saved.ok) return false;
 
     if (documentType === "invoice") {
-      return syncInvoicePayments(job, documentToSave);
+      return syncInvoicePayments(job, documentToSave, paymentBaseline);
     }
 
     return true;

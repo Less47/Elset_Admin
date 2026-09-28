@@ -24,7 +24,7 @@ app.post("/__quickbooks-fixture", express.json(), (req, res) => {
   if (req.body.taxScenario === "empty") mock.taxCodes = [];
   if (req.body.payments) mock.setPayments(req.body.payments.map(([id, amount]) => ({ id, allocations: [[mock.invoices[0].Id, amount]] })));
   if (req.body.invoicePatch && mock.invoices[0]) Object.assign(mock.invoices[0], req.body.invoicePatch);
-  res.json({ customers: mock.customers, invoices: mock.invoices, items: mock.items, calls: mock.calls.map(({ url, method }) => ({ url, method })) });
+  res.json({ customers: mock.customers, invoices: mock.invoices, payments: mock.payments, items: mock.items, calls: mock.calls.map(({ url, method }) => ({ url, method })) });
 });
 app.use(createServerApp({ accountingFetch: (...args) => mock.fetch(...args) }));
 app.listen(Number(process.env.PORT), "127.0.0.1");

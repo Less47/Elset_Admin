@@ -62,15 +62,15 @@ export default function InvoiceAccounting({ provider = "xero", jobId, invoice, f
     {state?.connection?.retryAt > Date.now() ? <p className="mt-1 text-xs text-text-secondary">Retry after {new Date(state.connection.retryAt).toLocaleString()}.</p> : null}
     {error || state?.error ? <p role="alert" className="mt-2 break-words text-sm text-status-danger">{error || state.error}</p> : null}
     {!state && error || state?.status === "SYNCING" ? <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setRetry((value) => value + 1)}>Refresh sync status</Button> : null}
-    {state?.externalId ? <div className="mt-3 space-y-2 border-t pt-3">
+    {state?.externalId || provider === "quickbooks" && invoice ? <div className="mt-3 space-y-2 border-t pt-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm">Payment sync: {state.connection.paymentSync === "PAYMENT_PERMISSION_REQUIRED" ? "Permission required" : state.paymentSync?.status === "SYNCED" ? "Up to date" : labels[state.paymentSync?.status] || "Not synced"}</p>
-        <Button type="button" size="sm" variant="outline" disabled={blocked || busy || !connected || !state.connection.enabled || state.connection.paymentSync !== "CONNECTED"} onClick={() => void sync("sync-payments")}>Sync from {name}</Button>
+        <p className="text-sm">Payment sync: {state?.connection.paymentSync === "PAYMENT_PERMISSION_REQUIRED" ? "Permission required" : state?.paymentSync?.status === "SYNCED" ? "Up to date" : ({ PENDING: "Pending", PROCESSING: "Syncing", RETRYABLE: "Waiting to retry", REVIEW_REQUIRED: "Review required", PAUSED: "Paused" })[state?.paymentSync?.status] || labels[state?.paymentSync?.status] || "Not synced"}</p>
+        <Button type="button" size="sm" variant="outline" disabled={blocked || busy || !connected || !state?.connection.enabled || state?.connection.paymentSync !== "CONNECTED"} onClick={() => void sync("sync-payments")}>{provider === "quickbooks" ? "Sync with QuickBooks" : `Sync from ${name}`}</Button>
       </div>
-      {state.connection.paymentSync === "PAYMENT_PERMISSION_REQUIRED" ? <p className="text-sm text-text-secondary">{name} needs additional permission to sync payments. Update {name} Permissions in Settings → Add-ons.</p> : null}
-      {state.paymentSync?.lastSyncedAt ? <p className="text-xs text-text-secondary">Last synced from {name}: {new Date(state.paymentSync.lastSyncedAt).toLocaleString()}</p> : null}
-      {state.paymentSync?.error ? <p role="alert" className="text-sm text-status-danger">{state.paymentSync.error}</p> : null}
-      {state.paymentSync?.history?.length ? <details className="text-sm"><summary className="cursor-pointer">Payment sync history</summary><ul className="mt-2 space-y-1">{state.paymentSync.history.map((entry, index) => <li key={`${entry.createdAt}-${index}`} className="break-words text-text-secondary">{new Date(entry.createdAt).toLocaleString()} · {entry.message}</li>)}</ul></details> : null}
+      {state?.connection.paymentSync === "PAYMENT_PERMISSION_REQUIRED" ? <p className="text-sm text-text-secondary">{name} needs additional permission to sync payments. Update {name} Permissions in Settings → Add-ons.</p> : null}
+      {state?.paymentSync?.lastSyncedAt ? <p className="text-xs text-text-secondary">Last payment sync: {new Date(state.paymentSync.lastSyncedAt).toLocaleString()}</p> : null}
+      {state?.paymentSync?.error ? <p role="alert" className="text-sm text-status-danger">{state.paymentSync.error}</p> : null}
+      {state?.paymentSync?.history?.length ? <details className="text-sm"><summary className="cursor-pointer">Payment sync history</summary><ul className="mt-2 space-y-1">{state.paymentSync.history.map((entry, index) => <li key={`${entry.createdAt}-${index}`} className="break-words text-text-secondary">{new Date(entry.createdAt).toLocaleString()} · {entry.message}</li>)}</ul></details> : null}
     </div> : null}
   </section>;
 }

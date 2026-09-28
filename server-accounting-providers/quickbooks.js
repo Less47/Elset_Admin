@@ -341,7 +341,7 @@ export class QuickBooksAccountingProvider {
       }
       const unapplied = cents(payment.UnappliedAmt), total = cents(payment.TotalAmt);
       if (!Number.isSafeInteger(total) || !Number.isSafeInteger(unapplied) || total < 0 || unapplied < 0 || applied + unapplied !== total) review("QuickBooks payment allocations do not match its total.");
-      if (allocation > 0) payments.push({ id, invoiceId: external.Id, amountCents: allocation, date: payment.TxnDate, updatedAt: payment.MetaData?.LastUpdatedTime || "" });
+      if (allocation > 0) payments.push({ id, invoiceId: external.Id, amountCents: allocation, date: payment.TxnDate, updatedAt: payment.MetaData?.LastUpdatedTime || "", snapshot: payment });
       // Verify each resource too: a corrected allocation can retain the same invoice balance.
       if (JSON.stringify(payment) !== JSON.stringify(await this.getPayment(context, id))) throw new AccountingError("EXTERNAL_CHANGING", "QuickBooks payment changed during reconciliation. Retry shortly.", 503, 30);
     }

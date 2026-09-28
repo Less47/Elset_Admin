@@ -4,8 +4,9 @@ import { AccountingService } from "./server-accounting-service.js";
 import { safeAccountingError } from "./server-accounting-errors.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
 import { pendingQuickBooksCompany } from "./server-quickbooks-oauth.js";
+import { processPaymentOutbox } from "./server-accounting-payment-outbox.js";
 
-const retryable = new Set(["RATE_LIMITED", "PROVIDER_UNAVAILABLE", "EXTERNAL_CHANGING", "INTEGRATION_BUSY", "INTEGRATION_ERROR"]);
+const retryable = new Set(["RATE_LIMITED", "PROVIDER_UNAVAILABLE", "EXTERNAL_CHANGING", "INTEGRATION_BUSY", "INTEGRATION_ERROR", "OUTBOUND_PAYMENT_PENDING"]);
 
 function inboxDiagnostic(error) {
   // Never serialize the exception, its cause, request, or raw message: provider
@@ -73,7 +74,7 @@ export async function processAccountingInbox(db, { providerId = "xero", env = pr
         WHERE m.workspace_id=? AND m.provider=? AND m.external_tenant_id=? AND m.local_entity_type='invoice' AND m.external_entity_id=?`)
         .all(service.store.workspaceId, providerId, event.external_tenant_id, id)).map((row) => row.job_id);
       if (!jobs.length) { finish("IGNORED", `No ELSET invoice mapping matches this ${name} event.`); continue; }
-      for (const jobId of new Set(jobs)) await service.syncPayments(jobId, { expectedTenant: event.external_tenant_id });
+      for (const jobId of new Set(jobs)) await service.syncPayments(jobId, { expectedTenant: event.external_tenant_id, inboundOnly: true });
       finish("PROCESSED");
     } catch (cause) {
       const error = safeAccountingError(cause);
@@ -100,6 +101,13 @@ export function createAccountingInboxWorker({ env = process.env, fetchImpl } = {
         db = openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
         for (const providerId of ["xero", "quickbooks"]) {
           try {
+            if (providerId === "quickbooks") {
+              const service = new AccountingService(db, { providerId, env, fetchImpl });
+              await processPaymentOutbox(service);
+              const outbound = db.prepare(`SELECT MIN(retry_at) due FROM integration_payment_outbox
+                WHERE revision>completed_revision AND status IN ('PENDING','RETRYABLE','PROCESSING')`).get();
+              if (outbound.due !== null) nextDelay = Math.min(nextDelay ?? Infinity, Math.max(1000, outbound.due - Date.now()));
+            }
             await processAccountingInbox(db, { providerId, env, fetchImpl });
             const next = db.prepare(`SELECT MIN(CASE WHEN status='PROCESSING' THEN lease_until ELSE retry_at END) due
               FROM integration_webhook_events WHERE provider=? AND
