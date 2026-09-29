@@ -6,6 +6,7 @@ import PriceListPicker from "./PriceListPicker";
 import DocumentEmailComposer from "./DocumentEmailComposer";
 import DocumentEmailHistory, { EmailDeliveryDetails } from "./DocumentEmailHistory";
 import { resolveDocumentEmailDraft } from "@/lib/document-email";
+import { recipientList } from "@/lib/recipient-display";
 import { createBlankDocumentLine } from "@/lib/price-list";
 import { activeAccountingProvider, accountingProviderName } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
@@ -208,7 +209,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
             {sendStatus.warning ? <p className="mt-2">{sendStatus.warning}</p> : null}
             {!sendStatus.historySaved ? <p className="mt-2">The email was sent, but the send record could not be saved. Do not resend just to update the history.</p> : null}
           </>}
-          {sendStatus.phase === "error" && sendStatus.delivery?.acceptedRecipients?.length ? <p className="mt-2">No To recipient was accepted. Copies were accepted for the recipients listed below. Do not resend to them without checking.</p> : null}
+          {sendStatus.phase === "error" && recipientList(sendStatus.delivery?.acceptedRecipients).length > 0 ? <p className="mt-2">No To recipient was accepted. Copies were accepted for the recipients listed below. Do not resend to them without checking.</p> : null}
           <EmailDeliveryDetails delivery={sendStatus.delivery} />
         </WorkspaceMessage> : null}
       </div>

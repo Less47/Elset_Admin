@@ -274,6 +274,61 @@ function prepareComposerJob({ noEmail = false, payments } = {}) {
   return dbJob(EXISTING_JOB);
 }
 
+for (const [type, width] of [["quote", 1440], ["invoice", 390]]) {
+  test(`${type} legacy recipient history renders safely without rewriting saved records`, async ({ browser }) => {
+    const fields = ["to", "cc", "bcc", "acceptedRecipients", "rejectedRecipients", "unconfirmedRecipients"];
+    const invalidValues = [undefined, null, "", "   ", 42, false, { address: "object@example.test" }, { length: 1, join: "invalid" }, [null, 12, {}]];
+    const histories = [
+      { id: "legacy-strings", subject: "Legacy strings", toEmail: "unused-fallback@example.test", to: "[old@example.com](mailto:old@example.com)", cc: "[copy@example.com](mailto:copy@example.com)", bcc: "private@example.com", acceptedRecipients: "[old@example.com](mailto:old@example.com)", rejectedRecipients: "copy@example.com", unconfirmedRecipients: "private@example.com" },
+      { id: "legacy-email-only", subject: "Legacy To email only", toEmail: "fallback@example.test" },
+      { id: "new-arrays", subject: "New arrays", ...Object.fromEntries(fields.map((field) => [field, [` first-${field}@example.test `, `second-${field}@example.test`]])) },
+      ...invalidValues.map((value, index) => ({ id: `invalid-${index}`, subject: `Invalid recipients ${index}`, toEmail: "fallback@example.test", ...Object.fromEntries(fields.map((field) => [field, value])) })),
+      { id: "no-recipient", subject: "No recorded recipients", to: null },
+      { id: "mixed-array", subject: "Mixed recipient array", ...Object.fromEntries(fields.map((field) => [field, [null, {}, "  kept@example.test  ", 42, " "]])) },
+    ];
+    const job = dbJob(EXISTING_JOB);
+    job[type].sentHistory = histories;
+    const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+    try { db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
+    const before = dbJob(EXISTING_JOB);
+    const { context, page, writes } = await openWorkspace(browser, { type, width, height: 900 });
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    try {
+      await page.getByText(`View sent emails (${histories.length})`, { exact: true }).click();
+      const history = page.locator(".document-email-history");
+      const record = (subject) => history.locator(":scope > details").filter({ has: page.locator("summary", { hasText: subject }) });
+      const fieldText = (entry, label) => entry.locator("dt").filter({ hasText: new RegExp(`^${label}$`) }).locator("..").locator("dd");
+      const legacy = record("Legacy strings");
+      await legacy.locator("summary").click();
+      await expect(fieldText(legacy, "To")).toHaveText(histories[0].to);
+      await expect(fieldText(legacy, "CC")).toHaveText(histories[0].cc);
+      await expect(fieldText(legacy, "BCC \\(private\\)")).toHaveText(histories[0].bcc);
+      await expect(fieldText(legacy, "Accepted")).toHaveText(histories[0].acceptedRecipients);
+      await expect(fieldText(legacy, "Rejected")).toHaveText(histories[0].rejectedRecipients);
+      await expect(fieldText(legacy, "Unconfirmed")).toHaveText(histories[0].unconfirmedRecipients);
+      await expect(fieldText(record("Legacy To email only"), "To")).toHaveText("fallback@example.test");
+      for (const [field, label] of fields.map((field, index) => [field, ["To", "CC", "BCC \\(private\\)", "Accepted", "Rejected", "Unconfirmed"][index]])) {
+        await expect(fieldText(record("New arrays"), label)).toHaveText(`first-${field}@example.test, second-${field}@example.test`);
+        await expect(fieldText(record("Mixed recipient array"), label)).toHaveText("kept@example.test");
+      }
+      for (let index = 0; index < invalidValues.length; index++) {
+        const entry = record(`Invalid recipients ${index}`);
+        await expect(fieldText(entry, "To")).toHaveText("fallback@example.test");
+        await expect(entry.locator("dt").filter({ hasText: /^(CC|BCC \(private\)|Accepted|Rejected|Unconfirmed)$/ })).toHaveCount(0);
+      }
+      await expect(fieldText(record("No recorded recipients"), "To")).toHaveText("Not recorded");
+      await page.reload();
+      await expect(page.locator(".document-email-history")).toBeVisible();
+      await page.goto(`${baseUrl}/jobs/${EXISTING_JOB}`);
+      await expect(page.locator(".record-workspace")).toBeVisible();
+      expect(errors).toEqual([]);
+      expect(writes).toEqual([]);
+      expect(dbJob(EXISTING_JOB)).toEqual(before);
+    } finally { await context.close(); }
+  });
+}
+
 for (const type of ["quote", "invoice"]) for (const width of [1440, 390]) {
   test(`${type} email composer edits recipients and message independently at ${width}px`, async ({ browser }, info) => {
     const before = prepareComposerJob({ payments: [] });

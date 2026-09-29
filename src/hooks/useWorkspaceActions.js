@@ -38,6 +38,7 @@ import {
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
 import { buildDocumentPdfPayload } from "../lib/document-pdf-payload.js";
 import { createDocumentEmailDraft, documentContactSuggestions } from "../lib/document-email.js";
+import { recipientList } from "../lib/recipient-display.js";
 import { getSupportedInvoiceUpdateKeys } from "./workspace-invoice-updates";
 import { withDocumentSiteSnapshot } from "@/lib/document-site-snapshot";
 
@@ -1321,7 +1322,7 @@ export function useWorkspaceActions({
           id: crypto.randomUUID(),
           sentAt: payload.sentAt || new Date().toISOString(),
           fromEmail: payload.fromEmail || ADMIN_EMAIL,
-          toEmail: payload.to?.join(", ") || payload.recipientEmail || recipientEmail,
+          toEmail: recipientList(payload.to).join(", ") || payload.recipientEmail || recipientEmail,
           toName: recipientName,
           subject: payload.subject || "",
           messageId: payload.messageId || "",
