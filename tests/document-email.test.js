@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DocumentEmailError, submitDocumentEmail } from "../server-document-email.js";
 import { documentSendErrorMessage } from "../src/lib/document-send-status.js";
+import { sendDocumentAndPersistHistory } from "../src/hooks/document-send-workflow.js";
 
 const recipient = "accounts@example.test";
 const attachment = { filename: "document.pdf", bytes: Buffer.from("unchanged PDF bytes") };
@@ -24,10 +25,10 @@ for (const type of ["quote", "invoice"]) {
     sending.then(() => { finished = true; });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(finished, false);
-    assert.equal(submitted.to, recipient);
+    assert.deepEqual(submitted.to, [recipient]);
     assert.equal(submitted.from, "sender@example.test");
     assert.equal(submitted.replyTo, "reply@example.test");
-    assert.equal(submitted.cc, "copy@example.test");
+    assert.deepEqual(submitted.cc, ["copy@example.test"]);
     assert.deepEqual(submitted.attachments, [{ filename: attachment.filename, content: attachment.bytes, contentType: "application/pdf" }]);
     accept({ accepted: [recipient], messageId: "accepted-message" });
     const result = await sending;
@@ -54,7 +55,7 @@ for (const type of ["quote", "invoice"]) {
 
   test(`${type} does not report success when only CC or no recipient was accepted`, async () => {
     for (const accepted of [["copy@example.test"], [], undefined]) {
-      await assert.rejects(submitDocumentEmail(input(type), dependencies(async () => ({ accepted }))), (error) => error.code === "RECIPIENT_REJECTED");
+      await assert.rejects(submitDocumentEmail(input(type), dependencies(async () => ({ accepted, rejected: [recipient] }))), (error) => error.code === "RECIPIENT_REJECTED");
     }
   });
 }
@@ -64,7 +65,7 @@ test("provider acceptance matches named addresses case insensitively", async () 
   args.job.billingContact.email = '"Example Accounts" <accounts@example.test>';
   const result = await submitDocumentEmail(args, dependencies(async () => ({ accepted: [{ address: "ACCOUNTS@EXAMPLE.TEST" }] })));
   assert.equal(result.ok, true);
-  assert.equal(result.recipientEmail, args.job.billingContact.email);
+  assert.equal(result.recipientEmail, "accounts@example.test");
 });
 
 test("partial recipient acceptance identifies only accepted recipients and warns against blind resend", async () => {
@@ -79,3 +80,88 @@ test("partial recipient acceptance identifies only accepted recipients and warns
 test("unknown server codes never expose internal error details", () => {
   assert.equal(documentSendErrorMessage("invoice", "PRIVATE secret"), "Invoice could not be sent. Please try again.");
 });
+
+const composed = () => ({ to: ["first@example.test", "second@example.test"], cc: ["copy@example.test"], bcc: ["private@example.test"], subject: "Per-send subject", message: 'Hello <script>alert("x")</script> & team\n\nThanks,\nOffice' });
+
+for (const type of ["quote", "invoice"]) {
+  test(`${type} sends explicit To/CC/BCC, edited subject and safely escaped multiline body without changing PDF inputs`, async () => {
+    const args = { ...input(type), email: composed() };
+    const before = structuredClone(args);
+    let submitted, pdfInput;
+    const result = await submitDocumentEmail(args, dependencies(async (email) => {
+      submitted = email;
+      return { accepted: [...args.email.to, ...args.email.cc, ...args.email.bcc], rejected: [], messageId: "local-id" };
+    }, async (payload) => { pdfInput = payload; return attachment; }));
+    for (const key of ["to", "cc", "bcc", "subject"]) assert.deepEqual(submitted[key], args.email[key]);
+    assert.equal(submitted.text, args.email.message);
+    assert.equal(submitted.html, '<div>Hello &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; team<br /><br />Thanks,<br />Office</div>');
+    assert.equal(submitted.html.includes("private@example.test"), false);
+    assert.equal(submitted.text.includes("private@example.test"), false);
+    assert.equal(pdfInput.email, undefined);
+    assert.deepEqual(pdfInput.job, args.job);
+    assert.deepEqual(pdfInput.document, args.document);
+    assert.deepEqual(submitted.attachments[0].content, attachment.bytes);
+    assert.deepEqual(args, before);
+    assert.deepEqual(result.acceptedRecipients, [...args.email.to, ...args.email.cc, ...args.email.bcc]);
+    assert.deepEqual(result.rejectedRecipients, []);
+    assert.equal(result.warning, undefined);
+    assert.equal(result.message, args.email.message);
+    assert.equal(result.replyToEmail, args.emailSettings.replyToEmail);
+  });
+}
+
+for (const scenario of [
+  { name: "partial To", accepted: ["first@example.test", "copy@example.test", "private@example.test"], rejected: ["second@example.test"], success: true },
+  { name: "rejected CC and BCC", accepted: ["first@example.test", "second@example.test"], rejected: ["copy@example.test", "private@example.test"], success: true },
+  { name: "unconfirmed recipient", accepted: ["first@example.test"], rejected: [], success: true },
+  { name: "CC only", accepted: ["copy@example.test"], rejected: ["first@example.test", "second@example.test", "private@example.test"] },
+  { name: "BCC only", accepted: ["private@example.test"], rejected: ["first@example.test", "second@example.test", "copy@example.test"] },
+  { name: "no acceptance", accepted: [], rejected: ["first@example.test", "second@example.test", "copy@example.test", "private@example.test"] },
+  { name: "no provider confirmation", accepted: undefined, rejected: undefined },
+]) {
+  test(`${scenario.name} reports exact delivery and only persists issuance after To acceptance`, async () => {
+    let saved = false;
+    const args = { ...input("invoice"), email: composed() };
+    const workflow = await sendDocumentAndPersistHistory({
+      sendEmail: () => submitDocumentEmail(args, dependencies(async () => scenario)),
+      buildHistoryEntry: (payload) => payload,
+      persistHistory: async () => { saved = true; return true; },
+    });
+    assert.equal(saved, Boolean(scenario.success));
+    assert.equal(workflow.status, scenario.success ? "sent" : "failed");
+    const delivery = workflow.payload || workflow.delivery;
+    assert.deepEqual(delivery.acceptedRecipients, scenario.accepted || []);
+    assert.deepEqual(delivery.rejectedRecipients, scenario.rejected || []);
+    if (scenario.success) assert.match(workflow.payload.warning, /Do not resend to everyone/);
+    else assert.equal(workflow.code, scenario.accepted ? "RECIPIENT_REJECTED" : "SEND_UNCONFIRMED");
+  });
+}
+
+test("invalid recipients, missing To and injected headers stop before PDF or SMTP", async () => {
+  for (const email of [{ ...composed(), to: [] }, { ...composed(), cc: ["bad"] }, { ...composed(), bcc: ["bad"] }, { ...composed(), subject: "Subject\nBcc: secret@example.test" }, null]) {
+    await assert.rejects(submitDocumentEmail({ ...input("quote"), email }, dependencies(() => assert.fail("No SMTP"), () => assert.fail("No PDF"))), (error) => error.code === "INVALID_EMAIL" && Object.keys(error.fieldErrors).length > 0);
+  }
+});
+
+test("explicit recipients work without saved email and empty CC overrides Settings", async () => {
+  const args = { ...input("invoice"), job: { customerName: "Manual recipient" }, email: { ...composed(), cc: [], bcc: [] } };
+  let submitted;
+  await submitDocumentEmail(args, dependencies(async (mail) => { submitted = mail; return { accepted: args.email.to }; }));
+  assert.equal(submitted.cc, undefined);
+  assert.equal(submitted.bcc, undefined);
+  assert.deepEqual(submitted.to, args.email.to);
+});
+
+for (const emailPurpose of ["paid-receipt", "part-payment-receipt"]) {
+  test(`${emailPurpose} retains default text and stamp while safely encoding template values`, async () => {
+    const args = { ...input("invoice"), emailPurpose, stampText: emailPurpose === "paid-receipt" ? "PAID" : "PART PAYMENT" };
+    args.emailSettings.signature = "Office <img src=x onerror=alert(1)>\nNext line";
+    let submitted, pdfInput;
+    const result = await submitDocumentEmail(args, dependencies(async (mail) => { submitted = mail; return { accepted: [recipient, "copy@example.test"] }; }, async (payload) => { pdfInput = payload; return attachment; }));
+    assert.match(result.subject, emailPurpose === "paid-receipt" ? /PAID INVOICE/ : /PART PAYMENT RECEIPT/);
+    assert.match(submitted.text, /receipt/);
+    assert.match(submitted.html, /&lt;img/);
+    assert.equal(submitted.html.includes("<img"), false);
+    assert.equal(pdfInput.stampText, args.stampText);
+  });
+}

@@ -37,6 +37,7 @@ import {
 } from "./workspace-customer-api";
 import { sendDocumentAndPersistHistory } from "./document-send-workflow";
 import { buildDocumentPdfPayload } from "../lib/document-pdf-payload.js";
+import { createDocumentEmailDraft, documentContactSuggestions } from "../lib/document-email.js";
 import { getSupportedInvoiceUpdateKeys } from "./workspace-invoice-updates";
 import { withDocumentSiteSnapshot } from "@/lib/document-site-snapshot";
 
@@ -1188,7 +1189,13 @@ export function useWorkspaceActions({
       toEmail: recipientEmail,
       toName: recipientName,
       fromEmail: themeSettings.defaultSenderEmail || ADMIN_EMAIL,
+      replyToEmail: themeSettings.replyToEmail || themeSettings.defaultSenderEmail || ADMIN_EMAIL,
       ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail,
+      email: createDocumentEmailDraft({
+        job: selectedFreshJob, type: docType, emailPurpose: options.emailPurpose || "",
+        emailSettings: { ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail, signature: themeSettings.emailSignature },
+      }),
+      contactSuggestions: documentContactSuggestions(selectedFreshJob, data.customers.find((customer) => customer.id === selectedFreshJob.customerId)),
       priorAttempts: getPriorDocumentSendAttempts(selectedFreshJob, docType),
       stampText: options.stampText || "",
       emailPurpose: options.emailPurpose || "",
@@ -1270,9 +1277,6 @@ export function useWorkspaceActions({
     if (documentSendInFlightRef.current) return { status: "pending" };
     const recipientEmail = getDocumentRecipientEmail(selectedFreshJob);
     const recipientName = getDocumentRecipientName(selectedFreshJob);
-    if (!recipientEmail) {
-      return { status: "failed", code: "NO_RECIPIENT" };
-    }
     documentSendInFlightRef.current = true;
     setIsSendingDocument(true);
     try {
@@ -1286,7 +1290,7 @@ export function useWorkspaceActions({
           const response = await fetch("/api/documents/send", {
             method: "POST",
             headers: requestHeaders,
-            body: JSON.stringify(buildDocumentPdfPayload({
+            body: JSON.stringify({ ...buildDocumentPdfPayload({
               job: documentJob,
               documentType: docType,
               document: doc,
@@ -1299,13 +1303,15 @@ export function useWorkspaceActions({
                 ccEmail: docType === "invoice" ? themeSettings.invoiceCcEmail : themeSettings.quoteCcEmail,
                 signature: themeSettings.emailSignature,
               },
-            })),
+            }), ...(options.email !== undefined ? { email: options.email } : {}) }),
           }).catch(() => { throw Object.assign(new Error("Email response unavailable."), { code: "SEND_UNCONFIRMED" }); });
 
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || payload.ok !== true) {
             throw Object.assign(new Error("Email acceptance was not confirmed."), {
               code: response.ok ? "SEND_UNCONFIRMED" : payload.code || "SEND_FAILED",
+              delivery: payload.delivery,
+              fieldErrors: payload.fieldErrors,
             });
           }
 
@@ -1315,10 +1321,21 @@ export function useWorkspaceActions({
           id: crypto.randomUUID(),
           sentAt: payload.sentAt || new Date().toISOString(),
           fromEmail: payload.fromEmail || ADMIN_EMAIL,
-          toEmail: payload.recipientEmail || recipientEmail,
+          toEmail: payload.to?.join(", ") || payload.recipientEmail || recipientEmail,
           toName: recipientName,
           subject: payload.subject || "",
           messageId: payload.messageId || "",
+          // Additional metadata round-trips through document_send_history.extra_json.
+          to: payload.to,
+          cc: payload.cc,
+          bcc: payload.bcc,
+          replyToEmail: payload.replyToEmail,
+          message: payload.message,
+          acceptedRecipients: payload.acceptedRecipients,
+          rejectedRecipients: payload.rejectedRecipients,
+          unconfirmedRecipients: payload.unconfirmedRecipients,
+          warning: payload.warning || "",
+          sentBy: payload.sentBy,
           stampText: options.stampText || "",
           emailPurpose: options.emailPurpose || "",
           jobSnapshot: buildDocumentJobSnapshot(documentJob),

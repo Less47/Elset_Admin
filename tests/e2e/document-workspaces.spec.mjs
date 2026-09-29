@@ -17,6 +17,7 @@ import { themePresets } from "../../src/lib/theme-presets.js";
 import { DOCUMENT_JSON_LIMIT_BYTES } from "../../server-document-json.js";
 
 import { insertJobTree } from "../../server-workspace-jobs.js";
+import { updateCustomer } from "../../server-workspace-customers.js";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturePath = path.join(repoRoot, "fixtures/demo-workspace.json");
 const screenshotDir = path.join(repoRoot, "test-results/document-workspaces");
@@ -27,6 +28,8 @@ let serverProcess = null;
 let serverOutput = "";
 let mailServer, mailPort;
 const messages = [];
+const envelopes = [];
+const rejectedAddresses = new Set();
 let holdMail = false;
 let rejectMail = false;
 const pendingMail = [];
@@ -37,7 +40,7 @@ function releaseMail() {
 
 async function startMailSink() {
   mailServer = net.createServer((socket) => {
-    let buffer = "", receiving = false, message = "";
+    let buffer = "", receiving = false, message = "", envelope = [];
     socket.write("220 localhost test mail sink\r\n");
     socket.on("data", (chunk) => {
       buffer += chunk.toString();
@@ -50,7 +53,7 @@ async function startMailSink() {
             message = ""; receiving = false;
             const complete = () => {
               if (rejectMail) socket.write("550 PRIVATE provider rejection details\r\n");
-              else { messages.push(email); socket.write("250 captured locally\r\n"); }
+              else { messages.push(email); envelopes.push([...envelope]); socket.write("250 captured locally\r\n"); }
             };
             if (holdMail) pendingMail.push(complete);
             else complete();
@@ -58,6 +61,12 @@ async function startMailSink() {
           else message += line.replace(/^\.\./, ".") + "\r\n";
         } else if (/^EHLO|^HELO/.test(line)) socket.write("250-localhost\r\n250-AUTH PLAIN\r\n250 SIZE 25000000\r\n");
         else if (/^AUTH/.test(line)) socket.write("235 authenticated\r\n");
+        else if (/^MAIL FROM:/i.test(line)) { envelope = []; socket.write("250 OK\r\n"); }
+        else if (/^RCPT TO:/i.test(line)) {
+          const address = line.match(/<([^>]+)>/)?.[1] || "";
+          if (rejectedAddresses.has(address.toLowerCase())) socket.write("550 local recipient rejected\r\n");
+          else { envelope.push(address); socket.write("250 OK\r\n"); }
+        }
         else if (line === "DATA") { receiving = true; socket.write("354 end with dot\r\n"); }
         else if (line === "QUIT") { socket.end("221 goodbye\r\n"); }
         else socket.write("250 OK\r\n");
@@ -217,6 +226,10 @@ function documentFixture() {
   const fixture=JSON.parse(fs.readFileSync(fixturePath,'utf8'));
   const original=fixture.jobs.find(job=>job.id===EXISTING_JOB);
   const customer = fixture.customers.find((entry) => entry.id === original.customerId);
+  customer.contacts = [{ id: "composer-contact-manager", name: "Saved Manager", role: "Manager", email: "manager@example.test" }, { id: "composer-contact-duplicate", name: "Duplicate Customer", email: customer.email.toUpperCase() }];
+  fixture.settings.quoteCcEmail = "quote-copy@example.test";
+  fixture.settings.invoiceCcEmail = "invoice-copy@example.test";
+  fixture.settings.emailSignature = "Regards,\nELSET test office";
   customer.sites[0].ocNumber = "222222";
   customer.address = "1 Primary Site Road, Sampleton VIC 3000";
   customer.sites.unshift({ id: "document-site-a", address: customer.address, ocNumber: "111111" });
@@ -227,12 +240,17 @@ test.beforeAll(async()=>{
   tempDataDir=fs.mkdtempSync(path.join(os.tmpdir(),'elset-document-playwright-'));
   fs.mkdirSync(screenshotDir,{recursive:true});
   const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
-  try { importWorkspaceJsonData(db,documentFixture()); } finally { db.close(); }
+  try {
+    const fixture = documentFixture();
+    importWorkspaceJsonData(db, fixture);
+    for (const customer of fixture.customers) updateCustomer(db, customer.id, { contacts: customer.contacts });
+  } finally { db.close(); }
   await seedLoginAccounts();
   await startMailSink();
   await startServer();
 });
 test.beforeEach(()=>{
+  rejectedAddresses.clear();
   rejectMail = false;
   releaseMail();
   const db=openWorkspaceDb({dbPath:path.join(tempDataDir,'elset-workspace.db')});
@@ -243,6 +261,176 @@ test.beforeEach(()=>{
     for(const job of clean.jobs){db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);insertJobTree(db,job);}
   }finally{db.close();}
 });
+
+function prepareComposerJob({ noEmail = false, payments } = {}) {
+  const job = dbJob(EXISTING_JOB);
+  job.billingContact = { id: "composer-billing", name: "Billing Person", role: "Accounts", phone: job.customerPhone, notes: "", email: noEmail ? "" : "billing@example.test" };
+  job.requesterContact = { name: "Job Requester", email: "requester@example.test" };
+  job.onsiteContact = { name: "Onsite Person", email: "onsite@example.test" };
+  if (noEmail) job.customerEmail = "";
+  if (payments) job.invoice = { ...job.invoice, payments, paidAmount: 0, paymentStatus: "unpaid" };
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try { db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
+  return dbJob(EXISTING_JOB);
+}
+
+for (const type of ["quote", "invoice"]) for (const width of [1440, 390]) {
+  test(`${type} email composer edits recipients and message independently at ${width}px`, async ({ browser }, info) => {
+    const before = prepareComposerJob({ payments: [] });
+    const settings = readWorkspaceState().settings;
+    const customers = readWorkspaceState().customers;
+    const { context, page, writes } = await openWorkspace(browser, { type, width, height: width === 390 ? 844 : 1000 });
+    try {
+      await page.getByRole("button", { name: /^Preview & Send/ }).click();
+      const composer = page.getByRole("group", { name: "Email composer", exact: true });
+      await expect(composer).toBeVisible();
+      const frame = page.getByTitle(type === "quote" ? "Quote PDF preview" : "Invoice PDF preview");
+      const pdfUrl = await frame.getAttribute("src");
+      const previewRuns = await readPdfTextRuns(Buffer.from(await frame.evaluate(async (element) => Array.from(new Uint8Array(await (await fetch(element.src)).arrayBuffer())))));
+      await expect(composer.getByLabel("To recipients", { exact: true })).toContainText("billing@example.test");
+      await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(`ELSET ${type.toUpperCase()} FOR ${before.jobAddress}`);
+      await expect(page.getByLabel("Message", { exact: true })).toContainText("Regards,\nELSET test office");
+      const options = await page.getByLabel("Add saved contact to To", { exact: true }).locator("option").allTextContents();
+      expect(options).toContain("Job Requester · Requester · requester@example.test");
+      expect(options).toContain("Onsite Person · On-site contact · onsite@example.test");
+      expect(options).toContain("Saved Manager · Manager · manager@example.test");
+      expect(options.filter((text) => text.toLowerCase().includes(before.customerEmail.toLowerCase()))).toHaveLength(1);
+      await page.getByLabel("Add saved contact to To", { exact: true }).selectOption("requester@example.test");
+      await page.getByLabel("To", { exact: true }).fill("arbitrary@example.test; BILLING@EXAMPLE.TEST");
+      await page.getByRole("button", { name: "Add To recipients", exact: true }).click();
+      await expect(composer.getByLabel("To recipients", { exact: true }).locator(".document-recipient-chip")).toHaveCount(3);
+      await page.getByRole("button", { name: "Remove requester@example.test from To", exact: true }).click();
+      await page.getByRole("button", { name: `Remove ${type}-copy@example.test from CC`, exact: true }).click();
+      await page.getByLabel("CC", { exact: true }).fill("promote@example.test");
+      await page.getByRole("button", { name: "Add CC recipients", exact: true }).click();
+      await page.getByLabel("To", { exact: true }).fill("PROMOTE@example.test");
+      await page.getByRole("button", { name: "Add To recipients", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Remove promote@example.test from CC", exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "Remove PROMOTE@example.test from To", exact: true }).click();
+      await page.getByLabel("CC", { exact: true }).fill("cc-one@example.test, cc-two@example.test, arbitrary@example.test");
+      await page.getByRole("button", { name: "Add CC recipients", exact: true }).click();
+      await page.getByRole("button", { name: "Remove cc-two@example.test from CC", exact: true }).click();
+      await page.getByText("BCC (optional)", { exact: true }).click();
+      await page.getByLabel("BCC", { exact: true }).fill("private@example.test, remove-private@example.test");
+      await page.getByRole("button", { name: "Add BCC recipients", exact: true }).click();
+      await page.getByRole("button", { name: "Remove remove-private@example.test from BCC", exact: true }).click();
+      await page.getByLabel("Subject", { exact: true }).fill("Edited per-send subject");
+      const body = 'Personal message <script>alert("x")</script> & team\n\nEdited signature';
+      await page.getByLabel("Message", { exact: true }).fill(body);
+      await expect(frame).toHaveAttribute("src", pdfUrl);
+      expect(writes.filter((entry) => entry.path === "/api/quotes/preview-pdf")).toHaveLength(1);
+      await expect(page.locator(".document-feedback")).not.toContainText("Unsaved");
+      expect(dbJob(EXISTING_JOB)).toEqual(before);
+      expect(readWorkspaceState().settings).toEqual(settings);
+      expect(readWorkspaceState().customers).toEqual(customers);
+      await noModalOrOverflow(page);
+      await capture(page, info, `email-composer-${type}-${width}`);
+      await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+      await expect(page.locator('[data-document-send-status="success"]')).toBeVisible();
+      const sent = dbJob(EXISTING_JOB)[type].sentHistory.at(-1);
+      expect(sent).toMatchObject({ to: ["billing@example.test", "arbitrary@example.test"], cc: ["cc-one@example.test"], bcc: ["private@example.test"], subject: "Edited per-send subject", message: body, acceptedRecipients: ["billing@example.test", "arbitrary@example.test", "cc-one@example.test", "private@example.test"], rejectedRecipients: [], unconfirmedRecipients: [], replyToEmail: settings.replyToEmail, sentBy: { name: "Mobile Admin" } });
+      expect(sent.messageId).toBeTruthy();
+      expect(sent.documentSnapshot.items).toEqual(before[type].items);
+      expect(sent.documentSnapshot).not.toHaveProperty("email");
+      expect(sent.jobSnapshot.billingContact).toEqual(before.billingContact);
+      expect(readWorkspaceState().settings).toEqual(settings);
+      expect(readWorkspaceState().customers).toEqual(customers);
+      const request = writes.find((entry) => entry.path === "/api/documents/send").body;
+      expect(request.email.message).toBe(body);
+      expect(request.job.billingContact.email).toBe("billing@example.test");
+      const raw = messages.at(-1);
+      expect(raw).not.toContain("private@example.test");
+      expect(raw).not.toMatch(/^Bcc:/im);
+      expect(envelopes.at(-1)).toEqual(sent.acceptedRecipients);
+      const attachment = raw.split(/\r\n--/).find((part) => part.includes("Content-Type: application/pdf"));
+      expect(await readPdfTextRuns(Buffer.from(attachment.slice(attachment.indexOf("\r\n\r\n") + 4).trim(), "base64"))).toEqual(previewRuns);
+      await page.reload();
+      await page.getByText(/^View sent emails/).click();
+      await page.locator(".document-email-history details summary").first().click();
+      await expect(page.locator(".document-email-history")).toContainText(body);
+      await expect(page.locator(".document-email-history")).toContainText("private@example.test");
+      await page.getByRole("button", { name: /^Preview & Send/ }).click();
+      await expect(page.getByLabel("Subject", { exact: true })).not.toHaveValue("Edited per-send subject");
+      await expect(page.getByLabel("CC recipients", { exact: true })).toContainText(`${type}-copy@example.test`);
+    } finally { await context.close(); }
+  });
+}
+
+test("composer permits manual To without saved email and blocks malformed recipients before sending", async ({ browser }) => {
+  const before = prepareComposerJob({ noEmail: true });
+  const { context, page, writes } = await openWorkspace(browser, { type: "quote" });
+  try {
+    await page.getByRole("button", { name: /^Preview & Send/ }).click();
+    const send = page.getByRole("button", { name: /^Confirm & Send/ });
+    await expect(send).toBeDisabled();
+    await expect(page.getByRole("alert")).toContainText("Add at least one To");
+    await page.getByLabel("To", { exact: true }).fill("invalid");
+    await page.getByRole("button", { name: "Add To recipients", exact: true }).click();
+    await expect(send).toBeDisabled();
+    await expect(page.getByLabel("To", { exact: true })).toHaveValue("invalid");
+    await page.getByLabel("To", { exact: true }).fill("manual@example.test");
+    await page.getByLabel("CC", { exact: true }).fill("broken-address");
+    await expect(send).toBeDisabled();
+    await page.getByLabel("CC", { exact: true }).fill("");
+    await page.getByLabel("Subject", { exact: true }).fill("");
+    await expect(send).toBeDisabled();
+    await page.getByLabel("Subject", { exact: true }).fill("Manual send");
+    expect(writes.filter((entry) => entry.path === "/api/documents/send")).toHaveLength(0);
+    await send.click();
+    await expect(page.locator('[data-document-send-status="success"]')).toContainText("manual@example.test");
+    expect(dbJob(EXISTING_JOB).billingContact).toEqual(before.billingContact);
+    expect(dbJob(EXISTING_JOB).customerEmail).toBe("");
+  } finally { await context.close(); }
+});
+
+for (const scenario of ["partial", "cc-only", "bcc-only"]) {
+  test(`composer handles ${scenario} SMTP acceptance without unsafe issuance or retry advice`, async ({ browser }) => {
+    const before = prepareComposerJob({ payments: [] });
+    const { context, page } = await openWorkspace(browser, { type: "invoice" });
+    try {
+      await page.getByRole("button", { name: /^Preview & Send/ }).click();
+      await page.getByLabel("To", { exact: true }).fill("second@example.test");
+      await page.getByRole("button", { name: "Add To recipients", exact: true }).click();
+      await page.getByText("BCC (optional)", { exact: true }).click();
+      await page.getByLabel("BCC", { exact: true }).fill("private@example.test");
+      await page.getByRole("button", { name: "Add BCC recipients", exact: true }).click();
+      rejectedAddresses.add("second@example.test");
+      if (scenario !== "partial") rejectedAddresses.add("billing@example.test");
+      if (scenario === "cc-only") rejectedAddresses.add("private@example.test");
+      if (scenario === "bcc-only") rejectedAddresses.add("invoice-copy@example.test");
+      await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+      if (scenario === "partial") {
+        const banner = page.locator('[data-document-send-status="success"]');
+        await expect(banner).toContainText("Do not resend to everyone");
+        await expect(banner).toContainText("second@example.test");
+        expect(dbJob(EXISTING_JOB).invoice.sentHistory.at(-1)).toMatchObject({ acceptedRecipients: ["billing@example.test", "invoice-copy@example.test", "private@example.test"], rejectedRecipients: ["second@example.test"] });
+        await expect(page.getByRole("button", { name: "Retry Send", exact: true })).toHaveCount(0);
+      } else {
+        await expect(page.locator('[data-document-send-status="error"]')).toContainText("Copies were accepted");
+        await expect(page.locator('[data-document-send-status="error"]')).toContainText(scenario === "cc-only" ? "invoice-copy@example.test" : "private@example.test");
+        expect(dbJob(EXISTING_JOB).invoice).toEqual(before.invoice);
+        await expect(page.locator("[data-document-preview]")).toBeVisible();
+      }
+    } finally { await context.close(); }
+  });
+}
+
+for (const scenario of [{ amount: 550, purpose: "paid-receipt", stamp: "PAID", subject: "PAID INVOICE" }, { amount: 100, purpose: "part-payment-receipt", stamp: "PART PAYMENT", subject: "PART PAYMENT RECEIPT" }]) {
+  test(`${scenario.purpose} composer preserves purpose and stamp with edited message`, async ({ browser }) => {
+    prepareComposerJob({ payments: [{ id: "receipt-payment", date: "2026-09-01", amount: scenario.amount }] });
+    const { context, page, writes } = await openWorkspace(browser, { type: "invoice", width: 390, height: 844 });
+    try {
+      await page.getByRole("button", { name: /^Preview & Send/ }).click();
+      await expect(page.getByLabel("Subject", { exact: true })).toHaveValue(new RegExp(scenario.subject));
+      await expect(page.getByLabel("Message", { exact: true })).toContainText("receipt");
+      await page.getByLabel("Message", { exact: true }).fill("Thanks for your payment.\nReceipt attached.");
+      await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+      await expect(page.locator('[data-document-send-status="success"]')).toBeVisible();
+      expect(writes.find((entry) => entry.path === "/api/documents/send").body).toMatchObject({ stampText: scenario.stamp, emailPurpose: scenario.purpose });
+      expect(dbJob(EXISTING_JOB).invoice.sentHistory.at(-1)).toMatchObject({ stampText: scenario.stamp, emailPurpose: scenario.purpose, message: "Thanks for your payment.\nReceipt attached." });
+    } finally { await context.close(); }
+  });
+}
 test.afterAll(async()=>{
   await stopServer();
   await new Promise((resolve) => mailServer.close(resolve));

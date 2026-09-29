@@ -352,7 +352,7 @@ export function buildQuoteTemplateContext({ job, quote, template }) {
 }
 
 export function getDocumentRecipientEmail(job) {
-  return String(job?.billingContact?.email || job?.customerEmail || "").trim();
+  return String(job?.billingContact?.email || "").trim() || String(job?.customerEmail || "").trim();
 }
 
 export function getDocumentRecipientName(job) {
@@ -361,6 +361,11 @@ export function getDocumentRecipientName(job) {
 
 export function fillTemplateText(text, context) {
   return String(text || "").replace(/{{\s*(\w+)\s*}}/g, (_, key) => context[key] ?? "");
+}
+
+export function plainTextEmailHtml(message) {
+  const escaped = String(message).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+  return `<div>${escaped.replace(/\r\n|\r|\n/g, "<br />")}</div>`;
 }
 
 export function buildDocumentEmail({ job, type = "quote", emailSettings = {}, emailPurpose = "" }) {
@@ -380,18 +385,14 @@ export function buildDocumentEmail({ job, type = "quote", emailSettings = {}, em
       ? "paid invoice receipt"
       : type === "invoice" ? "invoice" : "quote";
   const signature = emailSettings?.signature || "Regards, ELSET PTY LD";
-  const subject = `ELSET ${documentLabel} FOR ${siteAddress}`;
+  const subject = `ELSET ${documentLabel} FOR ${siteAddress.replace(/[\r\n]+/g, " ")}`;
   const body = [
     `Dear ${customerName},`,
     `Attached to this email is your ${bodyLabel} for ${siteAddress}`,
     "",
     signature,
   ].join("\n");
-  const htmlBody = [
-    `<p>Dear ${customerName},</p>`,
-    `<p>Attached to this email is your ${bodyLabel} for ${siteAddress}</p>`,
-    `<p>${signature}</p>`,
-  ].join("");
+  const htmlBody = plainTextEmailHtml(body);
 
   return { subject, body, htmlBody };
 }

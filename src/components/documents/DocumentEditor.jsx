@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import InvoiceAccounting from "@/components/invoices/InvoiceAccounting";
 import PriceListPicker from "./PriceListPicker";
+import DocumentEmailComposer from "./DocumentEmailComposer";
+import DocumentEmailHistory, { EmailDeliveryDetails } from "./DocumentEmailHistory";
+import { resolveDocumentEmailDraft } from "@/lib/document-email";
 import { createBlankDocumentLine } from "@/lib/price-list";
 import { activeAccountingProvider, accountingProviderName } from "@/lib/addons";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +40,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
   const [accountingBusy, setAccountingBusy] = useState(false);
   const [isPreviewingDocument, setIsPreviewingDocument] = useState(false);
   const [sendPreview, setSendPreview] = useState(null);
+  const [emailDraft, setEmailDraft] = useState(null);
   const [sendStatus, setSendStatus] = useState(null);
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
@@ -52,6 +56,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
   const sending = isSendingDocument || sendStatus?.phase === "sending";
   const busy = isSaving || sending || isDeleting || accountingBusy;
   const previewOpen = Boolean(sendPreview);
+  const resolvedEmail = emailDraft ? resolveDocumentEmailDraft(emailDraft) : null;
   const deleteRestriction = type === "invoice" ? invoiceDeletionRestriction(job.invoice) || invoiceDeletionRestriction(docState) : "";
   const deletingSentInvoice = confirmSentRequired || invoiceHasBeenSent(job.invoice) || sendStatus?.phase === "success";
 
@@ -127,6 +132,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
       const preview = await onPreviewDocument(docState, options);
       if (preview) {
         if (!mountedRef.current) { URL.revokeObjectURL(preview.previewUrl); return; }
+        setEmailDraft(preview.email);
         setSendPreview({ ...preview, document: normalizeDocument(type, docState), previewTitle: options.previewTitle || `Preview ${documentLabel}`, confirmLabel: options.confirmLabel || `Confirm & Send ${documentLabel}`, sendOptions: options });
         window.scrollTo({ top: 0, behavior: "auto" });
       }
@@ -151,23 +157,24 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
     } finally { busyRef.current = false; setIsSaving(false); }
   }
   async function sendDocument() {
-    if (busyRef.current || !sendPreview?.document) return;
+    if (busyRef.current || !sendPreview?.document || !resolvedEmail || Object.keys(resolvedEmail.errors).length) return;
     busyRef.current = true;
     setError("");
     setFeedback("");
     setSendStatus({ phase: "sending" });
     window.scrollTo({ top: 0, behavior: "auto" });
     try {
-      const sent = await onSendDocument(sendPreview.document, sendPreview.sendOptions || {});
+      const sent = await onSendDocument(sendPreview.document, { ...sendPreview.sendOptions, email: resolvedEmail.email });
       if (!mountedRef.current) return;
       if (sent?.status !== "sent") {
-        setSendStatus({ phase: "error", message: documentSendErrorMessage(type, sent?.code || "SEND_UNCONFIRMED") });
+        setSendStatus({ phase: "error", message: documentSendErrorMessage(type, sent?.code || "SEND_UNCONFIRMED"), delivery: sent?.delivery });
         return;
       }
       if (sent.historySaved) setBaseline(draftSnapshot(docState));
       setSendStatus({
         phase: "success", recipient: sent.payload.recipientEmail || sendPreview.toEmail || recipientEmail,
         warning: sent.payload.warning,
+        delivery: sent.payload.warning ? sent.payload : null,
         historySaved: sent.historySaved,
       });
       setSendPreview(null);
@@ -187,7 +194,7 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
     <Button type="button" disabled={busy || isPreviewingDocument} onClick={saveDocument}>{isSaving ? "Saving..." : `Save ${documentLabel}`}</Button>
   </>;
   const previewActions = <>
-    <Button type="button" disabled={!recipientEmail || sending} aria-busy={sending} onClick={sendDocument}>{sending ? "Sending..." : sendStatus?.phase === "error" ? "Retry Send" : sendPreview?.confirmLabel}</Button>
+    <Button type="button" disabled={sending || !resolvedEmail || Object.keys(resolvedEmail.errors).length > 0} aria-busy={sending} onClick={sendDocument}>{sending ? "Sending..." : sendStatus?.phase === "error" ? "Retry Send" : sendPreview?.confirmLabel}</Button>
   </>;
   const title = sendPreview ? sendPreview.previewTitle : job[type] ? `${documentLabel} ${buildDocumentReference(job, type)}` : `New ${documentLabel}`;
 
@@ -201,6 +208,8 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
             {sendStatus.warning ? <p className="mt-2">{sendStatus.warning}</p> : null}
             {!sendStatus.historySaved ? <p className="mt-2">The email was sent, but the send record could not be saved. Do not resend just to update the history.</p> : null}
           </>}
+          {sendStatus.phase === "error" && sendStatus.delivery?.acceptedRecipients?.length ? <p className="mt-2">No To recipient was accepted. Copies were accepted for the recipients listed below. Do not resend to them without checking.</p> : null}
+          <EmailDeliveryDetails delivery={sendStatus.delivery} />
         </WorkspaceMessage> : null}
       </div>
       <p className="document-feedback" role="status" aria-live="polite">{busy ? isDeleting ? "Deleting..." : isSaving ? "Saving..." : "Sending..." : dirty ? "Unsaved changes" : feedback}</p>
@@ -208,8 +217,9 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
       {sendPreview ? <div className="document-preview-layout" data-document-preview>
         <div className="document-pdf-panel"><iframe title={`${documentLabel} PDF preview`} src={sendPreview.previewUrl} /><a href={sendPreview.previewUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-status-info underline">Open PDF in a new tab</a></div>
         <section className="document-summary" aria-labelledby="send-details-title">
-          <h2 id="send-details-title">Send details</h2><p className="text-sm text-text-secondary">Review the PDF before confirming the send.</p>
-          <dl><Detail label="To">{sendPreview.toName || recipientName}<br />{sendPreview.toEmail || recipientEmail || "No email saved"}</Detail><Detail label="From">{sendPreview.fromEmail || ADMIN_EMAIL}</Detail>{sendPreview.ccEmail ? <Detail label="CC">{sendPreview.ccEmail}</Detail> : null}<Detail label="Document">{sendPreview.stampText ? `${sendPreview.stampText} ${documentLabel}` : `${documentLabel} PDF`}</Detail><Detail label="Job">#{job.jobNumber}</Detail></dl>
+          <h2 id="send-details-title">Send email</h2><p className="mb-3 text-sm text-text-secondary">Review the PDF and edit this email before sending.</p>
+          <dl className="mb-3"><Detail label="From">{sendPreview.fromEmail || ADMIN_EMAIL}</Detail><Detail label="Reply-To">{sendPreview.replyToEmail || sendPreview.fromEmail || ADMIN_EMAIL}</Detail><Detail label="Attachment">{sendPreview.stampText ? `${sendPreview.stampText} ${documentLabel}` : `${documentLabel} PDF`}</Detail><Detail label="Job">#{job.jobNumber}</Detail></dl>
+          {emailDraft ? <DocumentEmailComposer draft={emailDraft} onChange={setEmailDraft} errors={resolvedEmail.errors} suggestions={sendPreview.contactSuggestions} disabled={sending} /> : null}
           {sendPreview.priorAttempts > 0 ? <p className="rounded border border-status-warning-border bg-status-warning-surface p-2 text-xs">This customer already has {sendPreview.priorAttempts} previous {type} send {sendPreview.priorAttempts === 1 ? "attempt" : "attempts"}.</p> : null}
         </section>
       </div> : <fieldset disabled={busy || isPreviewingDocument} className="min-w-0 space-y-4" aria-label={`${documentLabel} editor`}>
@@ -262,7 +272,8 @@ export default function DocumentEditor({ job, type, backLabel, onBack, onSave, o
         </section> : null}
         <section className="document-section" aria-labelledby="document-email-title">
           <h2 id="document-email-title">Email</h2><dl className="document-email-details"><Detail label="Recipient">{recipientName}</Detail><Detail label="Send to">{recipientEmail || "No email saved"}</Detail><Detail label="Send from">{ADMIN_EMAIL}</Detail><Detail label="Previous attempts">{sentCount}</Detail></dl>
-          <div className="mt-3 flex flex-wrap gap-2">{sentCount > 0 && onOpenSentDocument ? <Button type="button" variant="outline" onClick={onOpenSentDocument}>Open {documentLabel}</Button> : null}<Button type="button" variant="secondary" disabled={!recipientEmail || isPreviewingDocument} onClick={() => previewDocument(sendActionOptions)}>Preview &amp; Send {sendActionLabel}</Button></div>
+          <div className="mt-3 flex flex-wrap gap-2">{sentCount > 0 && onOpenSentDocument ? <Button type="button" variant="outline" onClick={onOpenSentDocument}>Open {documentLabel}</Button> : null}<Button type="button" variant="secondary" disabled={isPreviewingDocument} onClick={() => previewDocument(sendActionOptions)}>Preview &amp; Send {sendActionLabel}</Button></div>
+          <DocumentEmailHistory entries={docState.sentHistory} />
         </section>
         {type === "invoice" && accountingProvider ? <InvoiceAccounting provider={accountingProvider} jobId={job.id} invoice={job.invoice} fetchWithAuth={fetchWithAuth} blocked={dirty || busy || isPreviewingDocument} onBusyChange={setAccountingBusy} onReconciled={onInvoiceReconciled} /> : null}
         {type === "invoice" && job.invoice && onDeleteInvoice ? <section className="document-section" aria-labelledby="document-delete-title">

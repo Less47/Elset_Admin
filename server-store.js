@@ -738,6 +738,10 @@ function normalizeJobRecord(job) {
     customerName: job.customerName || "",
     customerEmail: job.customerEmail || "",
     customerPhone: job.customerPhone || "",
+    // These are existing job snapshots, needed for document recipients and
+    // contact suggestions. Preserve them through authenticated state reads.
+    ...Object.fromEntries(["billingContact", "requesterContact", "onsiteContact"].flatMap((key) =>
+      job[key] && typeof job[key] === "object" && !Array.isArray(job[key]) ? [[key, { ...job[key] }]] : [])),
     jobAddress: job.jobAddress || "",
     ocNumber: String(job.ocNumber || "").trim(),
     maintenancePlanId: String(job.maintenancePlanId || "").trim(),

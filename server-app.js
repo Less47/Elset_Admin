@@ -17,7 +17,6 @@ import {
   verifyUserPassword,
 } from "./server-auth.js";
 import {
-  getDocumentRecipientEmail,
   normalizeInvoiceTemplate,
   normalizeQuoteTemplate,
 } from "./src/lib/quote-template.js";
@@ -65,13 +64,9 @@ function getDocumentType(body) {
   return body?.documentType === "invoice" ? "invoice" : "quote";
 }
 
-function validateDocumentPayload(body, { requireCustomerEmail = true } = {}) {
+function validateDocumentPayload(body) {
   const documentType = getDocumentType(body);
-  const documentLabel = documentType === "invoice" ? "invoice" : "quote";
   if (!body || typeof body !== "object") return "Missing request body.";
-  if (requireCustomerEmail && !getDocumentRecipientEmail(body.job)) {
-    return `A billing or customer email is required before sending a ${documentLabel}.`;
-  }
   if (!body.job?.customerName) return "Customer name is required.";
   if (!body.job?.title) return "Job title is required.";
   const document = getDocumentRequestPayload(body);
@@ -193,22 +188,25 @@ export function createServerApp({ accountingFetch } = {}) {
       });
     }
 
-    const { job, template, emailSettings, emailPurpose, stampText } = req.body;
+    const { job, template, emailSettings, emailPurpose, stampText, email } = req.body;
     const documentType = getDocumentType(req.body);
     const document = getDocumentRequestPayload(req.body);
     try {
-      return res.json(await submitDocumentEmail({
-        job, document, template, type: documentType, stampText, emailSettings, emailPurpose,
+      const result = await submitDocumentEmail({
+        job, document, template, type: documentType, stampText, emailSettings, emailPurpose, email,
         defaultFromEmail: process.env.EMAIL_FROM, transportConfig: getTransportConfig(),
-      }));
+      });
+      return res.json({ ...result, sentBy: { id: req.user.id, name: req.user.name || req.user.username || "" } });
     } catch (error) {
       const code = error instanceof DocumentEmailError ? error.code : "SEND_FAILED";
-      return res.status(500).json({ code, error: documentSendErrorMessage(documentType, code) });
+      return res.status(code === "INVALID_EMAIL" ? 400 : 500).json({ code, error: documentSendErrorMessage(documentType, code),
+        ...(error instanceof DocumentEmailError ? { fieldErrors: error.fieldErrors, delivery: error.delivery } : {}),
+      });
     }
   };
 
   app.post("/api/quotes/preview-pdf", ...documentMiddleware, async (req, res) => {
-    const validationError = validateDocumentPayload(req.body, { requireCustomerEmail: false });
+    const validationError = validateDocumentPayload(req.body);
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }

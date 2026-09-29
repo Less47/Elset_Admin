@@ -546,6 +546,39 @@ test("sent-history routes are idempotent for duplicate stable IDs", async () => 
   });
 });
 
+test("email metadata round-trips in extra_json, alongside old history and separate repeated sends", async () => {
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withServer(env, async (baseUrl) => {
+      for (const type of ["quote", "invoice"]) {
+        const original = sentHistoryPayload(`old-${type}`, type);
+        const email = {
+          to: ["first@example.test", "second@example.test"], cc: ["copy@example.test"], bcc: ["private@example.test"],
+          fromEmail: "from@example.test", replyToEmail: "reply@example.test", subject: "Edited subject", message: "Exact message\n\nWith signature",
+          acceptedRecipients: ["first@example.test", "copy@example.test"], rejectedRecipients: ["second@example.test", "private@example.test"], unconfirmedRecipients: [],
+          warning: "Some recipients were rejected. Do not resend to everyone.", sentBy: { id: "sender-id", name: "Sender" },
+        };
+        for (const history of [original, { ...original, ...email, id: `first-${type}` }, { ...original, ...email, id: `second-${type}`, messageId: "second-message", subject: "Second subject" }]) {
+          const response = await requestJson(baseUrl, `/api/jobs/demo-job-1001/${type}/sent-history`, { method: "POST", body: JSON.stringify({ history }) });
+          assert.equal(response.response.status, 200);
+        }
+        const records = getDbState(dbPath).jobs.find((job) => job.id === "demo-job-1001")[type].sentHistory;
+        assert.equal(records.length, 3);
+        const old = records.find((record) => record.id === original.id);
+        assert.equal(old.message, undefined);
+        assert.equal(old.toEmail, original.toEmail);
+        const sent = records.find((record) => record.id === `first-${type}`);
+        for (const [key, value] of Object.entries(email)) assert.deepEqual(sent[key], value, key);
+        for (const key of ["jobSnapshot", "documentSnapshot", "templateSnapshot", "emailPurpose", "stampText", "sentAt"]) assert.deepEqual(sent[key], original[key]);
+        assert.equal(records.find((record) => record.id === `second-${type}`).subject, "Second subject");
+      }
+      const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false });
+      try {
+        assert.deepEqual(JSON.parse(db.prepare("SELECT extra_json FROM document_send_history WHERE source_id = ?").get("first-invoice").extra_json).bcc, ["private@example.test"]);
+      } finally { db.close(); }
+    });
+  });
+});
+
 test("document routes reject invalid values and fail closed without a workspace database", async () => {
   await withTempWorkspace(async ({ env }) => {
     await withServer(env, async (baseUrl) => {

@@ -11,7 +11,7 @@ export async function sendDocumentAndPersistHistory({
     if (payload?.ok !== true) throw Object.assign(new Error("Email acceptance was not confirmed."), { code: "SEND_UNCONFIRMED" });
   } catch (error) {
     if (typeof onError === "function") onError(error);
-    return { status: "failed", code: error?.code || "SEND_FAILED" };
+    return { status: "failed", code: error?.code || "SEND_FAILED", ...(error?.delivery ? { delivery: error.delivery } : {}), ...(error?.fieldErrors ? { fieldErrors: error.fieldErrors } : {}) };
   }
 
   try {

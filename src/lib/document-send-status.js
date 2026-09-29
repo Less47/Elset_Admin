@@ -3,8 +3,9 @@ export function documentSendErrorMessage(type, code) {
   switch (code) {
     case "ATTACHMENT_FAILED": return `Could not prepare ${label.toLowerCase()} attachment. Please try again.`;
     case "EMAIL_NOT_CONFIGURED": return `${label} could not be sent. Ask an administrator to check the email settings.`;
-    case "RECIPIENT_REJECTED": return `${label} could not be sent. The email service did not accept the recipient. Check the email address and try again.`;
-    case "NO_RECIPIENT": return `Add a billing or customer email address before sending the ${label.toLowerCase()}.`;
+    case "RECIPIENT_REJECTED": return `${label} was not accepted for any To recipient. Check the delivery details and addresses before retrying.`;
+    case "NO_RECIPIENT": return `Add a To email address before sending the ${label.toLowerCase()}.`;
+    case "INVALID_EMAIL": return "Check the email addresses, subject and message before sending.";
     case "SEND_UNCONFIRMED": return `Could not confirm whether the ${label.toLowerCase()} was sent. Check before retrying.`;
     default: return `${label} could not be sent. Please try again.`;
   }
