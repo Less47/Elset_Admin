@@ -12,6 +12,7 @@ import { createMaintenancePlan, generateMaintenanceJob, getMaintenanceOccurrence
 import { changeJobStatus, scheduleJob, updateJobDetails } from "../../server-workspace-jobs.js";
 import { replaceInvoiceForJob, replaceQuoteForJob } from "../../server-workspace-documents.js";
 import { updateCustomer } from "../../server-workspace-customers.js";
+import { themePresets } from "../../src/lib/theme-presets.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const screenshots = path.join(root, "test-results/maintenance");
@@ -22,6 +23,9 @@ fixture.customers[0].sites.push(...[
   ["maintenance-site-dendy", "18 Dendy Street, Brighton"],
   ["maintenance-site-martin", "20 Martin Street, Brighton"],
 ].map(([id, address]) => ({ id, address })));
+fixture.customers[0].sites.push(...Array.from({ length: 48 }, (_, index) => ({
+  id: `dense-site-${index}`, address: `${100 + index} ${index === 0 ? "LongOperationalSiteName".repeat(8) : "Operations"} Street, Brighton VIC 3186`,
+})));
 fixture.customers.push(
   { id: "northside", name: "Northside Apartments", address: "14 Sesame St, Caroline Springs VIC 3023", email: "north-office@example.test", phone: "0400 111 222", contacts: [{ name: "Adrian", email: "adrian@example.test", phone: "0400 555 123" }], sites: [{ id: "sesame", address: "14 Sesame St, Caroline Springs VIC 3023", streetAddress: "14 Sesame St", suburb: "Caroline Springs" }] },
   { id: "north-commercial", name: "Northside Commercial", address: "14 Park View Rd, Northside VIC 3000", sites: [{ id: "park", address: "14 Park View Rd, Northside VIC 3000" }, { id: "industrial", address: "82 Industrial Ave, Westfield VIC 3000", addressLine1: "82 Industrial Ave", locality: "Westfield" }] },
@@ -73,9 +77,13 @@ test.afterAll(async () => {
   if (target.startsWith(path.join(os.tmpdir(), "elset-maintenance-e2e-"))) fs.rmSync(target, { recursive: true, force: true });
 });
 
-async function open(browser, width = 1440, height = 900, section = "Calendar", timezoneId = "Australia/Sydney") {
+async function open(browser, width = 1440, height = 900, section = "Calendar", timezoneId = "Australia/Sydney", preset) {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: width < 1280, isMobile: width < 768, locale: "en-AU", timezoneId, reducedMotion: "reduce" });
   const page = await context.newPage();
+  if (preset) await page.route("**/api/user-preferences", async (route) => {
+    const response = await route.fetch(), body = await response.json();
+    await route.fulfill({ response, json: { ...body, preferences: { ...body.preferences, ...preset.values } } });
+  });
   await page.clock.setFixedTime("2027-09-01T02:00:00Z");
   await page.goto(url);
   await page.getByPlaceholder("Enter your username").fill("maintenanceadmin");
@@ -453,7 +461,8 @@ test("legacy labels load in dashboard, edit and Calendar without changing six-mo
   const card = page.locator('[data-maintenance-plan="calendar-plan"]');
   await expect(card).toContainText("Biannually");
   await expect(page.locator('[data-maintenance-plan="annual-plan"]')).toContainText("Annually");
-  await card.getByRole("button", { name: "Edit", exact: true }).click();
+  await card.dblclick();
+  await page.getByRole("button", { name: "Edit Plan", exact: true }).click();
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Customer", exact: true })).toHaveValue("Arcadia Example Apartments");
   await expect(page.getByRole("combobox", { name: "Site", exact: true })).toHaveValue("5 Connor Street, Brighton East");
@@ -524,7 +533,7 @@ test("compact dashboard, missing price, routed details and edit-date confirmatio
   await expect(page.locator('[data-maintenance-plan="no-price-plan"] [data-contract-price="missing"]')).toContainText("Not set");
   expect((await page.locator('[data-maintenance-plan="calendar-plan"]').boundingBox()).height).toBeLessThan(260);
   await capture(page, info, "maintenance-dashboard-desktop");
-  await page.locator('[data-maintenance-plan="calendar-plan"]').getByRole("button", { name: "Open Plan" }).click();
+  await page.locator('[data-maintenance-plan="calendar-plan"]').dblclick();
   await expect(page).toHaveURL(/\/maintenance\/calendar-plan$/);
   await expect(page.getByRole("heading", { name: "Checklist", exact: true })).toBeVisible();
   await expect(page.getByText("Record operational readings", { exact: true })).toBeVisible();
@@ -567,7 +576,8 @@ test("Add Plan creates automatic calendar dates; zero price, due exceptions and 
   await page.goto(`${url}/maintenance`);
   await expect(page.locator(`[data-maintenance-plan="${id}"]`)).toContainText("16/09/2027");
   await expect(page.getByRole("complementary", { name: "Due Queue" }).getByText("20 Martin Street BRIGHTON", { exact: true })).toHaveCount(0);
-  await page.locator(`[data-maintenance-plan="${id}"]`).getByRole("button", { name: "Edit", exact: true }).click();
+  await page.locator(`[data-maintenance-plan="${id}"]`).dblclick();
+  await page.getByRole("button", { name: "Edit Plan", exact: true }).click();
   await page.getByRole("combobox", { name: "Status", exact: true }).selectOption("inactive");
   await page.getByRole("button", { name: "Save Plan", exact: true }).click();
   await expect(page.locator("[data-maintenance-detail]")).toBeVisible();
@@ -654,9 +664,181 @@ for (const [name, width, height] of [["phone", 390, 844], ["tablet", 1024, 768]]
     await expect(page.locator("[data-maintenance-dashboard]")).toBeVisible();
     await expect(page.locator('[data-maintenance-plan="no-price-plan"] [data-contract-price="missing"]')).toContainText("Not set");
     await capture(page, info, `maintenance-dashboard-${name}`);
-    await page.locator('[data-maintenance-plan="calendar-plan"]').getByRole("button", { name: "Open Plan" }).click();
+    const planRow = page.locator('[data-maintenance-plan="calendar-plan"]');
+    if (width < 768) await planRow.tap(); else await planRow.dblclick();
     await expect(page.getByText("Record operational readings", { exact: true })).toBeVisible();
     await capture(page, info, `maintenance-plan-detail-${name}`);
     await context.close();
   });
 }
+function seedDenseDashboard() {
+  withDb((db) => {
+    for (let index = 0; index < 48; index += 1) createMaintenancePlan(db, {
+      ...basePlan, id: `dense-plan-${index}`, siteId: `dense-site-${index}`, nextDueDate: '2027-08-15', frequency: 'annually',
+      contractPrice: 100 + index, createdAt: new Date(Date.UTC(2027, 0, index + 1)).toISOString(),
+    });
+    createMaintenancePlan(db, { ...basePlan, id: 'zero-price', siteId: 'sesame', customerId: 'northside', nextDueDate: '2027-09-20', contractPrice: 0, contractPriceSet: true, createdAt: '2027-07-01T00:00:00Z' });
+    createMaintenancePlan(db, { ...basePlan, id: 'due-soon-plan', siteId: 'park', customerId: 'north-commercial', nextDueDate: '2027-09-04' });
+    createMaintenancePlan(db, { ...basePlan, id: 'inactive-plan', siteId: 'industrial', customerId: 'north-commercial', nextDueDate: '2027-08-01', active: false });
+    const occurrence = getMaintenanceOccurrences(db, '2027-03-01', '2027-03-31').find((entry) => entry.planId === basePlan.id);
+    generateMaintenanceJob(db, basePlan.id, { occurrenceKey: occurrence.key, revision: occurrence.revision });
+  });
+}
+
+for (const [width, height] of [[1920, 1080], [1366, 768], [1024, 768], [390, 844]]) {
+  test(`dense dashboard panes, scrolling and accessible opening at ${width}x${height}`, async ({ browser }, info) => {
+    seedDenseDashboard();
+    const before = state();
+    const { page, context, writes } = await open(browser, width, height, 'Maintenance');
+    try {
+      const dashboard = page.locator('[data-maintenance-dashboard]');
+      const plans = page.locator('[data-maintenance-plans-pane]');
+      const queue = page.getByRole('complementary', { name: 'Due Queue' });
+      const row = page.locator('[data-maintenance-plan="calendar-plan"]');
+      await expect(row).toBeVisible();
+      await expect(dashboard.getByRole('button', { name: /^(Open Plan|Generate Job|Edit)$/ })).toHaveCount(0);
+      await expect(queue.locator('[data-maintenance-due]')).toHaveCount(50);
+      await expect(queue.getByLabel('50 due visits')).toHaveText('50');
+      await expect(row).toContainText('Upcoming');
+      const priceValue = width < 768 ? ' dd' : '';
+      await expect(row.locator(`[data-contract-price="set"]${priceValue}`)).toHaveText('$350.00');
+      await expect(page.locator(`[data-maintenance-plan="no-price-plan"] [data-contract-price="missing"]${priceValue}`)).toHaveText('Not set');
+      await expect(page.locator(`[data-maintenance-plan="zero-price"] [data-contract-price="set"]${priceValue}`)).toHaveText('$0.00');
+      await expect(page.locator('[data-maintenance-plan="due-soon-plan"]')).toContainText('Due soon');
+      await expect(page.locator('[data-maintenance-plan="inactive-plan"]')).toContainText('Inactive');
+      if (width < 768) await expect(row).toContainText('1 active job');
+      else await expect(row.getByRole('cell', { name: '1 active job', exact: true })).toHaveText('1');
+      for (const control of await dashboard.locator('[data-page-top-bar] input:visible, [data-page-top-bar] button:visible').all()) {
+        expect((await control.boundingBox()).height).toBe(44);
+        await expect(control).toHaveAccessibleName(/\S/);
+      }
+      const toolbar = await dashboard.locator('[data-page-top-bar]').boundingBox();
+      const body = await dashboard.locator('[data-page-body]').boundingBox();
+      const planBox = await plans.boundingBox(), dueBox = await queue.boundingBox();
+      expect(body.y).toBeCloseTo(toolbar.y + toolbar.height, 0);
+      if (width >= 768) {
+        expect(planBox.width / body.width).toBeCloseTo(width >= 1280 ? .75 : .7, 2);
+        expect(dueBox.x).toBeCloseTo(planBox.x + planBox.width, 0);
+        expect(dueBox.y).toBeCloseTo(planBox.y, 0);
+        expect(planBox.y + planBox.height).toBeCloseTo(height, 0);
+        expect(dueBox.height).toBeCloseTo(planBox.height, 0);
+        expect((await row.boundingBox()).height).toBeLessThanOrEqual(width >= 1280 ? 44 : 62);
+        for (const pane of [plans, queue]) expect(await pane.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+        await plans.evaluate((el) => { el.scrollTop = 350; });
+        expect((await page.locator('.maintenance-table-heading').boundingBox()).y).toBeCloseTo(body.y, 0);
+        expect(await queue.evaluate((el) => el.scrollTop)).toBe(0);
+        await queue.evaluate((el) => { el.scrollTop = 400; });
+        expect((await page.locator('.maintenance-due-heading').boundingBox()).y).toBeCloseTo(body.y, 0);
+        expect(await plans.evaluate((el) => el.scrollTop)).toBe(350);
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        expect((await dashboard.locator('[data-page-top-bar]').boundingBox()).y).toBe(toolbar.y);
+        await page.screenshot({ path: path.join(screenshots, `dense-dashboard-scrolled-${width}.png`) });
+        await plans.evaluate((el) => { el.scrollTop = 0; }); await queue.evaluate((el) => { el.scrollTop = 0; });
+      } else {
+        expect(dueBox.y).toBeGreaterThanOrEqual(planBox.y + planBox.height);
+        await expect(dashboard.getByRole('table')).toHaveCount(0);
+        await page.evaluate(() => window.scrollTo(0, 350));
+        expect((await dashboard.locator('[data-page-top-bar]').boundingBox()).y).toBe(toolbar.y);
+        await page.evaluate(() => window.scrollTo(0, 0));
+      }
+      await page.screenshot({ path: path.join(screenshots, `dense-dashboard-${width}x${height}.png`) });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+      if (width < 768) await row.tap();
+      else {
+        await row.click(); await expect(page).toHaveURL(/\/maintenance$/);
+        await row.dblclick();
+      }
+      await expect(page).toHaveURL(/\/maintenance\/calendar-plan$/);
+      await expect(page.getByRole('button', { name: 'Generate Job', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Edit Plan', exact: true })).toBeVisible();
+      await page.goto(url + '/maintenance');
+      await row.focus(); await row.press('Enter');
+      await expect(page).toHaveURL(/\/maintenance\/calendar-plan$/);
+      await page.goto(url + '/maintenance');
+      const dueRow = page.locator('[data-maintenance-due="dense-plan-0"]');
+      if (width < 768) await dueRow.tap(); else { await dueRow.click(); await expect(page).toHaveURL(/\/maintenance$/); await dueRow.dblclick(); }
+      await expect(page).toHaveURL(/\/maintenance\/dense-plan-0$/);
+      await page.goto(url + '/maintenance'); await dueRow.focus(); await dueRow.press('Space');
+      await expect(page).toHaveURL(/\/maintenance\/dense-plan-0$/);
+      expect(writes).toEqual([]);
+      expect(state().maintenancePlans).toEqual(before.maintenancePlans);
+      expect(state().jobs).toEqual(before.jobs);
+      await info.attach('pane-bounds', { body: JSON.stringify({ toolbar, body, plans: planBox, due: dueBox }), contentType: 'application/json' });
+    } finally { await context.close(); }
+  });
+}
+
+for (const width of [1366, 390]) test(`dashboard search, filter and sort preserve their results at ${width}px`, async ({ browser }) => {
+  seedDenseDashboard();
+  const { page, context, writes } = await open(browser, width, 900, 'Maintenance');
+  try {
+    const dashboard = page.locator('[data-maintenance-dashboard]');
+    const search = page.getByRole('textbox', { name: 'Search maintenance plans', exact: true });
+    await search.fill('northside');
+    await expect(dashboard.locator('[data-maintenance-plan]')).toHaveCount(3);
+    await search.fill('nothing-matches-this-search');
+    await expect(dashboard.getByText('No maintenance plans found', { exact: true })).toBeVisible();
+    await expect(dashboard.locator('[data-maintenance-due]')).toHaveCount(50);
+    await search.fill('');
+    const filterButton = dashboard.getByRole('button', { name: /^Filters/ });
+    await filterButton.click();
+    const filterDialog = page.getByRole('dialog', { name: 'Filters', exact: true });
+    await filterDialog.getByRole('combobox', { name: width >= 1280 ? 'Filter' : 'Status', exact: true }).click();
+    await page.getByRole('option', { name: 'Inactive', exact: true }).click();
+    await filterDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(dashboard.locator('[data-maintenance-plan]')).toHaveCount(1);
+    await expect(dashboard.locator('[data-maintenance-plan="inactive-plan"]')).toBeVisible();
+    await filterButton.click(); await filterDialog.getByRole('button', { name: 'Reset', exact: true }).click();
+    if (width >= 1280) {
+      await filterDialog.getByRole('combobox', { name: 'Sort by', exact: true }).click();
+      await page.getByRole('option', { name: 'Newest plan', exact: true }).click();
+      await filterDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    } else {
+      await filterDialog.getByRole('button', { name: 'Done', exact: true }).click();
+      await dashboard.getByRole('combobox', { name: /^Sort maintenance plans:/ }).click();
+      await page.getByRole('option', { name: 'Newest plan', exact: true }).click();
+    }
+    const expected = state().maintenancePlans.slice().sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))).map((plan) => plan.id);
+    await expect.poll(() => dashboard.locator('[data-maintenance-plan]').evaluateAll((els) => els.map((el) => el.dataset.maintenancePlan))).toEqual(expected);
+    expect(writes).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test('dashboard opens plan details where Generate Job still creates the linked maintenance job', async ({ browser }) => {
+  const { page, context } = await open(browser, 1366, 768, 'Maintenance');
+  try {
+    await page.locator('[data-maintenance-plan="due-plan"]').dblclick();
+    await expect(page).toHaveURL(/\/maintenance\/due-plan$/);
+    await expect(page.getByRole('button', { name: 'Edit Plan', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Generate Job', exact: true }).click();
+    await expect.poll(() => state().jobs.filter((job) => job.maintenancePlanId === 'due-plan').length).toBe(1);
+    await expect(page).toHaveURL(/\/jobs\/[^/]+$/);
+    await page.goto(url + '/maintenance/due-plan');
+    await expect(page.getByRole('button', { name: 'Edit Plan', exact: true })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+test('empty dashboard keeps compact empty states and its add action', async ({ browser }, info) => {
+  withDb((db) => db.prepare('DELETE FROM maintenance_plans').run());
+  for (const width of [1920, 390]) {
+    const { page, context } = await open(browser, width, 900, 'Maintenance');
+    try {
+      await expect(page.getByText('No maintenance plans found', { exact: true })).toBeVisible();
+      const emptyDue = page.getByText('No maintenance visits due.', { exact: true });
+      await expect(emptyDue).toBeVisible(); expect((await emptyDue.boundingBox()).height).toBeLessThanOrEqual(48);
+      await expect(page.getByRole('button', { name: 'Add Maintenance Plan', exact: true })).toBeEnabled();
+      await capture(page, info, `empty-dashboard-${width}`);
+    } finally { await context.close(); }
+  }
+});
+
+for (const presetId of ['elset-classic', 'midnight-signal']) test(`dense dashboard follows ${presetId} theme`, async ({ browser }, info) => {
+  seedDenseDashboard();
+  const preset = themePresets.find((entry) => entry.id === presetId) || themePresets[0];
+  const { page, context } = await open(browser, 1366, 768, 'Maintenance', 'Australia/Sydney', preset);
+  try {
+    await expect(page.getByRole('table', { name: 'Maintenance plans', exact: true })).toBeVisible();
+    await expect(page.locator('[data-maintenance-plan="due-plan"] [data-slot="badge"]')).toHaveClass(/text-status-danger/);
+    await capture(page, info, `dense-dashboard-${presetId}`);
+  } finally { await context.close(); }
+});

@@ -32,7 +32,6 @@ test("existing job-opening business actions navigate through React Router", () =
     "JobHistoryManager",
     "CalendarManager",
     "InvoiceManager",
-    "MaintenanceManager",
     "GoogleJobsMap",
   ]) {
     assert.match(shellSource, new RegExp(`<${component}[\\s\\S]*?onOpenJob=\\{handleOpenJob\\}`));

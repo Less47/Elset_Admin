@@ -536,10 +536,10 @@ async function assertMobileRecordListContained(page) {
         const heading = article?.querySelector("h3");
         return Boolean(article && heading && document.getElementById(article.getAttribute("aria-labelledby")) === heading);
       })(),
-      actions: [...card.querySelectorAll("button")].map((button) => ({
-        height: button.getBoundingClientRect().height,
-        left: button.getBoundingClientRect().left,
-        right: button.getBoundingClientRect().right,
+      actions: [...card.querySelectorAll("button, [role='link'][tabindex='0']")].map((action) => ({
+        height: action.getBoundingClientRect().height,
+        left: action.getBoundingClientRect().left,
+        right: action.getBoundingClientRect().right,
       })),
     })),
   }));
@@ -1256,8 +1256,7 @@ test("phone database pages use contained record cards with visible identities, s
       identity: "10 Example Lane SAMPLETON",
       status: "Overdue",
       statusIsBadge: true,
-      action: "Open Plan",
-      expectedTexts: ["Quarterly", "Arcadia Example Apartments", "10 Example Lane", "1 active job", "15/09/2026", "2 hrs", "$450.00", "Generate Job", "Edit"],
+      expectedTexts: ["Quarterly", "Arcadia Example Apartments", "10 Example Lane", "1 active job", "15/09/2026", "2 hrs", "$450.00"],
       longRecordSelector: '[data-record-id="mobile-maintenance-long"]',
     },
     {
@@ -1314,7 +1313,10 @@ test("phone database pages use contained record cards with visible identities, s
         for (const expectedText of pageSpec.expectedTexts) {
           await expect(card.getByText(expectedText, { exact: false }).first()).toBeVisible();
         }
-        await expect(card.locator("button", { hasText: pageSpec.action })).toHaveCount(1);
+        if (pageSpec.section === "Maintenance") {
+          await expect(card.getByRole("link", { name: /^Open maintenance plan/ })).toHaveCount(1);
+          await expect(card.getByRole("button")).toHaveCount(0);
+        } else await expect(card.locator("button", { hasText: pageSpec.action })).toHaveCount(1);
 
         if (["Customers", "Sites"].includes(pageSpec.section)) {
           await expect(card.locator("dl")).toHaveCount(0);
@@ -1412,9 +1414,8 @@ test("phone database pages use contained record cards with visible identities, s
 
         await navigateToWorkspaceSection(page, "Maintenance", viewport.width);
         const maintenanceCard = page.locator('[data-mobile-record-card][data-record-id="mobile-maintenance-plan"]');
-        await expect(maintenanceCard.getByRole("button", { name: "Open Plan", exact: true })).toHaveCount(1);
-        await expect(maintenanceCard.getByRole("button", { name: "Generate Job", exact: true })).toHaveCount(1);
-        await expect(maintenanceCard.getByRole("button", { name: "Edit", exact: true })).toHaveCount(1);
+        await expect(maintenanceCard.getByRole("button")).toHaveCount(0);
+        await expect(maintenanceCard.getByRole("link", { name: /^Open maintenance plan/ })).toHaveCount(1);
         const maintenanceFilter = page.locator('[data-responsive-page-controls] button[aria-haspopup="dialog"]');
         await maintenanceFilter.click();
         await chooseSelectOption(page, "Status", "Upcoming");
@@ -1451,7 +1452,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
     { section: "Sites", action: "Open", headers: ["Site", "Customer", "Activity", "Work"] },
     { section: "Job History", action: "Open", headers: ["Job", "Customer", "Status", "Open"] },
     { section: "Invoices", action: "Job", headers: ["Job", "Invoice", "Payment", "Actions"] },
-    { section: "Maintenance", action: "Open Plan" },
+    { section: "Maintenance" },
     { section: "Staff", action: "Edit", headers: ["Staff", "Contact", "Action"] },
     { section: "Parts Inventory", action: "Edit", headers: ["Part", "Stock", "Value", "Action"] },
   ];
@@ -1479,7 +1480,10 @@ test("tablet and desktop database pages retain their existing fitted result grid
         await expect(page.locator("[data-mobile-record-list]")).toHaveCount(0);
         const desktopResults = page.locator("[data-desktop-record-results]");
         await expect(desktopResults).toBeVisible();
-        await expect(desktopResults.getByRole("button", { name: pageSpec.action, exact: true }).first()).toBeVisible();
+        if (pageSpec.section === "Maintenance") {
+          await expect(desktopResults.getByRole("button")).toHaveCount(0);
+          await expect(desktopResults.getByRole("row", { name: /^Open maintenance plan/ }).first()).toHaveAttribute("tabindex", "0");
+        } else await expect(desktopResults.getByRole("button", { name: pageSpec.action, exact: true }).first()).toBeVisible();
 
         if (pageSpec.headers) {
           const visibleHeader = desktopResults.locator(".data-grid-header:visible");
@@ -1493,9 +1497,8 @@ test("tablet and desktop database pages retain their existing fitted result grid
           }));
           expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
         } else {
-          for (const text of ["Next due", "Estimated time", "Contract price", "1 active job"]) {
-            await expect(desktopResults.getByText(text, { exact: true }).first()).toBeVisible();
-          }
+          for (const text of ["Next Due", "Contract", "Active Jobs"]) await expect(desktopResults.getByRole("columnheader", { name: text, exact: true })).toBeVisible();
+          await expect(desktopResults.getByRole("cell", { name: "1 active job", exact: true })).toBeVisible();
           await expect(page.getByRole("complementary", { name: "Due Queue" })).toBeVisible();
         }
         await assertNoHorizontalOverflow(page);

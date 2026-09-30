@@ -11,22 +11,34 @@
 .maintenance-summary dt { font-size: 9px; line-height: 14px; text-transform: uppercase; letter-spacing: .07em; color: color-mix(in oklab, var(--maintenance-toolbar-text, var(--workspace-hero-text)) var(--maintenance-toolbar-label-strength, 92%), var(--workspace-hero-bg)); font-weight: 600; white-space: nowrap; }
 .maintenance-summary dd { margin-top: 2px; font-size: 16px; line-height: 20px; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .maintenance-responsive-controls .maintenance-summary { margin-top: 10px; padding-top: 8px; border-top: 1px solid color-mix(in oklab, var(--workspace-hero-text) 22%, transparent); }
-.maintenance-dashboard-body { display: grid; grid-template-columns: minmax(0,1fr) clamp(320px,26%,380px); align-items: start; gap: 12px; min-width: 0; }
-.maintenance-plan-list { display: grid; gap: 10px; min-width: 0; }
-.maintenance-plan-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--card); min-width: 0; }
-.maintenance-card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.maintenance-card-actions { display: flex; flex-wrap: wrap; flex-shrink: 0; align-items: center; gap: 5px; }
-.maintenance-card-actions button { font-size: 11px; height: 32px; padding-inline: 9px; }
+.maintenance-dashboard > .maintenance-dashboard-body { display: grid; grid-template-columns: minmax(0,1fr); gap: 0; min-width: 0; min-height: 0; padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); background: var(--card); color: var(--card-foreground); }
+.maintenance-plans-pane { min-width: 0; min-height: 0; }
+.maintenance-table { display: grid; gap: 1px; font-size: 11px; }
+.maintenance-table-heading { position: sticky; top: 0; z-index: 2; }
+.maintenance-table-rows { display: grid; gap: 1px; }
+.maintenance-table-columns { display: grid; grid-template-columns: 78px minmax(0,1fr) 86px 88px 54px; gap: 1px; }
+.maintenance-table-columns > * { display: flex; min-width: 0; align-items: center; padding: 5px 8px; }
+.maintenance-table-columns.data-grid-header > * { min-height: 36px; font-size: 9px; font-weight: 600; line-height: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.maintenance-table-columns .maintenance-plan-name { display: flex; flex-direction: column; align-items: stretch; justify-content: center; line-height: 16px; }
+.maintenance-table-columns .maintenance-wide-column, .maintenance-table-columns .maintenance-time-column { display: none; }
+.maintenance-table [data-slot="badge"], .maintenance-due-row [data-slot="badge"] { max-width: 100%; padding-inline: 5px; font-size: 10px; }
+.maintenance-open-record { cursor: pointer; outline: none; }
+.maintenance-open-record:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--ring); outline-offset: -2px; }
+.maintenance-open-record:hover { background: var(--data-view-row-hover); }
+.maintenance-mobile-plan { border: 0; border-bottom: 1px solid var(--data-view-grid-line); border-radius: 0; }
+.maintenance-mobile-plan .maintenance-metrics { margin-top: 8px; }
+.maintenance-mobile-plan .maintenance-metrics > div { padding: 0; border: 0; background: none; }
 .maintenance-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-top: 12px; }
 .maintenance-metrics > div { padding: 8px 10px; background: var(--muted); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
 .maintenance-metrics dt { text-transform: uppercase; letter-spacing: .08em; font-size: 9px; font-weight: 600; color: var(--muted-foreground); }
 .maintenance-metrics dd { font-size: 13px; margin-top: 3px; font-weight: 600; color: var(--foreground); }
 .maintenance-metrics .maintenance-price-missing { background: var(--status-danger-surface); border: 1px solid var(--status-danger-border); }
 .maintenance-price-missing dt, .maintenance-price-missing dd { color: var(--status-danger); }
-.maintenance-due-queue { min-width: 0; padding: 14px; border: 1px solid var(--ui-border-color); border-radius: 12px; background: var(--card); color: var(--card-foreground); }
+.maintenance-due-queue { min-width: 0; min-height: 0; border-top: 1px solid var(--data-view-grid-line); background: var(--card); color: var(--card-foreground); }
+.maintenance-due-heading { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 10px; border-bottom: 1px solid var(--data-view-grid-line); background: var(--card); font-size: 12px; }
 .maintenance-due-muted { color: var(--muted-foreground); }
 .maintenance-due-count { background: var(--muted); color: var(--card-foreground); }
-.maintenance-due-row { min-width: 0; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.maintenance-due-row { display: grid; gap: 2px; min-width: 0; padding: 7px 10px; border-bottom: 1px solid var(--data-view-grid-line); }
 .maintenance-detail-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; align-items: start; }
 .maintenance-detail-column { display: grid; gap: 16px; min-width: 0; }
 .maintenance-picker { min-width: 0; }
@@ -44,7 +56,7 @@
   .maintenance-toolbar.page-controls { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "controls action" "summary summary"; }
   .maintenance-toolbar.page-controls .maintenance-summary { padding-top: 8px; border-top: 1px solid color-mix(in oklab, var(--workspace-hero-text) 22%, transparent); }
 }
-@container maintenance-dashboard (min-width: 1260px) {
+@container maintenance-dashboard (min-width: 1040px) {
   .maintenance-toolbar.page-controls { grid-template-columns: auto minmax(0,1fr) auto; grid-template-areas: "controls summary action"; }
   .maintenance-toolbar.page-controls .maintenance-summary { justify-self: center; align-self: end; padding-block: 2px; border: 0; }
 }
@@ -54,16 +66,32 @@
   .maintenance-responsive-controls .maintenance-toolbar > .grid > .order-3 { grid-column: 3; grid-row: 1; }
   .maintenance-responsive-controls .maintenance-toolbar [role="combobox"] > span.hidden { display: none; }
 }
-@container maintenance-dashboard (max-width: 899px) { .maintenance-dashboard-body { grid-template-columns: minmax(0,1fr); } }
-@media (max-width: 1199px) { .maintenance-card-heading { flex-wrap: wrap; } }
+@media (min-width: 768px) {
+  .maintenance-dashboard { display: flex; flex-direction: column; height: calc(100dvh - var(--page-navigation-height, 0px)); min-height: 0; }
+  .maintenance-dashboard > .page-top-bar { flex-shrink: 0; }
+  .maintenance-dashboard > .maintenance-dashboard-body { flex: 1; grid-template-columns: minmax(0,3fr) minmax(0,1fr); overflow: hidden; }
+  .maintenance-plans-pane, .maintenance-due-queue { overflow: auto; overscroll-behavior: contain; }
+  .maintenance-due-queue { border-top: 0; border-left: 1px solid var(--data-view-grid-line); }
+  .maintenance-due-heading { position: sticky; top: 0; z-index: 2; }
+  @container maintenance-dashboard (max-width: 999px) {
+    .maintenance-dashboard > .maintenance-dashboard-body { grid-template-columns: minmax(0,7fr) minmax(0,3fr); }
+  }
+}
+@container maintenance-dashboard (min-width: 1000px) {
+  .maintenance-table-columns { grid-template-columns: 78px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.2fr) 78px 86px 88px 54px; }
+  .maintenance-table-columns .maintenance-wide-column { display: flex; }
+  .maintenance-table-columns .maintenance-compact-meta { display: none; }
+}
+@container maintenance-dashboard (min-width: 1350px) {
+  .maintenance-table-columns { grid-template-columns: 84px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.3fr) 82px 90px 68px 96px 60px; }
+  .maintenance-table-columns .maintenance-time-column { display: flex; }
+}
 @media (max-width: 639px) {
   .maintenance-summary { justify-content: space-between; }
   .maintenance-summary > div { padding-inline: 8px; }
   .maintenance-summary dt { font-size: 9px; letter-spacing: .03em; }
   .maintenance-summary dd { font-size: 14px; }
   .maintenance-detail-grid { grid-template-columns: minmax(0,1fr); }
-  .maintenance-card-actions { width: 100%; }
-  .maintenance-card-actions button { min-height: 44px; flex: 1; }
   .maintenance-metrics > div { padding: 7px; }
   .maintenance-metrics dt { font-size: 8px; letter-spacing: .02em; }
   .maintenance-metrics dd { font-size: 12px; }

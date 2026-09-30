@@ -86,11 +86,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   } = derived;
   const {
     handleCreateInventoryItem,
-    handleCreateMaintenancePlan,
     handleCreateStaff,
     handleCreateSiteProfile,
     handleDeleteInventoryItem,
-    handleDeleteMaintenancePlan,
     handleEmptyDeletedCustomers,
     handleEmptyDeletedJobs,
     handleGenerateMaintenanceJob,
@@ -111,7 +109,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleStatusChange,
     handleUpdateInventoryItem,
     handleUpdateInvoicePayment,
-    handleUpdateMaintenancePlan,
     handleUpdateStaff,
   } = actions;
   const roleMenuLabel = isTechnician ? "Technician" : isAdmin ? "Admin" : "Office";
@@ -612,11 +609,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             maintenancePlans={data.maintenancePlans || []}
             customers={data.customers}
             jobs={data.jobs}
-            onCreatePlan={handleCreateMaintenancePlan}
-            onUpdatePlan={handleUpdateMaintenancePlan}
-            onDeletePlan={handleDeleteMaintenancePlan}
-            onGenerateJob={handleGenerateMaintenanceJob}
-            onOpenJob={handleOpenJob}
           />
         ) : null}
 

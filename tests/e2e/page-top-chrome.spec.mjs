@@ -273,6 +273,22 @@ async function screenshot(page, name) {
 }
 
 async function scrollUnderHeader(page, original, selector = "[data-page-top-bar]") {
+  const maintenancePane = page.locator("[data-maintenance-plans-pane]");
+  if (await maintenancePane.count() && await maintenancePane.evaluate((element) => getComputedStyle(element).overflowY === "auto")) {
+    await maintenancePane.evaluate((pane) => {
+      const tail = document.createElement("div");
+      tail.dataset.layoutTestTail = "";
+      tail.style.height = "1600px";
+      pane.querySelector(".maintenance-table-rows").append(tail);
+      pane.scrollTop = 400;
+    });
+    expect(await maintenancePane.evaluate((element) => element.scrollTop)).toBe(400);
+    expect((await page.locator(selector).boundingBox()).y).toBeCloseTo(original.y, 0);
+    expect((await page.locator(".maintenance-table-heading").boundingBox()).y).toBeCloseTo(original.bottom, 0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await maintenancePane.locator("[data-layout-test-tail]").evaluate((element) => element.remove());
+    return;
+  }
   // Empty result pages must obey the same scroll contract as long lists. A
   // temporary tail exercises that contract without changing production data.
   await page.locator("[data-page-body]:visible, .record-workspace-body:visible").first().evaluate((body) => {

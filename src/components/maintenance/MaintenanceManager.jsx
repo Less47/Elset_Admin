@@ -1,9 +1,7 @@
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
-import { Plus, Wrench, ArrowUpRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Plus, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { MobileRecordCard, MobileRecordList } from "@/components/shared/MobileRecordList";
 import { useMobileRecordLayout } from "@/hooks/useMobileRecordLayout";
 import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
@@ -35,16 +33,55 @@ function maintenanceToolbarStyle(surface) {
   return { "--maintenance-toolbar-text": best.color, "--maintenance-toolbar-label-strength": best.contrast >= 6 ? "92%" : "100%" };
 }
 
-function PlanList({ mobile, children }) {
-  return mobile ? <MobileRecordList label="Maintenance plan records">{children}</MobileRecordList> : <div className="grid gap-2.5" data-desktop-record-results>{children}</div>;
-}
-function PlanCard({ mobile, plan, onOpen, children }) {
-  function handleDoubleClick(event) {
-    if (event.target.closest("button, a, input, select, textarea, [role='button']")) return;
+function planOpeningProps(plan, onOpen, mobile) {
+  function open(event) {
+    const interactive = event.target.closest("button, a, input, select, textarea, [role='button'], [role='link'], [contenteditable='true']");
+    if (interactive && interactive !== event.currentTarget) return;
     onOpen(plan.id);
   }
-  return mobile ? <MobileRecordCard className="maintenance-plan-card cursor-pointer" recordId={plan.id} labelledBy={`maintenance-title-${plan.id}`}><div data-maintenance-plan={plan.id} onDoubleClick={handleDoubleClick}>{children}</div></MobileRecordCard>
-    : <article className="maintenance-plan-card cursor-pointer" data-maintenance-plan={plan.id} onDoubleClick={handleDoubleClick}>{children}</article>;
+  return {
+    tabIndex: 0,
+    "aria-label": `Open maintenance plan ${plan.planName}`,
+    title: mobile ? "Open maintenance plan" : "Double-click or press Enter to open maintenance plan",
+    onClick: mobile ? open : undefined,
+    onDoubleClick: mobile ? undefined : open,
+    onKeyDown: (event) => {
+      if (event.target !== event.currentTarget || event.repeat || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      onOpen(plan.id);
+    },
+  };
+}
+
+function ContractPrice({ plan }) {
+  const priceSet = plan.contractPriceSet ?? Number(plan.contractPrice) > 0;
+  return <span className={priceSet ? "" : "text-status-danger"} data-contract-price={priceSet ? "set" : "missing"}>{priceSet ? money(plan.contractPrice) : "Not set"}</span>;
+}
+
+function PlansTable({ rows, onOpen }) {
+  return <div data-desktop-record-results role="table" aria-label="Maintenance plans" className="data-grid maintenance-table">
+    <div role="rowgroup" className="maintenance-table-heading">
+      <div role="row" className="data-grid-header maintenance-table-columns">
+        <span role="columnheader">Status</span><span role="columnheader">Plan</span>
+        <span role="columnheader" className="maintenance-wide-column">Customer</span><span role="columnheader" className="maintenance-wide-column">Site</span>
+        <span role="columnheader" className="maintenance-wide-column">Frequency</span><span role="columnheader">Next Due</span>
+        <span role="columnheader" className="maintenance-time-column">Est. Time</span><span role="columnheader" className="text-right">Contract</span><span role="columnheader" className="text-right">Active Jobs</span>
+      </div>
+    </div>
+    <div role="rowgroup" className="maintenance-table-rows">
+      {rows.map(({ plan, customer, status, activeJobs }) => <div key={plan.id} role="row" className="data-grid-row maintenance-table-columns maintenance-open-record" data-maintenance-plan={plan.id} {...planOpeningProps(plan, onOpen, false)}>
+        <div role="cell"><Badge className={status.className}>{status.label}</Badge></div>
+        <div role="cell" className="maintenance-plan-name"><span className="truncate font-semibold" title={plan.planName}>{plan.planName}</span><span className="maintenance-compact-meta truncate text-text-secondary" title={customer?.name}>{customer?.name || "Unknown customer"} · {getMaintenanceFrequencyMeta(plan.frequency).label}</span><span className="maintenance-compact-meta truncate text-text-secondary" title={plan.siteAddress}>{plan.siteAddress}</span></div>
+        <div role="cell" className="maintenance-wide-column"><span className="truncate" title={customer?.name}>{customer?.name || "Unknown customer"}</span></div>
+        <div role="cell" className="maintenance-wide-column"><span className="truncate" title={plan.siteAddress}>{plan.siteAddress}</span></div>
+        <div role="cell" className="maintenance-wide-column">{getMaintenanceFrequencyMeta(plan.frequency).label}</div>
+        <div role="cell">{plan.nextDueDate ? formatDate(plan.nextDueDate) : "Not set"}</div>
+        <div role="cell" className="maintenance-time-column">{plan.estimatedDurationHours > 0 ? `${plan.estimatedDurationHours} hrs` : "Not set"}</div>
+        <div role="cell" className="justify-end tabular-nums"><ContractPrice plan={plan} /></div>
+        <div role="cell" className="justify-end tabular-nums" aria-label={`${activeJobs} active ${activeJobs === 1 ? "job" : "jobs"}`}>{activeJobs}</div>
+      </div>)}
+    </div>
+  </div>;
 }
 
 export function MaintenanceMetrics({ plan }) {
@@ -56,14 +93,11 @@ export function MaintenanceMetrics({ plan }) {
   </dl>;
 }
 
-export default function MaintenanceManager({ maintenancePlans, customers, jobs, onGenerateJob, onOpenPlan }) {
+export default function MaintenanceManager({ maintenancePlans, customers, jobs, onOpenPlan }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("due-date");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [busy, setBusy] = useState(null);
-  const [error, setError] = useState("");
-  const savingRef = useRef(false);
   const filterTrigger = useRef(null);
   const query = useDeferredValue(search).trim().toLowerCase();
   const mobile = useMobileRecordLayout();
@@ -80,13 +114,6 @@ export default function MaintenanceManager({ maintenancePlans, customers, jobs, 
   }).sort((a, b) => sort === "customer" ? (a.customer?.name || "").localeCompare(b.customer?.name || "") : sort === "created-recent" ? String(b.plan.createdAt).localeCompare(String(a.plan.createdAt)) : a.plan.nextDueDate.localeCompare(b.plan.nextDueDate));
   const stats = [["Plans", rows.length], ["Overdue", rows.filter((row) => row.status.id === "overdue").length], ["Due soon", rows.filter((row) => row.status.id === "due-soon").length], ["Active", rows.reduce((sum, row) => sum + row.activeJobs, 0)], ["Contract", money(rows.filter((row) => row.plan.active).reduce((sum, row) => sum + Number(row.plan.contractPrice || 0), 0))]];
 
-  async function generate(plan) {
-    if (savingRef.current) return;
-    savingRef.current = true; setBusy(plan.id); setError("");
-    try { await onGenerateJob(plan.id, plan.nextOccurrence); }
-    catch (failure) { setError(failure.message || "Unable to generate the maintenance job."); }
-    finally { savingRef.current = false; setBusy(null); }
-  }
   const filterSelect = (id) => <Select value={filter} onValueChange={setFilter}><SelectTrigger id={id} className="data-toolbar-field bg-card"><SelectValue /></SelectTrigger><SelectContent>{filters.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>;
   const addAction = <PagePrimaryAction onClick={() => onOpenPlan("new")}><Plus className="h-4 w-4" /> Add Maintenance Plan</PagePrimaryAction>;
   const summary = <dl className="maintenance-summary" aria-label="Maintenance summary">{stats.map(([label, value]) => <div key={label}><dt>{label}{label === "Active" ? <span className="sr-only"> jobs</span> : label === "Contract" ? <span className="sr-only"> value</span> : null}</dt><dd>{value}</dd></div>)}</dl>;
@@ -95,21 +122,22 @@ export default function MaintenanceManager({ maintenancePlans, customers, jobs, 
     <ResponsivePageControls className="maintenance-responsive-controls" surfaceClassName="maintenance-toolbar" search={<PageSearchField value={search} onChange={setSearch} placeholder="Search maintenance..." label="Search maintenance plans" />} controls={<><FilterButton ref={filterTrigger} activeCount={filter === "all" ? 0 : 1} open={filtersOpen} onClick={() => setFiltersOpen(true)} /><CompactSortControl value={sort} onValueChange={setSort} options={sorts} label="Sort maintenance plans" /></>} action={addAction} toolbarSummary={summary} summary={<ResultSummary className="sr-only">{visible.length} maintenance plans</ResultSummary>} />
     <DesktopPageControls activeCount={filter === "all" ? 0 : 1} onReset={() => setFilter("all")} className="maintenance-toolbar" search={<DesktopControlField hideLabel label="Search" size="search"><PageSearchField compact value={search} onChange={setSearch} placeholder="Search plan, customer or site..." label="Search maintenance plans" /></DesktopControlField>} filters={<><DesktopControlField htmlFor="maintenance-filter" label="Filter" size="medium">{filterSelect("maintenance-filter")}</DesktopControlField><DesktopControlField htmlFor="maintenance-sort" label="Sort by" size="medium"><Select value={sort} onValueChange={setSort}><SelectTrigger id="maintenance-sort" className="data-toolbar-field bg-card"><SelectValue /></SelectTrigger><SelectContent>{sorts.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></DesktopControlField></>} summary={summary} actions={addAction} />
     </PageTopBar>
-    <PageBody className="space-y-3">
-    {error ? <p role="alert" className="rounded-lg border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">{error}</p> : null}
-    <div className="maintenance-dashboard-body">
-      <section className="maintenance-plan-list" aria-label="Maintenance plans">
+    <PageBody className="maintenance-dashboard-body">
+      <section className="maintenance-plans-pane" aria-label="Maintenance plans" data-maintenance-plans-pane>
         <h2 className="sr-only">Maintenance plans</h2>
-        <PlanList mobile={mobile}>{visible.length ? visible.map(({ plan, customer, status, activeJobs }) => <PlanCard mobile={mobile} plan={plan} onOpen={onOpenPlan} key={plan.id}>
-          <div className="maintenance-card-heading"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge className={status.className}>{status.label}</Badge><span className="text-xs font-medium text-muted-foreground">{getMaintenanceFrequencyMeta(plan.frequency).label}</span>{activeJobs ? <span className="text-xs text-status-info">{activeJobs} active {activeJobs === 1 ? "job" : "jobs"}</span> : null}</div><h3 id={`maintenance-title-${plan.id}`} className="mt-2 truncate font-semibold text-foreground">{plan.planName}</h3><p className="mt-0.5 truncate text-xs text-text-secondary">{customer?.name || "Unknown customer"} · {plan.siteAddress}</p></div>
-            <div className="maintenance-card-actions"><Button variant="outline" size="sm" onClick={() => onOpenPlan(plan.id)}>Open Plan <ArrowUpRight className="h-3 w-3" /></Button><Button size="sm" disabled={!plan.active || Boolean(busy)} onClick={() => generate(plan)}>{busy === plan.id ? "Generating…" : "Generate Job"}</Button><Button variant="ghost" size="sm" onClick={() => onOpenPlan(plan.id, { edit: true })}>Edit</Button></div>
-          </div><MaintenanceMetrics plan={plan} />
-        </PlanCard>) : null}</PlanList>{!visible.length ? <EmptyState title="No maintenance plans found" text="Adjust your search or add a maintenance plan." /> : null}
+        {mobile ? <MobileRecordList label="Maintenance plan records" className="gap-0">{visible.map(({ plan, customer, status, activeJobs }) => <MobileRecordCard className="maintenance-mobile-plan p-0" recordId={plan.id} labelledBy={`maintenance-title-${plan.id}`} key={plan.id}>
+          <div role="link" className="maintenance-open-record p-3" data-maintenance-plan={plan.id} {...planOpeningProps(plan, onOpenPlan, true)}>
+            <div className="flex flex-wrap items-center gap-2"><Badge className={status.className}>{status.label}</Badge><span className="text-xs text-text-secondary">{getMaintenanceFrequencyMeta(plan.frequency).label}</span>{activeJobs ? <span className="text-xs text-status-info">{activeJobs} active {activeJobs === 1 ? "job" : "jobs"}</span> : null}</div>
+            <h3 id={`maintenance-title-${plan.id}`} className="mt-1 truncate font-semibold" title={plan.planName}>{plan.planName}</h3>
+            <p className="truncate text-xs text-text-secondary" title={customer?.name}>{customer?.name || "Unknown customer"}</p><p className="truncate text-xs text-text-secondary" title={plan.siteAddress}>{plan.siteAddress}</p>
+            <MaintenanceMetrics plan={plan} />
+          </div>
+        </MobileRecordCard>)}</MobileRecordList> : <PlansTable rows={visible} onOpen={onOpenPlan} />}
+        {!visible.length ? <div className="px-3 py-5 text-sm text-text-secondary" role="status"><p className="font-medium">No maintenance plans found</p><p className="mt-1 text-xs">Adjust your search or add a maintenance plan.</p></div> : null}
       </section>
-      <aside className="maintenance-due-queue" aria-label="Due Queue"><div className="flex items-center gap-2"><Wrench className="h-4 w-4" /><h2 className="font-semibold">Due Queue</h2><span className="maintenance-due-count ml-auto rounded-full px-2 text-xs">{due.length}</span></div><p className="maintenance-due-muted mt-1 text-xs">Overdue and due in the next 7 days.</p>
-        {due.length ? due.slice(0, 8).map(({ plan, customer, status }) => <div className="maintenance-due-row" key={plan.id}><div className="flex items-start justify-between gap-2"><button type="button" className="min-w-0 text-left text-sm font-semibold hover:underline" onClick={() => onOpenPlan(plan.id)}>{plan.planName}</button><Badge className={status.className}>{status.label}</Badge></div><p className="maintenance-due-muted mt-1 truncate text-xs">{customer?.name}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="maintenance-due-muted text-xs">Due {formatDate(plan.nextDueDate)}</span><Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => generate(plan)}>Generate Job</Button></div></div>) : <p className="maintenance-due-muted py-8 text-sm">Nothing urgent. Your next visits are on the Calendar.</p>}
+      <aside className="maintenance-due-queue" aria-label="Due Queue"><div className="maintenance-due-heading"><Wrench className="h-4 w-4" aria-hidden="true" /><h2 className="font-semibold">Due Queue</h2><span className="maintenance-due-count ml-auto rounded-full px-2 text-xs" aria-label={`${due.length} due visits`}>{due.length}</span></div>
+        {due.length ? <ul className="m-0 list-none p-0">{due.map(({ plan, customer, status }) => <li key={plan.id}><div role="link" className="maintenance-due-row maintenance-open-record" data-maintenance-due={plan.id} {...planOpeningProps(plan, onOpenPlan, mobile)}><div className="flex min-w-0 items-center justify-between gap-2"><span className="truncate text-xs font-semibold" title={plan.planName}>{plan.planName}</span><Badge className={status.className}>{status.label}</Badge></div><p className="maintenance-due-muted truncate text-xs" title={customer?.name}>{customer?.name || "Unknown customer"}</p><p className="maintenance-due-muted text-xs">Due {formatDate(plan.nextDueDate)}</p></div></li>)}</ul> : <p className="maintenance-due-muted px-3 py-3 text-xs">No maintenance visits due.</p>}
       </aside>
-    </div>
     </PageBody>
     <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} returnFocusRef={filterTrigger} activeCount={filter === "all" ? 0 : 1} onReset={() => setFilter("all")} description="Filter maintenance plans by service state."><FilterSheetField id="mobile-maintenance-filter" label="Status">{filterSelect("mobile-maintenance-filter")}</FilterSheetField></MobileFilterSheet>
   </PageWorkspace>;
