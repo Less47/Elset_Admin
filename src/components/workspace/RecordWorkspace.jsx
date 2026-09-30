@@ -54,7 +54,7 @@ export function RecordWorkspace({
             {subtitle ? <p className="record-workspace-subtitle mt-0.5 hidden truncate text-xs opacity-75 sm:block">{subtitle}</p> : null}
           </div>
 
-          {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
+          {headerActions ? <div className="flex shrink-0 items-center gap-2 [&_button]:h-11">{headerActions}</div> : null}
         </div>
       </header>
 

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 
 export default function MobileWorkspaceNavigation({
+  ref,
   activeSection,
   authUser,
   canManageBusiness,
@@ -41,7 +42,7 @@ export default function MobileWorkspaceNavigation({
   };
 
   return (
-    <div className="mobile-workspace-navigation sticky top-0 z-40 lg:hidden">
+    <div ref={ref} className="mobile-workspace-navigation sticky top-0 z-40 lg:hidden">
       <Dialog open={open} onOpenChange={setOpen}>
         <header
           className="border-b shadow-sm"

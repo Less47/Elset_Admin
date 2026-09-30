@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useStableCallback } from "@/hooks/useStableCallback";
 import { ArrowDownUp, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import {
 } from "./service-board-utils";
 
 export default function MobileServiceBoard({
+  noteStatus,
   noteEditMode = false,
   onToggleNoteEditMode,
   onEditNote,
@@ -91,17 +93,18 @@ export default function MobileServiceBoard({
   };
 
   return (
-    <section
-      className="mobile-service-board grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-3 pb-20"
+    <PageWorkspace
+      className="mobile-service-board"
       aria-label="Mobile Service Board"
     >
+      <PageTopBar data-service-board-toolbar innerClassName="px-2.5 pb-2.5">
       <MobileStatusTabs
         counts={counts}
         selectedView={selectedView}
         onSelect={onSelectedViewChange}
       />
 
-      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5 rounded-2xl border bg-card/88 p-2 shadow-sm backdrop-blur">
+      <div className="flex w-full min-w-0 max-w-full items-center gap-1.5 rounded-2xl border bg-card/88 p-2 shadow-sm backdrop-blur" data-service-board-primary-controls>
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -161,6 +164,9 @@ export default function MobileServiceBoard({
         ) : null}
       </div>
 
+      </PageTopBar>
+      <PageBody className="space-y-3 pb-20">
+      {noteStatus}
       {statusMessage ? (
         <div className="rounded-xl border border-status-success-border bg-status-success-surface px-3 py-2 text-sm font-medium text-status-success" role="status">
           {statusMessage}
@@ -232,6 +238,7 @@ export default function MobileServiceBoard({
         {selectedView === "Completed" ? <CompletedShowMore visibleLimit={visibleLimit} totalCount={selectedJobs.length} onShowMore={showMore} /> : null}
       </div>
 
+      </PageBody>
       <MobileBoardFilters
         activeFilterCount={activeFilterCount}
         onClearFilters={() => onUrgencyChange(false)}
@@ -252,6 +259,6 @@ export default function MobileServiceBoard({
         onStatusChange={onStatusChange}
         returnFocusId={moveJob ? getMobileMoveButtonId(moveJob.id) : ""}
       />
-    </section>
+    </PageWorkspace>
   );
 }

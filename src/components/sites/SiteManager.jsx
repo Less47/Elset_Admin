@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
 import { Plus } from "lucide-react";
@@ -201,7 +202,8 @@ export default function SiteManager({
 
   return (
     <>
-      <div className="space-y-4">
+      <PageWorkspace>
+      <PageTopBar>
         <ResponsivePageControls
           search={(
             <PageSearchField
@@ -236,7 +238,7 @@ export default function SiteManager({
 
         <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setSiteTypeFilter("all"); }}
           search={(
-            <DesktopControlField label="Search" size="search">
+            <DesktopControlField hideLabel label="Search" size="search">
               <PageSearchField
                 compact
                 value={search}
@@ -247,7 +249,7 @@ export default function SiteManager({
             </DesktopControlField>
           )}
           viewToggle={(
-            <DesktopControlField label="View" size="view">
+            <DesktopControlField hideLabel label="View" size="view">
               <ViewModeToggle compact value={viewMode} onChange={setViewMode} label="Site view" />
             </DesktopControlField>
           )}
@@ -298,8 +300,9 @@ export default function SiteManager({
           </PagePrimaryAction>
           )}
         />
-
-        <Card
+      </PageTopBar>
+      <PageBody className="space-y-4">
+      <Card
           className={isMobileRecordLayout
             ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
             : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
@@ -475,7 +478,8 @@ export default function SiteManager({
           )}
         </CardContent>
         </Card>
-      </div>
+      </PageBody>
+    </PageWorkspace>
 
       <MobileFilterSheet
         open={filtersOpen}

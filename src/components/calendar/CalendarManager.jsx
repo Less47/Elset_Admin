@@ -1,3 +1,5 @@
+import { PagePrimaryAction } from "@/components/shared/ResponsivePageControls";
+import { PageTopBar } from "@/components/workspace/PageWorkspace";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays, ChevronLeft, ChevronRight, ListFilter, Undo2, X } from "lucide-react";
@@ -51,6 +53,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
   const returnFocusRef = useRef(null);
   const suppressSheetRestoreRef = useRef(false);
   const workspaceRef = useRef(null);
+  const layoutRef = useRef(null);
   const miniPaneRef = useRef(null);
   const inspectorHeadingRef = useRef(null);
   const dayReturnFocusRef = useRef(null);
@@ -402,25 +405,25 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
 
   return (
     <div ref={workspaceRef} className="calendar-workspace min-w-0" data-calendar-workspace>
+      <PageTopBar className="calendar-page-top-bar" innerClassName="calendar-toolbar" data-calendar-toolbar>
+        <h1 className="calendar-toolbar-title text-base font-semibold text-inherit sm:text-lg" data-calendar-month>{monthLabel}</h1>
+        <div className="calendar-month-navigation flex items-center gap-1">
+          <PagePrimaryAction type="button" variant="outline" className="calendar-nav-arrow h-11 w-11 bg-card/95 p-0" aria-label="Previous month" title="Previous month" onClick={() => miniProps.onMonthChange(-1)}><ChevronLeft className="h-4 w-4" /></PagePrimaryAction>
+          <PagePrimaryAction type="button" ref={todayTrigger} variant="outline" className="calendar-today-button h-11 bg-card/95 px-3 text-xs" onClick={miniProps.onToday}>Today</PagePrimaryAction>
+          <PagePrimaryAction type="button" variant="outline" className="calendar-nav-arrow h-11 w-11 bg-card/95 p-0" aria-label="Next month" title="Next month" onClick={() => miniProps.onMonthChange(1)}><ChevronRight className="h-4 w-4" /></PagePrimaryAction>
+        </div>
+        <div className="calendar-toolbar-actions flex items-center gap-2">
+          <PagePrimaryAction type="button" variant="outline" className="calendar-undo-button bg-card/95 text-xs" aria-label="Undo last calendar change" title={latestUndo ? `Undo: ${latestUndo.label}` : "Undo last calendar change"} data-calendar-undo-count={undoHistory.length} disabled={!latestUndo || Boolean(pending) || bulkBusy || maintenanceBusy || Boolean(undoPending) || Boolean(maintenanceMove) || Boolean(completedMove)} aria-busy={Boolean(undoPending)} onClick={undoCalendarChange}><Undo2 className="h-4 w-4" /><span className="calendar-undo-label">Undo</span></PagePrimaryAction>
+          {workspaceDayPanel ? <PagePrimaryAction type="button" variant="outline" className="calendar-navigator-toggle h-11 bg-card/95 px-2 text-xs" aria-expanded={navigatorOpen} aria-controls="calendar-expanded-navigator" onClick={() => setNavigatorOpen((value) => !value)}><CalendarDays className="h-4 w-4" /> Dates</PagePrimaryAction> : null}
+          <PagePrimaryAction type="button" ref={jobsTrigger} className="calendar-jobs-toggle h-11 px-3 text-xs" aria-label={`Jobs ${queueJobs.length}`} onClick={() => { returnFocusRef.current = jobsTrigger.current; setPanel({ type: "jobs" }); }}><ListFilter className="calendar-jobs-icon h-4 w-4" /> Jobs <span className="calendar-jobs-count rounded-full bg-current/25 px-1.5">{queueJobs.length}</span></PagePrimaryAction>
+        </div>
+      </PageTopBar>
       {maintenanceLoadError ? <div role="alert" className="flex items-center gap-2 rounded-lg bg-status-danger-surface p-2 text-xs text-status-danger">{maintenanceLoadError}<Button size="sm" variant="outline" onClick={() => setMaintenanceRefresh((value) => value + 1)}>Retry</Button></div> : null}
-      <div className="calendar-layout">
+      <div ref={layoutRef} className="calendar-layout">
         <div ref={miniPaneRef} className="calendar-mini-pane">
           {inspectorOpen ? <CalendarDayInspector date={selectedDate} jobs={selectedJobs} eligibleCount={eligibleJobs.length} dragApi={dragApi} busy={Boolean(pending) || bulkBusy || maintenanceBusy || Boolean(undoPending)} active={dayPanelOpen} headingRef={inspectorHeadingRef} notice={dayPanelOpen ? notice : null} onClose={closeInspector} onOpenJob={openJob} onSchedule={openSchedule} onRescheduleDay={() => openBulk()} maintenanceActions={maintenanceActions} /> : <MiniCalendar {...miniProps} />}
         </div>
         <div className="calendar-center">
-          <header className="calendar-toolbar min-w-0" data-calendar-toolbar>
-            <h1 className="calendar-toolbar-title text-base font-semibold text-inherit sm:text-lg" data-calendar-month>{monthLabel}</h1>
-            <div className="calendar-month-navigation flex items-center gap-1">
-              <Button type="button" variant="outline" className="calendar-nav-arrow h-11 w-11 bg-card/95 p-0" aria-label="Previous month" title="Previous month" onClick={() => miniProps.onMonthChange(-1)}><ChevronLeft className="h-4 w-4" /></Button>
-              <Button type="button" ref={todayTrigger} variant="outline" className="calendar-today-button h-11 bg-card/95 px-3 text-xs" onClick={miniProps.onToday}>Today</Button>
-              <Button type="button" variant="outline" className="calendar-nav-arrow h-11 w-11 bg-card/95 p-0" aria-label="Next month" title="Next month" onClick={() => miniProps.onMonthChange(1)}><ChevronRight className="h-4 w-4" /></Button>
-            </div>
-            <div className="calendar-toolbar-actions flex items-center gap-2">
-              <Button type="button" variant="outline" className="calendar-undo-button bg-card/95 text-xs" aria-label="Undo last calendar change" title={latestUndo ? `Undo: ${latestUndo.label}` : "Undo last calendar change"} data-calendar-undo-count={undoHistory.length} disabled={!latestUndo || Boolean(pending) || bulkBusy || maintenanceBusy || Boolean(undoPending) || Boolean(maintenanceMove) || Boolean(completedMove)} aria-busy={Boolean(undoPending)} onClick={undoCalendarChange}><Undo2 className="h-4 w-4" /><span className="calendar-undo-label">Undo</span></Button>
-              {workspaceDayPanel ? <Button type="button" variant="outline" className="calendar-navigator-toggle h-11 bg-card/95 px-2 text-xs" aria-expanded={navigatorOpen} aria-controls="calendar-expanded-navigator" onClick={() => setNavigatorOpen((value) => !value)}><CalendarDays className="h-4 w-4" /> Dates</Button> : null}
-              <Button type="button" ref={jobsTrigger} className="calendar-jobs-toggle h-11 px-3 text-xs" aria-label={`Jobs ${queueJobs.length}`} onClick={() => { returnFocusRef.current = jobsTrigger.current; setPanel({ type: "jobs" }); }}><ListFilter className="calendar-jobs-icon h-4 w-4" /> Jobs <span className="calendar-jobs-count rounded-full bg-current/25 px-1.5">{queueJobs.length}</span></Button>
-            </div>
-          </header>
           {workspaceDayPanel && navigatorOpen ? <div className="calendar-mini-expanded" id="calendar-expanded-navigator"><MiniCalendar {...miniProps} /></div> : null}
           {error ? <div className="flex items-start justify-between gap-2 rounded-lg border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger" role="alert"><span>{error}</span><Button type="button" variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label="Dismiss scheduling error" onClick={() => setError("")}><X className="h-4 w-4" /></Button></div> : null}
           {!panel ? notice : null}
@@ -431,7 +434,7 @@ export default function CalendarManager({ jobs, onOpenJob, onScheduleJob, onPrev
       </div>
 
       {workspaceDayPanel && !hasMiniColumn ? (
-        <CalendarSheet open={dayPanelOpen} modal={false} placement="workspace-left" portalContainer={workspaceRef.current} restoreFocus={!panel} focusKey="day" notice={notice} onOpenChange={changePanelOpen} title={formatCalendarDate(selectedDate, { weekday: "long", day: "numeric", month: "long" })} description={`${selectedJobs.length} scheduled ${selectedJobs.length === 1 ? "job" : "jobs"}`} error={error} returnFocusRef={returnFocusRef}>
+        <CalendarSheet open={dayPanelOpen} modal={false} placement="workspace-left" portalContainer={layoutRef.current} restoreFocus={!panel} focusKey="day" notice={notice} onOpenChange={changePanelOpen} title={formatCalendarDate(selectedDate, { weekday: "long", day: "numeric", month: "long" })} description={`${selectedJobs.length} scheduled ${selectedJobs.length === 1 ? "job" : "jobs"}`} error={error} returnFocusRef={returnFocusRef}>
           {dayPanelContent}
         </CalendarSheet>
       ) : null}

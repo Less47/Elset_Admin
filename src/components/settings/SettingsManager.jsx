@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { buildSemanticTheme } from "@/lib/theme-tokens";
 import { useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useSettingsDraft } from "@/hooks/useSettingsDraft";
@@ -115,7 +116,7 @@ const presetPreviewKeys = [
 function WorkspacePreview({ settings }) {
   const { vars } = buildSemanticTheme(normalizeThemeSettings(settings));
   return (
-    <Card className="min-w-0 self-start overflow-hidden rounded-3xl border-border shadow-sm 2xl:sticky 2xl:top-5">
+    <Card data-workspace-preview-panel className="min-w-0 self-start overflow-hidden rounded-3xl border-border shadow-sm 2xl:sticky 2xl:top-[calc(var(--page-top-bar-height,0px)+1.25rem)]">
       <CardHeader><CardTitle className="text-base">Workspace Preview</CardTitle></CardHeader>
       <CardContent>
         <div data-workspace-preview style={vars} className="theme-workspace-preview rounded-2xl border p-3 text-sm">
@@ -477,15 +478,17 @@ function SettingsContent({
   };
 
   return (
-    <fieldset className="grid min-w-0 gap-4">
-      <div className="floating-page-toolbar flex flex-col gap-2 overflow-x-auto overscroll-x-contain px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
-          {["preferences", "templates", "ui", "addons"].includes(activeSettingsTab) ? <SettingsSaveButton scope={scope} /> : null}
+    <PageWorkspace>
+    <fieldset className="min-w-0">
+      <PageTopBar>
+      <div className="floating-page-toolbar flex flex-wrap items-center gap-2 px-4 py-3">
+        <div className="order-first flex w-full flex-wrap items-center justify-end gap-2 xl:order-last xl:ml-auto xl:w-auto">
+          {["preferences", "templates", "ui", "addons"].includes(activeSettingsTab) ? <SettingsSaveButton scope={scope} className="h-11" /> : null}
           <Badge className={isAuthenticated ? "bg-status-success-surface text-status-success" : "bg-surface-raised text-text-secondary"}>
             {isAuthenticated ? "Server sync enabled" : "Offline"}
           </Badge>
         </div>
-        <div className="flex min-w-max flex-nowrap gap-2" data-settings-navigation>
+        <div className="flex flex-wrap items-center gap-2" data-settings-navigation>
           {settingsTabs.filter((tab) => canManageWorkspaceSettings || tab.value === "ui").map((tab) => {
             const isActive = activeSettingsTab === tab.value;
 
@@ -494,7 +497,7 @@ function SettingsContent({
                 key={tab.value}
                 type="button"
                 variant={isActive ? "default" : "outline"}
-                className="rounded-xl"
+                className="h-11 rounded-xl"
                 onClick={() => tab.value !== activeSettingsTab && scope.requestAction(() => onActiveSettingsTabChange?.(tab.value))}
               >
                 {tab.label}
@@ -503,6 +506,8 @@ function SettingsContent({
           })}
         </div>
       </div>
+      </PageTopBar>
+      <PageBody className="space-y-4">
       {canManageWorkspaceSettings && activeSettingsTab === "addons" && workspaceAddons ? <AddonsSettings workspaceAddons={workspaceAddons} available fetchWithAuth={fetchWithAuth} /> : null}
       {canManageWorkspaceSettings && activeSettingsTab === "price-list" ? <PriceListSettings fetchWithAuth={fetchWithAuth} /> : null}
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
@@ -1223,6 +1228,8 @@ function SettingsContent({
           </Card>
         </div>
       )}
+      </PageBody>
     </fieldset>
+    </PageWorkspace>
   );
 }

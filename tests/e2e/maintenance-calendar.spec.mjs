@@ -496,6 +496,7 @@ for (const [width, height] of [[1920, 1080], [1440, 900], [1280, 720], [1024, 76
     expect(saved.customerId).toBe("northside"); expect(saved.frequency).toBe("six-monthly");
     expect(saved.nextDueDate).toBe("2027-03-09");
     expect(writes.filter((request) => request.method() === "POST")).toHaveLength(1);
+    expect((await page.getByRole("button", { name: "Edit Plan", exact: true }).boundingBox()).height).toBe(44);
     await page.getByRole("button", { name: "Edit Plan", exact: true }).click();
     await expect(page).toHaveURL(/\/maintenance\/[^/]+\/edit$/);
     await page.reload();

@@ -13,13 +13,13 @@ export default function SettingsDraftScope({ children }) {
   return <SettingsDraftContext.Provider value={value}>{children}</SettingsDraftContext.Provider>;
 }
 
-export function SettingsSaveButton({ scope }) {
+export function SettingsSaveButton({ scope, className }) {
   const state = useSyncExternalStore(scope.group.subscribe, scope.group.getSnapshot);
   return <div className="flex flex-wrap items-center justify-end gap-2">
     <div aria-live="polite" aria-atomic="true" className="text-sm">
       {state.errors.length ? <p role="alert" className="text-status-danger">{state.errors.join(" ")}</p>
         : <span role="status" aria-label="Settings save status" className="text-text-secondary">{state.saving ? "Saving..." : state.dirty ? "Unsaved changes" : state.saved ? "Saved" : ""}</span>}
     </div>
-    <Button type="button" disabled={!state.dirty || state.saving} aria-busy={state.saving} onClick={() => void scope.group.save()}>{state.saving ? "Saving..." : "Save changes"}</Button>
+    <Button type="button" className={className} disabled={!state.dirty || state.saving} aria-busy={state.saving} onClick={() => void scope.group.save()}>{state.saving ? "Saving..." : "Save changes"}</Button>
   </div>;
 }

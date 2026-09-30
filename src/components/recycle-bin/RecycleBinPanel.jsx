@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useMemo, useRef, useState } from "react";
 import { WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
 import { calculateQuoteTotal, money } from "@/lib/quote-template";
@@ -46,16 +47,19 @@ export default function RecycleBinPanel({
   );
 
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="jobs" className="space-y-6">
+    <PageWorkspace>
+      <Tabs defaultValue="jobs" className="gap-0">
+        <PageTopBar>
         <div className="floating-page-toolbar flex items-center px-4 py-3">
-          <TabsList className="grid w-full max-w-[480px] grid-cols-3 rounded-xl bg-card/90">
-            <TabsTrigger value="jobs">Jobs</TabsTrigger>
-            <TabsTrigger value="customers">Customers</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsList className="grid w-full max-w-[480px] grid-cols-3 rounded-xl bg-card/90 group-data-horizontal/tabs:h-auto">
+            <TabsTrigger className="h-11" value="jobs">Jobs</TabsTrigger>
+            <TabsTrigger className="h-11" value="customers">Customers</TabsTrigger>
+            <TabsTrigger className="h-11" value="invoices">Invoices</TabsTrigger>
           </TabsList>
         </div>
 
+        </PageTopBar>
+        <PageBody>
         <TabsContent value="jobs">
           <Card className="rounded-3xl border-border">
             <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -195,7 +199,8 @@ export default function RecycleBinPanel({
             </CardContent>
           </Card>
         </TabsContent>
+        </PageBody>
       </Tabs>
-    </div>
+    </PageWorkspace>
   );
 }

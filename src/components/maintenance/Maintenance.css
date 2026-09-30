@@ -1,6 +1,6 @@
-.maintenance-dashboard { container: maintenance-dashboard / inline-size; display: grid; gap: 12px; min-width: 0; }
+.maintenance-dashboard { container: maintenance-dashboard / inline-size; display: block; min-width: 0; }
 .maintenance-toolbar { min-width: 0; }
-.maintenance-toolbar.page-controls { align-items: end; column-gap: 16px; row-gap: 10px; padding-block: 10px; }
+.maintenance-toolbar.page-controls { align-items: center; column-gap: 16px; row-gap: 10px; padding-block: 10px; }
 .maintenance-toolbar .page-controls__left { grid-area: controls; }
 .maintenance-toolbar .page-controls__right { grid-area: action; }
 .maintenance-toolbar .page-controls__label { color: var(--maintenance-toolbar-text, var(--workspace-hero-text)); }

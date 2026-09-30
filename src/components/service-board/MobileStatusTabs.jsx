@@ -36,8 +36,7 @@ export default function MobileStatusTabs({ counts, selectedView, onSelect }) {
 
   return (
     <div
-      className="mobile-status-tabs sticky z-30 min-w-0 overflow-hidden -mx-[var(--content-padding-x-mobile)] border-b bg-card/92 px-[var(--content-padding-x-mobile)] py-1.5 shadow-sm backdrop-blur sm:-mx-[var(--content-padding-x-sm)] sm:px-[var(--content-padding-x-sm)]"
-      style={{ top: "calc(3.5rem + env(safe-area-inset-top))" }}
+      className="mobile-status-tabs min-w-0 overflow-hidden py-1.5"
     >
       <div
         role="tablist"

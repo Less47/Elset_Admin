@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
 import { Plus } from "lucide-react";
@@ -221,7 +222,8 @@ export default function CustomerManager({
 
   return (
     <>
-    <div className="space-y-4">
+    <PageWorkspace>
+      <PageTopBar>
       <ResponsivePageControls
         search={(
           <PageSearchField
@@ -250,12 +252,12 @@ export default function CustomerManager({
 
       <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setFilterBy("all"); setCreatedRange("all-time"); setCustomerTypeFilter("all"); }}
         search={(
-          <DesktopControlField label="Search" size="search">
+          <DesktopControlField hideLabel label="Search" size="search">
             <PageSearchField compact value={search} onChange={setSearch} placeholder="Search customers..." label="Search customers" />
           </DesktopControlField>
         )}
         viewToggle={(
-          <DesktopControlField label="View" size="view">
+          <DesktopControlField hideLabel label="View" size="view">
             <ViewModeToggle compact value={viewMode} onChange={setViewMode} label="Customer view" />
           </DesktopControlField>
         )}
@@ -330,7 +332,8 @@ export default function CustomerManager({
           </PagePrimaryAction>
         )}
       />
-
+      </PageTopBar>
+      <PageBody className="space-y-4">
       <Card
         className={isMobileRecordLayout
           ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
@@ -498,7 +501,8 @@ export default function CustomerManager({
         )}
       </CardContent>
       </Card>
-    </div>
+    </PageBody>
+    </PageWorkspace>
     <MobileFilterSheet
       open={filtersOpen}
       onOpenChange={setFiltersOpen}

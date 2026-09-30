@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -311,7 +312,8 @@ export default function StaffManager({
 
   return (
     <>
-      <div className="space-y-4">
+      <PageWorkspace>
+      <PageTopBar>
         <ResponsivePageControls
           search={(
             <PageSearchField value={search} onChange={setSearch} placeholder="Search staff..." label="Search staff" />
@@ -327,7 +329,7 @@ export default function StaffManager({
 
         <DesktopPageControls
           search={(
-            <DesktopControlField label="Search" size="search">
+            <DesktopControlField hideLabel label="Search" size="search">
               <PageSearchField
                 compact
                 value={search}
@@ -364,8 +366,9 @@ export default function StaffManager({
             </PagePrimaryAction>
           )}
         />
-
-        <Card
+      </PageTopBar>
+      <PageBody className="space-y-4">
+      <Card
           className={isMobileRecordLayout
             ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
             : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
@@ -549,7 +552,8 @@ export default function StaffManager({
           )}
         </CardContent>
         </Card>
-      </div>
+      </PageBody>
+    </PageWorkspace>
 
       <StaffFormDialog
         open={staffDialogOpen}

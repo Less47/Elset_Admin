@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
@@ -45,6 +46,7 @@ const invoiceSortOptions = [
 ];
 
 export default function InvoiceManager({
+  notice,
   jobs,
   customerId = "",
   customerName,
@@ -175,7 +177,8 @@ export default function InvoiceManager({
 
   return (
     <>
-    <div className="space-y-4">
+    <PageWorkspace>
+      <PageTopBar>
       {customerId ? <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm" data-invoice-customer-filter>
         <span>Invoices for <strong>{customerName || "selected customer"}</strong></span>
         <Button type="button" variant="ghost" size="sm" onClick={onClearCustomer}>Clear customer filter</Button>
@@ -199,7 +202,7 @@ export default function InvoiceManager({
 
       <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setTimeRange("all-time"); setFilterBy("all"); setJobStatusFilter("all"); }}
         search={(
-          <DesktopControlField label="Search" size="search" className="flex-[1_1_12rem]">
+          <DesktopControlField hideLabel label="Search" size="search" className="flex-[1_1_12rem]">
             <PageSearchField compact value={search} onChange={setSearch} placeholder="Search billing records..." label="Search billing records" />
           </DesktopControlField>
         )}
@@ -267,12 +270,6 @@ export default function InvoiceManager({
         )}
       />
 
-      <Card
-        className={mobileRecordLayout
-          ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
-          : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
-        data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
-      >
       <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-6">
         {[
           { label: "Invoices", value: invoiceStats.invoiced },
@@ -288,7 +285,15 @@ export default function InvoiceManager({
           </div>
         ))}
       </div>
-
+      </PageTopBar>
+      <PageBody className="space-y-4">
+        {notice}
+      <Card
+        className={mobileRecordLayout
+          ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
+          : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
+        data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
+      >
       <CardContent className="p-0">
         {mobileRecordLayout ? (
           filteredRows.length === 0 ? (
@@ -505,7 +510,8 @@ export default function InvoiceManager({
         )}
       </CardContent>
       </Card>
-    </div>
+    </PageBody>
+    </PageWorkspace>
     <MobileFilterSheet
       open={filtersOpen}
       onOpenChange={setFiltersOpen}

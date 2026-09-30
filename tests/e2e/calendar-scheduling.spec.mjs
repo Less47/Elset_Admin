@@ -254,18 +254,22 @@ async function expectCompactMobileToolbar(page) {
   const previous = page.getByRole("button", { name: "Previous month", exact: true });
   const today = page.getByRole("button", { name: "Today", exact: true });
   const next = page.getByRole("button", { name: "Next month", exact: true });
+  const undo = page.getByRole("button", { name: "Undo last calendar change", exact: true });
   const jobs = page.getByRole("button", { name: /^Jobs \d+$/ });
   await expect(page.getByRole("button", { name: "Dates", exact: true })).toHaveCount(0);
   await expect(page.locator(".calendar-mini-expanded")).toHaveCount(0);
   for (const control of [month, previous, today, next, jobs]) await expect(control).toBeVisible();
-  const boxes = await Promise.all([month, previous, today, next, jobs].map((control) => control.boundingBox()));
+  const boxes = await Promise.all([previous, today, next, undo, jobs].map((control) => control.boundingBox()));
+  for (const box of boxes) expect(box.height).toBe(44);
+  const monthBox = await month.boundingBox();
+  expect(monthBox.y + monthBox.height).toBeLessThanOrEqual(boxes[0].y);
   const centers = boxes.map((box) => box.y + box.height / 2);
   expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
   for (let index = 0; index < boxes.length - 1; index += 1) {
     expect(boxes[index].x + boxes[index].width).toBeLessThanOrEqual(boxes[index + 1].x + 1);
   }
   const toolbarBox = await page.locator("[data-calendar-toolbar]").boundingBox();
-  expect(toolbarBox.height).toBeLessThanOrEqual(54);
+  expect(toolbarBox.height).toBeLessThanOrEqual(80);
   await noOverflow(page);
 }
 async function screenshot(page, info, name) {
@@ -1510,7 +1514,7 @@ test("Calendar density fits five jobs, expands with height and keeps all columns
         const chips = [...cell.querySelectorAll(".calendar-job-chip")];
         const first = chips[0];
         return {
-          workspace: box(".calendar-workspace"), mini: box(".calendar-mini-pane"), main: box(".calendar-main"), queue: box(".calendar-queue-pane"), toolbar: box(".calendar-toolbar"), grid: box(".calendar-month-grid"), cell: box('[data-calendar-date="2026-09-15"]'), chip: box(".calendar-job-chip"), number: box('[data-calendar-date="2026-09-15"] .calendar-day-number'),
+          workspace: box(".calendar-workspace"), mini: box(".calendar-mini-pane"), main: box(".calendar-main"), queue: box(".calendar-queue-pane"), toolbar: box("[data-calendar-toolbar]"), grid: box(".calendar-month-grid"), cell: box('[data-calendar-date="2026-09-15"]'), chip: box(".calendar-job-chip"), number: box('[data-calendar-date="2026-09-15"] .calendar-day-number'),
           gap: getComputedStyle(document.querySelector(".calendar-layout")).gap,
           navigationRight: document.querySelector('aside').getBoundingClientRect().right,
           scrollHeight: document.documentElement.scrollHeight,
@@ -1567,7 +1571,7 @@ test("Calendar density fits five jobs, expands with height and keeps all columns
   } finally { await context.close(); }
 });
 
-test("mobile Calendar toolbar stays in one row from 320px through 430px", async ({ browser }) => {
+test("mobile Calendar toolbar keeps 44px controls aligned below its title from 320px through 430px", async ({ browser }) => {
   const { context, page, writes } = await openCalendar(browser, 430, 932);
   try {
     for (const [width, height] of [[430, 932], [390, 844], [360, 800], [320, 720]]) {

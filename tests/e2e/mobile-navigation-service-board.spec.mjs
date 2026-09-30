@@ -578,8 +578,9 @@ async function assertDesktopBoardSpacing(page) {
   expect(columnBoxes).toHaveLength(3);
   const columnTop = Math.min(...columnBoxes.map((box) => box.top));
   const toolbarBottom = toolbarBox.y + toolbarBox.height;
-  expect(columnTop - toolbarBottom).toBeGreaterThanOrEqual(14);
-  expect(columnTop - toolbarBottom).toBeLessThanOrEqual(18);
+  const bodyPadding = await page.locator("[data-desktop-service-board-layout] > [data-page-body]")
+    .evaluate((body) => Number.parseFloat(getComputedStyle(body).paddingTop));
+  expect(columnTop - toolbarBottom).toBeCloseTo(bodyPadding, 0);
   expect(Math.max(...columnBoxes.map((box) => box.top)) - columnTop).toBeLessThanOrEqual(1);
 }
 
@@ -961,7 +962,7 @@ test("mobile and tablet viewport matrix keeps filters, details, and overflow usa
 
       if (viewport.width === 375) {
         await expect(page.locator(".mobile-workspace-navigation header")).toHaveCSS("padding-top", "24px");
-        await expect(page.locator(".mobile-safe-workspace")).toHaveCSS("padding-left", "20px");
+        await expect(page.locator("[data-page-body]")).toHaveCSS("padding-left", "20px");
         const filterTrigger = page.locator('button[aria-label^="Open board filters"]');
         await filterTrigger.click();
         const filters = page.getByRole("dialog", { name: "Board filters" });
@@ -1189,7 +1190,8 @@ test("mobile page controls keep records primary and preserve live filter state",
     for (const label of ["Preferences", "Document Templates", "UI Settings", "Data Backup"]) {
       await expect(settingsToolbar.getByRole("button", { name: label, exact: true })).toBeVisible();
     }
-    await expect(settingsToolbar.locator("[data-settings-navigation]")).toHaveCSS("flex-wrap", "nowrap");
+    await expect(settingsToolbar.locator("[data-settings-navigation]")).toHaveCSS("flex-wrap", "wrap");
+    expect(await settingsToolbar.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
     await assertNoHorizontalOverflow(page);
 
     await navigateToWorkspaceSection(page, "Recycle Bin", width);
@@ -1670,7 +1672,7 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
           expect(metrics.search?.width).toBe(320);
           expect(metrics.leftGap).toBe("10px");
           expect(metrics.fieldControlHeights.length).toBeGreaterThan(0);
-          for (const height of metrics.fieldControlHeights) expect(height).toBe(40);
+          for (const height of metrics.fieldControlHeights) expect(height).toBe(44);
           for (const containment of metrics.fieldContainment) {
             expect(containment.left).not.toBeNull();
             expect(containment.right).not.toBeNull();
@@ -1688,7 +1690,7 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
             const actionBox = await action.boundingBox();
             expect(metrics.right).not.toBeNull();
             expect(metrics.toolbar.right - metrics.right.right).toBeLessThanOrEqual(17);
-            expect(actionBox.height).toBe(40);
+            expect(actionBox.height).toBe(44);
           } else {
             expect(metrics.right).toBeNull();
           }
@@ -1705,10 +1707,8 @@ test("standardized page controls stay aligned, accessible, and overflow-free at 
             for (const button of [listButton, gridButton]) {
               await expect(button).toHaveCSS("border-top-width", "1px");
               const box = await button.boundingBox();
-              expect(box.width).toBeGreaterThanOrEqual(36);
-              expect(box.width).toBeLessThanOrEqual(40);
-              expect(box.height).toBeGreaterThanOrEqual(36);
-              expect(box.height).toBeLessThanOrEqual(40);
+              expect(box.width).toBe(44);
+              expect(box.height).toBe(44);
             }
           }
         } else {

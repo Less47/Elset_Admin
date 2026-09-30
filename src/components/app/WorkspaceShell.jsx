@@ -1,5 +1,6 @@
-import { FilterPopover } from "@/components/shared/ResponsivePageControls";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { FilterPopover, PagePrimaryAction } from "@/components/shared/ResponsivePageControls";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
 import BuildIndicator from "@/components/app/BuildIndicator";
 import WorkspaceLogo from "@/components/app/WorkspaceLogo";
@@ -121,6 +122,20 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const jobNotes = useJobNoteEditor({ jobs: data.jobs, onSave: actions.handleSaveServiceBoardNote });
   const boardFocus = useRef(null);
   const recordOpen = Boolean(workspacePage);
+  const shellRef = useRef(null);
+  const mobileNavigationRef = useRef(null);
+  useLayoutEffect(() => {
+    // Measure navigation including safe areas and text zoom. Map retains its
+    // independent sizing/overflow contract.
+    if (mapWorkspaceOpen) return;
+    const shell = shellRef.current;
+    const navigation = mobileNavigationRef.current;
+    const update = () => shell?.style.setProperty("--page-navigation-height", `${navigation?.getBoundingClientRect().height || 0}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    if (navigation) observer.observe(navigation);
+    return () => { observer.disconnect(); shell?.style.removeProperty("--page-navigation-height"); };
+  }, [isDesktopLayout, recordOpen, mapWorkspaceOpen]);
   useEffect(() => {
     if (!recordOpen && activeSection === "service-board" && boardFocus.current?.isConnected) {
       boardFocus.current.focus({ preventScroll: true });
@@ -144,20 +159,21 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
     return (
       <div className="grid gap-3">
-        <div className="flex w-full flex-col gap-2 md:flex-row md:items-center">
+        <div className="flex w-full flex-col gap-2 md:flex-row md:items-center" data-service-board-primary-controls>
           <Input
-            className={searchInputClassName}
+            className={`h-11 ${searchInputClassName}`}
+            aria-label="Search jobs"
             placeholder="Search jobs, customer, address..."
             value={officeSearch}
             onChange={(event) => setOfficeSearch(event.target.value)}
           />
 
-          <div className="flex shrink-0 flex-nowrap items-center gap-2 md:justify-end">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
             <FilterPopover activeCount={showHighUrgencyOnly ? 1 : 0} onReset={() => setShowHighUrgencyOnly(false)}><label className="flex min-h-11 items-center gap-3 text-sm">
               <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
               <span className="whitespace-nowrap text-sm">High urgency only</span>
             </label></FilterPopover>
-            <Button
+            <PagePrimaryAction
               variant="outline"
               className={`${fullScreenButtonClassName} whitespace-nowrap px-3`}
               onClick={() => setServiceBoardFullScreen((prev) => !prev)}
@@ -171,11 +187,11 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                   <Maximize2 className="mr-2 h-4 w-4" /> Full Screen
                 </>
               )}
-            </Button>
+            </PagePrimaryAction>
             {canManageBusiness ? (
-              <Button className="whitespace-nowrap rounded-2xl px-3 hover:opacity-95" style={themePalette.primaryButton} onClick={() => openCreateJob()}>
+              <PagePrimaryAction className="whitespace-nowrap rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => openCreateJob()}>
                 <Plus className="mr-2 h-4 w-4" /> New Job
-              </Button>
+              </PagePrimaryAction>
             ) : null}
           </div>
         </div>
@@ -191,10 +207,21 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     );
   };
 
+  const noteStatus = <>
+            {jobNotes.pendingCount > 0 ? <p role="status" className="mb-2 text-xs text-text-secondary">Saving job note…</p> : null}
+            {jobNotes.failures.map((failure) => (
+              <div key={failure.jobId} role="alert" className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">
+                <span>Job #{failure.jobNumber}: {failure.message} Your draft is kept for retry.</span>
+                <Button type="button" variant="outline" onClick={(event) => jobNotes.retry(failure, event)}>Retry note</Button>
+              </div>
+            ))}
+  </>;
+
   return (
-    <div className={mapWorkspaceOpen || calendarWorkspaceOpen ? `${mapWorkspaceOpen ? "map" : "calendar"}-workspace-app fixed inset-0 flex min-h-0 flex-col overflow-hidden lg:block` : "contents"}>
+    <div ref={shellRef} className={mapWorkspaceOpen || calendarWorkspaceOpen ? `${mapWorkspaceOpen ? "map" : "calendar"}-workspace-app fixed inset-0 flex min-h-0 flex-col overflow-hidden lg:block` : "contents"}>
       {!isDesktopLayout && !workspacePage ? (
         <MobileWorkspaceNavigation
+          ref={mobileNavigationRef}
           activeSection={activeSection}
           authUser={authUser}
           canManageBusiness={canManageBusiness}
@@ -357,14 +384,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           workspacePage
             ? "min-w-0 lg:pl-[var(--sidebar-width)]"
             : desktopServiceBoardFullScreen
-            ? "min-w-0 space-y-4 px-3 py-3 sm:px-4 sm:py-4"
+            ? "workspace-page-column workspace-page-column--fullscreen min-w-0"
             : mapWorkspaceOpen
             ? "map-workspace-shell min-h-0 min-w-0 flex-1 overflow-hidden lg:h-full lg:pl-[var(--sidebar-width)]"
             : calendarWorkspaceOpen
             ? "calendar-workspace-shell min-h-0 min-w-0 flex-1 overflow-hidden lg:h-full lg:pl-[var(--sidebar-width)]"
-            : activeSection === "service-board"
-            ? "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] pb-[var(--content-padding-y-mobile)] pt-0 sm:px-[var(--content-padding-x-sm)] sm:pb-[var(--content-padding-y-sm)] sm:pt-0 lg:px-[var(--content-padding-x-lg)] lg:pb-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)] lg:pt-[var(--content-padding-y-lg)]"
-            : "mobile-safe-workspace min-w-0 space-y-[var(--section-gap)] px-[var(--content-padding-x-mobile)] py-[var(--content-padding-y-mobile)] sm:px-[var(--content-padding-x-sm)] sm:py-[var(--content-padding-y-sm)] lg:px-[var(--content-padding-x-lg)] lg:py-[var(--content-padding-y-lg)] lg:pl-[var(--sidebar-offset)]"
+            : "workspace-page-column min-w-0 lg:pl-[var(--sidebar-width)]"
         }
       >
         {workspacePage}
@@ -396,13 +421,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {activeSection === "service-board" ? (
           <div className="min-w-0">
-            {jobNotes.pendingCount > 0 ? <p role="status" className="mb-2 text-xs text-text-secondary">Saving job note…</p> : null}
-            {jobNotes.failures.map((failure) => (
-              <div key={failure.jobId} role="alert" className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">
-                <span>Job #{failure.jobNumber}: {failure.message} Your draft is kept for retry.</span>
-                <Button type="button" variant="outline" onClick={(event) => jobNotes.retry(failure, event)}>Retry note</Button>
-              </div>
-            ))}
             {jobNotes.editor ? <JobNoteEditor
               key={jobNotes.editor.jobId}
               editor={jobNotes.editor}
@@ -425,21 +443,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                   formatDate={formatDate}
                 />
 
-                <div className="grid gap-4" data-desktop-service-board-layout>
-                  {desktopServiceBoardFullScreen ? (
-                    <Card data-service-board-toolbar className="py-0 sticky top-3 z-20 rounded-xl border-border bg-card/80 shadow-sm backdrop-blur">
-                      <CardContent className="grid gap-2 p-panel">
-                        {renderServiceBoardControls("panel")}
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <Card data-service-board-toolbar className="py-0 overflow-hidden rounded-xl shadow-xl" style={themePalette.heroCard}>
-                      <CardContent className="flex flex-col justify-center p-panel">
-                        {renderServiceBoardControls("hero")}
-                      </CardContent>
-                    </Card>
-                  )}
-
+                <PageWorkspace data-desktop-service-board-layout>
+                  <PageTopBar data-service-board-toolbar innerClassName="p-panel">
+                    {renderServiceBoardControls("hero")}
+                  </PageTopBar>
+                  <PageBody className="space-y-4">
+                    {noteStatus}
                   <OfficeBoard
                     noteEditMode={jobNotes.active}
                     onEditNote={jobNotes.open}
@@ -477,10 +486,12 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                       )
                     }
                   />
-                </div>
+                  </PageBody>
+                </PageWorkspace>
               </>
             ) : (
               <MobileServiceBoard
+                noteStatus={noteStatus}
                 noteEditMode={jobNotes.active}
                 onToggleNoteEditMode={jobNotes.toggle}
                 onEditNote={jobNotes.open}
@@ -574,11 +585,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         ) : null}
 
         {canManageBusiness && activeSection === "invoices" ? (
-          <div className="space-y-4">
-          {chrome.invoiceNotice ? <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-status-success-border bg-status-success-surface px-4 py-3 text-sm text-status-success">
+          <InvoiceManager
+            notice={chrome.invoiceNotice ? <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-status-success-border bg-status-success-surface px-4 py-3 text-sm text-status-success">
             <span>{chrome.invoiceNotice}</span><Button variant="ghost" size="sm" onClick={chrome.dismissInvoiceNotice}>Dismiss</Button>
           </div> : null}
-          <InvoiceManager
             key={chrome.invoiceCustomerId || "all-customers"}
             customerId={chrome.invoiceCustomerId}
             customerName={data.customers.find((customer) => customer.id === chrome.invoiceCustomerId)?.name}
@@ -594,7 +604,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             normalizeDocument={normalizeDocument}
             toTimestamp={toTimestamp}
           />
-          </div>
         ) : null}
 
         {canManageBusiness && activeSection === "maintenance" ? (

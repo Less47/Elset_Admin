@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +64,9 @@ export default function StatisticsPanel({
     });
 
   return (
-    <div className="space-y-6">
+    <PageWorkspace>
+      <PageTopBar innerClassName="px-panel py-3"><h1 className="text-lg font-semibold">Statistics</h1></PageTopBar>
+      <PageBody className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="rounded-3xl border-border">
           <CardContent className="p-5">
@@ -211,6 +214,7 @@ export default function StatisticsPanel({
           ) : null}
         </CardContent>
       </Card>
-    </div>
+    </PageBody>
+    </PageWorkspace>
   );
 }

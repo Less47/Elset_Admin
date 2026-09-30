@@ -893,6 +893,9 @@ test("document workspaces fit all eight requested viewports with usable line ite
         await noModalOrOverflow(page);
         await expect(page.getByRole("heading", { level: 1 })).toContainText(type === "quote" ? "Quote" : "Invoice");
         await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+        for (const control of await page.locator(".record-workspace-header button:visible").all()) {
+          expect((await control.boundingBox()).height).toBe(44);
+        }
         for (const field of ["Item 1 description", "Item 1 quantity", "Item 1 rate"]) {
           const input = page.getByLabel(field, { exact: true });
           const bounds = await input.boundingBox();

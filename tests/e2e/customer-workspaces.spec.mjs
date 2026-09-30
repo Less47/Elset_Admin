@@ -752,6 +752,7 @@ test("Customer and Site pages fill desktop, tablet and phone workspaces", async 
       await noModalOrOverflow(page);
       await captureWorkspace(page, info, `site-profile-${width}x${height}`);
       await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
+      await expect(page).toHaveURL(/\/sites\/[^/]+\/edit$/);
       await page.reload();
       await expect(page.getByRole("button", { name: "Save Site Profile", exact: true })).toBeVisible();
       await noModalOrOverflow(page);

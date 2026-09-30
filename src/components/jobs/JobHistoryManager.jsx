@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
@@ -176,7 +177,8 @@ export default function JobHistoryManager({
 
   return (
     <>
-    <div className="space-y-4">
+    <PageWorkspace>
+      <PageTopBar>
       <ResponsivePageControls
         search={(
           <PageSearchField
@@ -201,7 +203,7 @@ export default function JobHistoryManager({
 
       <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setStatusFilter("all"); setUrgencyFilter("all"); setDocumentFilter("all"); setCreatedRange("all-time"); setCreatedFrom(""); setCreatedTo(""); }}
         search={(
-          <DesktopControlField label="Search" size="search">
+          <DesktopControlField hideLabel label="Search" size="search">
             <PageSearchField
               compact
               value={search}
@@ -315,7 +317,8 @@ export default function JobHistoryManager({
           </>
         )}
       />
-
+      </PageTopBar>
+      <PageBody className="space-y-4">
       <Card
         className={mobileRecordLayout
           ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
@@ -507,7 +510,8 @@ export default function JobHistoryManager({
         )}
       </CardContent>
       </Card>
-    </div>
+    </PageBody>
+    </PageWorkspace>
     <MobileFilterSheet
       open={filtersOpen}
       onOpenChange={setFiltersOpen}

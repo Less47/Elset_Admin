@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { Plus, Wrench, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -89,9 +90,12 @@ export default function MaintenanceManager({ maintenancePlans, customers, jobs, 
   const filterSelect = (id) => <Select value={filter} onValueChange={setFilter}><SelectTrigger id={id} className="data-toolbar-field bg-card"><SelectValue /></SelectTrigger><SelectContent>{filters.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>;
   const addAction = <PagePrimaryAction onClick={() => onOpenPlan("new")}><Plus className="h-4 w-4" /> Add Maintenance Plan</PagePrimaryAction>;
   const summary = <dl className="maintenance-summary" aria-label="Maintenance summary">{stats.map(([label, value]) => <div key={label}><dt>{label}{label === "Active" ? <span className="sr-only"> jobs</span> : label === "Contract" ? <span className="sr-only"> value</span> : null}</dt><dd>{value}</dd></div>)}</dl>;
-  return <div className="maintenance-dashboard" data-maintenance-dashboard style={maintenanceToolbarStyle(toolbarSurface)}>
+  return <PageWorkspace className="maintenance-dashboard" data-maintenance-dashboard style={maintenanceToolbarStyle(toolbarSurface)}>
+    <PageTopBar>
     <ResponsivePageControls className="maintenance-responsive-controls" surfaceClassName="maintenance-toolbar" search={<PageSearchField value={search} onChange={setSearch} placeholder="Search maintenance..." label="Search maintenance plans" />} controls={<><FilterButton ref={filterTrigger} activeCount={filter === "all" ? 0 : 1} open={filtersOpen} onClick={() => setFiltersOpen(true)} /><CompactSortControl value={sort} onValueChange={setSort} options={sorts} label="Sort maintenance plans" /></>} action={addAction} toolbarSummary={summary} summary={<ResultSummary className="sr-only">{visible.length} maintenance plans</ResultSummary>} />
-    <DesktopPageControls activeCount={filter === "all" ? 0 : 1} onReset={() => setFilter("all")} className="maintenance-toolbar" search={<DesktopControlField label="Search" size="search"><PageSearchField compact value={search} onChange={setSearch} placeholder="Search plan, customer or site..." label="Search maintenance plans" /></DesktopControlField>} filters={<><DesktopControlField htmlFor="maintenance-filter" label="Filter" size="medium">{filterSelect("maintenance-filter")}</DesktopControlField><DesktopControlField htmlFor="maintenance-sort" label="Sort by" size="medium"><Select value={sort} onValueChange={setSort}><SelectTrigger id="maintenance-sort" className="data-toolbar-field bg-card"><SelectValue /></SelectTrigger><SelectContent>{sorts.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></DesktopControlField></>} summary={summary} actions={addAction} />
+    <DesktopPageControls activeCount={filter === "all" ? 0 : 1} onReset={() => setFilter("all")} className="maintenance-toolbar" search={<DesktopControlField hideLabel label="Search" size="search"><PageSearchField compact value={search} onChange={setSearch} placeholder="Search plan, customer or site..." label="Search maintenance plans" /></DesktopControlField>} filters={<><DesktopControlField htmlFor="maintenance-filter" label="Filter" size="medium">{filterSelect("maintenance-filter")}</DesktopControlField><DesktopControlField htmlFor="maintenance-sort" label="Sort by" size="medium"><Select value={sort} onValueChange={setSort}><SelectTrigger id="maintenance-sort" className="data-toolbar-field bg-card"><SelectValue /></SelectTrigger><SelectContent>{sorts.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></DesktopControlField></>} summary={summary} actions={addAction} />
+    </PageTopBar>
+    <PageBody className="space-y-3">
     {error ? <p role="alert" className="rounded-lg border border-status-danger-border bg-status-danger-surface p-3 text-sm text-status-danger">{error}</p> : null}
     <div className="maintenance-dashboard-body">
       <section className="maintenance-plan-list" aria-label="Maintenance plans">
@@ -106,6 +110,7 @@ export default function MaintenanceManager({ maintenancePlans, customers, jobs, 
         {due.length ? due.slice(0, 8).map(({ plan, customer, status }) => <div className="maintenance-due-row" key={plan.id}><div className="flex items-start justify-between gap-2"><button type="button" className="min-w-0 text-left text-sm font-semibold hover:underline" onClick={() => onOpenPlan(plan.id)}>{plan.planName}</button><Badge className={status.className}>{status.label}</Badge></div><p className="maintenance-due-muted mt-1 truncate text-xs">{customer?.name}</p><div className="mt-3 flex items-center justify-between gap-2"><span className="maintenance-due-muted text-xs">Due {formatDate(plan.nextDueDate)}</span><Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => generate(plan)}>Generate Job</Button></div></div>) : <p className="maintenance-due-muted py-8 text-sm">Nothing urgent. Your next visits are on the Calendar.</p>}
       </aside>
     </div>
+    </PageBody>
     <MobileFilterSheet open={filtersOpen} onOpenChange={setFiltersOpen} returnFocusRef={filterTrigger} activeCount={filter === "all" ? 0 : 1} onReset={() => setFilter("all")} description="Filter maintenance plans by service state."><FilterSheetField id="mobile-maintenance-filter" label="Status">{filterSelect("mobile-maintenance-filter")}</FilterSheetField></MobileFilterSheet>
-  </div>;
+  </PageWorkspace>;
 }

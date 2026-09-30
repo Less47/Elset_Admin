@@ -44,16 +44,16 @@ export function DesktopPageControls({ search, viewToggle, filters, summary, acti
   );
 }
 
-export function DesktopControlField({ children, className, htmlFor, label, size = "medium" }) {
+export function DesktopControlField({ children, className, htmlFor, label, hideLabel = false, size = "medium" }) {
   return (
     <div
       className={cn("page-controls__field", desktopFieldSizeClassNames[size] || desktopFieldSizeClassNames.medium, className)}
       data-control-size={size}
     >
       {htmlFor ? (
-        <label htmlFor={htmlFor} className="page-controls__label">{label}</label>
+        <label htmlFor={htmlFor} className={hideLabel ? "sr-only" : "page-controls__label"}>{label}</label>
       ) : (
-        <span className="page-controls__label">{label}</span>
+        <span className={hideLabel ? "sr-only" : "page-controls__label"}>{label}</span>
       )}
       {children}
     </div>
@@ -109,8 +109,8 @@ export function PageSearchField({ value, onChange, placeholder, label, compact =
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 !text-muted-foreground" aria-hidden="true" />
       <Input
         className={cn(
-          "data-toolbar-field border-border bg-card pl-9 pr-11",
-          compact ? "h-10 rounded-lg text-sm" : "h-11 rounded-xl text-base"
+          "data-toolbar-field h-11 border-border bg-card pl-9 pr-11",
+          compact ? "rounded-lg text-sm" : "rounded-xl text-base"
         )}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -121,8 +121,8 @@ export function PageSearchField({ value, onChange, placeholder, label, compact =
         <button
           type="button"
           className={cn(
-            "absolute right-0 top-0 flex items-center justify-center !text-muted-foreground outline-none hover:!text-foreground focus-visible:ring-3 focus-visible:ring-status-info-border/35",
-            compact ? "h-10 w-10 rounded-lg" : "h-11 w-11 rounded-xl"
+            "absolute right-0 top-0 flex h-11 w-11 items-center justify-center !text-muted-foreground outline-none hover:!text-foreground focus-visible:ring-3 focus-visible:ring-status-info-border/35",
+            compact ? "rounded-lg" : "rounded-xl"
           )}
           onClick={() => onChange("")}
           aria-label={compact ? "Clear search" : `Clear ${label.toLowerCase()}`}
@@ -187,7 +187,7 @@ export function ViewModeToggle({ value, onChange, label = "View mode", compact =
 
   return (
     <div
-      className={cn("flex shrink-0 items-end gap-1.5", compact ? "h-10" : "h-11")}
+      className="flex h-11 shrink-0 items-center gap-1.5"
       role="group"
       aria-label={label}
     >
@@ -200,8 +200,8 @@ export function ViewModeToggle({ value, onChange, label = "View mode", compact =
           size="sm"
           variant="ghost"
           className={cn(
-            "page-controls__view-button border border-border",
-            compact ? "h-9 w-9 min-w-9 rounded-md p-0" : "h-11 min-w-11 rounded-lg px-2 sm:px-2.5",
+            "page-controls__view-button h-11 min-w-11 border border-border",
+            compact ? "w-11 rounded-md p-0" : "rounded-lg px-2 sm:px-2.5",
             value === option.value
               ? "is-active"
               : "!text-foreground hover:!text-foreground"
@@ -222,7 +222,7 @@ export function ViewModeToggle({ value, onChange, label = "View mode", compact =
 
 export function PagePrimaryAction({ children, className, compact = false, ...props }) {
   return (
-    <Button className={cn(compact ? "h-10 rounded-lg px-3" : "h-11 rounded-xl px-3", className)} {...props}>
+    <Button className={cn("h-11 px-3", compact ? "rounded-lg" : "rounded-xl", className)} {...props}>
       {children}
     </Button>
   );

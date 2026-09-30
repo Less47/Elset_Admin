@@ -1,3 +1,4 @@
+import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -270,7 +271,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
   return (
     <>
-      <div className="space-y-4">
+      <PageWorkspace>
+      <PageTopBar>
         <ResponsivePageControls
           search={(
             <PageSearchField value={search} onChange={setSearch} placeholder="Search parts..." label="Search parts inventory" />
@@ -291,7 +293,7 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
 
         <DesktopPageControls activeCount={activeFilterCount} onReset={() => { setFilterBy("all"); }}
           search={(
-            <DesktopControlField label="Search" size="search">
+            <DesktopControlField hideLabel label="Search" size="search">
               <PageSearchField
                 compact
                 value={search}
@@ -346,8 +348,9 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
             </PagePrimaryAction>
           )}
         />
-
-        <Card className="data-card gap-0 overflow-hidden rounded-xl border-border shadow-none">
+      </PageTopBar>
+      <PageBody className="space-y-4">
+      <Card className="data-card gap-0 overflow-hidden rounded-xl border-border shadow-none">
         <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-4">
           {[
             { label: "Parts", value: inventoryStats.totalParts },
@@ -576,7 +579,8 @@ export default function InventoryManager({ inventoryItems, onCreatePart, onUpdat
           )}
         </CardContent>
         </Card>
-      </div>
+      </PageBody>
+    </PageWorkspace>
 
       <MobileFilterSheet
         open={filtersOpen}

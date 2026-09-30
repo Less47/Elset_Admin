@@ -1,6 +1,5 @@
 .document-workspace { min-width: 0; }
 .document-workspace .record-workspace-header h1 { outline: none; }
-.document-workspace .record-workspace-header button { height: 36px; }
 .document-feedback { min-height: 16px; margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
 .document-feedback:empty { display: none; }
 .document-send-status { margin-bottom: 12px; overflow-wrap: anywhere; }
