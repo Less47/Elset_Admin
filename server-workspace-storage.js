@@ -91,6 +91,7 @@ function filterAuthorizedState(data, user) {
   return {
     staff: normalized.staff,
     customers: normalized.customers,
+    contacts: normalized.contacts || [],
     inventoryItems: normalized.inventoryItems,
     maintenancePlans: normalized.maintenancePlans,
     jobs: normalized.jobs,

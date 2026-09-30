@@ -1,4 +1,5 @@
 import express from "express";
+import { createContact, updateContact, deleteContact, linkContact, unlinkContact } from "./server-workspace-contacts.js";
 import {
   createCustomer,
   createCustomerSite,
@@ -82,6 +83,14 @@ export function createCustomerRouter({
   const authMiddleware = requireAuth || ((_req, _res, next) => next());
   const roleMiddleware = requireRole ? requireRole(["admin", "office"]) : ((_req, _res, next) => next());
   const middleware = [authMiddleware, roleMiddleware];
+
+  router.post("/api/contacts", ...middleware, handleCustomerRoute((db, req) => createContact(db, getRequestBody(req, "contact")), env));
+  router.patch("/api/contacts/:contactId", ...middleware, handleCustomerRoute((db, req) => updateContact(db, req.params.contactId, getRequestBody(req, "contact")), env));
+  router.delete("/api/contacts/:contactId", ...middleware, handleCustomerRoute((db, req) => deleteContact(db, req.params.contactId), env));
+  router.put("/api/customers/:id/contacts/:contactId", ...middleware, handleCustomerRoute((db, req) => linkContact(db, "customer", req.params.id, req.params.contactId, getRequestBody(req, "assignment")), env));
+  router.delete("/api/customers/:id/contacts/:contactId", ...middleware, handleCustomerRoute((db, req) => unlinkContact(db, "customer", req.params.id, req.params.contactId), env));
+  router.put("/api/customers/:id/sites/:siteId/contacts/:contactId", ...middleware, handleCustomerRoute((db, req) => linkContact(db, "site", req.params.siteId, req.params.contactId, getRequestBody(req, "assignment"), req.params.id), env));
+  router.delete("/api/customers/:id/sites/:siteId/contacts/:contactId", ...middleware, handleCustomerRoute((db, req) => unlinkContact(db, "site", req.params.siteId, req.params.contactId, req.params.id), env));
 
   router.get("/api/customers/:id/account-summary", ...middleware, (req, res) => {
     res.set("Cache-Control", "no-store");

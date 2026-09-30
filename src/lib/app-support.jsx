@@ -1,3 +1,4 @@
+import { getCustomerDirectContacts, getCustomerBillingContacts, getCustomerAccountContact, getCustomerPrimaryContact, getSitePrimaryContact, getSiteContacts, isLegacyAccountContact } from "./contact-model.js";
 import { normalizeDeletedInvoices } from "./invoice-deletion.js";
 import { customerPostalFields } from "./customer-profile.js";
 import { createBlankDocumentLine } from "./price-list.js";
@@ -998,14 +999,6 @@ export function getNextJobNumber(jobs) {
   );
 }
 
-function buildContactSignature(contact) {
-  return [
-    String(contact?.name || "").trim().toLowerCase(),
-    String(contact?.email || "").trim().toLowerCase(),
-    String(contact?.phone || "").trim(),
-  ].join("|");
-}
-
 export function normalizeContactRecord(contact, fallback = {}) {
   if (!contact && !fallback) return null;
 
@@ -1014,76 +1007,25 @@ export function normalizeContactRecord(contact, fallback = {}) {
     ...(contact?.siteId !== undefined ? { siteId: contact.siteId } : {}),
     id: String(contact?.id || fallback.id || "").trim() || crypto.randomUUID(),
     name: String(contact?.name || fallback.name || "").trim(),
+    ...(contact?.position !== undefined ? { position: String(contact.position || "").trim() } : {}),
     role: String(contact?.role || fallback.role || "").trim(),
     phone: String(contact?.phone || fallback.phone || "").trim(),
     email: String(contact?.email || fallback.email || "").trim(),
     notes: String(contact?.notes || fallback.notes || "").trim(),
   };
 
-  if (!normalized.name && !normalized.phone && !normalized.email && !normalized.notes) {
+  if (!normalized.name && !normalized.phone && !normalized.email && !normalized.notes && !normalized.position) {
     return null;
   }
 
   return normalized;
 }
 
-export function normalizeCustomerContacts(contacts, { customerId = "", customerName = "", email = "", phone = "", sites = [] } = {}) {
-  const nextContacts = [];
-
-  const addContact = (contact, fallback = {}) => {
-    const normalized = normalizeContactRecord(contact, fallback);
-    if (!normalized) return null;
-
-    const signature = buildContactSignature(normalized);
-    const existing = nextContacts.find((entry) => entry.id === normalized.id || (signature && buildContactSignature(entry) === signature));
-    if (existing) return existing;
-
-    nextContacts.push(normalized);
-    return normalized;
-  };
-
-  if (Array.isArray(contacts)) {
-    contacts.forEach((contact) => addContact(contact));
-  }
-
-  if (email || phone) {
-    addContact(
-      {
-        id: customerId ? `${customerId}-primary-contact` : "",
-        name: customerName,
-        role: "Primary contact",
-        email,
-        phone,
-      },
-      {
-        id: customerId ? `${customerId}-primary-contact` : "",
-        name: customerName,
-        role: "Primary contact",
-        email,
-        phone,
-      }
-    );
-  }
-
-  (Array.isArray(sites) ? sites : []).forEach((site) => {
-    if (!site?.contactName && !site?.contactPhone && !site?.contactEmail) return;
-
-    addContact(
-      {
-        id: String(site.contactId || "").trim() || (site.id ? `${site.id}-site-contact` : ""),
-        name: site.contactName,
-        role: "Site contact",
-        phone: site.contactPhone,
-        email: site.contactEmail,
-      },
-      {
-        id: site.id ? `${site.id}-site-contact` : "",
-        role: "Site contact",
-      }
-    );
-  });
-
-  return nextContacts.sort((a, b) => getContactDisplayName(a).localeCompare(getContactDisplayName(b)) || a.role.localeCompare(b.role));
+export function normalizeCustomerContacts(contacts, { customerId = "", customerName = "", email = "", phone = "" } = {}) {
+  const seen = new Set();
+  return (Array.isArray(contacts) ? contacts : []).filter((contact) => !isLegacyAccountContact(contact, { id: customerId, name: customerName, email, phone }))
+    .map((contact) => ({ ...contact, ...normalizeContactRecord(contact) }))
+    .filter((contact) => contact.id && !seen.has(contact.id) && seen.add(contact.id));
 }
 
 export function normalizeJobContactSnapshot(contact, fallbackRole = "") {
@@ -1099,6 +1041,7 @@ export function buildContactSnapshot(contact, fallbackRole = "") {
       ? {
           id: contact.id,
           name: contact.name,
+          ...(contact.position !== undefined ? { position: contact.position } : {}),
           role: contact.role || fallbackRole,
           phone: contact.phone,
           email: contact.email,
@@ -1115,29 +1058,19 @@ export function getContactDisplayName(contact) {
 }
 
 export function getCustomerContacts(customer) {
-  return normalizeCustomerContacts(customer?.contacts, {
-    customerId: customer?.id,
-    customerName: customer?.name,
-    email: customer?.email,
-    phone: customer?.phone,
-    sites: normalizeCustomerSiteProfiles(customer?.sites, customer?.address, customer?.siteAccessNotes),
-  });
+  return getCustomerDirectContacts(customer);
 }
 
 export function getCustomerBillingContact(customer) {
-  const contacts = getCustomerContacts(customer);
-  const billingContactId = String(customer?.billingContactId || "").trim();
-  return contacts.find((contact) => contact.id === billingContactId)
-    || contacts.find((contact) => contact.email)
-    || contacts[0]
-    || null;
+  return getCustomerBillingContacts(customer)[0] || getCustomerAccountContact(customer)
+    || getCustomerPrimaryContact(customer) || getCustomerContacts(customer)[0] || null;
 }
 
 export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
   const normalizedCustomer = customer || {};
   const address = normalizeSiteAddress(normalizedCustomer.address);
   const baseSites = normalizeCustomerSiteProfiles(normalizedCustomer.sites, address, normalizedCustomer.siteAccessNotes);
-  const contacts = normalizeCustomerContacts(normalizedCustomer.contacts, {
+  const contacts = Array.isArray(normalizedCustomer.contactAssignments) ? getCustomerDirectContacts(normalizedCustomer) : normalizeCustomerContacts(normalizedCustomer.contacts, {
     customerId: normalizedCustomer.id,
     customerName: normalizedCustomer.name,
     email: normalizedCustomer.email,
@@ -1165,10 +1098,7 @@ export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
         updatedAt: site.updatedAt,
       })),
   ]);
-  const resolvedBillingContact = contacts.find((contact) => contact.id === String(normalizedCustomer.billingContactId || "").trim())
-    || contacts.find((contact) => contact.email)
-    || contacts[0]
-    || null;
+  const resolvedBillingContact = getCustomerBillingContact({ ...normalizedCustomer, contacts });
 
   return {
     ...normalizedCustomer,
@@ -1256,6 +1186,7 @@ export function normalizeSiteAssets(assets) {
 }
 
 function resolveSiteContactRecord(siteProfile, customerContacts = []) {
+  if (Array.isArray(siteProfile?.contactAssignments)) return buildContactSnapshot(getSitePrimaryContact(siteProfile), "Site contact");
   const contactId = String(siteProfile?.contactId || "").trim();
   const linkedContact = contactId ? customerContacts.find((contact) => contact.id === contactId) || null : null;
 
@@ -1285,6 +1216,7 @@ export function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAcc
     ocNumber: String(site?.ocNumber || "").trim(),
     accessNotes: String(site?.accessNotes ?? legacyAccessNote?.notes ?? "").trim(),
     notes: String(site?.notes || "").trim(),
+    ...(Array.isArray(site?.contactAssignments) ? { contactAssignments: site.contactAssignments, contacts: site.contacts || [] } : {}),
     contactId: String(site?.contactId || "").trim(),
     contactName: String(site?.contactName || "").trim(),
     contactPhone: String(site?.contactPhone || "").trim(),
@@ -1313,6 +1245,7 @@ export function mergeSiteProfileRecords(existing, incoming) {
     ocNumber: hasExplicitField("ocNumber") ? incoming.ocNumber : existing.ocNumber,
     accessNotes: hasExplicitField("accessNotes") ? incoming.accessNotes : existing.accessNotes,
     notes: hasExplicitField("notes") ? incoming.notes : existing.notes,
+    ...(Array.isArray(incoming.contactAssignments) ? { contactAssignments: incoming.contactAssignments, contacts: incoming.contacts } : Array.isArray(existing.contactAssignments) ? { contactAssignments: existing.contactAssignments, contacts: existing.contacts } : {}),
     contactId: hasExplicitField("contactId") ? incoming.contactId : existing.contactId,
     contactName: hasExplicitField("contactName") ? incoming.contactName : existing.contactName,
     contactPhone: hasExplicitField("contactPhone") ? incoming.contactPhone : existing.contactPhone,
@@ -1589,6 +1522,7 @@ export function buildCustomerSites(customer, jobs) {
     if (siteProfile) {
       Object.assign(current, siteAddressMetadata(siteProfile));
       const resolvedContact = resolveSiteContactRecord(siteProfile, customerContacts);
+      if (Array.isArray(siteProfile.contactAssignments)) { current.contactAssignments = siteProfile.contactAssignments; current.contacts = siteProfile.contacts || []; }
       current.siteProfileId = siteProfile.id;
       current.label = siteProfile.label;
       current.profileNotes = siteProfile.notes;
@@ -1644,16 +1578,7 @@ export function getCustomerSiteAccessNote(customer, address) {
 export function getCustomerSitePrimaryContact(customer, siteIdentifier) {
   const siteProfile = getCustomerSiteProfile(customer, siteIdentifier);
   if (!siteProfile) return null;
-  return buildContactSnapshot(
-    {
-      id: siteProfile.contactId,
-      name: siteProfile.contactName,
-      phone: siteProfile.contactPhone,
-      email: siteProfile.contactEmail,
-      role: "Site contact",
-    },
-    "Site contact"
-  );
+  return resolveSiteContactRecord(siteProfile, getCustomerContacts(customer));
 }
 
 export function buildSiteProfileDraft(site) {
@@ -1666,10 +1591,7 @@ export function buildSiteProfileDraft(site) {
       ocNumber: "",
       accessNotes: "",
       notes: "",
-      contactId: "",
-      contactName: "",
-      contactPhone: "",
-      contactEmail: "",
+      contactAssignments: [],
       assets: [],
     };
   }
@@ -1683,10 +1605,9 @@ export function buildSiteProfileDraft(site) {
     ocNumber: String(site.ocNumber || "").trim(),
     accessNotes: String(site.accessNotes || "").trim(),
     notes: String(site.profileNotes || site.notes || "").trim(),
-    contactId: String(site.contactId || "").trim(),
-    contactName: String(site.contactName || "").trim(),
-    contactPhone: String(site.contactPhone || "").trim(),
-    contactEmail: String(site.contactEmail || "").trim(),
+    contactAssignments: Array.isArray(site.contactAssignments) ? site.contactAssignments.map((assignment) => ({ ...assignment }))
+      : getSiteContacts(site).map((contact) => ({ contactId: contact.id, contact, roles: contact.roles || ["Site contact"], isPrimary: Boolean(contact.isPrimary) })),
+    contacts: getSiteContacts(site),
     assets: normalizeSiteAssets(site.assets),
   };
 }
@@ -1822,6 +1743,7 @@ export function normalizeAppState(savedState) {
     : [];
 
   return purgeExpiredRecycleBinState({
+    contacts: Array.isArray(savedState?.contacts) ? savedState.contacts : [],
     staff,
     customers,
     inventoryItems,

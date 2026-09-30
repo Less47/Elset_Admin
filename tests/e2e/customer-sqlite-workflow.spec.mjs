@@ -264,7 +264,7 @@ async function openCustomerProfile(page, customerName) {
   await page.locator('input[placeholder="Search customers..."]:visible').fill(customerName);
   const row = page.locator(".data-grid-row", { hasText: customerName }).first();
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: /Open/ }).click();
+  await row.dblclick();
   await expect(page.locator(".record-workspace h1")).toHaveText(customerName);
   await expect(page).toHaveURL(/\/customers\/[^/]+$/);
 }
@@ -341,7 +341,7 @@ async function openSiteProfile(page, address) {
   await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(address);
   const row = page.locator(".data-grid-row", { hasText: address }).first();
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: /Open/ }).click();
+  await row.dblclick();
   await expect(page.locator(".record-workspace")).toContainText(address);
 }
 
@@ -424,7 +424,7 @@ async function openJobFromHistory(page, title) {
   await page.getByPlaceholder("Search job, customer, address, or status...").fill(title);
   const row = page.locator(".data-grid-row", { hasText: title }).first();
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: /Open/ }).click();
+  await row.dblclick();
   await expect(page).toHaveURL(/\/jobs\/[^/?#]+$/);
   const workspace = page.locator(".record-workspace");
   await expect(workspace.getByRole("heading", { name: title, level: 1 })).toBeVisible();

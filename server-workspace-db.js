@@ -7,12 +7,13 @@ import { accountingSchemaSql } from "./server-accounting-schema.js";
 import { accountingPaymentSchemaSql } from "./server-accounting-payment-schema.js";
 import { accountingV3SchemaSql } from "./server-accounting-v3-schema.js";
 import { accountingPaymentOutboxSchemaSql } from "./server-accounting-payment-outbox-schema.js";
+import { contactSchemaSql, migrateLegacyContacts } from "./server-contact-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 14;
+export const WORKSPACE_SCHEMA_VERSION = 15;
 
 const migrations = [
   {
@@ -566,6 +567,7 @@ const migrations = [
     `,
   },
   { version: 14, name: "quickbooks-payment-outbox", sql: accountingPaymentOutboxSchemaSql },
+  { version: 15, name: "contact-relationship-model", sql: contactSchemaSql, after: migrateLegacyContacts },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -608,7 +610,7 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
   return version;
 }
 
-function assertWorkspaceSchemaObjects(db, version) {
+export function assertWorkspaceSchemaObjects(db, version) {
   if (version >= 14) {
     db.prepare("SELECT external_snapshot_json FROM integration_external_payments LIMIT 0").all();
     db.prepare("SELECT request_json FROM integration_operations LIMIT 0").all();
@@ -668,6 +670,7 @@ export function migrateWorkspaceSchema(db, { onMigration } = {}) {
       try {
         migration.apply?.(db);
         db.exec(migration.sql);
+        migration.after?.(db);
         const now = new Date().toISOString();
         if (version === 0) {
           db.prepare("INSERT INTO workspace_info (id, schema_version, created_at, updated_at) VALUES (1, 1, ?, ?)").run(now, now);

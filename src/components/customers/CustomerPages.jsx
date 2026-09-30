@@ -39,14 +39,14 @@ export default function CustomerPages() {
   }
   if (mode === "create-customer" || mode === "edit-customer") {
     const editing = mode === "edit-customer";
-    return <CustomerFormPage key={location.pathname} customer={editing ? customer : null} backLabel={editing ? "Customer Profile" : "Customers"}
+    return <CustomerFormPage contacts={data.contacts} key={location.pathname} customer={editing ? customer : null} backLabel={editing ? "Customer Profile" : "Customers"}
       onCancel={onBack}
       onOpenSite={(entry) => navigate(`${customerPath}/sites/${encodeURIComponent(entry.siteProfileId || entry.id)}`, { state: linkState })}
       onSave={(draft) => editing ? actions.handleUpdateCustomer(customer.id, draft) : actions.handleCreateCustomer(draft)}
       onSaved={(saved) => editing ? onBack() : navigate(`/customers/${encodeURIComponent(saved.id)}`, { replace: true, state: location.state })} />;
   }
   if (siteRoute) {
-    return <SiteWorkspace key={location.pathname} customer={customer} site={site} jobs={jobs} editing={mode !== "site-details"}
+    return <SiteWorkspace contacts={data.contacts} key={location.pathname} customer={customer} site={site} jobs={jobs} editing={mode !== "site-details"}
       maintenancePlans={siteContracts} onOpenPlan={actions.handleOpenMaintenancePlan}
       tab={tab} onTabChange={setTab} backLabel={mode === "edit-site" ? "Site Profile" : backLabel}
       onBack={onBack} onEdit={() => navigate(`${sitePath}/edit`, { state: linkState })}

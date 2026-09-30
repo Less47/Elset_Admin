@@ -224,6 +224,30 @@ test("SQLite ServiceM8 import writes customers, sites, jobs, notes, documents, p
   });
 });
 
+test("ServiceM8 imports every primary and secondary contact with stable identities, positions and provenance", async () => {
+  const snapshot = readServiceM8Fixture();
+  snapshot.contacts.push({ ...snapshot.contacts[0], uuid: "svc-secondary", is_primary_contact: "0", is_billing_contact: "1", job_title: "Facilities Manager" });
+  await withTempWorkspace(async ({ env, dbPath }) => {
+    await withMockedServiceM8(snapshot, async () => {
+      await withServer(env, async (baseUrl) => {
+        const result = await requestJson(baseUrl, "/api/admin/servicem8-import/apply", { method: "POST", body: JSON.stringify({ apiKey: "synthetic-api-key" }) });
+        assert.equal(result.response.status, 200, result.payload.error);
+        const state = getDbState(dbPath);
+        assert.equal(state.contacts.filter((contact) => contact.externalRefs?.serviceM8).length, 3);
+        const person = state.contacts.find((contact) => contact.id === "servicem8-contact-svc-secondary");
+        assert.equal(person.position, "Facilities Manager");
+        assert.equal(person.externalRefs.serviceM8.contactUuid, "svc-secondary");
+        const customer = state.customers.find((entry) => entry.id === "servicem8-company-svc-company-alpha");
+        assert.equal(customer.contacts.length, 2);
+        assert.equal(customer.contacts.find((contact) => contact.id === person.id).isBilling, true);
+        const site = customer.sites.find((entry) => entry.id === "servicem8-site-svc-site-alpha");
+        assert.equal(site.contacts[0].id, "servicem8-contact-svc-contact-site-alpha");
+        assert.ok(!customer.contacts.some((contact) => contact.id === site.contacts[0].id));
+      });
+    });
+  });
+});
+
 test("SQLite ServiceM8 import updates records when the ServiceM8 source edit date advances", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {

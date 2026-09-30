@@ -2,7 +2,8 @@ import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-contex
 import { useRef, useState } from "react";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
-import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
+import ContactAssignmentsEditor, { ContactList } from "@/components/shared/ContactAssignmentsEditor";
+import { getSiteContacts } from "@/lib/contact-model";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FormField } from "@/components/shared/FormField";
 import { CustomerJobHistory } from "@/components/customers/CustomerWorkspace";
@@ -17,7 +18,7 @@ import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts,
 const NOT_SET_VALUE = "not-set";
 const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
-export default function SiteWorkspace({ customer, site, jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile }) {
+export default function SiteWorkspace({ customer, site, contacts = [], jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile }) {
   const isEditingSite = editing || !site;
   const [initial] = useState(() => buildSiteProfileDraft(site));
   const [draftSite, setDraftSite] = useState(initial);
@@ -50,7 +51,7 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
     finally { submitting.current = false; setSaving(false); }
   };
-  const currentTab = ["overview", "assets", "maintenance", "jobs"].includes(tab) ? tab : "overview";
+  const currentTab = ["overview", "contacts", "assets", "maintenance", "jobs"].includes(tab) ? tab : "overview";
   return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={!site ? "New Site" : isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
     subtitle={site?.address || "Site details and gates / projects"} maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} onBack={() => onBack()}
     headerActions={!isEditingSite ? <Button type="button" className="h-11" onClick={onEdit}>Edit Site Profile</Button> : null}>
@@ -58,6 +59,7 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
       <Tabs value={currentTab} onValueChange={onTabChange} className="min-w-0 gap-3">
         <div className="record-tab-strip min-w-0 overflow-x-auto pb-1"><TabsList aria-label="Site sections" className="h-auto min-h-11 w-max gap-1 bg-transparent">
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="overview">Overview</TabsTrigger>
+          <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="contacts">Contacts <span className="text-xs">{(activeSite?.contactAssignments || []).length}</span></TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="assets">Gates / Projects <span className="text-xs">{(activeSite?.assets || []).length}</span></TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="jobs">Job History <span className="text-xs">{siteJobs.length}</span></TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="maintenance">Maintenance <span className="text-xs">{maintenancePlans.length}</span></TabsTrigger>
@@ -93,28 +95,6 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
                         </SelectContent>
                       </Select>
                     </FormField>
-                    <ContactSnapshotEditor
-                      title="Site contact"
-                      description="Pick a saved customer contact or keep a site-specific access contact just for this address."
-                      contacts={customerContacts}
-                      fallbackRole="Site contact"
-                      value={{
-                        id: draftSite.contactId,
-                        name: draftSite.contactName,
-                        role: "Site contact",
-                        phone: draftSite.contactPhone,
-                        email: draftSite.contactEmail,
-                      }}
-                      onChange={(contact) =>
-                        setDraftSite((prev) => ({
-                          ...prev,
-                          contactId: contact?.id || "",
-                          contactName: contact?.name || "",
-                          contactPhone: contact?.phone || "",
-                          contactEmail: contact?.email || "",
-                        }))
-                      }
-                    />
                     <FormField label="OC number">
                       <Input
                         value={draftSite.ocNumber}
@@ -155,7 +135,7 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
                       <p className="mt-1 font-medium text-foreground">{formatSiteType(site.siteType)}</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase text-muted-foreground">Site contact</p>
+                      <p className="text-xs uppercase text-muted-foreground">Primary site contact</p>
                       <p className="mt-1 font-medium text-foreground">{site.contactName || "Not set"}</p>
                     </div>
                     <div>
@@ -182,6 +162,9 @@ export default function SiteWorkspace({ customer, site, jobs, maintenancePlans =
         </WorkspaceSection>
         {!isEditingSite && hasSavedProfile ? <div className="mt-4 flex justify-end"><Button type="button" variant="outline" className="border-status-danger-border text-status-danger" onClick={() => onDeleteSiteProfile(customer.id, site)}>Remove Saved Profile</Button></div> : null}
         </TabsContent>
+        <TabsContent value="contacts" className="min-w-0"><WorkspaceSection title="Site contacts" description="People to contact about this location." panel>
+          <fieldset disabled={saving} className="min-w-0">{isEditingSite ? <ContactAssignmentsEditor kind="site" value={draftSite.contactAssignments} contacts={contacts} preferredContacts={[...(site?.contacts || []), ...customerContacts]} onChange={(assignments) => setDraftSite((current) => ({ ...current, contactAssignments: assignments }))} /> : <ContactList contacts={getSiteContacts(site)} />}</fieldset>
+        </WorkspaceSection></TabsContent>
         <TabsContent value="assets" className="min-w-0"><WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site."><fieldset disabled={saving} className="min-w-0">
 
               <div className="grid gap-3">

@@ -16,6 +16,7 @@ export function CreateJobRoute() {
           <CreateJobPage
             backLabel={backLabel}
             customers={data.customers}
+            contacts={data.contacts}
             jobs={data.jobs}
             staff={data.staff}
             onCancel={onBack}

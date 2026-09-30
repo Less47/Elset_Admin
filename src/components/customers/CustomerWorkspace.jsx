@@ -1,3 +1,5 @@
+import { ContactList } from "@/components/shared/ContactAssignmentsEditor";
+import { getCustomerRelatedContacts } from "@/lib/contact-model";
 import { useState } from "react";
 import CustomerAccount from "./CustomerAccount";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
@@ -9,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RecordWorkspace, RECORD_WORKSPACE_WIDE_MAX_WIDTH, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { buildCustomerSites, formatCustomerType, formatSiteType, formatDate, getContactDisplayName, getCustomerContacts, toTimestamp } from "@/lib/app-support";
+import { buildCustomerSites, formatCustomerType, formatSiteType, formatDate,   toTimestamp } from "@/lib/app-support";
 import "./CustomerWorkspace.css";
 
 export function CustomerInfo({ label, children }) {
@@ -95,25 +97,10 @@ function CustomerSitesSection({ sites, onOpenSite, onCreateSite, desktop }) {
   );
 }
 
-function CustomerContactsSection({ customer, contacts, sites, desktop }) {
-  return (
-    <CustomerSection desktop={desktop} name="contacts" title="Contacts" count={contacts.length}>
-        {!contacts.length ? <p className="text-sm text-text-secondary">No contacts saved yet. Edit this customer to add contacts.</p> : (
-          <MobileRecordList label="Customer contacts">{contacts.map((contact) => (
-            <MobileRecordCard key={contact.id} recordId={contact.id} labelledBy={`customer-contact-${contact.id}`}>
-              <MobileRecordHeader className="flex-wrap">
-                <div className="min-w-0"><h3 id={`customer-contact-${contact.id}`} className="text-xs font-semibold [overflow-wrap:anywhere]">{getContactDisplayName(contact)}</h3>{contact.role ? <p className="text-[11px] text-text-secondary [overflow-wrap:anywhere]">{contact.role}</p> : null}</div>
-                <div className="flex flex-wrap gap-1">
-                  {contact.id === `${customer.id}-primary-contact` ? <Badge variant="secondary">Account</Badge> : null}{customer.billingContactId === contact.id ? <Badge>Billing</Badge> : null}
-                  {sites.some((site) => site.contactId === contact.id) ? <Badge variant="secondary">Site contact</Badge> : null}
-                </div>
-              </MobileRecordHeader>
-              <MobileRecordBody className="mt-1 grid-cols-2 gap-x-3 text-xs"><p><span className="text-muted-foreground">Phone</span><br />{contact.phone || "Not set"}</p><p><span className="text-muted-foreground">Email</span><br />{contact.email || "Not set"}</p>{contact.notes ? <p className="col-span-2 whitespace-pre-wrap">{contact.notes}</p> : null}</MobileRecordBody>
-            </MobileRecordCard>
-          ))}</MobileRecordList>
-        )}
-    </CustomerSection>
-  );
+function CustomerContactsSection({ contacts, desktop }) {
+  return <CustomerSection desktop={desktop} name="contacts" title="Contacts" count={contacts.length}>
+    <ContactList contacts={contacts} customer />
+  </CustomerSection>;
 }
 
 function CustomerJobsSection({ jobs, onOpenJob, desktop }) {
@@ -129,7 +116,7 @@ export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, 
   const desktop = useMediaQuery("(min-width: 64rem)");
   const [deleting, setDeleting] = useState(false);
   const sites = buildCustomerSites(customer, jobs);
-  const contacts = getCustomerContacts(customer);
+  const contacts = getCustomerRelatedContacts(customer);
   const tabValue = ["overview", "sites", "contacts", "account", "maintenance", "jobs"].includes(tab) ? tab : "overview";
   const deleteCustomer = async () => {
     setDeleting(true);

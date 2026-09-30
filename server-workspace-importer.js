@@ -1,3 +1,5 @@
+import { importCustomerContactRelationships, importLegacyCrossCustomerSiteContacts, storeContact } from "./server-workspace-contacts.js";
+import { isLegacyAccountContact } from "./src/lib/contact-model.js";
 // Offline historical JSON import; never imported by the application runtime.
 import { decimalToScaledInteger, moneyToCents, documentTotalCents } from "./server-workspace-financials.js";
 export { decimalToScaledInteger, moneyToCents, lineTotalCentsFromScaled, documentSubtotalCents, gstCentsFromSubtotal, documentTotalCents } from "./server-workspace-financials.js";
@@ -69,7 +71,12 @@ function sourceCounts(data) {
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const maintenancePlans = Array.isArray(data.maintenancePlans) ? data.maintenancePlans : [];
 
+  const canonicalCounts = Array.isArray(data.contacts) && customers.every((customer) => Array.isArray(customer.contactAssignments)
+    && (customer.sites || []).every((site) => Array.isArray(site.contactAssignments)))
+    ? { contacts: data.contacts.length, customerContactAssignments: customers.reduce((sum, customer) => sum + customer.contactAssignments.length, 0),
+      siteContactAssignments: customers.reduce((sum, customer) => sum + (customer.sites || []).reduce((siteSum, site) => siteSum + site.contactAssignments.length, 0), 0) } : {};
   return {
+    ...canonicalCounts,
     staff: (data.staff || []).length,
     customers: customers.length,
     customerSites: customers.reduce((sum, customer) => sum + (customer.sites || []).length, 0),
@@ -138,6 +145,9 @@ function compareSummaries(sourceSummary, dbSummary) {
 
 function getNonEmptyEntityTables(db) {
   const tableNames = [
+    "contacts",
+    "customer_contact_links",
+    "site_contact_links",
     "staff",
     "customers",
     "sites",
@@ -235,10 +245,6 @@ function buildInsertStatements(db) {
         id, name, email, phone, customer_type, address, created_at, updated_at, external_refs_json, extra_json
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
-    customerContact: db.prepare(`
-      INSERT INTO customer_contacts (id, customer_id, site_id, kind, name, phone, email, role, notes, extra_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `),
     site: db.prepare(`
       INSERT INTO sites (
         id, customer_id, label, address, site_type, access_notes, notes, contact_name, contact_phone,
@@ -330,8 +336,8 @@ const templateKeys = new Set([
   "notesHeading", "termsHeading", "termsText", "footerText",
 ]);
 const staffKeys = new Set(["id", "name", "role", "email", "phone", "createdAt", "updatedAt"]);
-const customerKeys = new Set(["id", "name", "email", "phone", "customerType", "address", "sites", "siteAccessNotes", "externalRefs", "createdAt", "updatedAt"]);
-const siteKeys = new Set(["id", "label", "address", "siteType", "accessNotes", "notes", "contactName", "contactPhone", "assets", "createdAt", "updatedAt", "ocNumber", "_inferredProfile"]);
+const customerKeys = new Set(["contacts", "contactAssignments", "billingContactId", "id", "name", "email", "phone", "customerType", "address", "sites", "siteAccessNotes", "externalRefs", "createdAt", "updatedAt"]);
+const siteKeys = new Set(["contactId", "contactEmail", "contacts", "contactAssignments", "id", "label", "address", "siteType", "accessNotes", "notes", "contactName", "contactPhone", "assets", "createdAt", "updatedAt", "ocNumber", "_inferredProfile"]);
 const assetKeys = new Set(["id", "name", "type", "location", "model", "notes", "createdAt", "updatedAt"]);
 const accessNoteKeys = new Set(["id", "address", "notes", "updatedAt"]);
 const maintenanceKeys = new Set([
@@ -507,28 +513,13 @@ function insertWorkspaceData(db, data, { sourceJsonSha256 = "" } = {}) {
         text(site.siteType),
         text(site.accessNotes),
         text(site.notes),
-        text(site.contactName),
-        text(site.contactPhone),
+        "",
+        "",
         text(site.ocNumber),
         site.createdAt ? text(site.createdAt) : null,
         site.updatedAt ? text(site.updatedAt) : null,
         objectJson(pickExtra(site, siteKeys))
       );
-
-      if (site.contactName || site.contactPhone) {
-        statements.customerContact.run(
-          `${site.id}:primary-contact`,
-          customer.id,
-          site.id,
-          "site-primary",
-          text(site.contactName),
-          text(site.contactPhone),
-          "",
-          "",
-          "",
-          "{}"
-        );
-      }
 
       for (const asset of site.assets || []) {
         statements.siteAsset.run(
@@ -557,6 +548,16 @@ function insertWorkspaceData(db, data, { sourceJsonSha256 = "" } = {}) {
       );
     }
   }
+
+  // Canonical records precede projections so shared records never inherit stale copies.
+  for (const contact of data.contacts || []) storeContact(db, contact, { preserveExisting: true, allowBlank: true });
+  for (const customer of data.customers || []) {
+    for (const contact of [...(customer.contacts || []), ...(customer.sites || []).flatMap((site) => site.contacts || [])]) {
+      if (contact.id && !isLegacyAccountContact(contact, customer)) storeContact(db, contact, { preserveExisting: true, allowBlank: true });
+    }
+  }
+  for (const customer of data.customers || []) importCustomerContactRelationships(db, customer);
+  importLegacyCrossCustomerSiteContacts(db, data.customers || []);
 
   for (const item of data.inventoryItems || []) {
     const quantityText = text(item.quantity ?? 0);
@@ -783,19 +784,21 @@ export function importWorkspaceJsonData(db, rawData, {
     for (const plan of data.maintenancePlans || []) {
       for (const entry of plan.occurrenceExceptions || []) writeMaintenanceException(db, plan.id, entry);
     }
+
+    const foreignKeyErrors = runForeignKeyCheck(db);
+    if (foreignKeyErrors.length > 0) {
+      throw new Error(`Workspace SQLite foreign-key validation failed:\n${foreignKeyErrors.join("\n")}`);
+    }
+
+    const dbSummary = summarizeWorkspaceDb(db);
+    const validationErrors = compareSummaries(sourceSummary, dbSummary);
+    if (validationErrors.length > 0) {
+      throw new Error(`Workspace SQLite validation failed:\n${validationErrors.join("\n")}`);
+    }
+
+    return dbSummary;
   });
-  importTransaction();
-
-  const foreignKeyErrors = runForeignKeyCheck(db);
-  if (foreignKeyErrors.length > 0) {
-    throw new Error(`Workspace SQLite foreign-key validation failed:\n${foreignKeyErrors.join("\n")}`);
-  }
-
-  const dbSummary = summarizeWorkspaceDb(db);
-  const validationErrors = compareSummaries(sourceSummary, dbSummary);
-  if (validationErrors.length > 0) {
-    throw new Error(`Workspace SQLite validation failed:\n${validationErrors.join("\n")}`);
-  }
+  const dbSummary = importTransaction();
 
   return {
     ok: true,

@@ -3,6 +3,8 @@ import { WORKSPACE_LOGO_KEY, workspaceLogoUrl } from "./src/lib/workspace-logo.j
 import { effectiveMaintenancePlan } from "./src/lib/maintenance-recurrence.js";
 import { readMaintenanceExceptions } from "./server-maintenance-occurrence-store.js";
 import { maintenancePlanIdentity } from "./src/lib/maintenance-plan.js";
+import { readContacts, readContactLinks } from "./server-workspace-contacts.js";
+import { getCustomerDirectContacts, getSiteContacts } from "./src/lib/contact-model.js";
 
 function parseJson(value, fallback = null) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -129,7 +131,13 @@ export function loadWorkspaceStateFromDb(db) {
   const templateRows = db.prepare("SELECT * FROM document_templates ORDER BY type").all();
   const staffRows = db.prepare("SELECT * FROM staff ORDER BY lower(name), created_at").all();
   const customerRows = db.prepare("SELECT * FROM customers ORDER BY lower(name), created_at").all();
-  const contactRows = db.prepare("SELECT * FROM customer_contacts ORDER BY customer_id, lower(name), lower(role)").all();
+  const contacts = readContacts(db);
+  const contactsById = new Map(contacts.map((contact) => [contact.id, contact]));
+  const customerLinks = rowsByKey(readContactLinks(db, "customer"), "customerId");
+  const siteLinks = rowsByKey(readContactLinks(db, "site"), "siteId");
+  const siteContacts = new Map([...siteLinks].map(([id, contactAssignments]) => [id, getSiteContacts({ contactAssignments }, contactsById)]));
+  const sitePrimaries = new Map([...siteContacts].map(([id, records]) => [id, records.find((contact) => contact.isPrimary)]));
+  const customerContacts = new Map([...customerLinks].map(([id, contactAssignments]) => [id, getCustomerDirectContacts({ contactAssignments }, contactsById)]));
   const siteRows = db.prepare("SELECT * FROM sites ORDER BY customer_id, created_at, lower(label), lower(address)").all();
   const assetRows = db.prepare("SELECT * FROM site_assets ORDER BY site_id, lower(name)").all();
   const accessNoteRows = db.prepare("SELECT * FROM site_access_notes ORDER BY customer_id, updated_at").all();
@@ -178,7 +186,6 @@ export function loadWorkspaceStateFromDb(db) {
   }, {});
 
   const templatesByType = new Map(templateRows.map((row) => [row.type, row]));
-  const contactsByCustomerId = rowsByKey(contactRows, "customer_id");
 
   const staff = staffRows.map((row) => mergeExtra({
     id: row.id,
@@ -204,8 +211,12 @@ export function loadWorkspaceStateFromDb(db) {
       siteType: siteRow.site_type,
       accessNotes: siteRow.access_notes,
       notes: siteRow.notes,
-      contactName: siteRow.contact_name,
-      contactPhone: siteRow.contact_phone,
+      contactAssignments: siteLinks.get(siteRow.id) || [],
+      contacts: siteContacts.get(siteRow.id) || [],
+      contactId: sitePrimaries.get(siteRow.id)?.id || "",
+      contactName: sitePrimaries.get(siteRow.id)?.name || "",
+      contactPhone: sitePrimaries.get(siteRow.id)?.phone || "",
+      contactEmail: sitePrimaries.get(siteRow.id)?.email || "",
       ocNumber: siteRow.oc_number,
       assets: (assetsBySiteId.get(siteRow.id) || []).map((assetRow) => mergeExtra({
         id: assetRow.id,
@@ -226,16 +237,9 @@ export function loadWorkspaceStateFromDb(db) {
       notes: noteRow.notes,
       updatedAt: noteRow.updated_at || undefined,
     }, noteRow.extra_json)),
-    contacts: (contactsByCustomerId.get(row.id) || []).map((contactRow) => mergeExtra({
-      id: contactRow.id,
-      kind: contactRow.kind,
-      siteId: contactRow.site_id || "",
-      name: contactRow.name,
-      phone: contactRow.phone,
-      email: contactRow.email,
-      role: contactRow.role,
-      notes: contactRow.notes,
-    }, contactRow.extra_json)),
+    contactAssignments: customerLinks.get(row.id) || [],
+    contacts: customerContacts.get(row.id) || [],
+    billingContactId: (customerContacts.get(row.id) || []).find((contact) => contact.isBilling)?.id || ((row.email || row.phone) ? `${row.id}-primary-contact` : ""),
     externalRefs: parseJson(row.external_refs_json, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at || undefined,
@@ -341,6 +345,7 @@ export function loadWorkspaceStateFromDb(db) {
     }),
     staff,
     customers,
+    contacts,
     jobs,
     deletedJobs: deletedRows
       .filter((row) => row.kind === "job")

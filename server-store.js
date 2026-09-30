@@ -369,6 +369,7 @@ function normalizeSiteProfileRecord(site, fallbackAddress = "", legacyAccessNote
     ocNumber: String(site?.ocNumber || "").trim(),
     accessNotes: String(site?.accessNotes ?? legacyAccessNote?.notes ?? "").trim(),
     notes: String(site?.notes || "").trim(),
+    ...(Array.isArray(site?.contactAssignments) ? { contactAssignments: site.contactAssignments, contacts: site.contacts || [] } : {}),
     contactId: String(site?.contactId || "").trim(),
     contactName: String(site?.contactName || "").trim(),
     contactPhone: String(site?.contactPhone || "").trim(),
@@ -397,6 +398,7 @@ function mergeSiteProfileRecords(existing, incoming) {
     ocNumber: hasExplicitField("ocNumber") ? incoming.ocNumber : existing.ocNumber,
     accessNotes: hasExplicitField("accessNotes") ? incoming.accessNotes : existing.accessNotes,
     notes: hasExplicitField("notes") ? incoming.notes : existing.notes,
+    ...(Array.isArray(incoming.contactAssignments) ? { contactAssignments: incoming.contactAssignments, contacts: incoming.contacts } : Array.isArray(existing.contactAssignments) ? { contactAssignments: existing.contactAssignments, contacts: existing.contacts } : {}),
     contactId: hasExplicitField("contactId") ? incoming.contactId : existing.contactId,
     contactName: hasExplicitField("contactName") ? incoming.contactName : existing.contactName,
     contactPhone: hasExplicitField("contactPhone") ? incoming.contactPhone : existing.contactPhone,
@@ -555,6 +557,7 @@ function normalizeCustomerRecord(customer) {
     contacts: Array.isArray(customer.contacts)
       ? customer.contacts.filter((contact) => contact && typeof contact === "object" && !Array.isArray(contact)).map((contact) => ({ ...contact }))
       : [],
+    ...(Array.isArray(customer.contactAssignments) ? { contactAssignments: customer.contactAssignments } : {}),
     billingContactId: String(customer.billingContactId || "").trim(),
     address,
     ...customerPostalFields(customer),

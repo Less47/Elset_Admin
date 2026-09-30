@@ -1,7 +1,7 @@
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useRef, useState } from "react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
-import { Badge } from "@/components/ui/badge";
+import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { buildCustomerSites, customerTypeOptions, normalizeCustomerRecord, siteT
 import "./CustomerFormPage.css";
 
 function buildDraft(customer) {
-  if (!customer) return { name: "", email: "", phone: "", customerType: "", address: "", primarySiteType: "", primaryOcNumber: "", postalAddressSameAsPrimary: true, postalAddress: "" };
+  if (!customer) return { name: "", email: "", phone: "", customerType: "", address: "", contacts: [], contactAssignments: [], primarySiteType: "", primaryOcNumber: "", postalAddressSameAsPrimary: true, postalAddress: "" };
   const normalized = normalizeCustomerRecord(customer);
   const site = buildCustomerSites(normalized, []).find((entry) => entry.isPrimary);
   return {
@@ -21,8 +21,8 @@ function buildDraft(customer) {
     address: normalized.address, primarySiteType: site?.siteType || "", primaryOcNumber: site?.ocNumber || "",
     primarySiteAddress: { address: normalized.address, ...siteAddressMetadata(site) },
     ...customerPostalFields(normalized),
-    contacts: normalized.contacts.filter((contact) => contact.id !== `${customer.id}-primary-contact`),
-    billingContactId: normalized.billingContactId || "",
+    contacts: normalized.contacts,
+    contactAssignments: normalized.contactAssignments || [],
   };
 }
 
@@ -39,7 +39,7 @@ export function CustomerTypeField({ id, label, value, options, onChange }) {
   </CustomerField>;
 }
 
-export default function CustomerFormPage({ customer = null, backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite }) {
+export default function CustomerFormPage({ customer = null, contacts = [], backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite }) {
   const editing = Boolean(customer);
   const [initial] = useState(() => buildDraft(customer));
   const [draft, setDraft] = useState(initial);
@@ -50,7 +50,6 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
   const markSaved = useUnsavedChanges(dirty, { busy: saving });
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  const updateContact = (id, key, value) => setDraft((current) => ({ ...current, contacts: current.contacts.map((contact) => contact.id === id ? { ...contact, [key]: value } : contact) }));
   const primarySite = editing ? buildCustomerSites(customer, []).find((site) => site.isPrimary) : null;
 
   const submit = async (event) => {
@@ -65,7 +64,7 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
       const payload = editing ? (() => {
         const normalized = normalizeCustomerRecord({ ...customer, ...draft });
         return { name: normalized.name, email: normalized.email, phone: normalized.phone, customerType: normalized.customerType,
-          contacts: normalized.contacts, billingContactId: normalized.billingContactId,
+          contactAssignments: draft.contactAssignments,
           ...customerPostalFields(draft),
           ...(siteChanged ? { primarySite: {
             id: primarySite?.siteProfileId || "", expectedAddress: initial.address,
@@ -117,23 +116,9 @@ export default function CustomerFormPage({ customer = null, backLabel = "Custome
           </label>
           {!draft.postalAddressSameAsPrimary ? <CustomerField id="customer-postal-address" label="Postal address"><Input id="customer-postal-address" value={draft.postalAddress} onChange={(event) => update("postalAddress", event.target.value)} placeholder="Street address or PO Box, suburb, state and postcode" autoComplete="street-address" /></CustomerField> : null}
         </WorkspaceSection>
-        {editing ? <WorkspaceSection title="Contact details" panel description="Account email and phone remain the customer fallback. Named contacts can be used for access, requests or billing.">
-          <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 border-b pb-3">
-            <p className="text-sm">{draft.billingContactId === `${customer.id}-primary-contact` ? "Account contact is the billing default." : draft.billingContactId ? "A saved contact is the billing default." : "No dedicated billing contact selected."}</p>
-            <Button type="button" variant="outline" disabled={!draft.email.trim() && !draft.phone.trim()} onClick={() => update("billingContactId", `${customer.id}-primary-contact`)}>Use Account Contact</Button>
-          </div>
-          <div className="grid min-w-0 gap-3">
-            {draft.contacts.map((contact, index) => <section key={contact.id} className="min-w-0 rounded-lg border p-3" aria-label={`Contact ${index + 1}`}>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Contact {index + 1}</h3><div className="flex flex-wrap items-center gap-2">
-                {draft.billingContactId === contact.id ? <Badge>Billing default</Badge> : null}
-                <Button type="button" variant="outline" onClick={() => setDraft((current) => ({ ...current, contacts: current.contacts.filter((entry) => entry.id !== contact.id), billingContactId: current.billingContactId === contact.id ? "" : current.billingContactId }))}>Remove</Button>
-              </div></div>
-              <div className="grid min-w-0 gap-3 sm:grid-cols-2">{[["name", "Name"], ["role", "Role"], ["phone", "Phone"], ["email", "Email"]].map(([key, label]) => <CustomerField key={key} id={`contact-${contact.id}-${key}`} label={label}><Input id={`contact-${contact.id}-${key}`} value={contact[key] || ""} onChange={(event) => updateContact(contact.id, key, event.target.value)} /></CustomerField>)}</div>
-              <div className="mt-3 flex justify-end"><Button type="button" variant="outline" onClick={() => update("billingContactId", contact.id)}>Use For Billing</Button></div>
-            </section>)}
-            <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => update("contacts", [...draft.contacts, { id: crypto.randomUUID(), name: "", role: "", phone: "", email: "", notes: "" }])}>Add Contact</Button></div>
-          </div>
-        </WorkspaceSection> : null}
+        <WorkspaceSection title="Contacts" panel={editing}>
+          <ContactAssignmentsEditor value={draft.contactAssignments} contacts={contacts} preferredContacts={draft.contacts || []} onChange={(assignments) => update("contactAssignments", assignments)} />
+        </WorkspaceSection>
       </fieldset>
       {error ? <div role="alert" className={editing ? "" : "px-3 pb-3"}><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
       {editing ? <WorkspaceActionBar maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} status={saveStatus}>{formActions}</WorkspaceActionBar> : (

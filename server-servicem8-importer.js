@@ -341,6 +341,16 @@ function mergeServiceM8Refs(existingRefs = {}, incomingRefs = {}) {
   };
 }
 
+function mergeContactAssignments(existing = [], incoming = []) {
+  const byId = new Map(existing.map((assignment) => [assignment.contactId, assignment]));
+  const primary = existing.find((assignment) => assignment.isPrimary)?.contactId || incoming.find((assignment) => assignment.isPrimary)?.contactId;
+  for (const assignment of incoming) {
+    const previous = byId.get(assignment.contactId);
+    byId.set(assignment.contactId, { ...assignment, ...previous, ...(assignment.contact ? { contact: assignment.contact } : {}), isPrimary: assignment.contactId === primary });
+  }
+  return [...byId.values()];
+}
+
 function mergeSiteRecord(existing, incoming, preferIncoming) {
   if (!existing) return incoming;
   if (!incoming) return existing;
@@ -364,6 +374,7 @@ function mergeSiteRecord(existing, incoming, preferIncoming) {
     notes: pick("notes"),
     contactName: pick("contactName"),
     contactPhone: pick("contactPhone"),
+    contactAssignments: mergeContactAssignments(existing.contactAssignments, incoming.contactAssignments),
     assets: Array.isArray(existing.assets) && existing.assets.length > 0 ? existing.assets : (incoming.assets || []),
     createdAt: existing.createdAt || incoming.createdAt,
     updatedAt: preferIncoming ? (incoming.updatedAt || existing.updatedAt) : (existing.updatedAt || incoming.updatedAt),
@@ -408,15 +419,32 @@ function mergeCustomerRecord(existing, incoming, preferIncoming) {
     customerType: pick("customerType"),
     address: pick("address"),
     sites: mergeSites(existing.sites, incoming.sites, preferIncoming),
+    contactAssignments: mergeContactAssignments(existing.contactAssignments, incoming.contactAssignments),
     siteAccessNotes: Array.isArray(existing.siteAccessNotes) ? existing.siteAccessNotes : [],
     externalRefs: mergeServiceM8Refs(existing.externalRefs, incoming.externalRefs),
     createdAt: existing.createdAt || incoming.createdAt,
   };
 }
 
+function serviceM8ContactAssignments(records, importedAt, customer = false) {
+  const primary = selectPrimaryContact(records);
+  return records.map((record) => {
+    const uuid = getRecordUuid(record);
+    const id = uuid ? `servicem8-contact-${uuid}` : crypto.randomUUID();
+    return {
+      contactId: id, roles: [], isPrimary: record === primary,
+      ...(customer ? { isBilling: toBoolean(record.is_billing_contact) } : {}),
+      contact: { id, name: getContactName(record), phone: getContactPhone(record), email: cleanText(record.email),
+        position: cleanText(record.job_title || record.position), notes: cleanText(record.notes),
+        createdAt: toIsoTimestamp(record.edit_date, importedAt),
+        externalRefs: { serviceM8: { contactUuid: uuid, companyUuid: cleanText(record.company_uuid), importedAt, editDate: cleanText(record.edit_date), raw: record } } },
+    };
+  });
+}
+
 function buildSiteDraft(company, contactsByCompanyUuid, importedAt, isPrimarySite = false) {
   const companyUuid = getRecordUuid(company);
-  const contact = selectPrimaryContact(contactsByCompanyUuid.get(companyUuid) || []);
+  const contacts = contactsByCompanyUuid.get(companyUuid) || [];
   const address = buildCompanyAddress(company);
 
   if (!address) return null;
@@ -430,8 +458,7 @@ function buildSiteDraft(company, contactsByCompanyUuid, importedAt, isPrimarySit
     notes: cleanText(company?.billing_attention)
       ? `Billing attention: ${cleanText(company.billing_attention)}`
       : "",
-    contactName: getContactName(contact),
-    contactPhone: getContactPhone(contact),
+    contactAssignments: serviceM8ContactAssignments(contacts, importedAt),
     assets: [],
     createdAt: toIsoTimestamp(company?.edit_date, importedAt),
     updatedAt: toIsoTimestamp(company?.edit_date, importedAt),
@@ -457,6 +484,7 @@ function buildCustomerDraft(company, siteCompanies, contactsByCompanyUuid, exist
     customerType: toBoolean(company?.is_individual) ? "homeowner" : "business",
     address: companyAddress,
     sites: siteDrafts,
+    contactAssignments: serviceM8ContactAssignments(contactsByCompanyUuid.get(companyUuid) || [], importedAt, true),
     siteAccessNotes: [],
     externalRefs: {
       serviceM8: {

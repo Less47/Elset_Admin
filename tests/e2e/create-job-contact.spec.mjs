@@ -22,10 +22,11 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await server?.close(); });
 
-const siteEditor = (page) => page.locator("#create-job-site .contact-snapshot-editor");
+
+const siteEditor = (page) => page.locator('#create-job-site [aria-label="Site contact management"]');
 async function openSiteContact(page, { newCustomer = false } = {}) {
   await page.route("**/api/**", (route) => route.fulfill({ json: { results: [] } }));
-  await page.goto(`${baseUrl}/__contact-regression`);
+  await page.goto(baseUrl + "/__contact-regression");
   if (newCustomer) {
     await page.getByRole("button", { name: "Add New Customer", exact: true }).click();
     await page.getByLabel("Customer or company name").fill("New Contact Customer");
@@ -35,92 +36,66 @@ async function openSiteContact(page, { newCustomer = false } = {}) {
     await page.getByRole("button", { name: "Add site", exact: true }).click();
   }
   await page.getByLabel(newCustomer ? "Primary site address" : "Site address", { exact: true }).fill("2 New Street, Melbourne VIC 3000");
-  await expect(siteEditor(page)).toBeVisible();
+  await siteEditor(page).getByRole("button", { name: "Add Contact", exact: true }).click();
   return siteEditor(page);
 }
-
-test("Site Contact accepts real spacebar presses, editable role-first drafts and full names", async ({ page }) => {
-  const editor = await openSiteContact(page, { newCustomer: true });
-  const name = editor.getByLabel("Name", { exact: true });
-  const role = editor.getByLabel("Role", { exact: true });
-  await role.fill("");
-  await expect(role).toHaveValue("");
-  await role.pressSequentially("Building Manager");
-  for (const fullName of ["John Smith", "Mary Jane Brown", "A B Services", "A  B Services"]) {
-    await name.fill("");
-    await name.pressSequentially(fullName);
-    await expect(name).toHaveValue(fullName);
-    await expect(name).toBeFocused();
-    await expect(role).toHaveValue("Building Manager");
-  }
-  await name.fill("John");
-  await name.press("Space");
-  await expect(name).toHaveValue("John ");
-  await name.pressSequentially("Smith");
-  await expect(name).toHaveValue("John Smith");
-});
-
-test("Site Contact keyboard selection populates new values and preserves edited roles on refresh", async ({ page }) => {
-  const editor = await openSiteContact(page);
-  const picker = editor.getByRole("combobox", { name: "Saved customer contact" });
-  await picker.focus();
-  await picker.press("ArrowDown");
-  await expect(page.getByRole("listbox")).toBeVisible();
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Enter");
-  await expect(editor.getByLabel("Name", { exact: true })).toHaveValue("John Smith");
-  await expect(editor.getByLabel("Role", { exact: true })).toHaveValue("Caretaker");
-  await editor.getByLabel("Role", { exact: true }).fill("");
-  await editor.getByLabel("Role", { exact: true }).pressSequentially("Site Manager");
-  await page.getByLabel("Job title").fill("Unrelated draft edit");
-  await page.getByRole("button", { name: "Refresh customer records" }).click();
-  await expect(editor.getByLabel("Name", { exact: true })).toHaveValue("John Smith");
-  await expect(editor.getByLabel("Role", { exact: true })).toHaveValue("Site Manager");
-  await expect(page.getByLabel("Site address", { exact: true })).toHaveValue("2 New Street, Melbourne VIC 3000");
-  await picker.click();
-  await page.getByRole("option", { name: "Mary Jane Brown - Reception", exact: true }).click();
-  await expect(editor.getByLabel("Name", { exact: true })).toHaveValue("Mary Jane Brown");
-  await expect(editor.getByLabel("Role", { exact: true })).toHaveValue("Reception");
-  await picker.focus();
-  await picker.press("ArrowUp");
-  await expect(page.getByRole("listbox")).toBeVisible();
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(editor.getByLabel("Name", { exact: true })).toHaveValue("Mary Jane Brown");
-  await expect(editor.getByLabel("Role", { exact: true })).toHaveValue("Reception");
-});
-
-test("Create Job submits the latest Site Contact name and job-specific role without editing the master contact", async ({ page }) => {
-  const editor = await openSiteContact(page);
-  await editor.getByRole("combobox", { name: "Saved customer contact" }).click();
-  await page.getByRole("option", { name: "John Smith - Caretaker", exact: true }).click();
-  await editor.getByLabel("Role", { exact: true }).fill(" Site Manager ");
-  await editor.getByLabel("Name", { exact: true }).fill(" Mary  Jane Brown ");
+async function newPerson(editor) {
+  await editor.getByRole("button", { name: "New contact", exact: true }).click();
+  await editor.getByRole("button", { name: "Create new contact", exact: true }).click();
+  await editor.getByRole("checkbox", { name: "Primary contact" }).check();
+}
+async function submit(page) {
   await page.getByLabel("Job title").fill("Contact snapshot job");
-  await page.getByLabel("Description of work").fill("Keep the edited contact snapshot.");
+  await page.getByLabel("Description of work").fill("Keep the latest contact details.");
   await page.getByRole("button", { name: "Create Job", exact: true }).click();
-  const payload = JSON.parse(await page.getByLabel("Created Job payload").textContent());
-  expect(payload.job.onsiteContact).toMatchObject({ name: "Mary  Jane Brown", role: "Site Manager" });
-  expect(payload.job.onsiteContact.id).not.toBe("contact-a");
-  expect(payload.siteInput.contactId).toBe("");
-  expect(payload.siteInput.contactRole).toBeUndefined();
-  expect(payload.customer.contacts.find((contact) => contact.id === "contact-a")).toMatchObject({ name: "John Smith", role: "Caretaker" });
+  return JSON.parse(await page.getByLabel("Created Job payload").textContent());
+}
+test("new site contact accepts real spacebar presses, positions and custom roles", async ({ page }) => {
+  const editor = await openSiteContact(page, { newCustomer: true }); await newPerson(editor);
+  await editor.getByLabel("Position", { exact: true }).pressSequentially("Facilities Manager");
+  const name = editor.getByLabel("Name", { exact: true });
+  for (const fullName of ["John Smith", "Mary Jane Brown", "A B Services", "A  B Services"]) {
+    await name.fill(""); await name.pressSequentially(fullName); await expect(name).toHaveValue(fullName); await expect(name).toBeFocused();
+  }
+  await name.fill("John"); await name.press("Space"); await expect(name).toHaveValue("John "); await name.pressSequentially("Smith");
+  await editor.getByLabel("Roles at this site").pressSequentially("Caretaker, Building Manager");
+  const payload = await submit(page);
+  expect(payload.siteInput.contactAssignments[0].roles).toEqual(["Caretaker", "Building Manager"]);
+  expect(payload.job.onsiteContact).toMatchObject({ name: "John Smith", position: "Facilities Manager", role: "Caretaker, Building Manager" });
 });
-
-test("Create Job accepts a new free-text contact and retains an explicit on-site contact override", async ({ page }) => {
-  const editor = await openSiteContact(page, { newCustomer: true });
-  await editor.getByLabel("Name", { exact: true }).pressSequentially("John Smith");
-  await editor.getByLabel("Role", { exact: true }).fill("Building Manager");
-  await page.getByLabel("Job title").fill("New contact job");
-  await page.getByLabel("Description of work").fill("Keep the new contact details.");
-  await page.getByRole("button", { name: "Create Job", exact: true }).click();
-  const payload = JSON.parse(await page.getByLabel("Created Job payload").textContent());
-  expect(payload.job.onsiteContact).toMatchObject({ name: "John Smith", role: "Building Manager" });
+test("existing site contact can be selected by keyboard without duplicating its identity and survives a refresh", async ({ page }) => {
+  const editor = await openSiteContact(page);
+  await editor.getByLabel("Search contacts").fill("John");
+  const choice = editor.getByRole("button", { name: /John Smith/ }); await choice.focus(); await choice.press("Enter");
+  await expect(editor.getByLabel("Name", { exact: true })).toHaveValue("John Smith");
+  await editor.getByLabel("Roles at this site").fill("Site Manager");
+  await editor.getByRole("checkbox", { name: "Primary contact" }).check();
+  await page.getByRole("button", { name: "Refresh customer records" }).click();
+  await expect(editor.getByLabel("Roles at this site")).toHaveValue("Site Manager");
+  const payload = await submit(page);
+  expect(payload.siteInput.contactAssignments[0]).toMatchObject({ contactId: "contact-a", roles: ["Site Manager"], isPrimary: true });
+  expect(payload.siteInput.contactAssignments[0].contact).toBeUndefined();
+  expect(payload.job.onsiteContact).toMatchObject({ id: "contact-a", name: "John Smith", role: "Site Manager" });
+});
+test("editing a job contact creates a custom snapshot and leaves the site assignment unchanged", async ({ page }) => {
+  const editor = await openSiteContact(page);
+  await editor.getByRole("button", { name: /John Smith/ }).click();
+  await editor.getByRole("checkbox", { name: "Primary contact" }).check();
   await page.getByText("Job contacts (optional)", { exact: true }).click();
-  const override = page.locator(".contact-snapshot-editor").filter({ has: page.getByText("On-site contact", { exact: true }) });
-  await override.getByLabel("Name", { exact: true }).pressSequentially("Other Contact");
-  await override.getByLabel("Role", { exact: true }).fill("Technician");
-  await page.getByRole("button", { name: "Create Job", exact: true }).click();
-  expect(JSON.parse(await page.getByLabel("Created Job payload").textContent()).job.onsiteContact).toMatchObject({ name: "Other Contact", role: "Technician" });
+  const onsite = page.getByRole("region", { name: "On-site contact", exact: true });
+  await onsite.getByRole("combobox").click(); await page.getByRole("option", { name: /John Smith/ }).click();
+  await onsite.getByLabel("Name", { exact: true }).fill(" Mary  Jane Brown ");
+  await onsite.getByLabel("Role", { exact: true }).fill("Temporary access contact");
+  const payload = await submit(page);
+  expect(payload.job.onsiteContact).toMatchObject({ name: "Mary  Jane Brown", role: "Temporary access contact" });
+  expect(payload.job.onsiteContact.id).not.toBe("contact-a");
+  expect(payload.siteInput.contactAssignments[0].contactId).toBe("contact-a");
+  expect(payload.customer.contacts.find((contact) => contact.id === "contact-a").name).toBe("John Smith");
+});
+test("new site can have no contacts and requester stays independently selectable", async ({ page }) => {
+  const editor = await openSiteContact(page, { newCustomer: true }); await editor.getByRole("button", { name: "Cancel adding" }).click();
+  await page.getByText("Job contacts (optional)", { exact: true }).click();
+  await page.getByRole("region", { name: "Requester", exact: true }).getByLabel("Name", { exact: true }).fill("Independent Requester");
+  const payload = await submit(page); expect(payload.siteInput.contactAssignments).toEqual([]); expect(payload.job.onsiteContact).toBeNull();
+  expect(payload.job.requesterContact.name).toBe("Independent Requester");
 });

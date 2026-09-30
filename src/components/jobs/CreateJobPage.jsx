@@ -1,3 +1,5 @@
+import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEditor";
+import { getJobContactGroups, getSitePrimaryContact } from "@/lib/contact-model";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Plus, Search, UserRound } from "lucide-react";
@@ -22,6 +24,7 @@ import {
   formatCustomerType,
   formatSiteType,
   getCustomerContacts,
+  getCustomerBillingContact,
   getCustomerSiteAccessNote,
   getSiteDisplayName,
   normalizeSiteAddress,
@@ -41,11 +44,7 @@ function createEmptySiteDraft() {
     ocNumber: "",
     accessNotes: "",
     notes: "",
-    contactId: "",
-    contactName: "",
-    contactRole: "Site contact",
-    contactPhone: "",
-    contactEmail: "",
+    contactAssignments: [],
   };
 }
 
@@ -57,6 +56,7 @@ function RequiredMessage({ id, show, children = "This field is required." }) {
 export default function CreateJobPage({
   backLabel,
   customers,
+  contacts = [],
   jobs,
   staff,
   onCancel,
@@ -147,7 +147,8 @@ export default function CreateJobPage({
     ) || null,
     [job.jobAddress, selectedCustomerSites]
   );
-  const availableContacts = customerMode === "existing" ? selectedCustomerContacts : [];
+  const activeContactSite = siteMode === "create" ? { ...siteDraft, contacts } : selectedSite;
+  const contactGroups = (purpose) => getJobContactGroups(customerMode === "existing" ? selectedCustomer : null, activeContactSite, purpose);
 
   useEffect(() => {
     if (customerMode !== "existing" || !selectedCustomer) {
@@ -166,8 +167,8 @@ export default function CreateJobPage({
         ...current,
         jobAddress: defaultSite.address,
         requesterContact: null,
-        onsiteContact: null,
-        billingContact: null,
+        onsiteContact: buildContactSnapshot(getSitePrimaryContact(defaultSite), "On-site contact"),
+        billingContact: buildContactSnapshot(getCustomerBillingContact(selectedCustomer), "Billing contact"),
       }));
       return;
     }
@@ -179,7 +180,7 @@ export default function CreateJobPage({
       jobAddress: selectedCustomer.address || "",
       requesterContact: null,
       onsiteContact: null,
-      billingContact: null,
+      billingContact: buildContactSnapshot(getCustomerBillingContact(selectedCustomer), "Billing contact"),
     }));
   }, [customerMode, selectedCustomer, selectedCustomerSites]);
 
@@ -208,7 +209,7 @@ export default function CreateJobPage({
 
   const selectSite = (site) => {
     markDirty();
-    setJob((current) => ({ ...current, jobAddress: site.address }));
+    setJob((current) => ({ ...current, jobAddress: site.address, onsiteContact: buildContactSnapshot(getSitePrimaryContact(site), "On-site contact") }));
     setChangingSite(false);
     setTouched((current) => ({ ...current, site: true }));
   };
@@ -225,17 +226,11 @@ export default function CreateJobPage({
       const existingCustomer = orderedCustomers.find((entry) => entry.id === selectedCustomerId) || null;
       const jobAddress = normalizeSiteAddress(selectedJobAddress);
       const shouldCreateSite = customerMode === "new" || siteMode === "create";
-      const { contactRole, ...siteProfileDraft } = siteDraft;
+      const siteProfileDraft = siteDraft;
       const siteInput = shouldCreateSite
         ? { ...siteProfileDraft, address: jobAddress }
         : null;
-      const siteContact = shouldCreateSite ? buildContactSnapshot({
-        id: siteDraft.contactId,
-        name: siteDraft.contactName,
-        role: contactRole,
-        phone: siteDraft.contactPhone,
-        email: siteDraft.contactEmail,
-      }, "Site contact") : null;
+      const siteContact = shouldCreateSite ? buildContactSnapshot(getSitePrimaryContact({ ...siteDraft, contacts }), "Site contact") : null;
       const saved = await onSave({
         job: {
           ...job,
@@ -552,30 +547,7 @@ export default function CreateJobPage({
                   <p className="text-sm text-muted-foreground">Owners Corporation / plan reference for this property.</p>
                 </div>
               </div>
-              <ContactSnapshotEditor
-                title="Site contact"
-                description="Optional. This becomes the default on-site contact for jobs at this address."
-                contacts={availableContacts}
-                fallbackRole="Site contact"
-                value={{
-                  id: siteDraft.contactId,
-                  name: siteDraft.contactName,
-                  role: siteDraft.contactRole,
-                  phone: siteDraft.contactPhone,
-                  email: siteDraft.contactEmail,
-                }}
-                onChange={(contact) => {
-                  markDirty();
-                  setSiteDraft((current) => ({
-                    ...current,
-                    contactId: contact?.id || "",
-                    contactName: contact?.name || "",
-                    contactRole: contact?.role ?? "Site contact",
-                    contactPhone: contact?.phone || "",
-                    contactEmail: contact?.email || "",
-                  }));
-                }}
-              />
+              <ContactAssignmentsEditor kind="site" value={siteDraft.contactAssignments} contacts={contacts} preferredContacts={selectedCustomerContacts} onChange={(assignments) => { markDirty(); setSiteDraft((current) => ({ ...current, contactAssignments: assignments })); }} />
               <div className="grid gap-1.5">
                 <Label htmlFor="new-site-access-notes">Access notes</Label>
                 <Textarea id="new-site-access-notes" rows={3} value={siteDraft.accessNotes} onChange={(event) => {
@@ -696,15 +668,15 @@ export default function CreateJobPage({
             <summary className="cursor-pointer font-medium text-foreground">Job contacts (optional)</summary>
             <p className="mt-2 text-sm leading-6 text-text-secondary">Leave these blank to use the saved site and customer billing contacts.</p>
             <div className="mt-4 grid gap-3">
-              <ContactSnapshotEditor title="Requester" description="Who asked for the work or booked the visit." contacts={availableContacts} fallbackRole="Requester" value={job.requesterContact} onChange={(contact) => {
+              <ContactSnapshotEditor title="Requester" description="Who asked for the work or booked the visit." groups={contactGroups("requester")} fallbackRole="Requester" value={job.requesterContact} onChange={(contact) => {
                 markDirty();
                 setJob((current) => ({ ...current, requesterContact: contact }));
               }} />
-              <ContactSnapshotEditor title="On-site contact" description="Who the team should speak with on arrival." contacts={availableContacts} fallbackRole="On-site contact" value={job.onsiteContact} onChange={(contact) => {
+              <ContactSnapshotEditor title="On-site contact" description="Who the team should speak with on arrival." groups={contactGroups("onsite")} fallbackRole="On-site contact" value={job.onsiteContact} onChange={(contact) => {
                 markDirty();
                 setJob((current) => ({ ...current, onsiteContact: contact }));
               }} />
-              <ContactSnapshotEditor title="Billing contact" description="Who quotes and invoices should go to for this job." contacts={availableContacts} fallbackRole="Billing contact" value={job.billingContact} onChange={(contact) => {
+              <ContactSnapshotEditor title="Billing contact" description="Who quotes and invoices should go to for this job." groups={contactGroups("billing")} fallbackRole="Billing contact" value={job.billingContact} onChange={(contact) => {
                 markDirty();
                 setJob((current) => ({ ...current, billingContact: contact }));
               }} />

@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { FormField } from "@/components/shared/FormField";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectLabel, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { buildContactSnapshot, getContactDisplayName } from "@/lib/app-support";
 
 const NOT_SET_VALUE = "__none__";
@@ -12,6 +12,8 @@ function hasContactContent(contact) {
     String(contact?.name || "").trim()
       || String(contact?.phone || "").trim()
       || String(contact?.email || "").trim()
+      || String(contact?.position || "").trim()
+      || String(contact?.notes || "").trim()
   );
 }
 
@@ -20,6 +22,8 @@ function buildDraftContact(contact, fallbackRole = "") {
     id: String(contact?.id || "").trim(),
     name: String(contact?.name ?? ""),
     role: String(contact?.role ?? fallbackRole),
+    position: String(contact?.position ?? ""),
+    notes: String(contact?.notes ?? ""),
     phone: String(contact?.phone ?? ""),
     email: String(contact?.email ?? ""),
   };
@@ -37,11 +41,14 @@ export default function ContactSnapshotEditor({
   title,
   description = "",
   value,
-  contacts = [],
+  contacts: savedContacts = [],
+  groups,
   fallbackRole = "",
   onChange,
 }) {
   const fieldId = useId();
+  const contactGroups = groups || [{ label: "Customer contacts", contacts: savedContacts }];
+  const contacts = contactGroups.flatMap((group) => group.contacts);
   const draftContact = buildDraftContact(value, fallbackRole);
   const selectValue = getSelectValue(value, contacts);
 
@@ -74,7 +81,7 @@ export default function ContactSnapshotEditor({
   };
 
   return (
-    <div className="contact-snapshot-editor rounded-2xl border border-border bg-card p-3">
+    <section aria-label={title} className="contact-snapshot-editor min-w-0 rounded-2xl border border-border bg-card p-3">
       <div>
         <p className="text-sm font-semibold text-foreground">{title}</p>
         {description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}
@@ -89,11 +96,11 @@ export default function ContactSnapshotEditor({
             <SelectContent>
               <SelectItem value={NOT_SET_VALUE}>Not set</SelectItem>
               {selectValue === CUSTOM_VALUE ? <SelectItem value={CUSTOM_VALUE}>Custom job contact</SelectItem> : null}
-              {contacts.map((contact) => (
+              {contactGroups.map((group) => <SelectGroup key={group.label}><SelectLabel>{group.label}</SelectLabel>{group.contacts.map((contact) => (
                 <SelectItem key={contact.id} value={contact.id}>
-                  {getContactDisplayName(contact)}{contact.role ? ` - ${contact.role}` : ""}
+                  {getContactDisplayName(contact)}{contact.isPrimary ? " - Primary" : ""}{contact.role ? ` - ${contact.role}` : ""}
                 </SelectItem>
-              ))}
+              ))}</SelectGroup>)}
             </SelectContent>
           </Select>
         </FormField>
@@ -127,6 +134,7 @@ export default function ContactSnapshotEditor({
               placeholder="Phone number"
             />
           </FormField>
+          <FormField label="Position" htmlFor={`${fieldId}-position`}><Input id={`${fieldId}-position`} value={draftContact.position} onChange={(event) => handleFieldChange("position", event.target.value)} /></FormField>
           <FormField label="Email" htmlFor={`${fieldId}-email`}>
             <Input
               id={`${fieldId}-email`}
@@ -137,6 +145,6 @@ export default function ContactSnapshotEditor({
           </FormField>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

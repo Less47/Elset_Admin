@@ -1,3 +1,4 @@
+import { getJobContactGroups } from "@/lib/contact-model";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useMemo, useState } from "react";
 import { Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
@@ -19,7 +20,7 @@ import {
   formatDate,
   getContactDisplayName,
   getCustomerBillingContact,
-  getCustomerContacts,
+
   getCustomerSiteAccessNote,
   getCustomerSitePrimaryContact,
   getInvoicePaymentSummary,
@@ -81,7 +82,7 @@ function ContactSummary({ contact, label }) {
     <div className="py-3 first:pt-0 last:pb-0">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 font-medium text-foreground">{getContactDisplayName(contact)}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{[contact.phone, contact.email].filter(Boolean).join(" · ") || "No phone or email saved"}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{[contact.position, contact.role, contact.phone, contact.email].filter(Boolean).join(" · ") || "No phone or email saved"}</p>
     </div>
   );
 }
@@ -149,7 +150,6 @@ export default function JobDetailsPage({
     ) || null,
     [customerSites, overviewDraft.jobAddress]
   );
-  const customerContacts = useMemo(() => (customer ? getCustomerContacts(customer) : []), [customer]);
 
   const overviewDirty = overviewEditing
     && JSON.stringify(overviewDraft) !== JSON.stringify(buildOverviewDraft(job));
@@ -351,9 +351,9 @@ export default function JobDetailsPage({
                         <details className="record-inset-surface rounded-lg p-3 sm:p-4">
                           <summary className="cursor-pointer font-medium text-foreground">Job contacts</summary>
                           <div className="mt-4 grid gap-3">
-                            <ContactSnapshotEditor title="Requester" description="Who asked for this work." contacts={customerContacts} fallbackRole="Requester" value={overviewDraft.requesterContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, requesterContact: contact }))} />
-                            <ContactSnapshotEditor title="On-site contact" description="Who the team should speak with on arrival." contacts={customerContacts} fallbackRole="On-site contact" value={overviewDraft.onsiteContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, onsiteContact: contact }))} />
-                            <ContactSnapshotEditor title="Billing contact" description="Who quotes and invoices should be sent to." contacts={customerContacts} fallbackRole="Billing contact" value={overviewDraft.billingContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, billingContact: contact }))} />
+                            <ContactSnapshotEditor title="Requester" description="Who asked for this work." groups={getJobContactGroups(customer, draftJobSite, "requester")} fallbackRole="Requester" value={overviewDraft.requesterContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, requesterContact: contact }))} />
+                            <ContactSnapshotEditor title="On-site contact" description="Who the team should speak with on arrival." groups={getJobContactGroups(customer, draftJobSite, "onsite")} fallbackRole="On-site contact" value={overviewDraft.onsiteContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, onsiteContact: contact }))} />
+                            <ContactSnapshotEditor title="Billing contact" description="Who quotes and invoices should be sent to." groups={getJobContactGroups(customer, draftJobSite, "billing")} fallbackRole="Billing contact" value={overviewDraft.billingContact} onChange={(contact) => setOverviewDraft((current) => ({ ...current, billingContact: contact }))} />
                           </div>
                         </details>
                         <div className="flex flex-wrap justify-end gap-2">

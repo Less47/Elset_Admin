@@ -23,6 +23,8 @@ function groupDocumentTotals(db, documentTable, lineTable, documentIdColumn) {
 }
 
 export function summarizeWorkspaceDb(db) {
+  const contactCounts = db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='contacts'").get()
+    ? { contacts: countTable(db, "contacts"), customerContactAssignments: countTable(db, "customer_contact_links"), siteContactAssignments: countTable(db, "site_contact_links") } : {};
   const invoiceTotalsById = new Map();
   const invoices = db.prepare("SELECT id FROM invoices").all();
   const invoiceLines = db.prepare("SELECT quantity_micros, rate_cents FROM invoice_line_items WHERE invoice_id = ?");
@@ -44,6 +46,7 @@ export function summarizeWorkspaceDb(db) {
 
   return {
     counts: {
+      ...contactCounts,
       staff: countTable(db, "staff"),
       customers: countTable(db, "customers"),
       customerSites: countTable(db, "sites"),

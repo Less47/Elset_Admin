@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { importCustomerContactRelationships } from "./server-workspace-contacts.js";
 import { applyPrimarySiteUpdate, customerPostalFields } from "./src/lib/customer-profile.js";
 import {
   archiveMaintenancePlansForCustomer,
@@ -95,6 +96,8 @@ const customerKnownKeys = new Set([
   "sites",
   "siteAccessNotes",
   "contacts",
+  "contactAssignments",
+  "billingContactId",
   "externalRefs",
   "createdAt",
   "updatedAt",
@@ -110,6 +113,10 @@ const siteKnownKeys = new Set([
   "notes",
   "contactName",
   "contactPhone",
+  "contactEmail",
+  "contactId",
+  "contacts",
+  "contactAssignments",
   "assets",
   "createdAt",
   "updatedAt",
@@ -117,38 +124,6 @@ const siteKnownKeys = new Set([
 ]);
 const assetKnownKeys = new Set(["id", "name", "type", "location", "model", "notes", "createdAt", "updatedAt"]);
 const accessNoteKnownKeys = new Set(["id", "address", "notes", "updatedAt"]);
-const contactKnownKeys = new Set(["id", "kind", "name", "phone", "email", "role", "notes", "siteId"]);
-
-function normalizeContactRecord(contact, fallback = {}) {
-  if (!contact && !fallback) return null;
-  const candidate = {
-    ...fallback,
-    ...(contact || {}),
-  };
-  const name = trimText(candidate.name);
-  const phone = trimText(candidate.phone);
-  const email = trimText(candidate.email);
-  const notes = trimText(candidate.notes);
-  const role = trimText(candidate.role);
-  if (!name && !phone && !email && !notes && !role) return null;
-
-  return {
-    id: trimText(candidate.id) || crypto.randomUUID(),
-    kind: trimText(candidate.kind),
-    name,
-    phone,
-    email,
-    role,
-    notes,
-    siteId: trimText(candidate.siteId || candidate.site_id),
-    extra: pickExtra(candidate, contactKnownKeys),
-  };
-}
-
-function contactSignature(contact) {
-  return [contact.name, contact.role, contact.phone, contact.email, contact.notes].join("|").toLowerCase();
-}
-
 function normalizeAssetRecord(asset) {
   if (!asset || typeof asset !== "object" || Array.isArray(asset)) return null;
   return {
@@ -168,8 +143,9 @@ function normalizeAssets(assets) {
   return Array.isArray(assets) ? assets.map(normalizeAssetRecord).filter(Boolean) : [];
 }
 
-function normalizeSiteRecord(site, fallbackAddress = "") {
+export function normalizeSiteRecord(site, fallbackAddress = "") {
   if (!site || typeof site !== "object" || Array.isArray(site)) return null;
+  if (site.contactAssignments !== undefined && !Array.isArray(site.contactAssignments)) throw new WorkspaceCustomerError("Site contacts must be a list.");
   const address = normalizeSiteAddress(site.address || fallbackAddress);
   if (!address) return null;
 
@@ -183,6 +159,9 @@ function normalizeSiteRecord(site, fallbackAddress = "") {
     notes: trimText(site.notes),
     contactName: trimText(site.contactName),
     contactPhone: trimText(site.contactPhone),
+    contactEmail: trimText(site.contactEmail ?? site.extra?.contactEmail),
+    contactId: trimText(site.contactId ?? site.extra?.contactId),
+    ...(Array.isArray(site.contactAssignments) ? { contactAssignments: site.contactAssignments, contacts: site.contacts || [] } : {}),
     ocNumber: trimText(site.ocNumber),
     createdAt: trimText(site.createdAt) || nowIso(),
     updatedAt: trimText(site.updatedAt || site.createdAt) || nowIso(),
@@ -229,61 +208,9 @@ function normalizeSiteAccessNotes(notes, sites) {
   return [...byAddress.values()].sort((a, b) => a.address.localeCompare(b.address));
 }
 
-function normalizeContacts(customer, sites) {
-  const contacts = [];
-  const addContact = (contact, fallback = {}) => {
-    const normalized = normalizeContactRecord(contact, fallback);
-    if (!normalized) return null;
-    const signature = contactSignature(normalized);
-    const existingById = contacts.find((entry) => entry.id === normalized.id);
-    if (existingById) {
-      Object.assign(existingById, {
-        ...existingById,
-        ...normalized,
-        extra: {
-          ...(existingById.extra || {}),
-          ...(normalized.extra || {}),
-        },
-      });
-      return existingById;
-    }
-    const existing = contacts.find((entry) => contactSignature(entry) === signature);
-    if (existing) return existing;
-    contacts.push(normalized);
-    return normalized;
-  };
-
-  (Array.isArray(customer.contacts) ? customer.contacts : []).forEach((contact) => addContact(contact));
-
-  if (customer.email || customer.phone) {
-    addContact({
-      id: customer.id ? `${customer.id}-primary-contact` : "",
-      name: customer.name,
-      role: "Primary contact",
-      email: customer.email,
-      phone: customer.phone,
-    });
-  }
-
-  (Array.isArray(sites) ? sites : []).forEach((site) => {
-    const contactEmail = trimText(site.extra?.contactEmail);
-    const contactId = trimText(site.extra?.contactId);
-    if (!site.contactName && !site.contactPhone && !contactEmail) return;
-    addContact({
-      id: contactId || `${site.id}-site-contact`,
-      siteId: site.id,
-      name: site.contactName,
-      role: "Site contact",
-      phone: site.contactPhone,
-      email: contactEmail,
-    });
-  });
-
-  return contacts.sort((a, b) => (a.name || a.email || a.phone).localeCompare(b.name || b.email || b.phone));
-}
-
 export function normalizeCustomerInput(input, existingCustomer = null) {
   assertPlainObject(input);
+  if (input.contactAssignments !== undefined && !Array.isArray(input.contactAssignments)) throw new WorkspaceCustomerError("Customer contacts must be a list.");
   const now = nowIso();
   const source = {
     ...(existingCustomer || {}),
@@ -305,6 +232,8 @@ export function normalizeCustomerInput(input, existingCustomer = null) {
       ];
     }
   }
+
+  if (Array.isArray(input.contacts) && input.contactAssignments === undefined && existingCustomer) delete source.contactAssignments;
 
   const customerId = trimText(source.id) || crypto.randomUUID();
   const address = normalizeSiteAddress(source.address);
@@ -346,7 +275,9 @@ export function normalizeCustomerInput(input, existingCustomer = null) {
     updatedAt: trimText(source.updatedAt) || now,
     extra: { ...pickExtra(source, customerKnownKeys), ...customerPostalFields(source) },
   };
-  customer.contacts = normalizeContacts({ ...source, ...customer }, sites);
+  customer.contacts = Array.isArray(source.contacts) ? source.contacts : [];
+  customer.billingContactId = source.billingContactId || "";
+  if (Array.isArray(source.contactAssignments)) customer.contactAssignments = source.contactAssignments;
 
   return customer;
 }
@@ -396,35 +327,19 @@ function insertServiceM8Ref(db, entityType, entityId, externalRefs) {
   );
 }
 
-function replaceCustomerContacts(db, customer) {
-  db.prepare("DELETE FROM customer_contacts WHERE customer_id = ?").run(customer.id);
-  const insert = db.prepare(`
-    INSERT INTO customer_contacts (id, customer_id, site_id, kind, name, phone, email, role, notes, extra_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  customer.contacts.forEach((contact) => {
-    insert.run(
-      contact.id,
-      customer.id,
-      contact.siteId || null,
-      contact.kind,
-      contact.name,
-      contact.phone,
-      contact.email,
-      contact.role,
-      contact.notes,
-      objectJson(contact.extra)
-    );
-  });
-}
-
 function replaceCustomerSites(db, customer) {
-  db.prepare("DELETE FROM sites WHERE customer_id = ?").run(customer.id);
+  const ids = new Set(customer.sites.map((site) => site.id));
+  for (const row of db.prepare("SELECT id FROM sites WHERE customer_id=?").all(customer.id)) {
+    if (!ids.has(row.id)) db.prepare("DELETE FROM sites WHERE id=? AND customer_id=?").run(row.id, customer.id);
+  }
   const insertSite = db.prepare(`
     INSERT INTO sites (
       id, customer_id, label, address, site_type, access_notes, notes, contact_name, contact_phone,
       oc_number, created_at, updated_at, extra_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET label=excluded.label,address=excluded.address,site_type=excluded.site_type,
+      access_notes=excluded.access_notes,notes=excluded.notes,oc_number=excluded.oc_number,
+      updated_at=excluded.updated_at,extra_json=excluded.extra_json
   `);
   const insertAsset = db.prepare(`
     INSERT INTO site_assets (id, site_id, name, type, location, model, notes, created_at, updated_at, extra_json)
@@ -432,6 +347,8 @@ function replaceCustomerSites(db, customer) {
   `);
 
   customer.sites.forEach((site) => {
+    const existing = db.prepare("SELECT customer_id FROM sites WHERE id=?").get(site.id);
+    if (existing && existing.customer_id !== customer.id) throw new WorkspaceCustomerError("Site belongs to another customer.", 409);
     insertSite.run(
       site.id,
       customer.id,
@@ -440,14 +357,15 @@ function replaceCustomerSites(db, customer) {
       site.siteType,
       site.accessNotes,
       site.notes,
-      site.contactName,
-      site.contactPhone,
+      "", // Compatibility columns are no longer written; existing values remain intact.
+      "",
       site.ocNumber,
       site.createdAt,
       site.updatedAt,
       objectJson(site.extra)
     );
 
+    db.prepare("DELETE FROM site_assets WHERE site_id=?").run(site.id);
     site.assets.forEach((asset) => {
       insertAsset.run(
         asset.id,
@@ -476,7 +394,7 @@ function replaceCustomerAccessNotes(db, customer) {
   });
 }
 
-export function insertOrReplaceCustomer(db, customer) {
+export function insertOrReplaceCustomer(db, customer, { preserveContacts = false } = {}) {
   db.prepare(`
     INSERT INTO customers (
       id, name, email, phone, customer_type, address, created_at, updated_at, external_refs_json, extra_json
@@ -504,7 +422,7 @@ export function insertOrReplaceCustomer(db, customer) {
   );
   replaceCustomerSites(db, customer);
   replaceCustomerAccessNotes(db, customer);
-  replaceCustomerContacts(db, customer);
+  importCustomerContactRelationships(db, customer, { preserveExisting: preserveContacts });
   insertServiceM8Ref(db, "customer", customer.id, customer.externalRefs);
 }
 
@@ -643,7 +561,7 @@ export function restoreCustomer(db, customerIdInput) {
 
     const restoredPayload = parseJson(deletedRecord.payload_json, null);
     const customer = normalizeCustomerInput({ ...(restoredPayload || {}), id: customerId });
-    insertOrReplaceCustomer(db, customer);
+    insertOrReplaceCustomer(db, customer, { preserveContacts: true });
     restoreMaintenancePlansForCustomer(db, customerId);
     syncJobCustomerSnapshots(db, customer, customer.updatedAt);
     db.prepare("DELETE FROM deleted_records WHERE kind = 'customer' AND record_id = ?").run(customerId);

@@ -66,7 +66,7 @@ const serviceM8ImportOptionFields = [
   {
     key: "includeContacts",
     label: "Contacts",
-    description: "Use ServiceM8 primary contacts for customer email, phone, and site contacts.",
+    description: "Import named customer and site contacts, including their positions and contact details.",
   },
   {
     key: "includeSchedules",

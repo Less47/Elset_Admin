@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
-import { siteAddressMetadata } from "./src/lib/site-location.js";
+import { normalizeCustomerInput as normalizeCustomerRecord, normalizeSiteRecord, insertOrReplaceCustomer } from "./server-workspace-customers.js";
+import { getCustomerBillingContacts, getCustomerAccountContact, getCustomerPrimaryContact, getCustomerDirectContacts, getSitePrimaryContact } from "./src/lib/contact-model.js";
 import { insertInvoiceTree, insertQuoteTree } from "./server-workspace-documents.js";
 import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
 import { expandMaintenanceOccurrences, isMaintenanceDate } from "./src/lib/maintenance-recurrence.js";
@@ -9,8 +10,6 @@ import { archiveJobCostEntries, restoreJobCostEntries } from "./server-workspace
 
 const statusValues = new Set(["To Do", "In Progress", "Completed"]);
 const urgencyValues = new Set(["Low", "Medium", "High"]);
-const customerTypeValues = new Set(["homeowner", "strata", "property-manager", "builder", "business", "government", "other", ""]);
-const siteTypeValues = new Set(["residential", "commercial", "industrial", "mixed-use", "other", ""]);
 
 export class WorkspaceJobError extends Error {
   constructor(message, statusCode = 400) {
@@ -108,40 +107,6 @@ function pickExtra(record, knownKeys) {
   return extra;
 }
 
-const customerKnownKeys = new Set([
-  "id",
-  "name",
-  "email",
-  "phone",
-  "customerType",
-  "address",
-  "sites",
-  "siteAccessNotes",
-  "contacts",
-  "externalRefs",
-  "createdAt",
-  "updatedAt",
-]);
-const siteKnownKeys = new Set([
-  "extra",
-  "id",
-  "label",
-  "address",
-  "siteType",
-  "accessNotes",
-  "notes",
-  "contactId",
-  "contactName",
-  "contactPhone",
-  "contactEmail",
-  "assets",
-  "createdAt",
-  "updatedAt",
-  "ocNumber",
-]);
-const assetKnownKeys = new Set(["id", "name", "type", "location", "model", "notes", "createdAt", "updatedAt"]);
-const accessNoteKnownKeys = new Set(["id", "address", "notes", "updatedAt"]);
-const contactKnownKeys = new Set(["id", "kind", "name", "phone", "email", "role", "notes", "siteId"]);
 const jobKnownKeys = new Set([
   "id",
   "jobNumber",
@@ -178,214 +143,6 @@ const jobKnownKeys = new Set([
 const noteKnownKeys = new Set(["id", "author", "text", "createdAt"]);
 const attachmentKnownKeys = new Set(["id", "name", "url", "path", "mimeType", "mime_type", "sizeBytes", "size_bytes", "createdAt", "kind"]);
 
-function normalizeContactRecord(contact, fallback = {}) {
-  const candidate = {
-    ...fallback,
-    ...(contact || {}),
-  };
-  const name = trimText(candidate.name);
-  const phone = trimText(candidate.phone);
-  const email = trimText(candidate.email);
-  const notes = trimText(candidate.notes);
-  const role = trimText(candidate.role);
-  if (!name && !phone && !email && !notes && !role) return null;
-
-  return {
-    id: trimText(candidate.id) || crypto.randomUUID(),
-    kind: trimText(candidate.kind),
-    name,
-    phone,
-    email,
-    role,
-    notes,
-    siteId: trimText(candidate.siteId || candidate.site_id),
-    extra: pickExtra(candidate, contactKnownKeys),
-  };
-}
-
-function contactSignature(contact) {
-  return [contact.name, contact.role, contact.phone, contact.email, contact.notes].join("|").toLowerCase();
-}
-
-function normalizeAssetRecord(asset) {
-  if (!asset || typeof asset !== "object" || Array.isArray(asset)) return null;
-  return {
-    id: trimText(asset.id) || crypto.randomUUID(),
-    name: trimText(asset.name) || "Unnamed gate / project",
-    type: trimText(asset.type),
-    location: trimText(asset.location),
-    model: trimText(asset.model),
-    notes: trimText(asset.notes),
-    createdAt: trimText(asset.createdAt),
-    updatedAt: trimText(asset.updatedAt || asset.createdAt) || nowIso(),
-    extra: pickExtra(asset, assetKnownKeys),
-  };
-}
-
-function normalizeAssets(assets) {
-  return Array.isArray(assets) ? assets.map(normalizeAssetRecord).filter(Boolean) : [];
-}
-
-function normalizeSiteRecord(site, fallbackAddress = "") {
-  if (!site || typeof site !== "object" || Array.isArray(site)) return null;
-  const address = normalizeSiteAddress(site.address || fallbackAddress);
-  if (!address) return null;
-
-  return {
-    ...siteAddressMetadata(site),
-    id: trimText(site.id) || crypto.randomUUID(),
-    label: trimText(site.label),
-    address,
-    siteType: normalizeOption(site.siteType, siteTypeValues),
-    accessNotes: trimText(site.accessNotes),
-    notes: trimText(site.notes),
-    contactId: trimText(site.contactId),
-    contactName: trimText(site.contactName),
-    contactPhone: trimText(site.contactPhone),
-    contactEmail: trimText(site.contactEmail),
-    ocNumber: trimText(site.ocNumber),
-    createdAt: trimText(site.createdAt) || nowIso(),
-    updatedAt: trimText(site.updatedAt || site.createdAt) || nowIso(),
-    assets: normalizeAssets(site.assets),
-    extra: { ...(site.extra || {}), ...pickExtra(site, siteKnownKeys), ...siteAddressMetadata(site) },
-  };
-}
-
-function normalizeSiteAccessNoteRecord(note) {
-  if (!note || typeof note !== "object" || Array.isArray(note)) return null;
-  const address = normalizeSiteAddress(note.address);
-  if (!address) return null;
-  return {
-    id: trimText(note.id) || crypto.randomUUID(),
-    address,
-    notes: trimText(note.notes),
-    updatedAt: trimText(note.updatedAt || note.createdAt) || nowIso(),
-    extra: pickExtra(note, accessNoteKnownKeys),
-  };
-}
-
-function normalizeSiteAccessNotes(notes, sites) {
-  const byAddress = new Map();
-  const addNote = (note) => {
-    const normalized = normalizeSiteAccessNoteRecord(note);
-    if (!normalized) return;
-    const key = normalized.address.toLowerCase();
-    const existing = byAddress.get(key);
-    if (!existing || Date.parse(normalized.updatedAt || "") >= Date.parse(existing.updatedAt || "")) {
-      byAddress.set(key, normalized);
-    }
-  };
-
-  (Array.isArray(notes) ? notes : []).forEach(addNote);
-  (Array.isArray(sites) ? sites : [])
-    .filter((site) => site.accessNotes)
-    .forEach((site) => addNote({
-      id: site.id,
-      address: site.address,
-      notes: site.accessNotes,
-      updatedAt: site.updatedAt,
-    }));
-
-  return [...byAddress.values()].sort((a, b) => a.address.localeCompare(b.address));
-}
-
-function normalizeContacts(customer, sites) {
-  const contacts = [];
-  const addContact = (contact, fallback = {}) => {
-    const normalized = normalizeContactRecord(contact, fallback);
-    if (!normalized) return;
-    const existingById = contacts.find((entry) => entry.id === normalized.id);
-    if (existingById) {
-      Object.assign(existingById, {
-        ...existingById,
-        ...normalized,
-        extra: {
-          ...(existingById.extra || {}),
-          ...(normalized.extra || {}),
-        },
-      });
-      return;
-    }
-    if (contacts.some((entry) => contactSignature(entry) === contactSignature(normalized))) return;
-    contacts.push(normalized);
-  };
-
-  (Array.isArray(customer.contacts) ? customer.contacts : []).forEach((contact) => addContact(contact));
-  if (customer.email || customer.phone) {
-    addContact({
-      id: customer.id ? `${customer.id}-primary-contact` : "",
-      name: customer.name,
-      role: "Primary contact",
-      email: customer.email,
-      phone: customer.phone,
-    });
-  }
-  (Array.isArray(sites) ? sites : []).forEach((site) => {
-    if (!site.contactName && !site.contactPhone && !site.contactEmail) return;
-    addContact({
-      id: site.contactId || `${site.id}-site-contact`,
-      siteId: site.id,
-      name: site.contactName,
-      role: "Site contact",
-      phone: site.contactPhone,
-      email: site.contactEmail,
-    });
-  });
-
-  return contacts.sort((a, b) => (a.name || a.email || a.phone).localeCompare(b.name || b.email || b.phone));
-}
-
-function normalizeCustomerRecord(input, fallback = null) {
-  assertPlainObject(input, "Customer");
-  const now = nowIso();
-  const source = {
-    ...(fallback || {}),
-    ...input,
-  };
-  const id = trimText(source.id) || crypto.randomUUID();
-  const address = normalizeSiteAddress(source.address);
-  const sites = [];
-  const addSite = (site, fallbackAddress = "") => {
-    const normalized = normalizeSiteRecord(site, fallbackAddress);
-    if (!normalized) return;
-    const existing = sites.find((entry) => entry.id === normalized.id || entry.address.toLowerCase() === normalized.address.toLowerCase());
-    if (existing) {
-      Object.assign(existing, {
-        ...existing,
-        ...normalized,
-        id: existing.id || normalized.id,
-        createdAt: existing.createdAt || normalized.createdAt,
-      });
-      return;
-    }
-    sites.push(normalized);
-  };
-
-  (Array.isArray(source.sites) ? source.sites : []).forEach((site) => addSite(site));
-  if (address && !sites.some((site) => site.address.toLowerCase() === address.toLowerCase())) {
-    addSite({ address }, address);
-  }
-
-  const customer = {
-    id,
-    name: trimText(source.name) || "Unnamed customer",
-    email: trimText(source.email),
-    phone: trimText(source.phone),
-    customerType: normalizeOption(source.customerType, customerTypeValues),
-    address,
-    sites,
-    siteAccessNotes: normalizeSiteAccessNotes(source.siteAccessNotes, sites),
-    externalRefs: source.externalRefs && typeof source.externalRefs === "object" && !Array.isArray(source.externalRefs)
-      ? source.externalRefs
-      : {},
-    createdAt: trimText(source.createdAt) || now,
-    updatedAt: trimText(source.updatedAt || source.createdAt) || now,
-    extra: pickExtra(source, customerKnownKeys),
-  };
-  customer.contacts = normalizeContacts({ ...source, ...customer }, sites);
-  return customer;
-}
-
 function getCustomerState(db, customerId) {
   return loadWorkspaceStateFromDb(db).customers.find((customer) => customer.id === customerId) || null;
 }
@@ -420,136 +177,9 @@ function touchWorkspaceInfo(db, updatedAt = nowIso()) {
   `).run(updatedAt, updatedAt);
 }
 
-function replaceCustomerContacts(db, customer) {
-  db.prepare("DELETE FROM customer_contacts WHERE customer_id = ?").run(customer.id);
-  const insert = db.prepare(`
-    INSERT INTO customer_contacts (id, customer_id, site_id, kind, name, phone, email, role, notes, extra_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  customer.contacts.forEach((contact) => {
-    insert.run(
-      contact.id,
-      customer.id,
-      contact.siteId || null,
-      contact.kind,
-      contact.name,
-      contact.phone,
-      contact.email,
-      contact.role,
-      contact.notes,
-      objectJson(contact.extra)
-    );
-  });
-}
-
-function replaceCustomerSites(db, customer) {
-  db.prepare("DELETE FROM sites WHERE customer_id = ?").run(customer.id);
-  const insertSite = db.prepare(`
-    INSERT INTO sites (
-      id, customer_id, label, address, site_type, access_notes, notes, contact_name, contact_phone,
-      oc_number, created_at, updated_at, extra_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertAsset = db.prepare(`
-    INSERT INTO site_assets (id, site_id, name, type, location, model, notes, created_at, updated_at, extra_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  customer.sites.forEach((site) => {
-    insertSite.run(
-      site.id,
-      customer.id,
-      site.label,
-      site.address,
-      site.siteType,
-      site.accessNotes,
-      site.notes,
-      site.contactName,
-      site.contactPhone,
-      site.ocNumber,
-      site.createdAt,
-      site.updatedAt,
-      objectJson({
-        ...site.extra,
-        ...(site.contactId ? { contactId: site.contactId } : {}),
-        ...(site.contactEmail ? { contactEmail: site.contactEmail } : {}),
-      })
-    );
-
-    site.assets.forEach((asset) => {
-      insertAsset.run(
-        asset.id,
-        site.id,
-        asset.name,
-        asset.type,
-        asset.location,
-        asset.model,
-        asset.notes,
-        asset.createdAt || null,
-        asset.updatedAt,
-        objectJson(asset.extra)
-      );
-    });
-  });
-}
-
-function replaceCustomerAccessNotes(db, customer) {
-  db.prepare("DELETE FROM site_access_notes WHERE customer_id = ?").run(customer.id);
-  const insert = db.prepare(`
-    INSERT INTO site_access_notes (id, customer_id, address, notes, updated_at, extra_json)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  customer.siteAccessNotes.forEach((note) => {
-    insert.run(note.id, customer.id, note.address, note.notes, note.updatedAt, objectJson(note.extra));
-  });
-}
-
-function insertOrReplaceCustomer(db, customer) {
-  db.prepare(`
-    INSERT INTO customers (
-      id, name, email, phone, customer_type, address, created_at, updated_at, external_refs_json, extra_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      email = excluded.email,
-      phone = excluded.phone,
-      customer_type = excluded.customer_type,
-      address = excluded.address,
-      updated_at = excluded.updated_at,
-      external_refs_json = excluded.external_refs_json,
-      extra_json = excluded.extra_json
-  `).run(
-    customer.id,
-    customer.name,
-    customer.email,
-    customer.phone,
-    customer.customerType,
-    customer.address,
-    customer.createdAt,
-    customer.updatedAt,
-    objectJson(customer.externalRefs),
-    objectJson(customer.extra)
-  );
-  replaceCustomerSites(db, customer);
-  replaceCustomerAccessNotes(db, customer);
-  replaceCustomerContacts(db, customer);
-}
-
 function getCustomerBillingContact(customer) {
-  const contacts = Array.isArray(customer?.contacts) ? customer.contacts : [];
-  return (
-    contacts.find((contact) => /billing|account/i.test(`${contact.role || ""} ${contact.kind || ""}`) && (contact.email || contact.phone))
-    || contacts.find((contact) => contact.email || contact.phone)
-    || (customer?.email || customer?.phone
-      ? {
-          id: `${customer.id}-primary-contact`,
-          name: customer.name,
-          role: "Billing contact",
-          email: customer.email,
-          phone: customer.phone,
-        }
-      : null)
-  );
+  return getCustomerBillingContacts(customer)[0] || getCustomerAccountContact(customer)
+    || getCustomerPrimaryContact(customer) || getCustomerDirectContacts(customer)[0] || null;
 }
 
 function getCustomerSiteByAddress(customer, address) {
@@ -558,22 +188,7 @@ function getCustomerSiteByAddress(customer, address) {
 }
 
 function getCustomerSitePrimaryContact(customer, address) {
-  const site = getCustomerSiteByAddress(customer, address);
-  if (!site) return null;
-  const contact = site.contactId
-    ? (customer.contacts || []).find((entry) => entry.id === site.contactId)
-    : null;
-  return contact || (
-    site.contactName || site.contactPhone || site.contactEmail
-      ? {
-          id: site.contactId || `${site.id}-site-contact`,
-          name: site.contactName,
-          role: "Site contact",
-          phone: site.contactPhone,
-          email: site.contactEmail,
-        }
-      : null
-  );
+  return getSitePrimaryContact(getCustomerSiteByAddress(customer, address));
 }
 
 function normalizeContactSnapshot(contact, fallbackRole) {
@@ -592,6 +207,7 @@ function normalizeContactSnapshot(contact, fallbackRole) {
     phone,
     email,
     notes,
+    ...(contact.position !== undefined ? { position: trimText(contact.position) } : {}),
   };
 }
 
@@ -1011,6 +627,7 @@ export function createJob(db, input) {
       }
     }
 
+    customer = getCustomerState(db, customer.id);
     const normalizedJob = normalizeJobBaseWithDb(db, jobForInsert, customer, {
       jobNumber: allocateJobNumber(db),
       now,
@@ -1456,7 +1073,7 @@ export function restoreDeletedJob(db, jobIdInput) {
 
       if (deletedCustomer) {
         customer = normalizeCustomerRecord(parseJson(deletedCustomer.payload_json, {}));
-        insertOrReplaceCustomer(db, customer);
+        insertOrReplaceCustomer(db, customer, { preserveContacts: true });
         db.prepare("DELETE FROM deleted_records WHERE kind = 'customer' AND record_id = ?").run(customer.id);
       } else {
         customer = normalizeCustomerRecord({

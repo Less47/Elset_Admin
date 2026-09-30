@@ -1,5 +1,6 @@
 import addressparser from "nodemailer/lib/addressparser/index.js";
 import { buildDocumentEmail, getDocumentRecipientEmail } from "./quote-template.js";
+import { getCustomerBillingContacts, getCustomerPrimaryContact, getCustomerDirectContacts, getSiteContacts, getCustomerAccountContact } from "./contact-model.js";
 
 export const recipientFields = ["to", "cc", "bcc"];
 const hasHeaderControls = (value) => Array.from(value).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
@@ -98,12 +99,17 @@ export function resolveDocumentEmailDraft(draft) {
 
 export function documentContactSuggestions(job, customer) {
   const suggestions = [], seen = new Set();
+  const address = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const site = customer?.sites?.find((entry) => job?.siteId ? entry.id === job.siteId : address(entry.address) === address(job?.jobAddress));
   const candidates = [
+    ...getCustomerBillingContacts(customer).map((contact) => [contact, "Billing contact"]),
     [job?.billingContact, "Billing contact"],
-    [{ name: customer?.name || job?.customerName, email: customer?.email || job?.customerEmail }, "Customer"],
+    [getCustomerPrimaryContact(customer), "Primary contact"],
     [job?.requesterContact, "Requester"],
     [job?.onsiteContact, "On-site contact"],
-    ...(customer?.contacts || []).map((contact) => [contact, contact.role || "Customer contact"]),
+    ...getCustomerDirectContacts(customer).map((contact) => [contact, contact.role || "Customer contact"]),
+    ...getSiteContacts(site).map((contact) => [contact, contact.role || "Site contact"]),
+    [getCustomerAccountContact(customer) || { name: job?.customerName, email: job?.customerEmail }, "Customer account"],
   ];
   for (const [contact, role] of candidates) {
     const { addresses, invalid } = parseEmailRecipients(contact?.email || "");

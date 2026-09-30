@@ -962,7 +962,8 @@ test("Invoices edit actions keep their origin through refresh and history", asyn
       await expect(page).toHaveURL(baseUrl + "/invoices");
       // The invoice list contains issued invoices; creation is covered from Job Details.
       const row = width < 768 ? page.locator(`[data-mobile-record-card][data-record-id="${EXISTING_JOB}"]`) : page.locator(".data-grid-row", { hasText: "Job #1001" });
-      await row.getByRole("button", { name: width < 768 ? "Open invoice editor for Job #1001" : "Editor", exact: true }).click();
+      if (width < 768) await row.getByRole("button", { name: "Open invoice editor for Job #1001", exact: true }).click();
+      else await row.dblclick();
       await expect(editor(page)).toHaveAttribute("data-document-mode", "edit");
       await save(page, "invoice");
       await page.reload();

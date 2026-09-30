@@ -167,7 +167,7 @@ async function startServer() {
 
   delete env.FLY_APP_NAME;
 
-  serverProcess = spawn(process.execPath, ["server.js"], {
+  serverProcess = spawn(process.execPath, ["--import", "./tests/fixtures/servicem8-fetch-stub.mjs", "server.js"], {
     cwd: repoRoot,
     env,
     stdio: ["ignore", "pipe", "pipe"],
@@ -207,6 +207,7 @@ async function login(page, { username = "admin", pathname = "/" } = {}) {
   await page.getByPlaceholder("Enter your password").fill(adminPassword);
   await page.getByRole("button", { name: "Sign In" }).click();
   await expect(page.getByRole("button", { name: "Sign In", exact: true })).toHaveCount(0);
+  await expect.poll(async () => (await page.request.get(baseUrl + "/api/auth/me")).status()).toBe(200);
 }
 
 function trackBroadWorkspacePuts(page) {
@@ -499,7 +500,7 @@ async function captureWorkspace(page, info, name) {
 test("Customer pages support list entry, tabs, refresh and browser Back/Forward", async ({ page }) => {
   await login(page, { pathname: "/customers" });
   await expect(page.getByRole("button", { name: "New Customer", exact: true })).toBeVisible();
-  await page.locator('[title="Double-click to open customer profile"]', { hasText: unrelatedCustomerName }).getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByRole('group', { name: `Open profile for ${unrelatedCustomerName}`, exact: true }).dblclick();
   await expect(page).toHaveURL(baseUrl + customerPath);
   await noModalOrOverflow(page);
   await page.reload();
@@ -555,11 +556,13 @@ test("Customer create and edit persist account, contact and primary Site ownersh
   await expect(page.getByRole("button", { name: "Save Customer", exact: true })).toBeEnabled();
   await page.getByLabel("Customer / company name").fill("Workspace Customer Updated");
   await page.getByRole("button", { name: "Add Contact", exact: true }).click();
-  const contact = page.getByRole("region", { name: "Contact 1", exact: true });
+  await page.getByRole("button", { name: "New contact", exact: true }).click();
+  await page.getByRole("button", { name: "Create new contact", exact: true }).click();
+  const contact = page.locator('[aria-label="Customer contact management"] section').last();
   await contact.getByLabel("Name", { exact: true }).fill("Billing Person");
   await contact.getByLabel("Email", { exact: true }).fill("billing@example.test");
-  await contact.getByLabel("Role", { exact: true }).fill("Accounts");
-  await contact.getByRole("button", { name: "Use For Billing", exact: true }).click();
+  await contact.getByLabel("Roles at this customer", { exact: true }).fill("Accounts");
+  await contact.getByRole("checkbox", { name: "Billing contact", exact: true }).check();
   await page.getByRole("button", { name: "Save Customer", exact: true }).click();
   await expect(page.locator(".record-workspace h1")).toHaveText("Workspace Customer Updated");
   await page.reload();
@@ -766,7 +769,7 @@ test("Customer and Site pages fill desktop, tablet and phone workspaces", async 
       await captureWorkspace(page, info, `edit-${width}x${height}`);
       await page.goto(baseUrl + "/customers/new");
       await noModalOrOverflow(page);
-      if (width >= 1024) await page.getByRole("button", { name: "Create Customer", exact: true }).scrollIntoViewIfNeeded();
+      await page.getByRole("button", { name: "Create Customer", exact: true }).scrollIntoViewIfNeeded();
       await expect(page.getByRole("button", { name: "Create Customer", exact: true })).toBeInViewport();
       await page.evaluate(() => window.scrollTo(0, 0));
       await captureWorkspace(page, info, `create-${width}x${height}`);
@@ -903,13 +906,13 @@ test("Customer layout handles empty sections, long text and many uncapped record
         else for (const name of ["sites", "contacts", "jobs"]) expect(boxes[name].height).toBeLessThan(150);
       }
       await captureWorkspace(page, info, `${kind}-${width}x${height}`);
-      for (const [label, section, records] of [["Sites", "sites", 8], ["Contacts", "contacts", 13], ["Job History", "jobs", 16]]) {
+      for (const [label, section, records] of [["Sites", "sites", 8], ["Contacts", "contacts", 12], ["Job History", "jobs", 16]]) {
         await showCustomerSection(page, label);
         const content = page.locator(`[data-customer-section="${section}"]`);
-        await expect(content.locator('[data-mobile-record-card]')).toHaveCount(kind === "many" ? records : 0);
+        await expect(content.locator(section === "contacts" ? '[data-contact-id]' : '[data-mobile-record-card]')).toHaveCount(kind === "many" ? records : 0);
         await noModalOrOverflow(page);
         if (kind === "many") {
-          const finalRecord = content.locator('[data-mobile-record-card]').last();
+          const finalRecord = content.locator(section === "contacts" ? '[data-contact-id]' : '[data-mobile-record-card]').last();
           await finalRecord.scrollIntoViewIfNeeded();
           await expect(finalRecord).toBeInViewport();
         } else await expect(content).toContainText(/No (sites|contacts|jobs)/);
@@ -919,4 +922,139 @@ test("Customer layout handles empty sections, long text and many uncapped record
   }
   expect(writes).toEqual([]);
   expect(readWorkspaceState()).toEqual(before);
+});
+
+for (const width of [1440, 390]) test(`shared contact management works at ${width}px without overflow or losing site-only contacts`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  await login(page, { pathname: "/customers" });
+  const id = `contact-ui-${width}`, site1 = `${id}-one`, site2 = `${id}-two`, person = `${id}-shared`, siteOnly = `${id}-site-only`;
+  await apiJson(page, "POST", "/api/contacts", { id: person, name: `Shared Person ${width}`, position: "Facilities Manager", phone: "0400 111 222", email: "shared@example.test" });
+  await apiJson(page, "POST", "/api/contacts", { id: siteOnly, name: "Site Only Person", email: "siteonly@example.test" });
+  await apiJson(page, "POST", "/api/customers", { customer: { id, name: `Contact UI ${width}`, email: "account@example.test",
+    contactAssignments: [{ contactId: person, roles: ["Property Manager"], isPrimary: true, isBilling: true }],
+    sites: [{ id: site1, label: "North entrance", address: "10 Contact St", contactAssignments: [{ contactId: person, roles: ["Caretaker"], isPrimary: true }, { contactId: siteOnly, roles: ["Emergency access"] }] }, { id: site2, label: "South entrance", address: "20 Contact St", contactAssignments: [] }] } });
+  await page.goto(`${baseUrl}/customers/${id}`); await showCustomerSection(page, "Contacts");
+  const display = page.locator('[data-customer-section="contacts"]');
+  for (const label of ["Shared Person", "Facilities Manager", "Property Manager", "Primary", "Billing", "Site-only contact", "North entrance"]) await expect(display).toContainText(label);
+  await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
+  const editor = page.locator('[aria-label="Customer contact management"]');
+  await editor.getByRole("button", { name: "Edit details" }).click();
+  await editor.getByLabel("Phone", { exact: true }).fill("0400 999 888");
+  await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+  await editor.getByRole("button", { name: "New contact", exact: true }).click();
+  await editor.getByRole("button", { name: "Create new contact", exact: true }).click();
+  const added = editor.locator("section").last();
+  await added.getByLabel("Name", { exact: true }).fill(`New Person ${width}`);
+  await added.getByLabel("Position", { exact: true }).fill("Operations Director");
+  await added.getByLabel("Email", { exact: true }).fill(`new-${width}@example.test`);
+  await added.getByLabel("Notes", { exact: true }).fill("Call before attending");
+  await added.getByRole("button", { name: "Accounts", exact: true }).click();
+  await expect(added.getByLabel("Roles at this customer")).toHaveValue("Accounts");
+  await added.getByLabel("Roles at this customer").fill("Accounts, Custom role " + "LongRole".repeat(12));
+  await added.getByRole("checkbox", { name: "Primary contact", exact: true }).check();
+  await added.getByRole("checkbox", { name: "Billing contact", exact: true }).check();
+  await expect(editor.getByRole("checkbox", { name: "Primary contact", exact: true }).first()).not.toBeChecked();
+  await noModalOrOverflow(page);
+  await page.getByRole("button", { name: "Save Customer", exact: true }).click();
+  await expect(page.locator(".record-workspace h1")).toHaveText(`Contact UI ${width}`);
+  let saved = readWorkspaceState();
+  const created = saved.contacts.filter((contact) => contact.name === `New Person ${width}`); expect(created).toHaveLength(1);
+  expect(saved.customers.find((customer) => customer.id === id).contacts.filter((contact) => contact.isBilling)).toHaveLength(2);
+  expect(saved.contacts.find((contact) => contact.id === person).phone).toBe("0400 999 888");
+
+  await page.goto(`${baseUrl}/customers/${id}/sites/${site2}/edit`);
+  await page.getByRole("tab", { name: /^Contacts/ }).click();
+  const siteEditor = page.locator('[aria-label="Site contact management"]');
+  await siteEditor.getByRole("button", { name: "Add Contact", exact: true }).click();
+  await siteEditor.getByLabel("Search contacts").fill("Facilities Manager");
+  const candidate = siteEditor.getByRole("button", { name: new RegExp(`Shared Person ${width}`) }); await candidate.focus(); await candidate.press("Enter");
+  await siteEditor.getByRole("checkbox", { name: "Primary contact" }).check();
+  await siteEditor.getByRole("button", { name: "Building Manager", exact: true }).click();
+  await expect(siteEditor.getByLabel("Roles at this site")).toHaveValue("Building Manager");
+  await noModalOrOverflow(page);
+  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
+  saved = readWorkspaceState(); expect(saved.contacts.filter((contact) => contact.id === person)).toHaveLength(1);
+  expect(saved.customers.find((customer) => customer.id === id).sites.find((site) => site.id === site2).contacts[0]).toMatchObject({ id: person, phone: "0400 999 888", isPrimary: true });
+
+  await page.goto(`${baseUrl}/customers/${id}/edit`);
+  await page.locator('[aria-label="Customer contact management"] section').filter({ hasText: "Shared Person" }).getByRole("button", { name: "Remove from customer" }).click();
+  await page.getByRole("button", { name: "Save Customer", exact: true }).click();
+  await expect(page.locator(".record-workspace h1")).toHaveText(`Contact UI ${width}`);
+  await showCustomerSection(page, "Contacts");
+  const shared = page.locator(`[data-contact-id="${person}"]`);
+  for (const label of ["Site-only contact", "North entrance", "South entrance", "Caretaker", "Building Manager"]) await expect(shared).toContainText(label);
+  await noModalOrOverflow(page);
+  await page.screenshot({ path: info.outputPath(`contacts-${width}.png`), fullPage: true });
+});
+
+test("job contact selectors group current customer/site/billing records and keep saved snapshots after later edits", async ({ page }) => {
+  await login(page, { pathname: "/customers" });
+  const person = "job-contact-primary", secondary = "job-contact-secondary", onsite = "job-contact-site";
+  for (const [id, name, email] of [[person, "Primary Billing", "primary@example.test"], [secondary, "Second Billing", "second@example.test"], [onsite, "Site Supervisor", "supervisor@example.test"]]) await apiJson(page, "POST", "/api/contacts", { id, name, email, position: "Manager", phone: "123" });
+  await apiJson(page, "POST", "/api/customers", { id: "job-contact-customer", name: "Contact Job Customer", email: "account@example.test",
+    contactAssignments: [{ contactId: secondary, isBilling: true }, { contactId: person, isPrimary: true, isBilling: true }],
+    sites: [{ id: "job-contact-site-one", address: "40 Snapshot Street", contactAssignments: [{ contactId: onsite, isPrimary: true, roles: ["Caretaker"] }] }] });
+  await page.goto(`${baseUrl}/jobs/new`);
+  await page.getByRole("textbox", { name: "Search customers" }).fill("Contact Job Customer");
+  await page.locator('[aria-label="Customer search results"] button').click();
+  await page.getByText("Job contacts (optional)", { exact: true }).click();
+  await expect(page.getByRole("region", { name: "On-site contact", exact: true }).getByLabel("Name", { exact: true })).toHaveValue("Site Supervisor");
+  await expect(page.getByRole("region", { name: "Billing contact", exact: true }).getByLabel("Name", { exact: true })).toHaveValue("Primary Billing");
+  const requester = page.getByRole("region", { name: "Requester", exact: true }); await expect(requester.getByLabel("Name", { exact: true })).toHaveValue("");
+  await requester.getByRole("combobox").click(); await page.getByRole("option", { name: "Second Billing", exact: true }).click();
+  const billing = page.getByRole("region", { name: "Billing contact", exact: true });
+  await billing.getByRole("combobox").focus(); await billing.getByRole("combobox").press("ArrowDown");
+  await expect(page.getByRole("group", { name: "Billing contacts", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Job title").fill("Contact snapshot browser job"); await page.getByLabel("Description of work").fill("Historical contact snapshot coverage.");
+  await page.getByRole("button", { name: "Create Job", exact: true }).click();
+  await expect(page.locator(".record-workspace h1")).toHaveText("Contact snapshot browser job");
+  const job = readWorkspaceState().jobs.find((entry) => entry.title === "Contact snapshot browser job");
+  expect(job.requesterContact.id).toBe(secondary); expect(job.onsiteContact.id).toBe(onsite); expect(job.billingContact.id).toBe(person);
+  await apiJson(page, "PATCH", `/api/contacts/${onsite}`, { phone: "999", position: "Director" });
+  await page.reload(); expect(readWorkspaceState().jobs.find((entry) => entry.id === job.id).onsiteContact).toEqual(job.onsiteContact);
+  const next = await apiJson(page, "POST", "/api/jobs", { customer: { id: "job-contact-customer" }, job: { title: "Updated new job", jobAddress: "40 Snapshot Street" } });
+  expect(next.result.onsiteContact).toMatchObject({ phone: "999", position: "Director" });
+});
+
+test("ServiceM8 preview and import retain primary, secondary and site-only contacts through the Settings screen", async ({ page }) => {
+  await login(page, { pathname: "/settings" });
+  await page.getByRole("button", { name: "Data Backup", exact: true }).last().click();
+  await page.getByPlaceholder("Paste your ServiceM8 API key").fill("synthetic-key-never-sent-to-provider");
+  await page.getByRole("button", { name: "Preview Import", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Import Previewed Data", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Import Previewed Data", exact: true }).click();
+  await expect(page.getByText("ServiceM8 import complete. The shared workspace has been updated.", { exact: true })).toBeVisible();
+  const state = readWorkspaceState();
+  expect(state.contacts.filter((contact) => contact.externalRefs?.serviceM8)).toHaveLength(3);
+  const secondary = state.contacts.find((contact) => contact.id === "servicem8-contact-browser-secondary");
+  expect(secondary.position).toBe("Facilities Manager");
+  const customer = state.customers.find((entry) => entry.id === "servicem8-company-svc-company-alpha");
+  expect(customer.contacts).toHaveLength(2);
+  expect(customer.sites.find((site) => site.id === "servicem8-site-svc-site-alpha").contacts[0].name).toBe("Riley Example");
+  await page.goto(`${baseUrl}/customers/${customer.id}`); await showCustomerSection(page, "Contacts");
+  await expect(page.locator('[data-customer-section="contacts"]')).toContainText("Site-only contact");
+});
+
+test("download and confirmed restore preserve contacts and assignments through the Settings screen", async ({ page }, info) => {
+  await login(page, { pathname: "/settings" });
+  await apiJson(page, "POST", "/api/contacts", { id: "backup-browser-person", name: "Backup Person", position: "Director", phone: "123" });
+  await apiJson(page, "POST", "/api/customers", { id: "backup-browser-customer", name: "Backup Contact Customer", contactAssignments: [{ contactId: "backup-browser-person", isPrimary: true, isBilling: true }], sites: [{ id: "backup-browser-site", address: "90 Backup St", contactAssignments: [{ contactId: "backup-browser-person", isPrimary: true, roles: ["Caretaker"] }] }] });
+  await page.getByRole("button", { name: "Data Backup", exact: true }).last().click();
+  const pending = page.waitForEvent("download"); await page.getByRole("button", { name: "Download Backup", exact: true }).click();
+  const downloaded = await pending; const backupPath = info.outputPath("contact-backup.json"); await downloaded.saveAs(backupPath);
+  const payload = JSON.parse(fs.readFileSync(backupPath, "utf8")); expect(payload.metadata.workspace.schemaVersion).toBe(15);
+  expect(payload.metadata.workspace.summary.counts.contacts).toBeGreaterThan(0);
+  const before = readWorkspaceState();
+  await apiJson(page, "PATCH", "/api/contacts/backup-browser-person", { phone: "changed after backup" });
+  await page.locator('input[type="file"]').setInputFiles(backupPath);
+  await page.getByRole("button", { name: "Restore Backup", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Confirm Backup Restore" });
+  await dialog.getByPlaceholder("Re-enter your password").fill(adminPassword);
+  await dialog.getByRole("button", { name: "Confirm Restore", exact: true }).click();
+  await expect(page.getByText("Backup restored", { exact: true })).toBeVisible();
+  const after = readWorkspaceState(); expect(after.contacts).toEqual(before.contacts);
+  expect(after.customers.find((customer) => customer.id === "backup-browser-customer")).toEqual(before.customers.find((customer) => customer.id === "backup-browser-customer"));
+  await page.reload(); await expect(page.getByRole("button", { name: "Sign In", exact: true })).toHaveCount(0);
 });

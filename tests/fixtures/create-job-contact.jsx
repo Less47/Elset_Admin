@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import CreateJobPage from "../../src/components/jobs/CreateJobPage.jsx";
+import { UnsavedChangesContext } from "../../src/components/workspace/unsaved-changes-context.js";
 
 const initialCustomers = [{
   id: "contact-customer", name: "Contact Regression Customer", address: "1 Existing Street, Melbourne VIC 3000",
@@ -17,13 +18,13 @@ const registerNavigationBlocker = () => () => {};
 export default function ContactRegressionHarness() {
   const [customers, setCustomers] = useState(initialCustomers);
   const [payload, setPayload] = useState(null);
-  return <>
+  return <UnsavedChangesContext.Provider value={{ register: registerNavigationBlocker }}>
     <button onClick={() => setCustomers((current) => structuredClone(current))}>Refresh customer records</button>
-    <CreateJobPage customers={customers} jobs={jobs} staff={staff} backLabel="Test workspace"
+    <CreateJobPage contacts={customers.flatMap((customer) => customer.contacts)} customers={customers} jobs={jobs} staff={staff} backLabel="Test workspace"
       registerNavigationBlocker={registerNavigationBlocker} onCancel={() => {}} onCreated={() => {}}
       onSave={async (value) => { setPayload(value); return { id: "created-contact-job" }; }} />
     <pre aria-label="Created Job payload">{JSON.stringify(payload)}</pre>
-  </>;
+  </UnsavedChangesContext.Provider>;
 }
 
 createRoot(document.getElementById("root")).render(<ContactRegressionHarness />);

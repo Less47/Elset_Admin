@@ -8,6 +8,9 @@ import {
   WORKSPACE_SCHEMA_VERSION,
   getWorkspaceDataDir,
   getWorkspaceDbPath,
+  readWorkspaceSchemaVersion,
+  assertWorkspaceSchemaObjects,
+  migrateWorkspaceSchema,
 } from "./server-workspace-db.js";
 import { summarizeWorkspaceDb } from "./server-workspace-summary.js";
 
@@ -23,6 +26,9 @@ const expectedWorkspaceTables = [
   "staff",
   "customers",
   "customer_contacts",
+  "contacts",
+  "customer_contact_links",
+  "site_contact_links",
   "sites",
   "site_assets",
   "site_access_notes",
@@ -178,7 +184,7 @@ export async function backupSqliteDatabase(sourcePath, destinationPath) {
   finally { snapshot.close(); }
 }
 
-export function validateWorkspaceBackupDatabaseFile(backupPath, { expectedSummary = null, expectedSha256 = "" } = {}) {
+export function validateWorkspaceBackupDatabaseFile(backupPath, { expectedSummary = null, expectedSha256 = "", allowLegacy = false } = {}) {
   if (!fs.existsSync(backupPath)) {
     throw new Error("The workspace backup is missing the SQLite database file.");
   }
@@ -211,14 +217,14 @@ export function validateWorkspaceBackupDatabaseFile(backupPath, { expectedSummar
     }
 
     const schemaVersion = Number(db.pragma("user_version", { simple: true }) || 0);
-    if (schemaVersion !== WORKSPACE_SCHEMA_VERSION) {
+    if (schemaVersion !== WORKSPACE_SCHEMA_VERSION && !(allowLegacy && schemaVersion >= 1 && schemaVersion < WORKSPACE_SCHEMA_VERSION)) {
       throw new Error(
         `Unsupported workspace schema version ${schemaVersion || "(none)"}. Expected ${WORKSPACE_SCHEMA_VERSION}.`
       );
     }
 
     const tableNames = getTableNames(db);
-    const missingTables = expectedWorkspaceTables.filter((tableName) => !tableNames.has(tableName));
+    const missingTables = schemaVersion === WORKSPACE_SCHEMA_VERSION ? expectedWorkspaceTables.filter((tableName) => !tableNames.has(tableName)) : [];
     if (missingTables.length > 0) {
       throw new Error(`The workspace backup is missing required tables: ${missingTables.join(", ")}.`);
     }
@@ -227,14 +233,17 @@ export function validateWorkspaceBackupDatabaseFile(backupPath, { expectedSummar
     if (authTables.length > 0) {
       throw new Error(`The workspace backup database contains authentication tables: ${authTables.join(", ")}.`);
     }
+    readWorkspaceSchemaVersion(db);
+    assertWorkspaceSchemaObjects(db, schemaVersion);
 
     const foreignKeyErrors = db.prepare("PRAGMA foreign_key_check").all();
     if (foreignKeyErrors.length > 0) {
       throw new Error(`Workspace backup relationship validation failed: ${JSON.stringify(foreignKeyErrors)}`);
     }
 
-    const summary = summarizeWorkspaceDb(db);
-    const summaryErrors = expectedSummary ? compareSummaryObjects(expectedSummary, summary) : [];
+    // Legacy summaries are verified after upgrading the isolated restore copy.
+    const summary = schemaVersion === WORKSPACE_SCHEMA_VERSION ? summarizeWorkspaceDb(db) : null;
+    const summaryErrors = expectedSummary && summary ? compareSummaryObjects(expectedSummary, summary) : [];
     if (summaryErrors.length > 0) {
       throw new Error(`Workspace backup summary validation failed:\n${summaryErrors.join("\n")}`);
     }
@@ -375,7 +384,7 @@ export function materializeWorkspaceSqliteBackup(backupInput, tempDir) {
   if (!metadata.workspace || typeof metadata.workspace !== "object" || Array.isArray(metadata.workspace)) {
     throw new Error("The SQLite workspace backup metadata is missing workspace details.");
   }
-  if (metadata.workspace.schemaVersion !== WORKSPACE_SCHEMA_VERSION) {
+  if (!Number.isInteger(metadata.workspace.schemaVersion) || metadata.workspace.schemaVersion < 1 || metadata.workspace.schemaVersion > WORKSPACE_SCHEMA_VERSION) {
     throw new Error(
       `Unsupported workspace schema version ${metadata.workspace.schemaVersion || "(none)"}. `
       + `Expected ${WORKSPACE_SCHEMA_VERSION}.`
@@ -424,10 +433,22 @@ export function materializeWorkspaceSqliteBackup(backupInput, tempDir) {
   fs.mkdirSync(tempDir, { recursive: true });
   const tempDbPath = path.join(tempDir, WORKSPACE_DB_FILENAME);
   fs.writeFileSync(tempDbPath, databaseBuffer);
-  const validation = validateWorkspaceBackupDatabaseFile(tempDbPath, {
+  let validation = validateWorkspaceBackupDatabaseFile(tempDbPath, {
     expectedSummary: metadata.workspace.summary,
     expectedSha256,
+    allowLegacy: true,
   });
+  if (validation.schemaVersion !== metadata.workspace.schemaVersion) throw new Error("Workspace backup schema metadata does not match the database.");
+  if (validation.schemaVersion < WORKSPACE_SCHEMA_VERSION) {
+    // The uploaded bytes and active workspace remain untouched during validation.
+    const staged = new Database(tempDbPath, { fileMustExist: true });
+    try {
+      staged.pragma("foreign_keys = ON");
+      migrateWorkspaceSchema(staged);
+      staged.pragma("journal_mode = DELETE");
+    } finally { staged.close(); }
+    validation = validateWorkspaceBackupDatabaseFile(tempDbPath, { expectedSummary: metadata.workspace.summary });
+  }
 
   return {
     tempDbPath,

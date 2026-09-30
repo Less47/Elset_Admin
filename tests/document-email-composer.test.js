@@ -63,10 +63,10 @@ test("saved contact suggestions are relevant, labelled and deduplicated without 
   const before = structuredClone({ job, customer });
   assert.deepEqual(documentContactSuggestions(job, customer), [
     { name: "Bill", role: "Billing contact", email: "billing@example.test" },
-    { name: "Customer", role: "Customer", email: "customer@example.test" },
     { name: "Requester", role: "Requester", email: "request@example.test" },
     { name: "Site", role: "On-site contact", email: "site@example.test" },
     { name: "Other", role: "Manager", email: "manager@example.test" },
+    { name: "Customer", role: "Customer account", email: "customer@example.test" },
   ]);
   assert.deepEqual({ job, customer }, before);
 });
