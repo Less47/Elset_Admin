@@ -1,5 +1,5 @@
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEditor";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { customerPostalFields } from "@/lib/customer-profile";
 import { siteAddressMetadata } from "@/lib/site-location";
-import { RecordWorkspace, RECORD_WORKSPACE_WIDE_MAX_WIDTH, WorkspaceActionBar, WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
+import { RecordWorkspace, WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
 import { buildCustomerSites, customerTypeOptions, normalizeCustomerRecord, siteTypeOptions } from "@/lib/app-support";
 import "./CustomerFormPage.css";
 
@@ -41,6 +41,7 @@ export function CustomerTypeField({ id, label, value, options, onChange }) {
 
 export default function CustomerFormPage({ customer = null, contacts = [], backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite }) {
   const editing = Boolean(customer);
+  const formId = useId();
   const [initial] = useState(() => buildDraft(customer));
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
@@ -85,15 +86,18 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
 
   const saveStatus = saving ? "Saving…" : dirty ? "Unsaved changes" : "";
   const formActions = <>
-    <Button type="button" variant="outline" className={editing ? "h-11" : "h-9 max-lg:h-11"} disabled={saving} onClick={() => onCancel()}>Cancel</Button>
-    <Button type="submit" className={editing ? "h-11" : "h-9 max-lg:h-11"} disabled={saving || addressPending || (!editing && !draft.name.trim())} aria-busy={saving}>{saving ? "Saving…" : editing ? "Save Customer" : "Create Customer"}</Button>
+    <span className="sr-only text-xs xl:not-sr-only" role="status">{saveStatus}</span>
+    <Button type="button" variant="outline" className="hidden h-11 sm:inline-flex" disabled={saving} onClick={() => onCancel()}>Cancel</Button>
+    <Button type="submit" form={formId} className="h-11" disabled={saving || addressPending || (!editing && !draft.name.trim())} aria-busy={saving}>{saving ? "Saving…" : editing ? "Save Customer" : "Create Customer"}</Button>
   </>;
 
   return <RecordWorkspace backLabel={backLabel} eyebrow="Customers" title={editing ? "Edit Customer" : "New Customer"}
-    subtitle={editing ? customer.name : ""} onBack={() => onCancel()} maxWidth={editing ? RECORD_WORKSPACE_WIDE_MAX_WIDTH : "max-w-none"}>
-    <form onSubmit={submit} className={editing ? "grid min-w-0 gap-4" : "customer-create-form grid min-w-0 w-full max-w-xl"} aria-label={editing ? "Edit Customer" : "Create Customer"}>
-      <fieldset disabled={saving} className={editing ? "min-w-0 space-y-4" : "min-w-0"}>
-        <WorkspaceSection title="Customer details" panel={editing}>
+    subtitle={editing ? customer.name : ""} onBack={() => onCancel()} maxWidth="max-w-none" headerActions={formActions}>
+    <form id={formId} onSubmit={submit} className="grid min-w-0 w-full gap-4" aria-label={editing ? "Edit Customer" : "Create Customer"}>
+      {error ? <div role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
+      <fieldset disabled={saving} className="customer-form-columns">
+        <div className="grid min-w-0 gap-4" data-customer-form-column="details">
+        <WorkspaceSection title="Customer details" panel>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2"><CustomerField id="customer-name" label="Customer / company name"><Input id="customer-name" value={draft.name} required={!editing} onChange={(event) => update("name", event.target.value)} autoComplete="organization" /></CustomerField></div>
             <CustomerField id="customer-email" label="Account email"><Input id="customer-email" value={draft.email} onChange={(event) => update("email", event.target.value)} autoComplete="email" /></CustomerField>
@@ -101,32 +105,26 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
             <CustomerTypeField id="customer-type" label="Customer type" options={customerTypeOptions} value={draft.customerType} onChange={(value) => update("customerType", value)} />
           </div>
         </WorkspaceSection>
-        <WorkspaceSection title="Primary site" panel={editing}>
+        <WorkspaceSection title="Primary site" panel>
           <div className="grid min-w-0 items-start gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2"><CustomerField id="primary-site-address" label="Address"><GoogleAddressAutocompleteInput id="primary-site-address" value={draft.primarySiteAddress || { address: draft.address }} onSelectionPending={setAddressPending} onChange={(address) => setDraft((current) => ({ ...current, address: address.address, primarySiteAddress: address }))} placeholder="Search the customer's main address" /></CustomerField></div>
             <CustomerTypeField id="primary-site-type" label="Primary site type" options={siteTypeOptions} value={draft.primarySiteType} onChange={(value) => update("primarySiteType", value)} />
             <CustomerField id="primary-site-oc" label="OC number"><Input id="primary-site-oc" value={draft.primaryOcNumber} onChange={(event) => update("primaryOcNumber", event.target.value)} placeholder="e.g. PS123456" /><p className="text-xs text-text-secondary">Owners Corporation / plan reference for this property.</p></CustomerField>
           </div>
           {editing && primarySite ? <div className="mt-3 flex justify-end"><Button type="button" variant="outline" onClick={() => onOpenSite(primarySite)}>Open Site Profile</Button></div> : null}
-        </WorkspaceSection>
-        <WorkspaceSection title="Postal address" panel={editing}>
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm" htmlFor="customer-postal-same">
-            <input id="customer-postal-same" type="checkbox" className="h-4 w-4 accent-primary" checked={draft.postalAddressSameAsPrimary} onChange={(event) => update("postalAddressSameAsPrimary", event.target.checked)} />
+          <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 text-sm" htmlFor="customer-postal-same">
+            <input id="customer-postal-same" type="checkbox" className="h-4 w-4 shrink-0 accent-primary" checked={draft.postalAddressSameAsPrimary} onChange={(event) => update("postalAddressSameAsPrimary", event.target.checked)} />
             Postal address is the same as the main address
           </label>
           {!draft.postalAddressSameAsPrimary ? <CustomerField id="customer-postal-address" label="Postal address"><Input id="customer-postal-address" value={draft.postalAddress} onChange={(event) => update("postalAddress", event.target.value)} placeholder="Street address or PO Box, suburb, state and postcode" autoComplete="street-address" /></CustomerField> : null}
         </WorkspaceSection>
-        <WorkspaceSection title="Contacts" panel={editing}>
+        </div>
+        <div className="min-w-0" data-customer-form-column="contacts">
+        <WorkspaceSection title="Contacts" panel>
           <ContactAssignmentsEditor value={draft.contactAssignments} contacts={contacts} preferredContacts={draft.contacts || []} onChange={(assignments) => update("contactAssignments", assignments)} />
         </WorkspaceSection>
+        </div>
       </fieldset>
-      {error ? <div role="alert" className={editing ? "" : "px-3 pb-3"}><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
-      {editing ? <WorkspaceActionBar maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} status={saveStatus}>{formActions}</WorkspaceActionBar> : (
-        <footer className="flex min-w-0 items-center justify-between gap-2 border-t border-[var(--data-view-border)] p-3">
-          <div className="min-w-0 flex-1 text-xs font-medium text-text-secondary" aria-live="polite">{saveStatus}</div>
-          <div className="flex shrink-0 items-center gap-2">{formActions}</div>
-        </footer>
-      )}
     </form>
   </RecordWorkspace>;
 }

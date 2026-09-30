@@ -9,6 +9,7 @@ import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import { updateCustomer } from "../../server-workspace-customers.js";
+import { themePresets } from "../../src/lib/theme-presets.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -557,7 +558,6 @@ test("Customer create and edit persist account, contact and primary Site ownersh
   await page.getByLabel("Customer / company name").fill("Workspace Customer Updated");
   await page.getByRole("button", { name: "Add Contact", exact: true }).click();
   await page.getByRole("button", { name: "New contact", exact: true }).click();
-  await page.getByRole("button", { name: "Create new contact", exact: true }).click();
   const contact = page.locator('[aria-label="Customer contact management"] section').last();
   await contact.getByLabel("Name", { exact: true }).fill("Billing Person");
   await contact.getByLabel("Email", { exact: true }).fill("billing@example.test");
@@ -817,9 +817,11 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   const saved = after.sites.find((site) => site.address.startsWith("32 Synthetic"));
   expect(saved).toMatchObject({ ocNumber: "OC-SITE-WORKSPACE", assets: [expect.objectContaining({ name: "Synthetic entry gate" })] });
   expect(after.address).toBe(before.address);
-  // The existing Site API also materializes account/site fallback contacts.
+  // Owner saves refresh assignment write times; person/site details and the
+  // relationship IDs, roles, flags and creation times must stay unchanged.
   for (const contact of before.contacts) expect(after.contacts).toContainEqual(contact);
-  expect(after.sites.filter((site) => site.id !== saved.id)).toEqual(before.sites);
+  const stableSites = (sites) => sites.map((site) => ({ ...site, contactAssignments: site.contactAssignments.map((assignment) => ({ ...assignment, updatedAt: null })) }));
+  expect(stableSites(after.sites.filter((site) => site.id !== saved.id))).toEqual(stableSites(before.sites));
   await tracker.expectNone("Site pages use record-specific writes");
   tracker.stop();
 });
@@ -942,7 +944,6 @@ for (const width of [1440, 390]) test(`shared contact management works at ${widt
   await editor.getByLabel("Phone", { exact: true }).fill("0400 999 888");
   await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
   await editor.getByRole("button", { name: "New contact", exact: true }).click();
-  await editor.getByRole("button", { name: "Create new contact", exact: true }).click();
   const added = editor.locator("section").last();
   await added.getByLabel("Name", { exact: true }).fill(`New Person ${width}`);
   await added.getByLabel("Position", { exact: true }).fill("Operations Director");
@@ -967,7 +968,7 @@ for (const width of [1440, 390]) test(`shared contact management works at ${widt
   const siteEditor = page.locator('[aria-label="Site contact management"]');
   await siteEditor.getByRole("button", { name: "Add Contact", exact: true }).click();
   await siteEditor.getByLabel("Search contacts").fill("Facilities Manager");
-  const candidate = siteEditor.getByRole("button", { name: new RegExp(`Shared Person ${width}`) }); await candidate.focus(); await candidate.press("Enter");
+  await siteEditor.getByRole("option", { name: new RegExp(`Shared Person ${width}`) }).click();
   await siteEditor.getByRole("checkbox", { name: "Primary contact" }).check();
   await siteEditor.getByRole("button", { name: "Building Manager", exact: true }).click();
   await expect(siteEditor.getByLabel("Roles at this site")).toHaveValue("Building Manager");
@@ -1058,3 +1059,101 @@ test("download and confirmed restore preserve contacts and assignments through t
   expect(after.customers.find((customer) => customer.id === "backup-browser-customer")).toEqual(before.customers.find((customer) => customer.id === "backup-browser-customer"));
   await page.reload(); await expect(page.getByRole("button", { name: "Sign In", exact: true })).toHaveCount(0);
 });
+
+for (const [width, presetId] of [[1440, "elset"], [1440, "midnight-signal"], [390, "elset"], [390, "midnight-signal"], [820, "elset"], [1024, "elset"], [1280, "elset"]]) {
+  test(`customer create/edit layout, header saves and contact autocomplete at ${width}px in ${presetId}`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 900 });
+    const preset = themePresets.find((entry) => entry.id === presetId);
+    await page.route("**/api/user-preferences", async (route) => {
+      const response = await route.fetch(); const payload = await response.json();
+      await route.fulfill({ response, json: { ...payload, preferences: { ...payload.preferences, ...preset.values } } });
+    });
+    await login(page, { pathname: "/customers" });
+    const key = `refined-${width}-${presetId}`, contactId = `${key}-person`;
+    const person = { id: contactId, name: `Dropdown Person ${key}`, email: `${key}@example.test`, phone: `0400${width}987`, position: `Manager ${key}` };
+    await apiJson(page, "POST", "/api/contacts", person);
+    await apiJson(page, "POST", "/api/customers", { customer: { id: key, name: key, address: "10 Layout St", sites: [{ id: `${key}-site`, address: "10 Layout St" }], contactAssignments: [] } });
+
+    for (const editing of [false, true]) {
+      const mode = editing ? "edit" : "new", customerName = `${mode} ${key}`;
+      await page.goto(`${baseUrl}/customers/${editing ? `${key}/edit` : "new"}`);
+      await expect(page.getByRole("heading", { name: editing ? "Edit Customer" : "New Customer", exact: true })).toBeVisible();
+      await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--primary"))).toBe(preset.values.actionColor);
+      const form = page.getByRole("form", { name: editing ? "Edit Customer" : "Create Customer", exact: true });
+      const details = form.locator('[data-customer-form-column="details"]');
+      const contactsColumn = form.locator('[data-customer-form-column="contacts"]');
+      const primarySite = details.locator("section").filter({ has: page.getByRole("heading", { name: "Primary site", exact: true }) });
+      await expect(details.getByRole("heading", { name: "Customer details", exact: true })).toBeVisible();
+      await expect(contactsColumn.getByRole("heading", { name: "Contacts", exact: true })).toBeVisible();
+      const left = await details.boundingBox(), right = await contactsColumn.boundingBox();
+      if (width >= 1280) {
+        expect(right.x).toBeGreaterThan(left.x + left.width);
+        expect(right.y).toBeCloseTo(left.y, 0);
+        expect(left.width / right.width).toBeCloseTo(1.5, 1);
+      } else {
+        expect(right.x).toBeCloseTo(left.x, 0);
+        expect(right.y).toBeGreaterThan(left.y + left.height);
+      }
+      await expect(form.getByRole("heading", { name: "Postal address", exact: true })).toHaveCount(0);
+      await primarySite.getByRole("checkbox", { name: "Postal address is the same as the main address" }).uncheck();
+      await primarySite.getByLabel("Postal address", { exact: true }).fill("PO Box 42, Layout VIC 3000");
+      await page.getByLabel("Customer / company name").fill(customerName);
+      const save = page.getByRole("button", { name: editing ? "Save Customer" : "Create Customer", exact: true });
+      await expect(save).toHaveCount(1);
+      await expect(page.locator(".record-workspace-header").getByRole("button", { name: editing ? "Save Customer" : "Create Customer", exact: true })).toBeVisible();
+      expect(await save.evaluate((button) => button.form?.id)).toBe(await form.getAttribute("id"));
+      expect((await save.boundingBox()).height).toBe(44);
+      await expect(form.locator("footer, .record-workspace-action-bar")).toHaveCount(0);
+
+      const editor = contactsColumn.locator('[aria-label="Customer contact management"]');
+      await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+      const methods = editor.getByRole("group", { name: "Add contact method" });
+      await expect(methods.getByRole("button")).toHaveCount(2);
+      await expect(methods.getByRole("button", { name: "Existing contact", exact: true })).toHaveAttribute("aria-pressed", "true");
+      await expect(methods.getByRole("button", { name: "Cancel adding" })).toHaveCount(0);
+      const search = editor.getByRole("combobox", { name: "Search contacts" });
+      await expect(search).toHaveAttribute("aria-expanded", "false");
+      await expect(editor.getByRole("listbox")).toHaveCount(0);
+      expect((await editor.getByRole("button", { name: "Cancel adding" }).boundingBox()).y).toBeGreaterThan((await search.boundingBox()).y);
+      for (const query of [person.name, person.email, person.phone, person.position]) {
+        await search.fill(query);
+        await expect(search).toHaveValue(query);
+        await expect(editor.getByRole("option", { name: new RegExp(person.name) })).toBeVisible();
+      }
+      await search.press("Escape"); await expect(editor.getByRole("listbox")).toHaveCount(0);
+      await expect(search).toHaveValue(person.position);
+      await search.click(); await search.press("Tab"); await expect(editor.getByRole("listbox")).toHaveCount(0);
+      await search.fill("No matching fixture person"); await expect(editor.getByRole("status")).toHaveText("No matching contacts.");
+      await search.press("Enter"); await expect(form).toBeVisible();
+      await search.fill(person.email); await search.press("ArrowDown");
+      await expect(editor.getByRole("option", { selected: true })).toContainText(person.name);
+      await expect(search).toHaveAttribute("aria-activedescendant", await editor.getByRole("option", { selected: true }).getAttribute("id"));
+      await search.press("Enter");
+      await expect(editor.getByLabel("Name", { exact: true })).toHaveValue(person.name);
+      await expect(editor.getByRole("listbox")).toHaveCount(0);
+      await editor.getByRole("button", { name: "Close details", exact: true }).click();
+      await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+      await editor.getByRole("button", { name: "New contact", exact: true }).click();
+      await expect(editor.getByRole("button", { name: "Create new contact", exact: true })).toHaveCount(0);
+      const added = editor.locator("section").last();
+      await expect(added.getByLabel("Name", { exact: true })).toBeFocused();
+      await added.getByLabel("Name", { exact: true }).fill(`New Person ${customerName}`);
+      await added.getByLabel("Position", { exact: true }).fill("Facilities Manager");
+      await added.getByLabel("Roles at this customer").fill("Accounts, Property Manager");
+      await added.getByRole("checkbox", { name: "Billing contact", exact: true }).check();
+      await noModalOrOverflow(page);
+      await expect(save).toBeInViewport();
+      expect((await page.locator(".record-workspace-header").boundingBox()).y).toBe(0);
+      await page.evaluate(() => scrollTo(0, 0));
+      await page.screenshot({ path: info.outputPath(`${mode}-${width}-${presetId}.png`), fullPage: true });
+      await save.focus(); await save.press("Enter");
+      await expect(page.locator(".record-workspace h1")).toHaveText(customerName);
+      const saved = readWorkspaceState().customers.find((customer) => customer.name === customerName);
+      expect(saved.postalAddress).toBe("PO Box 42, Layout VIC 3000");
+      expect(saved.contactAssignments).toHaveLength(2);
+      expect(saved.contactAssignments.some((assignment) => assignment.contactId === contactId)).toBe(true);
+      expect(saved.contacts.find((contact) => contact.name === `New Person ${customerName}`)).toMatchObject({ position: "Facilities Manager", roles: ["Accounts", "Property Manager"], isBilling: true });
+      if (editing) expect(saved.sites[0].id).toBe(`${key}-site`);
+    }
+  });
+}

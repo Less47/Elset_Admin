@@ -41,7 +41,6 @@ async function openSiteContact(page, { newCustomer = false } = {}) {
 }
 async function newPerson(editor) {
   await editor.getByRole("button", { name: "New contact", exact: true }).click();
-  await editor.getByRole("button", { name: "Create new contact", exact: true }).click();
   await editor.getByRole("checkbox", { name: "Primary contact" }).check();
 }
 async function submit(page) {
@@ -65,8 +64,8 @@ test("new site contact accepts real spacebar presses, positions and custom roles
 });
 test("existing site contact can be selected by keyboard without duplicating its identity and survives a refresh", async ({ page }) => {
   const editor = await openSiteContact(page);
-  await editor.getByLabel("Search contacts").fill("John");
-  const choice = editor.getByRole("button", { name: /John Smith/ }); await choice.focus(); await choice.press("Enter");
+  const search = editor.getByRole("combobox", { name: "Search contacts" });
+  await search.fill("John"); await search.press("ArrowDown"); await search.press("Enter");
   await expect(editor.getByLabel("Name", { exact: true })).toHaveValue("John Smith");
   await editor.getByLabel("Roles at this site").fill("Site Manager");
   await editor.getByRole("checkbox", { name: "Primary contact" }).check();
@@ -79,7 +78,8 @@ test("existing site contact can be selected by keyboard without duplicating its 
 });
 test("editing a job contact creates a custom snapshot and leaves the site assignment unchanged", async ({ page }) => {
   const editor = await openSiteContact(page);
-  await editor.getByRole("button", { name: /John Smith/ }).click();
+  await editor.getByRole("combobox", { name: "Search contacts" }).click();
+  await editor.getByRole("option", { name: /John Smith/ }).click();
   await editor.getByRole("checkbox", { name: "Primary contact" }).check();
   await page.getByText("Job contacts (optional)", { exact: true }).click();
   const onsite = page.getByRole("region", { name: "On-site contact", exact: true });
