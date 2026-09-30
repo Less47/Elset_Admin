@@ -1,3 +1,4 @@
+import { recordRowOpenProps } from "@/lib/record-row";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
@@ -411,8 +412,7 @@ export default function CustomerManager({
                   {filteredCustomers.map((customer) => (
                     <div
                       key={customer.id}
-                      onDoubleClick={() => onOpenProfile(customer.id)}
-                      title="Double-click to open customer profile"
+                      {...recordRowOpenProps(`Open profile for ${customer.name}`, () => onOpenProfile(customer.id))}
                       className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_96px] gap-px bg-surface-selected transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
@@ -434,18 +434,15 @@ export default function CustomerManager({
                         <p className="text-right text-[11px] text-text-secondary">
                           <span className="font-semibold text-foreground">{customer.jobCount}</span> total / <span className="font-semibold text-foreground">{customer.openJobCount}</span> open
                         </p>
-                        <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenProfile(customer.id)}>
-                          Open
-                        </Button>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="hidden overflow-x-auto 2xl:block">
-              <div className="min-w-[1180px]">
+              <div className="min-w-[1050px]">
                 <div className="data-grid grid gap-px bg-surface-selected">
-                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
+                  <div className="data-grid-header grid grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                     <span>Customer</span>
                     <span>Email</span>
                     <span>Phone</span>
@@ -453,15 +450,13 @@ export default function CustomerManager({
                     <span>Last Activity</span>
                     <span className="text-right">Jobs</span>
                     <span className="text-right">Open</span>
-                    <span className="text-right">Action</span>
                   </div>
 
                   {filteredCustomers.map((customer) => (
                     <div
                       key={customer.id}
-                      onDoubleClick={() => onOpenProfile(customer.id)}
-                      title="Double-click to open customer profile"
-                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px_130px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
+                      {...recordRowOpenProps(`Open profile for ${customer.name}`, () => onOpenProfile(customer.id))}
+                      className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.25fr_1fr_120px_130px_90px_90px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -482,11 +477,6 @@ export default function CustomerManager({
                       </div>
                       <div className="text-right">
                         <span className="font-medium text-foreground">{customer.openJobCount}</span>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenProfile(customer.id)}>
-                          Open Profile
-                        </Button>
                       </div>
                     </div>
                   ))}

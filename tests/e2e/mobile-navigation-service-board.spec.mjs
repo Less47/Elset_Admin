@@ -1100,14 +1100,19 @@ test("mobile page controls keep records primary and preserve live filter state",
     await page.keyboard.press("Escape");
     await expect(historyFilterButton).toBeFocused();
     await expect(historyControls.getByRole("button", { name: "Filters, 2 active" })).toBeVisible();
-    await expect(page.locator("[data-result-summary]")).toHaveText("1 job · 0 open");
+    await expect(page.locator("[data-result-summary]")).toHaveText("1 job");
     await historyControls.getByRole("button", { name: "Filters, 2 active" }).click();
     filters = page.getByRole("dialog", { name: "Filters" });
     await expect(filters.getByRole("combobox", { name: "Status" })).toContainText("Completed");
     await expect(filters.getByLabel("Created from", { exact: true })).toHaveValue("2026-01-01");
     await filters.getByRole("button", { name: "Reset" }).click();
     await filters.getByRole("button", { name: "Done" }).click();
-    await expect(page.locator("[data-result-summary]")).toHaveText("4 jobs · 3 open");
+    await expect(page.locator("[data-result-summary]")).toHaveText("4 jobs");
+    await historyControls.getByRole("textbox", { name: "Search job history", exact: true }).fill("no-matching-history-job");
+    await expect(page.locator("[data-result-summary]")).toHaveText("0 jobs");
+    await expect(page.getByText("No jobs found", { exact: true })).toBeVisible();
+    await historyControls.getByRole("textbox", { name: "Search job history", exact: true }).fill("");
+    await expect(page.locator("[data-result-summary]")).toHaveText("4 jobs");
     await assertNoHorizontalOverflow(page);
 
     await navigateToWorkspaceSection(page, "Invoices", width);
@@ -1448,10 +1453,10 @@ test("phone database pages use contained record cards with visible identities, s
 
 test("tablet and desktop database pages retain their existing fitted result grids", async ({ browser }) => {
   const pageSpecs = [
-    { section: "Customers", action: "Open", headers: ["Customer", "Contact", "Activity", "Jobs"] },
-    { section: "Sites", action: "Open", headers: ["Site", "Customer", "Activity", "Work"] },
-    { section: "Job History", action: "Open", headers: ["Job", "Customer", "Status", "Open"] },
-    { section: "Invoices", action: "Job", headers: ["Job", "Invoice", "Payment", "Actions"] },
+    { section: "Customers", rowLabel: /^Open profile for/, route: /\/customers\/[^/]+$/, headers: ["Customer", "Contact", "Activity", "Jobs"], wideHeaders: ["Customer", "Email", "Phone", "Created", "Last Activity", "Jobs", "Open"] },
+    { section: "Sites", rowLabel: /^Open site/, route: /\/customers\/[^/]+\/sites\/[^/]+$/, headers: ["Site", "Customer", "Activity", "Work"], wideHeaders: ["Site", "Customer", "Type", "Last Activity", "Jobs", "Open", "Assets"] },
+    { section: "Job History", rowLabel: /^Open Job #/, route: /\/jobs\/[^/]+$/, headers: ["Job", "Customer", "Status"], wideHeaders: ["Job", "Customer & Site", "Status", "Urgency", "Scheduled", "Documents", "Last Activity"] },
+    { section: "Invoices", rowLabel: /^Open invoice editor for Job #/, action: "Job", headers: ["Job", "Invoice", "Payment", "Actions"], wideHeaders: ["Job", "Customer", "Work", "Issued", "Due", "Total", "Status", "Payment", "Actions"] },
     { section: "Maintenance" },
     { section: "Staff", action: "Edit", headers: ["Staff", "Contact", "Action"] },
     { section: "Parts Inventory", action: "Edit", headers: ["Part", "Stock", "Value", "Action"] },
@@ -1463,6 +1468,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
     { width: 1024, height: 768 },
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
   ]) {
     const context = await browser.newContext(viewport.width < 1024
       ? mobileContextOptions(viewport.width, viewport.height)
@@ -1476,19 +1482,32 @@ test("tablet and desktop database pages retain their existing fitted result grid
     try {
       await loginAs(page, "mobileadmin", viewport.width < 1024);
       for (const pageSpec of pageSpecs) {
+        if (viewport.width === 1920 && !pageSpec.rowLabel) continue;
         await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
         await expect(page.locator("[data-mobile-record-list]")).toHaveCount(0);
         const desktopResults = page.locator("[data-desktop-record-results]");
         await expect(desktopResults).toBeVisible();
+        if (pageSpec.section === "Job History") {
+          await expect(page.locator(".data-stat-grid")).toHaveCount(0);
+          const toolbar = await page.locator("[data-page-top-bar]").boundingBox();
+          const tableHeader = await desktopResults.locator(".data-grid-header:visible").boundingBox();
+          expect(tableHeader.y - toolbar.y - toolbar.height).toBeLessThanOrEqual(32);
+        }
         if (pageSpec.section === "Maintenance") {
           await expect(desktopResults.getByRole("button")).toHaveCount(0);
           await expect(desktopResults.getByRole("row", { name: /^Open maintenance plan/ }).first()).toHaveAttribute("tabindex", "0");
+        } else if (!pageSpec.action) {
+          await expect(desktopResults.getByRole("button")).toHaveCount(0);
         } else await expect(desktopResults.getByRole("button", { name: pageSpec.action, exact: true }).first()).toBeVisible();
+        if (pageSpec.rowLabel) {
+          await expect(desktopResults.getByRole("button", { name: /^(Open|Open Profile|Open Site|Open Job|Open Invoice|Open Invoice Editor|Editor)$/ })).toHaveCount(0);
+          await expect(desktopResults.getByRole("group", { name: pageSpec.rowLabel }).first()).toHaveAttribute("tabindex", "0");
+        }
 
         if (pageSpec.headers) {
           const visibleHeader = desktopResults.locator(".data-grid-header:visible");
           await expect(visibleHeader).toHaveCount(1);
-          expect((await visibleHeader.locator(":scope > *").allTextContents()).map((text) => text.trim())).toEqual(pageSpec.headers);
+          expect((await visibleHeader.locator(":scope > *").allTextContents()).map((text) => text.trim())).toEqual(viewport.width >= 1536 ? pageSpec.wideHeaders : pageSpec.headers);
           await expect(desktopResults.locator(".data-grid-row:visible").first()).toBeVisible();
           const scroller = desktopResults.locator(".overflow-x-auto:visible").first();
           const dimensions = await scroller.evaluate((element) => ({
@@ -1502,6 +1521,36 @@ test("tablet and desktop database pages retain their existing fitted result grid
           await expect(page.getByRole("complementary", { name: "Due Queue" })).toBeVisible();
         }
         await assertNoHorizontalOverflow(page);
+        if (viewport.width >= 1440 && pageSpec.rowLabel) {
+          await page.screenshot({ path: path.join(screenshotDir, `table-without-open-${pageSpec.section.replaceAll(" ", "-")}-${viewport.width}.png`) });
+          const row = desktopResults.locator(".data-grid-row:visible").first();
+          const startUrl = page.url();
+          await row.locator(":scope > *").first().click();
+          await expect(page).toHaveURL(startUrl);
+          if (pageSpec.route) {
+            await row.dblclick(); await expect(page).toHaveURL(pageSpec.route);
+            await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+            await row.focus(); await row.press("Enter"); await expect(page).toHaveURL(pageSpec.route);
+            await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+          } else {
+            const sentRow = desktopResults.getByRole("group", { name: "Open invoice editor for Job #1001", exact: true });
+            for (const keyboard of [false, true]) {
+              if (keyboard) { await sentRow.focus(); await sentRow.press("Enter"); }
+              else await sentRow.locator(":scope > *").first().dblclick();
+              await expect(page).toHaveURL(/\/jobs\/demo-job-1001\/invoice$/);
+              await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+            }
+            if (viewport.width >= 1536) {
+              const dueDate = sentRow.locator('input[type="date"]');
+              await dueDate.dblclick(); await dueDate.press("Enter");
+              await expect(page).toHaveURL(startUrl);
+              expect(context.pages()).toHaveLength(1);
+            }
+            await sentRow.getByRole("button", { name: "Job", exact: true }).click();
+            await expect(page).toHaveURL(/\/jobs\/demo-job-1001$/);
+            await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
+          }
+        }
       }
     } finally {
       await context.close();

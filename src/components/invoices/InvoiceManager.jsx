@@ -1,3 +1,4 @@
+import { recordRowOpenProps } from "@/lib/record-row";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -371,7 +372,7 @@ export default function InvoiceManager({
             <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
               <div className="data-grid grid min-w-[560px] gap-px bg-surface-selected md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_128px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Invoice</span>
                   <span>Payment</span>
@@ -381,7 +382,8 @@ export default function InvoiceManager({
                 {filteredRows.map((row) => (
                   <div
                     key={row.job.id}
-                    className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_112px_128px_150px] gap-px bg-surface-selected transition [&>*]:bg-card"
+                    {...recordRowOpenProps(`Open invoice editor for Job #${row.job.jobNumber}`, () => onOpenInvoice(row.job))}
+                    className="data-grid-row grid cursor-pointer grid-cols-[minmax(0,1.25fr)_112px_128px_128px] gap-px bg-surface-selected transition [&>*]:bg-card"
                   >
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{row.job.jobNumber}</p>
@@ -406,23 +408,18 @@ export default function InvoiceManager({
                       <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
                         Job
                       </Button>
-                      {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
-                        <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenSentInvoice(row.job)}>
-                          Open
-                        </Button>
-                      ) : null}
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
-                        {row.invoice ? "Editor" : "Create"}
-                      </Button>
+                      {!row.invoice ? <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
+                        Create
+                      </Button> : null}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
             <div className="hidden overflow-x-auto 2xl:block">
-            <div className="min-w-[1540px]">
+            <div className="min-w-[1460px]">
               <div className="data-grid grid gap-px bg-surface-selected">
-                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
+                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_180px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Customer</span>
                   <span>Work</span>
@@ -437,7 +434,8 @@ export default function InvoiceManager({
                 {filteredRows.map((row) => (
                   <div
                     key={row.job.id}
-                    className="data-grid-row grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_260px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
+                    {...recordRowOpenProps(`Open invoice editor for Job #${row.job.jobNumber}`, () => onOpenInvoice(row.job))}
+                    className="data-grid-row grid cursor-pointer grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_180px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                   >
                     <p className="font-semibold text-foreground">#{row.job.jobNumber}</p>
                     <div className="min-w-0">
@@ -490,14 +488,9 @@ export default function InvoiceManager({
                     <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenJob(row.job)}>
                       Job
                     </Button>
-                    {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
-                      <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenSentInvoice(row.job)}>
-                        Open Invoice
-                      </Button>
-                    ) : null}
-                    <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenInvoice(row.job)}>
-                      {row.invoice ? "Open Invoice Editor" : "Create Invoice"}
-                    </Button>
+                    {!row.invoice ? <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenInvoice(row.job)}>
+                      Create Invoice
+                    </Button> : null}
                   </div>
                 </div>
                 ))}

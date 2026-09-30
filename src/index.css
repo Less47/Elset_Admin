@@ -785,6 +785,12 @@
     background: var(--data-view-grid-line) !important;
   }
 
+  .data-grid-row[tabindex="0"]:focus-visible {
+    position: relative;
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
   .data-grid-row > * {
     padding: 0.5rem 0.75rem;
     min-height: 2.75rem;

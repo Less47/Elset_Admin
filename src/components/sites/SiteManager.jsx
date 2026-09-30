@@ -1,3 +1,4 @@
+import { recordRowOpenProps } from "@/lib/record-row";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useUserUiPreference } from "@/hooks/useUserUiPreferences";
@@ -377,8 +378,7 @@ export default function SiteManager({
                     {filteredSites.map((site) => (
                       <div
                         key={`${site.customer.id}-${site.id}`}
-                        onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
-                        title="Double-click to open site profile"
+                        {...recordRowOpenProps(`Open site ${getSiteDisplayName(site)}`, () => onOpenSite(site.customer.id, site.id))}
                         className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_104px_104px] gap-px bg-surface-selected transition [&>*]:bg-card"
                       >
                         <div className="min-w-0">
@@ -403,18 +403,15 @@ export default function SiteManager({
                           <p className="text-right text-[11px] text-text-secondary">
                             <span className="font-semibold text-foreground">{site.jobCount}</span> total / <span className="font-semibold text-foreground">{site.openJobCount}</span> open
                           </p>
-                          <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenSite(site.customer.id, site.id)}>
-                            Open
-                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
                 <div className="hidden overflow-x-auto 2xl:block">
-                <div className="min-w-[1200px]">
+                <div className="min-w-[1060px]">
                   <div className="data-grid grid gap-px bg-surface-selected">
-                    <div className="data-grid-header grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
+                    <div className="data-grid-header grid grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                       <span>Site</span>
                       <span>Customer</span>
                       <span>Type</span>
@@ -422,15 +419,13 @@ export default function SiteManager({
                       <span className="text-right">Jobs</span>
                       <span className="text-right">Open</span>
                       <span className="text-right">Assets</span>
-                      <span className="text-right">Action</span>
                     </div>
 
                     {filteredSites.map((site) => (
                       <div
                         key={`${site.customer.id}-${site.id}`}
-                        onDoubleClick={() => onOpenSite(site.customer.id, site.id)}
-                        title="Double-click to open site profile"
-                        className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px_140px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
+                        {...recordRowOpenProps(`Open site ${getSiteDisplayName(site)}`, () => onOpenSite(site.customer.id, site.id))}
+                        className="data-grid-row grid cursor-pointer select-none grid-cols-[1.8fr_1.2fr_140px_130px_90px_90px_100px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -459,11 +454,6 @@ export default function SiteManager({
                         </div>
                         <div className="text-right">
                           <span className="font-medium text-foreground">{site.assetCount}</span>
-                        </div>
-                        <div className="flex justify-end">
-                          <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenSite(site.customer.id, site.id)}>
-                            Open Site
-                          </Button>
                         </div>
                       </div>
                     ))}

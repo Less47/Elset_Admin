@@ -1,3 +1,4 @@
+import { recordRowOpenProps } from "@/lib/record-row";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -151,21 +152,6 @@ export default function JobHistoryManager({
     return rows;
   }, [createdFrom, createdRange, createdTo, deferredSearch, documentFilter, filterClock, jobRows, sortBy, statusFilter, urgencyFilter, toTimestamp]);
 
-  const historyStats = useMemo(() => {
-    return filteredJobs.reduce((stats, job) => ({
-      total: stats.total + 1,
-      open: stats.open + (job.status === "Completed" ? 0 : 1),
-      completed: stats.completed + (job.status === "Completed" ? 1 : 0),
-      quoted: stats.quoted + (job.hasQuote ? 1 : 0),
-      invoiced: stats.invoiced + (job.hasInvoice ? 1 : 0),
-    }), {
-      total: 0,
-      open: 0,
-      completed: 0,
-      quoted: 0,
-      invoiced: 0,
-    });
-  }, [filteredJobs]);
   const activeFilterCount = [
     statusFilter !== "all",
     urgencyFilter !== "all",
@@ -196,7 +182,7 @@ export default function JobHistoryManager({
         )}
         summary={(
           <ResultSummary>
-            {historyStats.total} {historyStats.total === 1 ? "job" : "jobs"} · {historyStats.open} open
+            {filteredJobs.length} {filteredJobs.length === 1 ? "job" : "jobs"}
           </ResultSummary>
         )}
       />
@@ -325,21 +311,6 @@ export default function JobHistoryManager({
           : "data-card gap-0 overflow-hidden rounded-xl border-border shadow-none"}
         data-mobile-record-results-shell={mobileRecordLayout ? "" : undefined}
       >
-        <div className="data-stat-grid hidden gap-px border-b border-border bg-surface-selected xl:grid xl:grid-cols-5">
-          {[
-            { label: "Jobs", value: historyStats.total },
-            { label: "Open", value: historyStats.open },
-            { label: "Completed", value: historyStats.completed },
-            { label: "Quoted", value: historyStats.quoted },
-            { label: "Invoiced", value: historyStats.invoiced },
-          ].map((stat) => (
-            <div key={stat.label} className="data-stat-card bg-card px-panel py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{stat.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-foreground">{stat.value}</p>
-            </div>
-          ))}
-        </div>
-
         <CardContent className="p-0">
         {mobileRecordLayout ? (
           filteredJobs.length === 0 ? (
@@ -399,20 +370,18 @@ export default function JobHistoryManager({
           ) : (
             <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
-              <div className="data-grid grid min-w-[600px] gap-px bg-surface-selected md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
+              <div className="data-grid grid min-w-[518px] gap-px bg-surface-selected md:min-w-0">
+                <div className="data-grid-header grid grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Customer</span>
                   <span>Status</span>
-                  <span className="text-right">Open</span>
                 </div>
 
                 {filteredJobs.map((job) => (
                   <div
                     key={job.id}
-                    onDoubleClick={() => onOpenJob(job)}
-                    title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px_82px] gap-px bg-surface-selected transition [&>*]:bg-card"
+                    {...recordRowOpenProps(`Open Job #${job.jobNumber}: ${job.title}`, () => onOpenJob(job))}
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[minmax(0,1.35fr)_minmax(210px,0.9fr)_170px] gap-px bg-surface-selected transition [&>*]:bg-card"
                   >
                     <div className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{job.jobNumber}</p>
@@ -432,20 +401,14 @@ export default function JobHistoryManager({
                       <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">{job.hasQuote ? "Quote" : "No quote"}</Badge>
                       <Badge className={`${job.invoiceStatus.className} ${job.invoiceStatus.id === "overdue" ? "ring-2 ring-status-danger-border" : ""} px-1.5 py-0 text-[10px]`}>{job.invoiceStatus.label}</Badge>
                     </div>
-
-                    <div className="flex items-center justify-end">
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenJob(job)}>
-                        Open
-                      </Button>
-                    </div>
                   </div>
                 ))}
               </div>
             </div>
             <div className="hidden overflow-x-auto 2xl:block">
-            <div className="min-w-[1520px]">
+            <div className="min-w-[1390px]">
               <div className="data-grid grid gap-px bg-surface-selected">
-                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
+                <div className="data-grid-header grid grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
                   <span>Job</span>
                   <span>Customer & Site</span>
                   <span>Status</span>
@@ -453,15 +416,13 @@ export default function JobHistoryManager({
                   <span>Scheduled</span>
                   <span>Documents</span>
                   <span>Last Activity</span>
-                  <span className="text-right">Action</span>
                 </div>
 
                 {filteredJobs.map((job) => (
                   <div
                     key={job.id}
-                    onDoubleClick={() => onOpenJob(job)}
-                    title="Double-click to open job"
-                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px_130px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
+                    {...recordRowOpenProps(`Open Job #${job.jobNumber}: ${job.title}`, () => onOpenJob(job))}
+                    className="data-grid-row grid cursor-pointer select-none grid-cols-[1.55fr_1.2fr_120px_110px_130px_180px_150px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                   >
                     <div className="min-w-0">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
@@ -492,12 +453,6 @@ export default function JobHistoryManager({
                     <div>
                       <p className="font-medium text-foreground">{formatDate(job.updatedAt)}</p>
                       <p className="mt-1 text-xs text-muted-foreground">Created {formatDate(job.createdAt)}</p>
-                    </div>
-
-                    <div className="flex items-center justify-end">
-                      <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenJob(job)}>
-                        Open Job
-                      </Button>
                     </div>
                   </div>
                 ))}
