@@ -60,7 +60,7 @@ export default function App() {
   }, [resetWorkspaceChrome]);
 
   const handleActiveSectionChange = (section) => {
-    const path = ["customers", "maintenance", "map", "invoices", "settings"].includes(section) ? `/${section}` : "/";
+    const path = ["customers", "maintenance", "map", "invoices", "settings", "statistics"].includes(section) ? `/${section}` : "/";
     navigate(path, { state: { section } });
   };
   useEffect(() => {

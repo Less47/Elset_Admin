@@ -95,7 +95,10 @@ export function MaintenanceMetrics({ plan }) {
 
 export default function MaintenanceManager({ maintenancePlans, customers, jobs, onOpenPlan }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("filter");
+    return filters.some(([id]) => id === requested) ? requested : "all";
+  });
   const [sort, setSort] = useState("due-date");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filterTrigger = useRef(null);

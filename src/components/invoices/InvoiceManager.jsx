@@ -64,7 +64,7 @@ export default function InvoiceManager({
 }) {
   const [search, setSearch] = useState("");
   const [timeRange, setTimeRange] = useState("all-time");
-  const [filterBy, setFilterBy] = useState("all");
+  const [filterBy, setFilterBy] = useState(() => new URLSearchParams(window.location.search).get("status") === "overdue" ? "overdue" : "all");
   const [jobStatusFilter, setJobStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("status");
   const [filtersOpen, setFiltersOpen] = useState(false);

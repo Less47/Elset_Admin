@@ -219,7 +219,7 @@ test.afterEach(async ({}, testInfo) => {
 });
 
 const screenshotDir = path.join(repoRoot, "test-results/page-top-chrome");
-const sections = ["Service Board", "Customers", "Sites", "Job History", "Invoices", "Calendar", "Maintenance", "Staff", "Parts Inventory", "Statistics", "Settings", "Recycle Bin"];
+const sections = ["Service Board", "Customers", "Sites", "Job History", "Invoices", "Calendar", "Maintenance", "Staff", "Parts Inventory", "Reports & Analytics", "Settings", "Recycle Bin"];
 
 async function navigate(page, label, width) {
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -312,6 +312,21 @@ async function scrollUnderHeader(page, original, selector = "[data-page-top-bar]
 
 async function primaryToolbarControls(page, label, width) {
   const header = page.locator("[data-page-top-bar]");
+  if (label === "Reports & Analytics") {
+    // This workspace intentionally uses compact 30px controls and a separate,
+    // locally scrolling tab row; other page toolbar contracts remain 44px.
+    const headerBox = await header.boundingBox();
+    for (const control of await header.locator('.analytics-toolbar input[type="date"], .analytics-toolbar select, .analytics-toolbar button').all()) {
+      await expect(control).toHaveAccessibleName(/\S/);
+      const box = await control.boundingBox();
+      expect(box.height).toBe(30);
+      expect(box.x).toBeGreaterThanOrEqual(headerBox.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(headerBox.x + headerBox.width);
+    }
+    await expect(header.getByRole("tablist")).toBeVisible();
+    await expect(header.getByRole("tablist")).toHaveCSS("overflow-x", "auto");
+    return;
+  }
   const toolbar = label === "Service Board" ? header.locator("[data-service-board-primary-controls]") : header;
   const controls = toolbar.locator("input:visible, button:visible");
   const boxes = [];

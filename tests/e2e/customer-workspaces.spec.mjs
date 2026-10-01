@@ -351,14 +351,14 @@ test("React Router restores Service Board scroll and focus through Job and Invoi
 test("React Router preserves sections sharing the root URL through refresh and history", async ({ page }) => {
   await login(page);
   const nav = page.getByRole("navigation", { name: "Application", exact: true });
-  for (const label of ["Sites", "Calendar", "Job History", "Staff", "Parts Inventory", "Statistics", "Recycle Bin"]) {
+  for (const label of ["Sites", "Calendar", "Job History", "Staff", "Parts Inventory", "Reports & Analytics", "Recycle Bin"]) {
     await nav.getByRole("button", { name: label, exact: true }).click();
-    await expect(page).toHaveURL(baseUrl + "/");
+    await expect(page).toHaveURL(baseUrl + (label === "Reports & Analytics" ? "/statistics" : "/"));
     await page.reload();
     await expect(nav.getByRole("button", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
   }
   await page.goBack();
-  await expect(nav.getByRole("button", { name: "Statistics", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("button", { name: "Reports & Analytics", exact: true })).toHaveAttribute("aria-current", "page");
   await page.goForward();
   await expect(nav.getByRole("button", { name: "Recycle Bin", exact: true })).toHaveAttribute("aria-current", "page");
 });

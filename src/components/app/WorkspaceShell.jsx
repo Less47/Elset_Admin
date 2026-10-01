@@ -20,7 +20,6 @@ import { TOMORROW_VIEW } from "@/components/service-board/service-board-utils";
 import SettingsManager from "@/components/settings/SettingsManager";
 import StaffManager from "@/components/staff/StaffManager";
 import SiteManager from "@/components/sites/SiteManager";
-import StatisticsPanel from "@/components/statistics/StatisticsPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,14 +30,12 @@ import {
   buildCustomerSites,
   formatDate,
   getCalendarDays,
-  getInventoryStockStatus,
   getInvoicePaymentSummary,
   getInvoiceStatus,
   getRecycleBinExpiryDate,
   getSiteDisplayName,
   hexToRgba,
   normalizeDocument,
-  normalizeInventoryRecord,
   parseDateInputValue,
   settingsTabs,
   toDateInputValue,
@@ -46,6 +43,7 @@ import {
 } from "@/lib/app-support";
 
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
+const ReportsAnalytics = lazy(() => import("@/components/statistics/ReportsAnalytics"));
 
 export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons, settingsPersistence, onSettingsPreview }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
@@ -77,7 +75,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   } = chrome;
   const {
     currentSection,
-    dashboard,
     filteredJobs,
     isServiceBoardFullScreen,
     themePalette,
@@ -633,15 +630,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           />
         ) : null}
 
-        {canManageBusiness && activeSection === "statistics" ? (
-          <StatisticsPanel
-            dashboard={dashboard}
-            jobs={data.jobs}
-            customers={data.customers}
-            inventoryItems={data.inventoryItems}
-            getInventoryStockStatus={getInventoryStockStatus}
-            normalizeInventoryRecord={normalizeInventoryRecord}
-          />
+        {canManageBusiness && activeSection === "statistics" && !workspacePage ? (
+          <Suspense fallback={<p className="p-3">Loading reports…</p>}><ReportsAnalytics data={data} fetchWithAuth={auth.fetchWithAuth} /></Suspense>
         ) : null}
 
         {isAuthenticated && activeSection === "settings" ? (

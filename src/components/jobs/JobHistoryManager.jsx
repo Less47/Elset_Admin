@@ -1,4 +1,5 @@
 import { recordRowOpenProps } from "@/lib/record-row";
+import { useLocation } from "react-router";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -55,7 +56,8 @@ export default function JobHistoryManager({
 }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("activity-recent");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const location = useLocation();
+  const [statusFilter, setStatusFilter] = useState(() => statuses.includes(location.state?.jobStatus) ? location.state.jobStatus : "all");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [documentFilter, setDocumentFilter] = useState("all");
   const [createdRange, setCreatedRange] = useState("all-time");

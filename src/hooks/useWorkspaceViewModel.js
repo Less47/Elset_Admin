@@ -1,17 +1,12 @@
 import { useMemo } from "react";
 import {
   addDaysToDateInput,
-  getInventoryStockStatus,
-  getInvoicePaymentSummary,
-  getInvoiceStatus,
-  getMaintenancePlanStatus,
   sectionMeta,
   settingsTabMeta,
   sideNavItems,
   toDateInputValue,
   toTimestamp,
 } from "@/lib/app-support";
-import { calculateInvoiceTotal, calculateQuoteTotal } from "@/lib/quote-template";
 
 export function useWorkspaceViewModel({
   activeSection,
@@ -50,63 +45,6 @@ export function useWorkspaceViewModel({
           || (a.jobNumber || 0) - (b.jobNumber || 0);
       });
   }, [data.jobs, tomorrowPlanningDate]);
-
-  const dashboard = useMemo(() => {
-    const quotesValue = data.jobs.reduce((sum, job) => sum + (job.quote ? calculateQuoteTotal(job.quote.items) : 0), 0);
-    const invoicesValue = data.jobs.reduce((sum, job) => sum + (job.invoice ? calculateInvoiceTotal(job.invoice.items) : 0), 0);
-    const completedJobs = data.jobs.filter((job) => job.status === "Completed").length;
-    const quotesCount = data.jobs.filter((job) => job.quote).length;
-    const invoicesCount = data.jobs.filter((job) => job.invoice).length;
-    const invoiceRows = data.jobs.filter((job) => job.invoice || job.status === "Completed");
-    const paidInvoices = invoiceRows.filter((job) => getInvoiceStatus(job).id === "paid").length;
-    const overdueInvoices = invoiceRows.filter((job) => getInvoiceStatus(job).id === "overdue").length;
-    const notInvoicedCompleted = invoiceRows.filter((job) => getInvoiceStatus(job).id === "not-invoiced").length;
-    const outstandingInvoiceValue = invoiceRows.reduce((sum, job) => {
-      if (!job.invoice) return sum;
-      return sum + getInvoicePaymentSummary(job.invoice).balanceAmount;
-    }, 0);
-    const todayKey = toDateInputValue(new Date());
-    const scheduledJobs = data.jobs.filter((job) => toDateInputValue(job.scheduledDate)).length;
-    const scheduledToday = data.jobs.filter((job) => toDateInputValue(job.scheduledDate) === todayKey).length;
-    const unscheduledOpenJobs = data.jobs.filter((job) => !toDateInputValue(job.scheduledDate) && job.status !== "Completed").length;
-    const inventoryItems = data.inventoryItems || [];
-    const maintenancePlans = data.maintenancePlans || [];
-    const lowStockParts = inventoryItems.filter((item) => {
-      const status = getInventoryStockStatus(item);
-      return status.id === "low" || status.id === "out";
-    }).length;
-    const inventoryValue = inventoryItems.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0);
-    const maintenanceStatuses = maintenancePlans.map((plan) => getMaintenancePlanStatus(plan, data.jobs).id);
-    const overdueMaintenancePlans = maintenanceStatuses.filter((status) => status === "overdue").length;
-    const dueSoonMaintenancePlans = maintenanceStatuses.filter((status) => status === "due-soon").length;
-    const activeMaintenancePlans = maintenanceStatuses.filter((status) => status === "active-job").length;
-
-    return {
-      totalJobs: data.jobs.length,
-      totalCustomers: data.customers.length,
-      totalParts: inventoryItems.length,
-      totalMaintenancePlans: maintenancePlans.length,
-      overdueMaintenancePlans,
-      dueSoonMaintenancePlans,
-      activeMaintenancePlans,
-      lowStockParts,
-      inventoryValue,
-      scheduledJobs,
-      scheduledToday,
-      unscheduledOpenJobs,
-      openJobs: data.jobs.length - completedJobs,
-      completedJobs,
-      highUrgency: data.jobs.filter((job) => job.urgency === "High").length,
-      quotesCount,
-      invoicesCount,
-      paidInvoices,
-      overdueInvoices,
-      notInvoicedCompleted,
-      outstandingInvoiceValue,
-      quotesValue,
-      invoicesValue,
-    };
-  }, [data.customers, data.inventoryItems, data.jobs, data.maintenancePlans]);
 
   const visibleSideNavItems = useMemo(
     () => (isTechnician ? sideNavItems.filter((item) => ["service-board", "settings"].includes(item.id)) : sideNavItems),
@@ -153,7 +91,6 @@ export function useWorkspaceViewModel({
   const noteAuthor = authUser?.name || (isTechnician ? "Technician" : "Office");
 
   return {
-    dashboard,
     currentSection,
     filteredJobs,
     isServiceBoardFullScreen,

@@ -1,0 +1,501 @@
+{
+  "title": "ELSET Reports & Analytics",
+  "baselineCommit": "16caa15c8f45c9278c7e6abf21607ff75b8ec0f8",
+  "filesChanged": [
+    "docs/reports-analytics.json",
+    "package-lock.json",
+    "package.json",
+    "server-app.js",
+    "server-reporting.js",
+    "src/App.jsx",
+    "src/components/app/WorkspaceShell.jsx",
+    "src/components/invoices/InvoiceManager.jsx",
+    "src/components/jobs/JobHistoryManager.jsx",
+    "src/components/maintenance/MaintenanceManager.jsx",
+    "src/components/statistics/AnalyticsPrimitives.jsx",
+    "src/components/statistics/ReportsAnalytics.jsx",
+    "src/components/statistics/StatisticsPanel.jsx",
+    "src/components/statistics/analytics.css",
+    "src/hooks/useWorkspaceViewModel.js",
+    "src/lib/analytics-reports.js",
+    "src/lib/analytics.js",
+    "src/lib/app-support.jsx",
+    "src/lib/invoice-account.js",
+    "src/lib/record-link-state.js",
+    "src/routes.js",
+    "tests/analytics.test.js",
+    "tests/e2e/analytics.spec.mjs",
+    "tests/e2e/customer-workspaces.spec.mjs",
+    "tests/e2e/mobile-navigation-service-board.spec.mjs",
+    "tests/e2e/page-top-chrome.spec.mjs",
+    "tests/e2e/theme-settings.spec.mjs",
+    "tests/fixtures/analytics-workspace.js"
+  ],
+  "dependencyAdded": {
+    "name": "recharts",
+    "version": "^3.10.1",
+    "documentation": "https://recharts.github.io/en-US/api/"
+  },
+  "navigation": {
+    "sectionId": "statistics",
+    "directRoute": "/statistics",
+    "label": "Reports & Analytics",
+    "compatibility": "Existing root-route section state remains supported. Existing job, invoice, customer and maintenance record routes are reused."
+  },
+  "tabs": [
+    "Overview",
+    "Financial",
+    "Jobs",
+    "Customers",
+    "Maintenance",
+    "Profitability",
+    "Reports"
+  ],
+  "capabilitiesInspected": {
+    "jobs": "Stored creation dates, current status, urgency, schedule, customer/site address, maintenance links and assigned technician. No reliable general completion/status event history.",
+    "customersAndSites": "Current customer IDs/types/creation dates and embedded sites; report links use existing customer and site relationships.",
+    "financials": "Actual invoice rows, canonical invoice line arithmetic, payment amount cents/dates, sent counts and inactive/archive eligibility.",
+    "maintenance": "Recurrence segments, occurrence exceptions, generated/completed job relationships, active state, next due dates, per-visit contract prices and default technician.",
+    "jobCosting": "Separate add-on-owned cost entries and canonical job summary, including category totals, integer cents, negative profit and zero-revenue margins.",
+    "inventory": "Current quantities, unit costs and reorder thresholds exist; no stock-movement history used to invent turnover or historical inventory metrics.",
+    "staff": "Stored assignment IDs/names. Same-name staff remain separate. A narrow server projection avoids the legacy workspace normalizer clearing assignments.",
+    "accountingMappings": "Existing provider mappings and payment ownership remain unchanged. Reports use local ELSET invoices/payments, never live QuickBooks or Xero queries."
+  },
+  "metrics": {
+    "financial": [
+      "Total invoiced including GST",
+      "Payments received including GST",
+      "Current outstanding and overdue balances",
+      "Invoice count",
+      "Average invoice",
+      "Overdue invoice count",
+      "Aging balances and invoice counts"
+    ],
+    "jobs": [
+      "Jobs created in period",
+      "Current open/completed/in-progress/unscheduled counts",
+      "Status distribution",
+      "Urgency distribution",
+      "Customer type distribution",
+      "Technician assignments",
+      "Jobs per customer"
+    ],
+    "customers": [
+      "Current customer count",
+      "New customers in period",
+      "Customers invoiced in period",
+      "Customers owing balances",
+      "Average invoiced value per invoiced customer",
+      "Top invoiced/received customers",
+      "Customer types",
+      "Lifetime invoiced/received/outstanding/invoice counts/job counts"
+    ],
+    "maintenance": [
+      "Active plans",
+      "Sum of active per-visit contract prices",
+      "Overdue next visits/plans",
+      "Plans due in 7 and 30 days",
+      "Generated jobs",
+      "12-month uncompleted occurrence forecast",
+      "Due status",
+      "Frequency distribution",
+      "Contract prices by customer",
+      "Maintenance job profitability where costed"
+    ],
+    "profitability": [
+      "Costed-job revenue ex GST",
+      "Recorded costs",
+      "Gross profit",
+      "Gross margin",
+      "Jobs with recorded costing",
+      "Uncosted invoiced jobs",
+      "Seven canonical cost categories",
+      "Margin distribution including zero revenue",
+      "Most profitable/lowest margin jobs"
+    ]
+  },
+  "deliberatelyUnsupported": [
+    "Jobs completed over time: current completed count is shown instead; updatedAt is never treated as a general completion timestamp.",
+    "Completion duration, status dwell time and technician speed/productivity: no general event history.",
+    "Quote acceptance/conversion rate: no reliable acceptance event history.",
+    "Historical outstanding-balance comparisons: current balances are snapshots, not a reconstructed ledger.",
+    "Average days to payment is not published as a settlement-history metric.",
+    "Locality/suburb ranking is not inferred from unstructured address strings.",
+    "No staff performance ranking from costs, no inventory turnover history, and no annualized contract revenue invented from per-visit prices."
+  ],
+  "dateFiltering": {
+    "storage": "React Router query parameters: range/from/to/tab/compare/report and relevant customer/site/technician/status/type filters. Dates persist across tabs, reload and record drill-down return paths.",
+    "presets": [
+      "Today",
+      "This week",
+      "This month",
+      "Last month",
+      "This quarter",
+      "This year",
+      "Last 12 months",
+      "Custom range"
+    ],
+    "inclusiveDateOnly": true,
+    "currentPresets": "Current week/month/quarter/year end today. Week starts Monday. Last month is the completed calendar month; last 12 months is rolling.",
+    "comparison": "Immediately preceding contiguous period with the same inclusive day count. Only dated metrics compare. Zero baseline displays New or No change, not Infinity.",
+    "financialBasis": "Invoiced by issue date; cash received by payment date even for older invoices. Outstanding and aging use current per-invoice balances at the displayed snapshot date across all issue dates.",
+    "jobBasis": "Creation-date trend; current status/urgency/assignments are explicitly labeled all-date snapshots.",
+    "customerBasis": "New customers by creation date; invoiced/received ranking uses its respective period; lifetime reports explicitly use all dates.",
+    "maintenanceBasis": "Schedule report expands selected due dates. Forecast starts today for 12 calendar months. Next-due KPIs and contract prices are current snapshots. Technician filtering uses plan defaults independently of generated jobs.",
+    "profitabilityBasis": "Jobs invoiced in range; unbilled jobs use creation dates. All recorded costs for those selected jobs are included. Charts group job cohorts, not expense-ledger recognition.",
+    "invalidRanges": "Explicit validation prevents misleading totals and exports."
+  },
+  "chartTypes": [
+    "Multi-series line trends",
+    "Daily/weekly/monthly time series with empty periods retained",
+    "Grouped vertical bars",
+    "Horizontal status/ranking/aging bars",
+    "Margin distribution bars"
+  ],
+  "reports": [
+    {
+      "id": "sales",
+      "name": "Sales Report",
+      "group": "Financial",
+      "basis": "Invoice issue date",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "status",
+        "type"
+      ]
+    },
+    {
+      "id": "payments",
+      "name": "Payments Received",
+      "group": "Financial",
+      "basis": "Payment date",
+      "filters": [
+        "customer",
+        "site",
+        "type"
+      ]
+    },
+    {
+      "id": "outstanding",
+      "name": "Outstanding Invoices",
+      "group": "Financial",
+      "basis": "Current balances · all issue dates",
+      "filters": [
+        "customer",
+        "site",
+        "type"
+      ]
+    },
+    {
+      "id": "aging",
+      "name": "Invoice Aging",
+      "group": "Financial",
+      "basis": "Current balances · due-date aging",
+      "filters": [
+        "customer",
+        "type"
+      ]
+    },
+    {
+      "id": "customer-revenue",
+      "name": "Customer Revenue",
+      "group": "Financial",
+      "basis": "Invoice issue date / payment date",
+      "filters": [
+        "customer",
+        "type"
+      ]
+    },
+    {
+      "id": "jobs",
+      "name": "Jobs Report",
+      "group": "Operations",
+      "basis": "Job creation date",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "status",
+        "type"
+      ]
+    },
+    {
+      "id": "open-jobs",
+      "name": "Open Jobs",
+      "group": "Operations",
+      "basis": "Current status · all creation dates",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "type"
+      ]
+    },
+    {
+      "id": "completed-jobs",
+      "name": "Completed Jobs",
+      "group": "Operations",
+      "basis": "Currently completed · all creation dates",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "type"
+      ]
+    },
+    {
+      "id": "technician",
+      "name": "Technician Workload",
+      "group": "Operations",
+      "basis": "Current assignments · all creation dates",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "status",
+        "type"
+      ]
+    },
+    {
+      "id": "jobs-customer",
+      "name": "Jobs by Customer",
+      "group": "Operations",
+      "basis": "Job creation date",
+      "filters": [
+        "customer",
+        "type"
+      ]
+    },
+    {
+      "id": "maintenance-schedule",
+      "name": "Maintenance Schedule",
+      "group": "Maintenance",
+      "basis": "Occurrence due date",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "type"
+      ]
+    },
+    {
+      "id": "maintenance-overdue",
+      "name": "Overdue Maintenance",
+      "group": "Maintenance",
+      "basis": "Current next due dates",
+      "filters": [
+        "customer",
+        "site",
+        "technician",
+        "type"
+      ]
+    },
+    {
+      "id": "maintenance-value",
+      "name": "Maintenance Contract Value",
+      "group": "Maintenance",
+      "basis": "Active plans · price per visit, not annual revenue",
+      "filters": [
+        "customer",
+        "site",
+        "type"
+      ]
+    },
+    {
+      "id": "profitability",
+      "name": "Job Profitability",
+      "group": "Profitability",
+      "basis": "Invoice issue date; unbilled jobs by creation date · all recorded job costs, ex GST",
+      "filters": [
+        "customer",
+        "site",
+        "type"
+      ]
+    },
+    {
+      "id": "costs",
+      "name": "Cost Breakdown",
+      "group": "Profitability",
+      "basis": "Selected job cohort · all recorded job costs, ex GST",
+      "filters": [
+        "customer",
+        "site",
+        "type"
+      ]
+    },
+    {
+      "id": "margin",
+      "name": "Gross Margin",
+      "group": "Profitability",
+      "basis": "Costed jobs in selected cohort · ex GST",
+      "filters": [
+        "customer",
+        "site",
+        "type"
+      ]
+    },
+    {
+      "id": "customers",
+      "name": "Customer Summary",
+      "group": "Customers",
+      "basis": "Lifetime totals · current customers",
+      "filters": [
+        "customer",
+        "type"
+      ]
+    },
+    {
+      "id": "lifetime",
+      "name": "Customer Lifetime Value",
+      "group": "Customers",
+      "basis": "Lifetime totals · current customers",
+      "filters": [
+        "customer",
+        "type"
+      ]
+    },
+    {
+      "id": "new-customers",
+      "name": "New Customers",
+      "group": "Customers",
+      "basis": "Customer creation date",
+      "filters": [
+        "customer",
+        "type"
+      ]
+    }
+  ],
+  "exports": {
+    "csv": "Filtered rows only; headers, UTF-8 BOM, CRLF, proper comma/quote/newline escaping, numeric money values, ISO dates, formula-safe user text, report/date-range filename.",
+    "print": "Browser Print / Save as PDF; landscape styling, report/date/filter context, full-width table, repeated print headers and hidden navigation. No PDF dependency added."
+  },
+  "drillDown": [
+    "Customer, job, invoice and maintenance table links use existing routes and return context.",
+    "Revenue/creation chart points open the report for that date bucket.",
+    "Job pipeline bars open Job History with the selected status.",
+    "Overdue invoice KPI opens /invoices?status=overdue.",
+    "Maintenance due groups use /maintenance?filter=?.",
+    "Returning from a job refreshes the reporting read, including costing edits."
+  ],
+  "financialReconciliation": {
+    "arithmetic": "Server invoiceFinancialsFromRows operates on canonical line/payment integer cents. Customer account and reporting share isCustomerAccountInvoice eligibility. Job profitability reuses summarizeJobCosting.",
+    "exclusions": "Unissued drafts, void/cancelled/deleted/archived/invalid invoices follow customer account eligibility; physical archives are outside live invoice queries. Payments are joined by invoice ID once.",
+    "overpayments": "Each outstanding balance is clamped per invoice. A credit on one invoice does not settle another. Invoiced minus received plus per-invoice overpayments equals outstanding for a common invoice cohort.",
+    "fixtureExample": {
+      "lifetimeInvoicedCents": 418000,
+      "lifetimeReceivedCents": 353000,
+      "overpaidCents": 1000,
+      "outstandingCents": 66000
+    },
+    "costing": "Ex GST revenue and recorded direct costs. Uncosted invoices are listed and excluded from aggregate margins; zero-revenue margins are null and losses remain signed."
+  },
+  "performance": {
+    "endpoint": "GET /api/reports/financials",
+    "access": "Read-only SQLite transaction with existing admin/office authentication and role middleware; no-store; disabled Job Costing data is withheld.",
+    "queries": "Fixed maximum of eight reads, not one query or HTTP request per chart/job. No full workspace reconstruction, photos or documents in the reporting payload.",
+    "client": "Memoized selectors, indexed/grouped lookups, binary bucket lookup, tab-only chart rendering and a lazy-loaded Recharts workspace. Cost details are returned only for jobs with actual entries.",
+    "benchmark": {
+      "fixture": {
+        "jobs": 5000,
+        "invoices": 5000,
+        "payments": 10000,
+        "costEntries": 1000
+      },
+      "samples": 7,
+      "reportingReadMedianMs": 64.65,
+      "analyticsSelectorMedianMs": 139.68,
+      "projectionBytes": 4627784,
+      "note": "Synthetic in-memory SQLite, local Node 24 on Windows; seven medians after warmup, no production traffic. Full workspace load occurs only in benchmark fixture setup."
+    }
+  },
+  "responsive": {
+    "outerPadding": 0,
+    "cardShells": false,
+    "gapsBetweenCells": 0,
+    "separators": "Thin internal theme-token dividers",
+    "chrome": "Sticky toolbar with sticky tabs in the same top region",
+    "desktop": "2:1 lead row and touching two-column cells",
+    "mobile": "Single column; local KPI/tab/table scrolling; no page-level horizontal overflow",
+    "themes": "Shared light/dark/data-view theme tokens; existing roundedEdges preference; presets verified"
+  },
+  "validation": {
+    "unit": {
+      "command": "npm test",
+      "total": 832,
+      "passed": 832,
+      "failed": 0,
+      "newAnalyticsTests": 30
+    },
+    "lint": {
+      "command": "npm run lint",
+      "result": "passed"
+    },
+    "build": {
+      "command": "npm run build",
+      "result": "passed"
+    },
+    "diff": {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    "playwright": {
+      "finalSelectedSuite": {
+        "total": 27,
+        "passed": 27,
+        "failed": 0
+      },
+      "additionalReportCentreRecheck": 1,
+      "uniqueScenarios": 27,
+      "newAnalyticsScenarios": 20,
+      "existingNavigationChromeThemeScenarios": 7,
+      "visualTabThemeViewportCombinations": 56,
+      "viewports": [
+        "1920x1080",
+        "1366x768",
+        "1024x768",
+        "390x844"
+      ],
+      "screenshotDirectory": "test-results/analytics",
+      "printPdf": "test-results/analytics/lifetime-report.pdf",
+      "printPdfPages": 1,
+      "coverage": [
+        "All seven tabs in light/dark themes at all four viewports",
+        "Date persistence and equal-period comparison",
+        "Financial totals and real assignment projection",
+        "Relevant filters and all 19 reports",
+        "Filtered CSV download",
+        "Existing record routes and return state",
+        "Changed costing refresh on return",
+        "Chart click drill-down",
+        "Sticky chrome and tooltip/dialog layering",
+        "Print context/table/navigation removal",
+        "Role protection and disabled costing",
+        "Read failure/retry without invented zero metrics",
+        "No per-chart requests or successful-save full resync"
+      ]
+    }
+  },
+  "remainingOpportunities": [
+    "Explicit completion/status/quote-acceptance event history for trustworthy duration and conversion metrics",
+    "Audited historical receivables and settlement snapshots",
+    "Consistently structured locality data",
+    "Server aggregation/pagination for very large report tables and ledgers; current snapshot endpoint loads required financial rows once",
+    "Saved report configurations or scheduled exports if requested"
+  ],
+  "unchanged": [
+    "Database schema",
+    "Authentication and existing business permissions",
+    "QuickBooks/Xero integration and payment ownership",
+    "Document/email behavior",
+    "Other pages? body padding"
+  ],
+  "delivery": {
+    "commitTitle": "Overhaul reports and analytics",
+    "pushed": false,
+    "deployed": false,
+    "productionDataChanged": false,
+    "commitLookup": "git log -1 --format=%H -- docs/reports-analytics.json"
+  }
+}

@@ -14,5 +14,5 @@ export function recordLinkState(location, match, jobs = []) {
 const sectionLabels = {
   "service-board": "Service Board", customers: "Customers", sites: "Sites", map: "Map", calendar: "Calendar",
   "job-history": "Job History", invoices: "Invoices", maintenance: "Maintenance", staff: "Staff",
-  inventory: "Parts Inventory", statistics: "Statistics", settings: "Settings", "recycle-bin": "Recycle Bin",
+  inventory: "Parts Inventory", statistics: "Reports & Analytics", settings: "Settings", "recycle-bin": "Recycle Bin",
 };

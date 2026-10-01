@@ -34,6 +34,7 @@ import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
 import { registerAddonRoutes } from "./server-addon-routes.js";
 import { registerJobCostingRoutes } from "./server-job-costing-routes.js";
+import { createReportingRouter } from "./server-reporting.js";
 import { registerAccountingRoutes } from "./server-accounting-routes.js";
 import { registerXeroWebhook } from "./server-xero-webhooks.js";
 import { registerQuickBooksWebhook } from "./server-quickbooks-webhooks.js";
@@ -280,6 +281,7 @@ export function createServerApp({ accountingFetch } = {}) {
   registerSettingsRoutes(app, { requireAuth, requireRole });
   registerAddonRoutes(app, { requireAuth, requireRole });
   registerJobCostingRoutes(app, { requireAuth, requireRole });
+  app.use(createReportingRouter({ requireAuth, requireRole }));
   registerAccountingRoutes(app, { requireAuth, requireRole, getOptionalAuthSession: getRequestAuthSession, authorizeOAuthInitiator: authorizeAccountingOAuthInitiator, fetchImpl: accountingFetch });
   app.use(createWorkspaceLogoRouter({ requireAuth, requireRole }));
   app.use(createUserPreferencesRouter({ requireAuth }));

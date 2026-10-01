@@ -797,7 +797,7 @@ test("mobile navigation and one-status Service Board support the core workflow",
     await expect(drawer).toBeVisible();
     for (const label of [
       "Service Board", "Customers", "Sites", "Map", "Calendar", "Job History", "Invoices",
-      "Maintenance", "Staff", "Parts Inventory", "Statistics", "Settings", "Recycle Bin",
+      "Maintenance", "Staff", "Parts Inventory", "Reports & Analytics", "Settings", "Recycle Bin",
     ]) {
       await expect(navigation.getByRole("button", { name: label, exact: true })).toBeVisible();
     }
@@ -1186,9 +1186,9 @@ test("mobile page controls keep records primary and preserve live filter state",
     await expect(page.locator("[data-responsive-page-controls]")).toHaveCount(0);
     await assertNoHorizontalOverflow(page);
 
-    await navigateToWorkspaceSection(page, "Statistics", width);
+    await navigateToWorkspaceSection(page, "Reports & Analytics", width);
     await expect(page.locator("[data-responsive-page-controls]")).toHaveCount(0);
-    await expect(page.getByText("Job Status Breakdown", { exact: true })).toBeVisible();
+    await expect(page.getByText("Job pipeline", { exact: true })).toBeVisible();
 
     await navigateToWorkspaceSection(page, "Settings", width);
     const settingsToolbar = page.locator(".floating-page-toolbar");

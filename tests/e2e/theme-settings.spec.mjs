@@ -723,7 +723,7 @@ test('semantic Midnight covers remaining pages, editors, pickers and document pa
     await page.getByRole('button', { name: /^Midnight Signal/ }).click();
     await saveDraft(page);
     await expect(status(page)).toHaveText('Saved');
-    for (const label of ['Service Board', 'Sites', 'Map', 'Job History', 'Invoices', 'Staff', 'Parts Inventory', 'Statistics']) {
+    for (const label of ['Service Board', 'Sites', 'Map', 'Job History', 'Invoices', 'Staff', 'Parts Inventory', 'Reports & Analytics']) {
       await navigate(page, label, 1440);
       await themeScreenshot(page, `midnight-1440-${label.toLowerCase().replaceAll(' ', '-')}`);
     }

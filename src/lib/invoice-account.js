@@ -44,17 +44,22 @@ function safeCents(value) {
   return value;
 }
 
+// Shared eligibility for the customer account and business reports.
+export function isCustomerAccountInvoice(record) {
+  const metadata = record.metadata || {};
+  const state = String(metadata.status || metadata.invoiceStatus || "").trim().toLowerCase();
+  return isQualifyingActualInvoice(record) && Boolean(record.invoiceId) && record.valid !== false
+    && Boolean(invoiceDate(record.issueDate)) && record.totalCents > 0
+    && !["draft", "unfinished", "incomplete", "invalid", "archived"].includes(state)
+    && !metadata.invalid && !metadata.incomplete && metadata.archived !== true && !metadata.archivedAt;
+}
+
 export function summarizeInvoiceAccount(customerId, records, { today = invoiceToday(), limit = 5 } = {}) {
   const invoices = [], seen = new Set();
   let totalInvoicedCents = 0, totalReceivedCents = 0;
   for (const record of records) {
     // Only actual invoice projections enter this function; never Job/Quote values.
-    const metadata = record.metadata || {};
-    const state = String(metadata.status || metadata.invoiceStatus || "").trim().toLowerCase();
-    if (record.customerId !== customerId || !isQualifyingActualInvoice(record) || seen.has(record.invoiceId)
-      || !record.invoiceId || record.valid === false || !invoiceDate(record.issueDate) || !(record.totalCents > 0)
-      || ["draft", "unfinished", "incomplete", "invalid", "archived"].includes(state)
-      || metadata.invalid || metadata.incomplete || metadata.archived === true || metadata.archivedAt) continue;
+    if (record.customerId !== customerId || !isCustomerAccountInvoice(record) || seen.has(record.invoiceId)) continue;
     const totalCents = safeCents(record.totalCents), paidCents = safeCents(record.paidCents), balanceCents = safeCents(record.balanceCents);
     seen.add(record.invoiceId);
     totalInvoicedCents = safeCents(totalInvoicedCents + totalCents);

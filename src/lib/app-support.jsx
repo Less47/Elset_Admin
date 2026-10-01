@@ -286,8 +286,8 @@ export const sideNavItems = [
   },
   {
     id: "statistics",
-    label: "Statistics",
-    description: "Review workload, urgency, and document totals.",
+    label: "Reports & Analytics",
+    description: "Explore financial, operational and customer reporting.",
     icon: BarChart3,
   },
   {
@@ -357,8 +357,8 @@ export const sectionMeta = {
   },
   statistics: {
     eyebrow: "Business Snapshot",
-    title: "Statistics",
-    description: "Monitor workload, urgency, and quote or invoice totals across the service operation.",
+    title: "Reports & Analytics",
+    description: "Explore financial, operational and customer reporting.",
   },
   settings: {
     eyebrow: "Workspace Settings",

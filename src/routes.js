@@ -36,6 +36,7 @@ export const workspaceRoutes = [
     ] },
   ] },
   { path: "invoices", id: "invoices", Component: SectionRoute, handle: { section: "invoices" } },
+  { path: "statistics", id: "statistics", Component: SectionRoute, handle: { section: "statistics" } },
   { path: "map", id: "map", Component: SectionRoute, handle: { section: "map" } },
   { path: "settings", id: "settings", Component: SectionRoute, handle: { section: "settings" } },
   { path: "*", id: "fallback", Component: SectionRoute, handle: { section: "service-board" } },
