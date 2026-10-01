@@ -1,6 +1,10 @@
-export function readMaintenanceExceptions(db) {
+export function readMaintenanceExceptions(db, { planIds = true, jobIds = [] } = {}) {
+  if (planIds !== true && !planIds.length && !jobIds.length) return [];
   return db.prepare(`SELECT maintenance_occurrence_exceptions.*, jobs.id AS live_job_id
-    FROM maintenance_occurrence_exceptions LEFT JOIN jobs ON jobs.id = maintenance_occurrence_exceptions.generated_job_id`).all().map((row) => ({
+    FROM maintenance_occurrence_exceptions LEFT JOIN jobs ON jobs.id = maintenance_occurrence_exceptions.generated_job_id
+    ${planIds === true ? "" : `WHERE plan_id IN (SELECT value FROM json_each(?))
+      OR job_id IN (SELECT value FROM json_each(?)) OR generated_job_id IN (SELECT value FROM json_each(?))`}`)
+    .all(...(planIds === true ? [] : [JSON.stringify(planIds), JSON.stringify(jobIds), JSON.stringify(jobIds)])).map((row) => ({
     key: row.occurrence_key, planId: row.plan_id, seriesId: row.series_id,
     originalDate: row.original_date, overrideDate: row.override_date, jobId: row.live_job_id || row.job_id || "", generatedJobId: row.generated_job_id,
     completedAt: row.completed_at, snapshot: JSON.parse(row.snapshot_json),

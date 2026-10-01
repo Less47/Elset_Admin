@@ -1,0 +1,538 @@
+{
+  "baselineCommit": "7eaa1fef0316f93fab2876c5315b4592fdc305af",
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "win32",
+    "database": "Temporary synthetic SQLite only",
+    "productionMeasured": false
+  },
+  "rootCause": "Route handlers built an authorized full workspace after saves, and internal mutation helpers also loaded the entire workspace to retrieve a single result. This duplicated unrelated queries, projection, JSON parsing, serialization, transfer and frontend replacement.",
+  "outcome": {
+    "ordinarySuccessfulSavesCallGetAuthorizedWorkspaceState": false,
+    "ordinarySuccessfulSavesCallLoadWorkspaceStateFromDb": false,
+    "ordinarySuccessfulSavesReturnFullWorkspaceJson": false
+  },
+  "benchmark": {
+    "command": "node scripts/benchmark-workspace-mutations.mjs",
+    "fixture": {
+      "customers": 500,
+      "jobs": 2000,
+      "invoices": 2000
+    },
+    "samples": 7,
+    "method": "Medians of seven measured samples after one warmup per case. The same script and fixture ran on baseline HEAD in an isolated checkout and on the implementation. Direct domain mutations and HTTP saves alternate values, so every write changes data. HTTP includes response-body consumption over localhost. Bytes are uncompressed UTF-8. Customer rename updates four linked job snapshots.",
+    "timingInterpretation": "mutationMs measures the direct domain function, including its result read; it is not SQL-only time. fullStateMs and fullSerializeMs are separately measured comparators, not additional work performed by the new mutation endpoint. responseSerializeMs measures JSON.stringify of the parsed response, not an instrumented server phase. Timings are independent medians and should not be added.",
+    "baseline": [
+      {
+        "name": "job",
+        "mutationMs": 170.481,
+        "fullStateMs": 123.238,
+        "fullSerializeMs": 11.946,
+        "requestMs": 330.229,
+        "responseSerializeMs": 10.614,
+        "legacyBytes": 4210714,
+        "responseBytes": 4210708
+      },
+      {
+        "name": "invoice",
+        "mutationMs": 56.634,
+        "fullStateMs": 111.815,
+        "fullSerializeMs": 11.807,
+        "requestMs": 210.245,
+        "responseSerializeMs": 10.571,
+        "legacyBytes": 4209866,
+        "responseBytes": 4209858
+      },
+      {
+        "name": "customer",
+        "mutationMs": 112.496,
+        "fullStateMs": 102.187,
+        "fullSerializeMs": 12.232,
+        "requestMs": 254.715,
+        "responseSerializeMs": 10.492,
+        "legacyBytes": 4211067,
+        "responseBytes": 4211013
+      }
+    ],
+    "current": [
+      {
+        "name": "job",
+        "mutationMs": 8.665,
+        "fullStateMs": 147.362,
+        "fullSerializeMs": 12.155,
+        "requestMs": 24.067,
+        "responseSerializeMs": 0.013,
+        "legacyBytes": 4210714,
+        "responseBytes": 3251
+      },
+      {
+        "name": "invoice",
+        "mutationMs": 7.762,
+        "fullStateMs": 127.127,
+        "fullSerializeMs": 12.354,
+        "requestMs": 21.915,
+        "responseSerializeMs": 0.011,
+        "legacyBytes": 4209866,
+        "responseBytes": 2401
+      },
+      {
+        "name": "customer",
+        "mutationMs": 8.032,
+        "fullStateMs": 125.018,
+        "fullSerializeMs": 11.83,
+        "requestMs": 24.781,
+        "responseSerializeMs": 0.028,
+        "legacyBytes": 4211067,
+        "responseBytes": 10226
+      }
+    ],
+    "reductions": [
+      {
+        "name": "job",
+        "requestPercent": 92.71,
+        "responseBytesPercent": 99.92
+      },
+      {
+        "name": "invoice",
+        "requestPercent": 89.58,
+        "responseBytesPercent": 99.94
+      },
+      {
+        "name": "customer",
+        "requestPercent": 90.27,
+        "responseBytesPercent": 99.76
+      }
+    ]
+  },
+  "migratedRoutes": [
+    {
+      "method": "POST",
+      "path": "/api/jobs/reschedule-day",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/:id",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/:id/service-board-note",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/:id/status",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/:id/schedule",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/tomorrow",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/:id/tomorrow",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/tomorrow",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/:id",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/restore",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deleted-jobs",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/notes",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/photos",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/:id/photos/:photoId",
+      "file": "server-job-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/contacts",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/contacts/:contactId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/contacts/:contactId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/customers/:id/contacts/:contactId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/customers/:id/contacts/:contactId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/customers/:id/sites/:siteId/contacts/:contactId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/customers/:id/sites/:siteId/contacts/:contactId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/customers",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/customers/:id",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/customers/:id",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/customers/:id/restore",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/deleted-customers",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/customers/:id/sites",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/customers/:id/sites/:siteId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/customers/:id/sites/:siteId",
+      "file": "server-customer-routes.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/jobs/:id/quote",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/:id/quote",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/quote/sent-history",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/jobs/:id/invoice",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/:id/invoice",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/:id/invoice",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/deleted-invoices/:id/restore",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/invoice/sent-history",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/invoice/payments",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/jobs/:id/invoice/payments/:paymentId",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jobs/:id/invoice/payments/:paymentId",
+      "file": "server-document-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance-plans",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/maintenance-plans/:id",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/maintenance-plans/:id/schedule",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/maintenance-plans/:id/occurrences",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance-plans/:id/complete-cycle",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance-plans/:id/generate-job",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/maintenance-plans/:id",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance-plans/:id/restore",
+      "file": "server-maintenance-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/inventory-items",
+      "file": "server-inventory-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/inventory-items/:id",
+      "file": "server-inventory-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/inventory-items/:id",
+      "file": "server-inventory-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/inventory-items/:id/restore",
+      "file": "server-inventory-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/staff",
+      "file": "server-staff-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/staff/:id",
+      "file": "server-staff-routes.js"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/staff/:id",
+      "file": "server-staff-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/staff/:id/restore",
+      "file": "server-staff-routes.js"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/settings",
+      "file": "server-settings-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/settings/reset",
+      "file": "server-settings-routes.js"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/document-templates/:type",
+      "file": "server-settings-routes.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/document-templates/:type/reset",
+      "file": "server-settings-routes.js"
+    }
+  ],
+  "otherTargetedRoutes": [
+    "GET /api/jobs/reschedule-day uses affected-job deltas for preview reconciliation",
+    "GET /api/maintenance-occurrences reads maintenance data and required dependencies"
+  ],
+  "intentionallyBroaderResponses": [
+    "GET /api/app-state remains the authoritative full load for initial load, refresh and explicit or uncertain-failure recovery.",
+    "Whole-workspace backup restore and ServiceM8 bulk import retain full workspace responses because they replace or import workspace-wide data.",
+    "Settings and document-template saves return the relevant shared settings/template object only.",
+    "Customer/site/contact, maintenance, archive/restore, staff assignment and bulk-schedule operations return all genuinely affected records.",
+    "Existing compact job status response=delta and calendar change metadata are preserved."
+  ],
+  "frontend": "A small pure applyWorkspaceDelta reducer is called through functional React setters. It normalizes only returned upserts, replaces complete authoritative records, applies removals and archives, and preserves unrelated object identity and pending edits. Optimistic board status/note ownership is preserved. Successful saves do not refetch app-state; uncertain writes can resync without retrying the write.",
+  "validation": {
+    "node": {
+      "command": "npm test",
+      "passed": 802,
+      "failed": 0
+    },
+    "lint": {
+      "command": "npm run lint",
+      "status": "passed"
+    },
+    "build": {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    "playwright": {
+      "uniqueScenariosVerified": 239,
+      "initialBroadRun": {
+        "passed": 228,
+        "failed": 9,
+        "total": 237
+      },
+      "focusedRerun": {
+        "passed": 29,
+        "failed": 1,
+        "includesAdditionalSettingsScenarios": 2
+      },
+      "finalInventoryStaffRerun": {
+        "passed": 1,
+        "failed": 0
+      },
+      "explanation": "All initially failing scenarios passed after correcting test timing or selectors: await committed Calendar Undo state, await maintenance edit navigation before reload, and select visible inventory rows and responsive staff Edit labels. Results are combined across runs; this is not a claim of one clean 239-test run.",
+      "coverage": [
+        "Job create/edit",
+        "Customer/site/shared contacts",
+        "Quote/invoice saves and payments",
+        "Document send history and local email sink",
+        "Maintenance",
+        "Inventory/staff",
+        "Service Board optimistic updates",
+        "Bulk scheduling and Undo",
+        "Settings persistence"
+      ]
+    },
+    "addedOrUpdatedTests": [
+      "SQL prepare sentinel rejects unrestricted full-collection reads during representative job, invoice, customer and shared-contact requests; also checks payload contents and size.",
+      "Route tests apply actual deltas through the production reducer and compare with an authorized authoritative reread across create/update/delete/restore and multi-record operations.",
+      "Reducer tests cover replacement, deletion, archive/restore, concurrent unrelated records and multi-record deltas.",
+      "Request tests verify successful saves avoid resync and uncertain network/server/malformed responses recover without retrying mutations.",
+      "Payment add/edit/delete preserve accounting-worker wake behavior.",
+      "Browser test verifies visible inventory/staff CRUD updates and absence of successful-save app-state reloads.",
+      "Settings tests exercise delta responses while preserving sent-patch ownership and unrelated preference drafts."
+    ]
+  },
+  "filesChanged": [
+    "docs/workspace-mutation-performance.json",
+    "scripts/benchmark-workspace-mutations.mjs",
+    "server-customer-routes.js",
+    "server-document-routes.js",
+    "server-inventory-routes.js",
+    "server-job-routes.js",
+    "server-maintenance-occurrence-store.js",
+    "server-maintenance-routes.js",
+    "server-settings-routes.js",
+    "server-staff-routes.js",
+    "server-workspace-contacts.js",
+    "server-workspace-customers.js",
+    "server-workspace-delta.js",
+    "server-workspace-documents.js",
+    "server-workspace-inventory.js",
+    "server-workspace-jobs.js",
+    "server-workspace-maintenance.js",
+    "server-workspace-query.js",
+    "server-workspace-settings.js",
+    "server-workspace-staff.js",
+    "server-workspace-state.js",
+    "src/hooks/useSettingsPersistence.js",
+    "src/hooks/useWorkspaceActions.js",
+    "src/hooks/workspace-customer-api.js",
+    "src/hooks/workspace-delta.js",
+    "tests/contact-model.test.js",
+    "tests/customer-routes.test.js",
+    "tests/document-routes.test.js",
+    "tests/e2e/calendar-scheduling.spec.mjs",
+    "tests/e2e/customer-sqlite-workflow.spec.mjs",
+    "tests/e2e/maintenance-calendar.spec.mjs",
+    "tests/e2e/theme-settings.spec.mjs",
+    "tests/helpers/workspace-delta-client.js",
+    "tests/inventory-routes.test.js",
+    "tests/job-routes.test.js",
+    "tests/maintenance-routes.test.js",
+    "tests/settings-routes.test.js",
+    "tests/staff-routes.test.js",
+    "tests/user-ui-preferences.test.js",
+    "tests/workspace-delta.test.js"
+  ],
+  "remainingConcerns": [
+    "Measurements are local synthetic results; Fly.io production latency and bandwidth were not measured.",
+    "Large individual records, embedded photos/document history, and operations affecting many linked records can still produce larger deltas.",
+    "Per-write connection initialization, SQLite integrity checks and genuinely required transaction work remain.",
+    "Document generation/email and accounting integration workflows retain their existing behavior and any existing full reads outside ordinary mutation response construction."
+  ],
+  "boundaries": {
+    "schemaChanged": false,
+    "authChanged": false,
+    "urlsChanged": false,
+    "uiRedesigned": false,
+    "accountingOwnershipChanged": false,
+    "productionDataChanged": false,
+    "pushed": false,
+    "deployed": false
+  },
+  "commit": "Resolve with git log -1 --format=%H -- docs/workspace-mutation-performance.json; the report is included in the single implementation commit."
+}

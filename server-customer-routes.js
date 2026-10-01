@@ -12,7 +12,7 @@ import {
   WorkspaceCustomerError,
 } from "./server-workspace-customers.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
+import { workspaceMutationResponse } from "./server-workspace-delta.js";
 import { getCustomerAccountSummary } from "./server-customer-account.js";
 import { invoiceDate, invoiceToday } from "./src/lib/invoice-account.js";
 
@@ -48,21 +48,13 @@ function openSqliteWorkspaceDb(env) {
   return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
-function sendSuccess(req, res, result, env) {
-  return res.json({
-    ok: true,
-    result,
-    state: getAuthorizedWorkspaceState(req.user, { env }),
-  });
-}
-
 function handleCustomerRoute(operation, env) {
   return (req, res) => {
     let db = null;
     try {
       db = openSqliteWorkspaceDb(env);
-      const result = operation(db, req);
-      return sendSuccess(req, res, result, env);
+      const payload = workspaceMutationResponse(db, "customers", req, operation);
+      return res.json(payload);
     } catch (error) {
       const statusCode = getStatusCode(error);
       return res.status(statusCode).json({

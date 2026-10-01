@@ -22,7 +22,7 @@ export function useSettingsPersistence({ session, personal, setData }) {
     async template(type, draft) {
       const normalized = normalizeDocumentTemplate(draft, type), key = type === "invoice" ? "invoiceTemplate" : "quoteTemplate";
       const payload = await requestSettingsWorkspaceUpdate({ fetchWithAuth: session.fetchWithAuth, path: `/api/document-templates/${type}`, method: "PUT", body: { template: normalized } });
-      const saved = payload.state[key];
+      const saved = payload.delta?.[key] || payload.state?.[key];
       setData(previous => ({ ...previous, [key]: saved }));
       return saved;
     },

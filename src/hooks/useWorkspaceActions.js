@@ -1,3 +1,4 @@
+import { applyWorkspaceDelta } from "./workspace-delta";
 import { useLocation, useMatches, useNavigate } from "react-router";
 import { recordLinkState } from "@/lib/record-link-state";
 import { useCallback, useRef, useState } from "react";
@@ -10,6 +11,10 @@ import { calendarUndoRequest } from "@/components/calendar/calendar-undo";
 import {
   addDaysToDateInput,
   normalizeCustomerRecord,
+  normalizeJobRecord,
+  normalizeDeletedJobRecord,
+  normalizeDeletedCustomerRecord,
+  normalizeStaffRecord,
   normalizeDocument,
   normalizeInventoryRecord,
   normalizeJobContactSnapshot,
@@ -71,7 +76,19 @@ export function useWorkspaceActions({
     return state;
   }
 
-  const applyCustomerServerState = applyServerState;
+  function normalizeDeltaRecord(key, record) {
+    if (key === "jobs") return { ...normalizeJobRecord(record), assignedTechnicianId: record.assignedTechnicianId, assignedTechnicianName: record.assignedTechnicianName };
+    const normalizers = { customers: normalizeCustomerRecord, staff: normalizeStaffRecord,
+      inventoryItems: normalizeInventoryRecord, maintenancePlans: normalizeMaintenancePlanRecord,
+      deletedJobs: normalizeDeletedJobRecord, deletedCustomers: normalizeDeletedCustomerRecord };
+    return normalizers[key] ? normalizers[key](record) : record;
+  }
+
+  function applyMutationPayload(payload) {
+    if (payload.state) return applyServerState(payload.state);
+    setData(previous => applyWorkspaceDelta(previous, payload.delta, normalizeDeltaRecord));
+    return null;
+  }
 
   async function saveCustomerApiRequest({
     path,
@@ -82,12 +99,13 @@ export function useWorkspaceActions({
     try {
       const payload = await requestCustomerWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path,
         method,
         body,
         errorMessage,
       });
-      const state = applyCustomerServerState(payload.state);
+      const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
       window.alert(error instanceof Error ? error.message : errorMessage);
@@ -105,12 +123,13 @@ export function useWorkspaceActions({
     try {
       const payload = await requestWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path,
         method,
         body,
         errorMessage,
       });
-      const state = applyServerState(payload.state);
+      const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
       if (onError) onError(error);
@@ -128,12 +147,13 @@ export function useWorkspaceActions({
     try {
       const payload = await requestDocumentWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path,
         method,
         body,
         errorMessage,
       });
-      const state = applyServerState(payload.state);
+      const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
       if (!documentSendInFlightRef.current) window.alert(error instanceof Error ? error.message : errorMessage);
@@ -150,12 +170,13 @@ export function useWorkspaceActions({
     try {
       const payload = await requestInventoryWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path,
         method,
         body,
         errorMessage,
       });
-      const state = applyServerState(payload.state);
+      const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
       window.alert(error instanceof Error ? error.message : errorMessage);
@@ -173,12 +194,13 @@ export function useWorkspaceActions({
     try {
       const payload = await requestMaintenanceWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path,
         method,
         body,
         errorMessage,
       });
-      const state = applyServerState(payload.state);
+      const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
       if (throwOnError) throw error;
@@ -196,12 +218,13 @@ export function useWorkspaceActions({
     try {
       const payload = await requestStaffWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path,
         method,
         body,
         errorMessage,
       });
-      const state = applyServerState(payload.state);
+      const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
       window.alert(error instanceof Error ? error.message : errorMessage);
@@ -499,6 +522,7 @@ export function useWorkspaceActions({
     if (!canManageBusiness) throw new Error("You do not have permission to reschedule jobs.");
     const payload = await requestWorkspaceUpdate({
       fetchWithAuth,
+      onRecovery: applyServerState,
       path: jobs ? "/api/jobs/reschedule-day" : `/api/jobs/reschedule-day?sourceDate=${encodeURIComponent(sourceDate)}`,
       method: jobs ? "POST" : "GET",
       ...(jobs ? { body: { sourceDate, scheduledDate, jobs } } : {}),
@@ -507,22 +531,7 @@ export function useWorkspaceActions({
       if (jobs) throw new Error(`Unable to confirm the move. Review the day to check the saved schedules before trying again. ${failure.message || ""}`.trim());
       throw failure;
     });
-    // Reconcile only the relevant dates/records, preserving other workspace
-    // state and the server's technician and imported-time fields verbatim.
-    const dates = new Set([sourceDate, scheduledDate].filter(Boolean));
-    const ids = new Set(jobs?.map((job) => job.id) || []);
-    const serverJobs = new Map(payload.state.jobs.map((job) => [job.id, job]));
-    const applyState = () => setData((previous) => {
-      const affected = new Set(ids);
-      for (const job of [...previous.jobs, ...serverJobs.values()]) if (dates.has(job.scheduledDate)) affected.add(job.id);
-      return {
-        ...previous,
-        jobs: [
-          ...previous.jobs.filter((job) => !affected.has(job.id)),
-          ...payload.state.jobs.filter((job) => affected.has(job.id)),
-        ],
-      };
-    });
+    const applyState = () => applyMutationPayload(payload);
     if (!jobs) return { ...payload.result, applyState };
     applyState();
     return payload.result;
@@ -540,14 +549,14 @@ export function useWorkspaceActions({
     if (!canManageBusiness) throw new Error("Calendar Undo requires access to the job scheduling API.");
     try {
       const payload = await requestWorkspaceUpdate({ fetchWithAuth, ...calendarUndoRequest(entry), errorMessage: "Unable to undo the Calendar change. Try again." });
-      applyServerState(payload.state);
+      applyMutationPayload(payload);
       return payload.result;
     } catch (error) {
       // A conflict or a lost acknowledgement may leave different saved dates.
       // Re-read authoritative state on failure, without issuing another write.
       try {
         const payload = await requestWorkspaceUpdate({ fetchWithAuth, path: "/api/app-state", method: "GET" });
-        applyServerState(payload.state);
+        applyMutationPayload(payload);
       } catch {
         error.message += " Unable to refresh the saved schedule; check your connection and refresh before trying again.";
       }
@@ -700,15 +709,11 @@ export function useWorkspaceActions({
     invoiceArchiveInFlightRef.current = true;
     const fallback = "Unable to update the invoice. Please try again.";
     try {
-      const response = await fetchWithAuth(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload?.ok !== true || !payload.state) {
-        return { ok: false, error: response.status >= 400 && response.status < 500 ? payload.error || fallback : fallback, code: payload.code };
-      }
-      applyServerState(payload.state);
+      const payload = await requestWorkspaceUpdate({ fetchWithAuth, path, method, body: body || {}, errorMessage: fallback, onRecovery: applyServerState });
+      applyMutationPayload(payload);
       return { ok: true, result: payload.result };
-    } catch {
-      return { ok: false, error: fallback };
+    } catch (error) {
+      return { ok: false, error: error.status >= 400 && error.status < 500 ? error.message : fallback, code: error.code };
     } finally { invoiceArchiveInFlightRef.current = false; }
   }
 
@@ -789,6 +794,7 @@ export function useWorkspaceActions({
     try {
       const payload = await requestWorkspaceUpdate({
         fetchWithAuth,
+        onRecovery: applyServerState,
         path: jobPath(jobId, "/service-board-note"),
         method: "PATCH",
         body: { serviceBoardNote },
@@ -796,7 +802,7 @@ export function useWorkspaceActions({
       });
       mergeNote(payload.result.serviceBoardNote);
     } catch (error) {
-      mergeNote(previousNote);
+      if (!error.recovered) mergeNote(previousNote);
       throw error;
     } finally {
       boardNoteSavesRef.current.delete(jobId);

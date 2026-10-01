@@ -5,7 +5,7 @@ import {
   lineTotalCentsFromScaled,
   moneyToCents,
 } from "./server-workspace-financials.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { getJobById } from "./server-workspace-state.js";
 import { invoiceDeletionRestriction, invoiceHasBeenSent } from "./src/lib/invoice-deletion.js";
 import { buildDocumentReference } from "./src/lib/quote-template.js";
 import { invoiceStatusFromAmounts } from "./src/lib/invoice-account.js";
@@ -411,7 +411,7 @@ function runForeignKeyCheck(db) {
 }
 
 function getJobState(db, jobId) {
-  return loadWorkspaceStateFromDb(db).jobs.find((job) => job.id === jobId) || null;
+  return getJobById(db, jobId);
 }
 
 function getQuoteResult(db, jobId, extra = {}) {
@@ -725,7 +725,7 @@ export function deleteInvoiceForJob(db, jobIdInput, { confirmSent = false, delet
     if (db.prepare("SELECT 1 FROM payments WHERE invoice_id = ? LIMIT 1").get(invoiceRow.id)) {
       throw new WorkspaceDocumentError("This invoice has recorded payments and cannot be deleted until those payments are handled.", 409);
     }
-    const job = loadWorkspaceStateFromDb(db).jobs.find((entry) => entry.id === jobId);
+    const job = getJobById(db, jobId);
     const restriction = invoiceDeletionRestriction(job.invoice);
     if (restriction) throw new WorkspaceDocumentError(restriction, 409);
     if (invoiceHasBeenSent(job.invoice) && confirmSent !== true) {

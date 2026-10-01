@@ -1,3 +1,4 @@
+import { readRows } from "./server-workspace-query.js";
 import crypto from "node:crypto";
 import { contactRoles, isLegacyAccountContact } from "./src/lib/contact-model.js";
 
@@ -27,16 +28,16 @@ function write(db, operation) {
   }).immediate();
 }
 
-export function readContacts(db) {
-  return db.prepare("SELECT * FROM contacts ORDER BY lower(name), id").all().map((row) => ({
+export function readContacts(db, ids = true) {
+  return readRows(db, "contacts", ids, { order: "lower(name), id" }).map((row) => ({
     ...object(contactJson(row.extra_json)), id: row.id, name: row.name, phone: row.phone, email: row.email,
     position: row.position, notes: row.notes, createdAt: row.created_at, updatedAt: row.updated_at,
   }));
 }
 
-export function readContactLinks(db, type) {
+export function readContactLinks(db, type, ownerIds = true) {
   const customer = type === "customer";
-  return db.prepare(`SELECT * FROM ${customer ? "customer_contact_links" : "site_contact_links"} ORDER BY is_primary DESC, contact_id`).all().map((row) => ({
+  return readRows(db, customer ? "customer_contact_links" : "site_contact_links", ownerIds, { column: customer ? "customer_id" : "site_id", order: "is_primary DESC, contact_id" }).map((row) => ({
     ...object(contactJson(row.extra_json)), [customer ? "customerId" : "siteId"]: row[customer ? "customer_id" : "site_id"],
     contactId: row.contact_id, roles: contactRoles(contactJson(row.roles_json, [])), isPrimary: Boolean(row.is_primary),
     ...(customer ? { isBilling: Boolean(row.is_billing) } : {}), createdAt: row.created_at, updatedAt: row.updated_at,
@@ -94,12 +95,12 @@ export function storeContactLink(db, type, ownerId, assignment) {
 export function createContact(db, input) {
   return write(db, () => {
     if (input?.id && db.prepare("SELECT id FROM contacts WHERE id=?").get(text(input.id))) throw new WorkspaceContactError("Contact already exists.", 409);
-    const id = storeContact(db, input); return readContacts(db).find((contact) => contact.id === id);
+    const id = storeContact(db, input); return readContacts(db, [id])[0];
   });
 }
 export function updateContact(db, contactId, input) {
   assertRecord(input);
-  return write(db, () => { requireContact(db, contactId); storeContact(db, { ...input, id: contactId, updatedAt: now() }); return readContacts(db).find((contact) => contact.id === contactId); });
+  return write(db, () => { requireContact(db, contactId); storeContact(db, { ...input, id: contactId, updatedAt: now() }); return readContacts(db, [contactId])[0]; });
 }
 export function deleteContact(db, contactId) {
   return write(db, () => {

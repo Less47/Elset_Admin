@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { moneyToCents } from "./server-workspace-financials.js";
 import { createJob } from "./server-workspace-jobs.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { getCustomerById, getJobById, getMaintenancePlanById, getJobsForMaintenancePlan, readWorkspaceRecords } from "./server-workspace-state.js";
 import { advanceMaintenanceDate, changeMaintenanceSchedule, expandMaintenanceOccurrences, isMaintenanceDate, maintenanceSchedule, nextMaintenanceOccurrence } from "./src/lib/maintenance-recurrence.js";
 import { writeMaintenanceException } from "./server-maintenance-occurrence-store.js";
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./src/lib/maintenance-frequency.js";
@@ -234,7 +234,7 @@ function ensureJobReference(db, jobId, planId) {
 }
 
 function getPlanState(db, planId) {
-  return loadWorkspaceStateFromDb(db).maintenancePlans.find((plan) => plan.id === planId) || null;
+  return getMaintenancePlanById(db, planId);
 }
 
 function normalizeMaintenancePlanInput(input, existing = null) {
@@ -412,7 +412,7 @@ function restoreMaintenancePlanFromArchiveRow(db, row) {
 
 export function createMaintenancePlan(db, input) {
   return db.transaction(() => {
-    const canonical = canonicalMaintenancePlanInput(input, null, loadWorkspaceStateFromDb(db).customers);
+    const canonical = canonicalMaintenancePlanInput(input, null, [getCustomerById(db, input?.customerId)].filter(Boolean));
     const plan = normalizeMaintenancePlanInput(canonical);
     if (db.prepare("SELECT id FROM maintenance_plans WHERE id = ?").get(plan.id)) {
       throw new WorkspaceMaintenanceError("A maintenance plan with that ID already exists.", 409);
@@ -436,7 +436,7 @@ export function updateMaintenancePlan(db, planIdInput, input) {
     const existing = getPlanState(db, planId);
     if (!existing) throw new WorkspaceMaintenanceError("Maintenance plan not found.", 404);
 
-    const canonical = canonicalMaintenancePlanInput(input, existing, loadWorkspaceStateFromDb(db).customers);
+    const canonical = canonicalMaintenancePlanInput(input, existing, [getCustomerById(db, input.customerId || existing.customerId)].filter(Boolean));
     let plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, existing);
     ensureCustomerExists(db, plan.customerId);
     ensureStaffExists(db, plan.defaultTechnicianId);
@@ -466,7 +466,7 @@ function assertMaintenanceRevision(plan, revision) {
 }
 
 function resolveOccurrence(db, plan, input = {}) {
-  const jobs = loadWorkspaceStateFromDb(db).jobs;
+  const jobs = getJobsForMaintenancePlan(db, plan.id);
   const key = input.occurrenceKey || plan.nextOccurrence?.key;
   const exception = plan.occurrenceExceptions?.find((entry) => entry.key === key);
   const segment = maintenanceSchedule(plan).segments.find((entry) => entry.firstOccurrence?.key === key && (!entry.untilDate || entry.anchorDate < entry.untilDate));
@@ -523,7 +523,7 @@ function applyOccurrenceChange(db, plan, input, frequency = plan.frequency) {
   let updated;
   // Adopt legacy generated jobs as sparse facts before replacing a schedule.
   // The job records themselves are untouched.
-  const jobs = loadWorkspaceStateFromDb(db).jobs.filter((job) => job.maintenancePlanId === plan.id);
+  const jobs = getJobsForMaintenancePlan(db, plan.id);
   const facts = [...(plan.occurrenceExceptions || [])];
   for (const job of jobs) {
     if (facts.some((entry) => entry.jobId === job.id)) continue;
@@ -643,7 +643,7 @@ export function restoreDeletedMaintenancePlan(db, planIdInput) {
 
 export function archiveMaintenancePlansForCustomer(db, customerIdInput, deletedAt = nowIso()) {
   const customerId = normalizeId(customerIdInput, "Customer ID");
-  const plans = loadWorkspaceStateFromDb(db).maintenancePlans.filter((plan) => plan.customerId === customerId);
+  const plans = readWorkspaceRecords(db, { maintenancePlans: db.prepare("SELECT id FROM maintenance_plans WHERE customer_id = ?").all(customerId).map(row => row.id) }).maintenancePlans;
   plans.forEach((plan) => archiveMaintenancePlanRow(db, plan, deletedAt));
   return plans.length;
 }
@@ -673,15 +673,12 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
     ensureCustomerExists(db, plan.customerId);
     ensureStaffExists(db, plan.defaultTechnicianId);
 
-    const state = loadWorkspaceStateFromDb(db);
-    const customer = state.customers.find((entry) => entry.id === plan.customerId);
+    const customer = getCustomerById(db, plan.customerId);
     if (!customer) throw new WorkspaceMaintenanceError("Customer not found.", 404);
 
     const occurrence = resolveOccurrence(db, plan, input);
     const dueDate = occurrence.date;
-    const existingOpenJob = state.jobs.find((job) =>
-      job.id === occurrence.jobId
-    );
+    const existingOpenJob = getJobById(db, occurrence.jobId);
     if (existingOpenJob) {
       return {
         plan: getPlanState(db, plan.id),
@@ -724,7 +721,7 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
     const extra = parseJson(db.prepare("SELECT extra_json FROM maintenance_plans WHERE id = ?").get(plan.id).extra_json, {});
     db.prepare("UPDATE maintenance_plans SET extra_json = ? WHERE id = ?").run(objectJson({ ...extra, recurrence: maintenanceSchedule(plan), maintenanceRevision: plan.maintenanceRevision + 1 }), plan.id);
     const refreshed = getPlanState(db, plan.id);
-    const nextDueDate = nextMaintenanceOccurrence(refreshed, loadWorkspaceStateFromDb(db).jobs)?.date || advanceMaintenanceDate(dueDate, plan.frequency);
+    const nextDueDate = nextMaintenanceOccurrence(refreshed, getJobsForMaintenancePlan(db, plan.id))?.date || advanceMaintenanceDate(dueDate, plan.frequency);
     db.prepare(`
       UPDATE maintenance_plans
          SET last_generated_at = ?,
@@ -738,7 +735,7 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
     runForeignKeyCheck(db);
     return {
       plan: getPlanState(db, plan.id),
-      job: loadWorkspaceStateFromDb(db).jobs.find((entry) => entry.id === job.id) || job,
+      job: getJobById(db, job.id) || job,
     };
   })();
 }
@@ -747,7 +744,7 @@ export function getMaintenanceOccurrences(db, from, to) {
   if (!isMaintenanceDate(from) || !isMaintenanceDate(to) || from > to || (new Date(`${to}T12:00:00Z`) - new Date(`${from}T12:00:00Z`)) / 86400000 > 732) {
     throw new WorkspaceMaintenanceError("Choose a valid maintenance range of at most two years.");
   }
-  const state = loadWorkspaceStateFromDb(db);
+  const state = readWorkspaceRecords(db, { maintenancePlans: true });
   const customers = new Map(state.customers.map((customer) => [customer.id, customer]));
   return state.maintenancePlans.flatMap((plan) => expandMaintenanceOccurrences(plan, from, to, state.jobs)
     .map((entry) => ({ ...entry, customerName: customers.get(plan.customerId)?.name || "Unknown customer" })));

@@ -664,6 +664,55 @@ test("SQLite startup and ordinary navigation do not broad-save app state", async
   }
 });
 
+test("inventory and staff saves update visible records from deltas without a full resync", async ({ page }) => {
+  await login(page);
+  const reloads = [];
+  page.on("request", request => { if (new URL(request.url()).pathname === "/api/app-state") reloads.push(request.url()); });
+  const save = async (button, endpoint) => {
+    const responsePromise = page.waitForResponse(response => response.url().includes(endpoint) && ["POST", "PATCH", "DELETE"].includes(response.request().method()));
+    await button.click();
+    const response = await responsePromise;
+    expect(response.ok()).toBe(true);
+    const payload = await response.json();
+    expect(payload.state).toBeUndefined();
+    expect(payload.delta).toBeTruthy();
+    return payload;
+  };
+  const input = (dialog, label) => dialog.locator(".grid.gap-2").filter({ has: page.locator("label", { hasText: new RegExp(`^${label}$`) }) }).locator("input");
+  await page.getByRole("button", { name: "Parts Inventory", exact: true }).click();
+  await page.getByRole("button", { name: "Add Part", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "Add Part", exact: true });
+  await input(dialog, "Part name").fill("Delta inventory part");
+  await input(dialog, "Quantity on hand").fill("7");
+  await save(dialog.getByRole("button", { name: "Create Part" }), "/api/inventory-items");
+  let row = page.locator(".data-grid-row:visible", { hasText: "Delta inventory part" });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Edit", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Edit Part", exact: true });
+  await input(dialog, "Part name").fill("Delta inventory saved");
+  await save(dialog.getByRole("button", { name: "Save Part" }), "/api/inventory-items/");
+  row = page.locator(".data-grid-row:visible", { hasText: "Delta inventory saved" });
+  await expect(row).toBeVisible();
+  page.once("dialog", dialog => dialog.accept());
+  await save(row.getByRole("button", { name: "Delete", exact: true }), "/api/inventory-items/");
+  await expect(row).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Staff", exact: true }).click();
+  await page.getByRole("button", { name: "Add Staff", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Add Staff Member" });
+  await input(dialog, "Full name").fill("Delta staff member");
+  await save(dialog.getByRole("button", { name: "Create Staff Member" }), "/api/staff");
+  row = page.locator(".data-grid-row:visible", { hasText: "Delta staff member" });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: /^Edit(?: Staff)?$/ }).click();
+  dialog = page.getByRole("dialog", { name: "Edit Staff Member" });
+  await input(dialog, "Full name").fill("Delta staff saved");
+  await save(dialog.getByRole("button", { name: "Save Staff Member" }), "/api/staff/");
+  await expect(page.locator(".data-grid-row:visible", { hasText: "Delta staff saved" })).toBeVisible();
+  expect(reloads).toEqual([]);
+  expect(readWorkspaceState().staff.some(record => record.name === "Delta staff saved")).toBe(true);
+});
+
 test("quote and invoice editors preview the shared PDF workflow", async ({ page }) => {
   await login(page);
 

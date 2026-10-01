@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -198,9 +199,11 @@ async function withServer(env, callback, user = {}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env, { role: user.role || "admin", staffId: user.staffId || "demo-staff-admin" });
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -208,6 +211,7 @@ async function withServer(env, callback, user = {}) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -216,7 +220,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -371,7 +375,7 @@ test("date scheduling and removal preserve time, status, assignment and commerci
         for (const scheduledDate of ["2026-09-15", "2026-10-04", ""]) {
           const result = await requestJson(baseUrl, "/api/jobs/demo-job-1001/schedule", { method: "PATCH", body: JSON.stringify({ scheduledDate }) });
           assert.equal(result.response.status, 200);
-          assert.equal(result.payload.state.jobs.find((job) => job.id === before.id).scheduledTime, "10:30");
+          assert.equal(result.workspace.jobs.find((job) => job.id === before.id).scheduledTime, "10:30");
           const saved = getDbState(dbPath).jobs.find((job) => job.id === before.id);
           const { scheduledDate: savedDate, updatedAt, ...remaining } = saved;
           assert.equal(savedDate, scheduledDate);
@@ -463,9 +467,9 @@ test("job create supports existing customer/site, new customer/site, existing cu
       assert.equal(newCustomer.payload.result.customerId, "customer-new-job");
       assert.equal(newCustomer.payload.result.jobAddress, "22 New Site Road, Sampleton VIC 3000");
       assert.equal(newCustomer.payload.result.ocNumber, "CLIENT-PO-NEW-1");
-      assert.equal(newCustomer.payload.state.customers.some((customer) => customer.id === "customer-new-job"), true);
+      assert.equal(newCustomer.workspace.customers.some((customer) => customer.id === "customer-new-job"), true);
       assert.equal(
-        newCustomer.payload.state.customers.find((customer) => customer.id === "customer-new-job").sites[0].ocNumber,
+        newCustomer.workspace.customers.find((customer) => customer.id === "customer-new-job").sites[0].ocNumber,
         "PS123456"
       );
 
@@ -494,7 +498,7 @@ test("job create supports existing customer/site, new customer/site, existing cu
       assert.equal(newSite.response.status, 200, newSite.payload.error);
       assert.equal(newSite.payload.result.jobAddress, "33 Created Site Avenue, Sampleton VIC 3000");
       assert.equal(
-        newSite.payload.state.customers
+        newSite.workspace.customers
           .find((customer) => customer.id === "demo-customer-arcadia")
           .sites.some((site) => site.id === "site-created-with-job"),
         true
@@ -608,7 +612,7 @@ test("job edit, schedule, tomorrow planning, and status updates persist", async 
       });
       assert.equal(removeAll.response.status, 200, removeAll.payload.error);
       assert.equal(removeAll.payload.result.updatedCount, 2);
-      assert.equal(removeAll.payload.state.jobs.filter((job) => job.serviceBoardTomorrowDate === "2026-02-07").length, 0);
+      assert.equal(removeAll.workspace.jobs.filter((job) => job.serviceBoardTomorrowDate === "2026-02-07").length, 0);
 
       const state = getDbState(dbPath);
       assert.equal(state.jobs.find((job) => job.id === "demo-job-1001").status, "Completed");
@@ -697,8 +701,8 @@ test("job delete archives complete jobs and restore preserves documents while ha
 
       const deleted = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
-      assert.equal(deleted.payload.state.jobs.some((job) => job.id === "demo-job-1001"), false);
-      const archivedJob = deleted.payload.state.deletedJobs.find((entry) => entry.job.id === "demo-job-1001")?.job;
+      assert.equal(deleted.workspace.jobs.some((job) => job.id === "demo-job-1001"), false);
+      const archivedJob = deleted.workspace.deletedJobs.find((entry) => entry.job.id === "demo-job-1001")?.job;
       assert.equal(Boolean(archivedJob?.quote), true);
       assert.equal(Boolean(archivedJob?.invoice), true);
       assert.equal(archivedJob.invoice.payments.length, 1);
@@ -715,7 +719,7 @@ test("job delete archives complete jobs and restore preserves documents while ha
       const emptied = await requestJson(baseUrl, "/api/deleted-jobs", { method: "DELETE" });
       assert.equal(emptied.response.status, 200, emptied.payload.error);
       assert.equal(emptied.payload.result.deletedCount, 1);
-      assert.equal(emptied.payload.state.deletedJobs.length, 0);
+      assert.equal(emptied.workspace.deletedJobs.length, 0);
 
       const state = getDbState(dbPath);
       assert.equal(state.jobs.some((job) => job.id === "job-restorable-core"), true);

@@ -1,3 +1,4 @@
+import { readRows, mergeIds } from "./server-workspace-query.js";
 import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
 import { WORKSPACE_LOGO_KEY, workspaceLogoUrl } from "./src/lib/workspace-logo.js";
 import { effectiveMaintenancePlan } from "./src/lib/maintenance-recurrence.js";
@@ -124,36 +125,56 @@ function mapInvoice(row, lineItemsByInvoiceId, paymentsByInvoiceId, sendHistoryB
   }, row.extra_json);
 }
 
+// Full loads and targeted reads share exactly the same record projection.
 export function loadWorkspaceStateFromDb(db) {
-  const accountingInvoices = new Map(db.prepare("SELECT local_entity_id,provider FROM integration_entity_mappings WHERE local_entity_type='invoice' ORDER BY created_at DESC").all().map((row) => [row.local_entity_id, row.provider]));
-  const info = db.prepare("SELECT * FROM workspace_info WHERE id = 1").get() || null;
-  const settingsRows = db.prepare("SELECT * FROM settings ORDER BY key").all();
-  const templateRows = db.prepare("SELECT * FROM document_templates ORDER BY type").all();
-  const staffRows = db.prepare("SELECT * FROM staff ORDER BY lower(name), created_at").all();
-  const customerRows = db.prepare("SELECT * FROM customers ORDER BY lower(name), created_at").all();
-  const contacts = readContacts(db);
+  return readWorkspaceRecords(db, Object.fromEntries([
+    "staff", "customers", "contacts", "jobs", "inventoryItems", "maintenancePlans",
+    "deletedJobs", "deletedCustomers", "deletedInvoices", "settings", "quoteTemplate", "invoiceTemplate", "meta",
+  ].map(key => [key, true])));
+}
+
+export function readWorkspaceRecords(db, selection) {
+  const maintenanceRows = readRows(db, "maintenance_plans", selection.maintenancePlans, { order: "next_due_date, lower(plan_name)" });
+  const planIds = maintenanceRows.map(row => row.id);
+  const linkedJobs = readRows(db, "jobs", planIds, { column: "maintenance_plan_id" });
+  const jobRows = readRows(db, "jobs", mergeIds(selection.jobs, linkedJobs.map(row => row.id)), { order: "COALESCE(job_number, 0) DESC, created_at DESC" });
+  const jobIds = jobRows.map(row => row.id);
+  const customerRows = readRows(db, "customers", mergeIds(selection.customers, maintenanceRows.map(row => row.customer_id)), { order: "lower(name), created_at" });
+  const customerIds = customerRows.map(row => row.id);
+  const siteRows = readRows(db, "sites", customerIds, { column: "customer_id", order: "customer_id, created_at, lower(label), lower(address)" });
+  const siteIds = siteRows.map(row => row.id);
+  const directLinks = readContactLinks(db, "customer", customerIds);
+  const locationLinks = readContactLinks(db, "site", siteIds);
+  const contacts = readContacts(db, mergeIds(selection.contacts, [...directLinks, ...locationLinks].map(link => link.contactId)));
   const contactsById = new Map(contacts.map((contact) => [contact.id, contact]));
-  const customerLinks = rowsByKey(readContactLinks(db, "customer"), "customerId");
-  const siteLinks = rowsByKey(readContactLinks(db, "site"), "siteId");
+  const customerLinks = rowsByKey(directLinks, "customerId");
+  const siteLinks = rowsByKey(locationLinks, "siteId");
   const siteContacts = new Map([...siteLinks].map(([id, contactAssignments]) => [id, getSiteContacts({ contactAssignments }, contactsById)]));
   const sitePrimaries = new Map([...siteContacts].map(([id, records]) => [id, records.find((contact) => contact.isPrimary)]));
   const customerContacts = new Map([...customerLinks].map(([id, contactAssignments]) => [id, getCustomerDirectContacts({ contactAssignments }, contactsById)]));
-  const siteRows = db.prepare("SELECT * FROM sites ORDER BY customer_id, created_at, lower(label), lower(address)").all();
-  const assetRows = db.prepare("SELECT * FROM site_assets ORDER BY site_id, lower(name)").all();
-  const accessNoteRows = db.prepare("SELECT * FROM site_access_notes ORDER BY customer_id, updated_at").all();
-  const inventoryRows = db.prepare("SELECT * FROM inventory_items ORDER BY lower(name), created_at").all();
-  const maintenanceRows = db.prepare("SELECT * FROM maintenance_plans ORDER BY next_due_date, lower(plan_name)").all();
-  const checklistRows = db.prepare("SELECT * FROM maintenance_checklist_items ORDER BY maintenance_plan_id, position").all();
-  const jobRows = db.prepare("SELECT * FROM jobs ORDER BY COALESCE(job_number, 0) DESC, created_at DESC").all();
-  const noteRows = db.prepare("SELECT * FROM job_notes ORDER BY job_id, created_at").all();
-  const attachmentRows = db.prepare("SELECT * FROM job_attachments ORDER BY job_id, created_at").all();
-  const quoteRows = db.prepare("SELECT * FROM quotes ORDER BY job_id").all();
-  const quoteItemRows = db.prepare("SELECT * FROM quote_line_items ORDER BY quote_id, position").all();
-  const invoiceRows = db.prepare("SELECT * FROM invoices ORDER BY job_id").all();
-  const invoiceItemRows = db.prepare("SELECT * FROM invoice_line_items ORDER BY invoice_id, position").all();
-  const paymentRows = db.prepare("SELECT * FROM payments ORDER BY invoice_id, date, created_at").all();
-  const sendHistoryRows = db.prepare("SELECT * FROM document_send_history ORDER BY job_id, sent_at").all();
-  const deletedRows = db.prepare("SELECT * FROM deleted_records ORDER BY deleted_at DESC").all();
+  const assetRows = readRows(db, "site_assets", siteIds, { column: "site_id", order: "site_id, lower(name)" });
+  const accessNoteRows = readRows(db, "site_access_notes", customerIds, { column: "customer_id", order: "customer_id, updated_at" });
+  const inventoryRows = readRows(db, "inventory_items", selection.inventoryItems, { order: "lower(name), created_at" });
+  const staffRows = readRows(db, "staff", selection.staff, { order: "lower(name), created_at" });
+  const checklistRows = readRows(db, "maintenance_checklist_items", planIds, { column: "maintenance_plan_id", order: "maintenance_plan_id, position" });
+  const noteRows = readRows(db, "job_notes", jobIds, { column: "job_id", order: "job_id, created_at" });
+  const attachmentRows = readRows(db, "job_attachments", jobIds, { column: "job_id", order: "job_id, created_at" });
+  const quoteRows = readRows(db, "quotes", jobIds, { column: "job_id", order: "job_id" });
+  const quoteItemRows = readRows(db, "quote_line_items", quoteRows.map(row => row.id), { column: "quote_id", order: "quote_id, position" });
+  const invoiceRows = readRows(db, "invoices", jobIds, { column: "job_id", order: "job_id" });
+  const invoiceIds = invoiceRows.map(row => row.id);
+  const invoiceItemRows = readRows(db, "invoice_line_items", invoiceIds, { column: "invoice_id", order: "invoice_id, position" });
+  const paymentRows = readRows(db, "payments", invoiceIds, { column: "invoice_id", order: "invoice_id, date, created_at" });
+  const sendHistoryRows = readRows(db, "document_send_history", jobIds, { column: "job_id", order: "job_id, sent_at" });
+  const accountingInvoices = new Map(readRows(db, "integration_entity_mappings", invoiceIds, { column: "local_entity_id", order: "created_at DESC" })
+    .filter(row => row.local_entity_type === "invoice").map(row => [row.local_entity_id, row.provider]));
+  const deletedRows = [
+    ...readRows(db, "deleted_records", selection.deletedJobs, { column: "record_id", order: "deleted_at DESC" }).filter(row => row.kind === "job"),
+    ...readRows(db, "deleted_records", selection.deletedCustomers, { column: "record_id", order: "deleted_at DESC" }).filter(row => row.kind === "customer"),
+  ];
+  const settingsRows = readRows(db, "settings", selection.settings, { column: "key", order: "key" });
+  const templateRows = readRows(db, "document_templates", [selection.quoteTemplate && "quote", selection.invoiceTemplate && "invoice"].filter(Boolean), { column: "type", order: "type" });
+  const info = selection.meta ? db.prepare("SELECT * FROM workspace_info WHERE id = 1").get() : null;
 
   const assetsBySiteId = rowsByKey(assetRows, "site_id");
   const sitesByCustomerId = rowsByKey(siteRows, "customer_id");
@@ -332,7 +353,7 @@ export function loadWorkspaceStateFromDb(db) {
     }, row.extra_json);
   });
 
-  const exceptions = readMaintenanceExceptions(db);
+  const exceptions = readMaintenanceExceptions(db, { planIds, jobIds });
   const exceptionByJob = new Map(exceptions.filter((entry) => entry.jobId).map((entry) => [entry.jobId, entry]));
   for (const job of jobs) {
     const occurrence = exceptionByJob.get(job.id);
@@ -353,7 +374,7 @@ export function loadWorkspaceStateFromDb(db) {
     deletedCustomers: deletedRows
       .filter((row) => row.kind === "customer")
       .map((row) => ({ deletedAt: row.deleted_at, customer: parseJson(row.payload_json, {}) })),
-    deletedInvoices: db.prepare("SELECT * FROM deleted_invoices ORDER BY deleted_at DESC").all()
+    deletedInvoices: readRows(db, "deleted_invoices", selection.deletedInvoices, { order: "deleted_at DESC" })
       .map((row) => ({ ...parseJson(row.payload_json, {}), id: row.id, invoiceId: row.invoice_id, jobId: row.job_id, deletedAt: row.deleted_at })),
     quoteTemplate: mapDocumentTemplate(templatesByType.get("quote")) || {},
     invoiceTemplate: mapDocumentTemplate(templatesByType.get("invoice")) || {},
@@ -364,4 +385,20 @@ export function loadWorkspaceStateFromDb(db) {
     users: [],
     sessions: [],
   };
+}
+
+export function getJobById(db, id) {
+  return readWorkspaceRecords(db, { jobs: [id] }).jobs[0] || null;
+}
+
+export function getCustomerById(db, id) {
+  return readWorkspaceRecords(db, { customers: [id] }).customers[0] || null;
+}
+
+export function getMaintenancePlanById(db, id) {
+  return readWorkspaceRecords(db, { maintenancePlans: [id] }).maintenancePlans[0] || null;
+}
+
+export function getJobsForMaintenancePlan(db, id) {
+  return readWorkspaceRecords(db, { jobs: readRows(db, "jobs", [id], { column: "maintenance_plan_id" }).map(row => row.id) }).jobs;
 }

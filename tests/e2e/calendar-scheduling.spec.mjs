@@ -612,7 +612,7 @@ for (const width of [390, 820, 1440]) for (const preset of themePresets) {
       await noOverflow(page);
       await undo.click();
       await expect(undo).toBeDisabled();
-      expect(dbJob("calendar-todo").scheduledDate).toBe("");
+      await expect.poll(() => dbJob("calendar-todo").scheduledDate).toBe("");
     } finally { await context.close(); }
   });
 }

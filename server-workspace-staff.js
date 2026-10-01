@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { readWorkspaceRecords } from "./server-workspace-state.js";
 
 const staffKnownKeys = new Set([
   "id",
@@ -149,7 +149,7 @@ function runForeignKeyCheck(db) {
 }
 
 function getStaffMemberState(db, staffId) {
-  return loadWorkspaceStateFromDb(db).staff.find((staffMember) => staffMember.id === staffId) || null;
+  return readWorkspaceRecords(db, { staff: [staffId] }).staff[0] || null;
 }
 
 function ensureStaffMemberExists(db, staffId) {

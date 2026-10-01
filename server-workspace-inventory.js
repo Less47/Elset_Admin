@@ -4,7 +4,7 @@ import {
   moneyToCents,
 } from "./server-workspace-financials.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { readWorkspaceRecords } from "./server-workspace-state.js";
 
 const QUANTITY_SCALE = 1_000_000;
 const inventoryCategories = new Set(["Automation", "Access Control", "Electrical", "Hardware", "Consumables", "Tools", "Other"]);
@@ -204,7 +204,7 @@ function runForeignKeyCheck(db) {
 }
 
 function getInventoryItemState(db, itemId) {
-  return loadWorkspaceStateFromDb(db).inventoryItems.find((item) => item.id === itemId) || null;
+  return readWorkspaceRecords(db, { inventoryItems: [itemId] }).inventoryItems[0] || null;
 }
 
 function ensureInventoryItemExists(db, itemId) {

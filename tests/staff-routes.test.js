@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -195,9 +196,11 @@ async function withServer(env, callback, user = {}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env, { role: user.role || "admin", staffId: user.staffId || "demo-staff-admin" });
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -205,6 +208,7 @@ async function withServer(env, callback, user = {}) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -213,7 +217,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -252,7 +256,7 @@ test("POST /api/staff creates a staff member and preserves optional fields", asy
       assert.equal(result.payload.result.notes, "Synthetic staff note.");
       assert.equal(result.payload.result.active, true);
       assert.equal(result.payload.result.technicianCode, "TECH-SYN-1");
-      assert.equal(result.payload.state.staff.some((entry) => entry.id === "staff-synthetic-field-tech"), true);
+      assert.equal(result.workspace.staff.some((entry) => entry.id === "staff-synthetic-field-tech"), true);
 
       const state = getDbState(dbPath);
       const saved = state.staff.find((entry) => entry.id === "staff-synthetic-field-tech");
@@ -356,7 +360,7 @@ test("staff routes preserve existing duplicate email behaviour", async () => {
         })),
       });
       assert.equal(second.response.status, 200, second.payload.error);
-      assert.equal(second.payload.state.staff.filter((entry) => entry.email === "duplicate.staff@example.test").length, 2);
+      assert.equal(second.workspace.staff.filter((entry) => entry.email === "duplicate.staff@example.test").length, 2);
     });
   });
 });
@@ -368,7 +372,7 @@ test("DELETE /api/staff/:id archives staff and restore relinks assigned jobs and
       assert.equal(deleted.response.status, 200, deleted.payload.error);
       assert.equal(deleted.payload.result.assignedJobCount, 2);
       assert.equal(deleted.payload.result.maintenancePlanCount, 1);
-      assert.equal(deleted.payload.state.staff.some((entry) => entry.id === "demo-staff-admin"), false);
+      assert.equal(deleted.workspace.staff.some((entry) => entry.id === "demo-staff-admin"), false);
 
       const deletedState = getDbState(dbPath);
       const activeJob = deletedState.jobs.find((entry) => entry.id === "demo-job-1001");

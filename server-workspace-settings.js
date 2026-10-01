@@ -12,7 +12,7 @@ import {
   workspacePreferenceSettingKeys,
   workspaceUiSettingKeys,
 } from "./server-workspace-setting-keys.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { readWorkspaceRecords } from "./server-workspace-state.js";
 
 const sidebarWidthValues = new Set(["icon-only", "compact", "standard", "wide"]);
 const contentDensityValues = new Set(["compact", "comfortable", "spacious"]);
@@ -308,11 +308,11 @@ function runForeignKeyCheck(db) {
 }
 
 function getSettingsState(db) {
-  return loadWorkspaceStateFromDb(db).settings;
+  return readWorkspaceRecords(db, { settings: true }).settings;
 }
 
 function getTemplateState(db, type) {
-  const state = loadWorkspaceStateFromDb(db);
+  const state = readWorkspaceRecords(db, { [type === "invoice" ? "invoiceTemplate" : "quoteTemplate"]: true });
   return type === "invoice" ? state.invoiceTemplate : state.quoteTemplate;
 }
 

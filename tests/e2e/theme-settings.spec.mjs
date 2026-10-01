@@ -990,9 +990,9 @@ test("preference drafts preserve textarea selection, DOM identity, and latest va
       ...payload.result,
       settings: { ...payload.result.settings, bankBsb: "000000", emailSignature: "STALE SERVER RESPONSE" },
     },
-    state: {
-      ...payload.state,
-      settings: { ...payload.state.settings, bankBsb: "000000", emailSignature: "STALE SERVER RESPONSE" },
+    delta: {
+      ...payload.delta,
+      settings: { ...payload.delta.settings, bankBsb: "000000", emailSignature: "STALE SERVER RESPONSE" },
     },
   }));
 

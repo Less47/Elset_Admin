@@ -20,7 +20,7 @@ import {
   WorkspaceJobError,
 } from "./server-workspace-jobs.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
+import { workspaceMutationResponse } from "./server-workspace-delta.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -43,25 +43,17 @@ function openSqliteWorkspaceDb(env) {
   return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
-function sendSuccess(req, res, result, env) {
-  return res.json({
-    ok: true,
-    result,
-    state: getAuthorizedWorkspaceState(req.user, { env }),
-  });
-}
-
 function handleJobRoute(operation, env, { delta = false } = {}) {
   return (req, res) => {
     let db = null;
     try {
       db = openSqliteWorkspaceDb(env);
-      const result = operation(db, req);
       if (delta && req.query.response === "delta") {
+        const result = operation(db, req);
         if (req.user?.role === "technician") result.maintenancePlan = null;
         return res.json({ ok: true, result });
       }
-      return sendSuccess(req, res, result, env);
+      return res.json(workspaceMutationResponse(db, "jobs", req, operation));
     } catch (error) {
       const statusCode = getStatusCode(error);
       return res.status(statusCode).json({
@@ -122,8 +114,9 @@ export function createJobRouter({
         }
         const serviceBoardNote = normalizeServiceBoardNote(req.body.serviceBoardNote);
         db = openSqliteWorkspaceDb(env);
-        const result = updateJobDetails(db, req.params.id, { serviceBoardNote });
-        return sendSuccess(req, res, { id: result.id, serviceBoardNote: result.serviceBoardNote }, env);
+        const payload = workspaceMutationResponse(db, "jobs", req, () => updateJobDetails(db, req.params.id, { serviceBoardNote }));
+        payload.result = { id: payload.result.id, serviceBoardNote: payload.result.serviceBoardNote };
+        return res.json(payload);
       } catch (error) {
         return res.status(getStatusCode(error)).json({ error: getErrorMessage(error, "Unable to save the job note.") });
       } finally {

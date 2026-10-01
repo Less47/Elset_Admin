@@ -463,6 +463,7 @@ test("legacy labels load in dashboard, edit and Calendar without changing six-mo
   await expect(page.locator('[data-maintenance-plan="annual-plan"]')).toContainText("Annually");
   await card.dblclick();
   await page.getByRole("button", { name: "Edit Plan", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Customer", exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("combobox", { name: "Customer", exact: true })).toHaveValue("Arcadia Example Apartments");
   await expect(page.getByRole("combobox", { name: "Site", exact: true })).toHaveValue("5 Connor Street, Brighton East");

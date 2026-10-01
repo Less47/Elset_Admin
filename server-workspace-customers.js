@@ -5,7 +5,7 @@ import {
   archiveMaintenancePlansForCustomer,
   restoreMaintenancePlansForCustomer,
 } from "./server-workspace-maintenance.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { getCustomerById, readWorkspaceRecords } from "./server-workspace-state.js";
 import { siteAddressMetadata, updatedSiteAddressMetadata } from "./src/lib/site-location.js";
 import { archiveJobCostEntries } from "./server-workspace-job-costing.js";
 
@@ -290,7 +290,7 @@ function ensureCustomerExists(db, customerId) {
 }
 
 function getCustomerState(db, customerId) {
-  return loadWorkspaceStateFromDb(db).customers.find((customer) => customer.id === customerId) || null;
+  return getCustomerById(db, customerId);
 }
 
 function runForeignKeyCheck(db) {
@@ -503,7 +503,7 @@ export function deleteCustomer(db, customerIdInput) {
 
   return db.transaction(() => {
     ensureCustomerExists(db, customerId);
-    const state = loadWorkspaceStateFromDb(db);
+    const state = readWorkspaceRecords(db, { customers: [customerId], jobs: db.prepare("SELECT id FROM jobs WHERE customer_id = ?").all(customerId).map(row => row.id) });
     const customer = state.customers.find((entry) => entry.id === customerId);
     const relatedJobs = state.jobs.filter((job) => job.customerId === customerId);
     const deletedAt = nowIso();

@@ -13,7 +13,7 @@ import {
   WorkspaceDocumentError,
 } from "./server-workspace-documents.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
-import { getAuthorizedWorkspaceState } from "./server-workspace-storage.js";
+import { workspaceMutationResponse } from "./server-workspace-delta.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -36,22 +36,14 @@ function openSqliteWorkspaceDb(env) {
   return openWorkspaceDb({ dbPath: getWorkspaceDbPath(env), migrate: false, fileMustExist: true });
 }
 
-function sendSuccess(req, res, result, env) {
-  return res.json({
-    ok: true,
-    result,
-    state: getAuthorizedWorkspaceState(req.user, { env }),
-  });
-}
-
 function handleDocumentRoute(operation, env) {
   return (req, res) => {
     let db = null;
     try {
       db = openSqliteWorkspaceDb(env);
-      const result = operation(db, req);
-      if (result.paymentId) req.app.locals.accountingInboxWorker?.wake();
-      return sendSuccess(req, res, result, env);
+      const payload = workspaceMutationResponse(db, "documents", req, operation);
+      if (payload.result.paymentId) req.app.locals.accountingInboxWorker?.wake();
+      return res.json(payload);
     } catch (error) {
       const statusCode = getStatusCode(error);
       return res.status(statusCode).json({
@@ -68,8 +60,8 @@ function handleInvoiceArchiveRoute(operation, env) {
     let db;
     try {
       db = openSqliteWorkspaceDb(env);
-      const result = operation(db, req);
-      return sendSuccess(req, res, result, env);
+      const payload = workspaceMutationResponse(db, "documents", req, operation);
+      return res.json(payload);
     } catch (error) {
       const statusCode = getStatusCode(error);
       return res.status(statusCode).json({

@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -184,9 +185,11 @@ async function withServer(env, callback, user = {}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env, { role: user.role || "admin", staffId: user.staffId || "demo-staff-admin" });
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -194,6 +197,7 @@ async function withServer(env, callback, user = {}) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -202,7 +206,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -234,7 +238,7 @@ test("POST /api/maintenance-plans creates a maintenance plan", async () => {
       assert.equal(result.payload.result.siteId, "demo-site-front-entry");
       assert.equal(result.payload.result.planName, "10 Example Lane SAMPLETON");
       assert.deepEqual(result.payload.result.checklist, ["Created checklist item"]);
-      assert.equal(result.payload.state.maintenancePlans.some((plan) => plan.id === "created-maintenance-plan"), true);
+      assert.equal(result.workspace.maintenancePlans.some((plan) => plan.id === "created-maintenance-plan"), true);
 
       const state = getDbState(dbPath);
       assert.equal(state.maintenancePlans.some((plan) => plan.id === "created-maintenance-plan"), true);
@@ -361,7 +365,7 @@ test("maintenance job generation advances recurrence and job completion updates 
         body: JSON.stringify({ status: "Completed" }),
       });
       assert.equal(completed.response.status, 200, completed.payload.error);
-      const completedPlan = completed.payload.state.maintenancePlans.find((plan) => plan.id === "demo-maintenance-plan");
+      const completedPlan = completed.workspace.maintenancePlans.find((plan) => plan.id === "demo-maintenance-plan");
       assert.ok(completedPlan.lastCompletedAt);
 
       const state = getDbState(dbPath);
@@ -378,13 +382,13 @@ test("maintenance plan delete archives the plan and restore relinks active jobs"
       const deleted = await requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
       assert.equal(deleted.payload.result.linkedJobCount, 1);
-      assert.equal(deleted.payload.state.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), false);
-      assert.equal(deleted.payload.state.jobs.find((job) => job.id === "demo-maintenance-job").maintenancePlanId, "");
+      assert.equal(deleted.workspace.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), false);
+      assert.equal(deleted.workspace.jobs.find((job) => job.id === "demo-maintenance-job").maintenancePlanId, "");
 
       const restored = await requestJson(baseUrl, "/api/maintenance-plans/demo-maintenance-plan/restore", { method: "POST" });
       assert.equal(restored.response.status, 200, restored.payload.error);
       assert.equal(restored.payload.result.id, "demo-maintenance-plan");
-      assert.equal(restored.payload.state.jobs.find((job) => job.id === "demo-maintenance-job").maintenancePlanId, "demo-maintenance-plan");
+      assert.equal(restored.workspace.jobs.find((job) => job.id === "demo-maintenance-job").maintenancePlanId, "demo-maintenance-plan");
 
       const state = getDbState(dbPath);
       assert.equal(state.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), true);
@@ -399,12 +403,12 @@ test("customer archive and restore preserves related maintenance plans in SQLite
       const deleted = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
       assert.equal(deleted.payload.result.deletedMaintenancePlanCount, 1);
-      assert.equal(deleted.payload.state.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), false);
+      assert.equal(deleted.workspace.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), false);
 
       const restored = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia/restore", { method: "POST" });
       assert.equal(restored.response.status, 200, restored.payload.error);
-      assert.equal(restored.payload.state.customers.some((customer) => customer.id === "demo-customer-arcadia"), true);
-      assert.equal(restored.payload.state.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), true);
+      assert.equal(restored.workspace.customers.some((customer) => customer.id === "demo-customer-arcadia"), true);
+      assert.equal(restored.workspace.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), true);
 
       const state = getDbState(dbPath);
       assert.equal(state.maintenancePlans.some((plan) => plan.id === "demo-maintenance-plan"), true);

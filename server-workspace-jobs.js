@@ -3,7 +3,7 @@ import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { normalizeCustomerInput as normalizeCustomerRecord, normalizeSiteRecord, insertOrReplaceCustomer } from "./server-workspace-customers.js";
 import { getCustomerBillingContacts, getCustomerAccountContact, getCustomerPrimaryContact, getCustomerDirectContacts, getSitePrimaryContact } from "./src/lib/contact-model.js";
 import { insertInvoiceTree, insertQuoteTree } from "./server-workspace-documents.js";
-import { loadWorkspaceStateFromDb } from "./server-workspace-state.js";
+import { getJobById, getCustomerById, getMaintenancePlanById, getJobsForMaintenancePlan, readWorkspaceRecords } from "./server-workspace-state.js";
 import { expandMaintenanceOccurrences, isMaintenanceDate } from "./src/lib/maintenance-recurrence.js";
 import { writeMaintenanceException } from "./server-maintenance-occurrence-store.js";
 import { archiveJobCostEntries, restoreJobCostEntries } from "./server-workspace-job-costing.js";
@@ -144,11 +144,11 @@ const noteKnownKeys = new Set(["id", "author", "text", "createdAt"]);
 const attachmentKnownKeys = new Set(["id", "name", "url", "path", "mimeType", "mime_type", "sizeBytes", "size_bytes", "createdAt", "kind"]);
 
 function getCustomerState(db, customerId) {
-  return loadWorkspaceStateFromDb(db).customers.find((customer) => customer.id === customerId) || null;
+  return getCustomerById(db, customerId);
 }
 
 function getJobState(db, jobId) {
-  return loadWorkspaceStateFromDb(db).jobs.find((job) => job.id === jobId) || null;
+  return getJobById(db, jobId);
 }
 
 function ensureJobExists(db, jobId) {
@@ -805,8 +805,7 @@ export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input, { 
   if (!isMaintenanceDate(input.scheduledDate)) throw new WorkspaceJobError("Choose a valid calendar date.");
   const jobId = normalizeId(jobIdInput, "Job ID");
   return db.transaction(() => {
-    const state = loadWorkspaceStateFromDb(db);
-    const job = state.jobs.find((entry) => entry.id === jobId);
+    const job = getJobById(db, jobId);
     if (!job) throw new WorkspaceJobError("Job not found.", 404);
     if (job.status !== "Completed" || !job.maintenancePlanId) {
       throw new WorkspaceJobError("This job is no longer completed maintenance. Refresh and try again.", 409);
@@ -814,10 +813,10 @@ export function correctCompletedMaintenanceJobSchedule(db, jobIdInput, input, { 
     if (input.expectedScheduledDate !== job.scheduledDate) {
       throw new WorkspaceJobError("This job's scheduled date has changed. Refresh and try again.", 409);
     }
-    const plan = state.maintenancePlans.find((entry) => entry.id === job.maintenancePlanId);
+    const plan = getMaintenancePlanById(db, job.maintenancePlanId);
     const prior = plan?.occurrenceExceptions?.find((entry) => entry.jobId === jobId || entry.generatedJobId === jobId);
     const occurrenceDate = prior?.overrideDate || prior?.snapshot?.date || job.maintenanceDueDate;
-    const occurrence = plan && expandMaintenanceOccurrences({ ...plan, active: true }, occurrenceDate, occurrenceDate, state.jobs)
+    const occurrence = plan && expandMaintenanceOccurrences({ ...plan, active: true }, occurrenceDate, occurrenceDate, getJobsForMaintenancePlan(db, job.maintenancePlanId))
       .find((entry) => entry.jobId === jobId);
     if (!occurrence) throw new WorkspaceJobError("The linked maintenance occurrence is unavailable. Refresh and try again.", 409);
     let overrideDate = input.scheduledDate;
@@ -899,7 +898,7 @@ export function previewDayReschedule(db, sourceDateInput) {
   const sourceDate = requireCalendarDate(sourceDateInput);
   return db.transaction(() => ({
     sourceDate,
-    jobs: loadWorkspaceStateFromDb(db).jobs
+    jobs: readWorkspaceRecords(db, { jobs: db.prepare("SELECT id FROM jobs WHERE scheduled_date = ?").all(sourceDate).map(row => row.id) }).jobs
       .filter((job) => job.scheduledDate === sourceDate && isActiveCalendarJob(job))
       .map((job) => ({ job, revision: schedulingRevision(job) })),
   }))();
@@ -933,7 +932,7 @@ export function rescheduleDayJobs(db, input) {
   // conflicts are skipped explicitly. Any unexpected database error rolls back
   // every write, so the response never reports an uncommitted success.
   return db.transaction(() => {
-    const current = new Map(loadWorkspaceStateFromDb(db).jobs.map((job) => [job.id, job]));
+    const current = new Map(readWorkspaceRecords(db, { jobs: entries.map(entry => entry.id) }).jobs.map((job) => [job.id, job]));
     const succeeded = [];
     const failed = [];
     for (const entry of entries) {
@@ -1001,6 +1000,7 @@ export function removeAllJobsFromTomorrow(db, tomorrowDateInput = "") {
   const tomorrowDate = normalizeDateInput(tomorrowDateInput) || getDefaultTomorrowDate();
 
   return db.transaction(() => {
+    const jobIds = db.prepare("SELECT id FROM jobs WHERE service_board_tomorrow_date = ?").all(tomorrowDate).map(row => row.id);
     const updatedAt = nowIso();
     const result = db.prepare(`
       UPDATE jobs
@@ -1015,6 +1015,7 @@ export function removeAllJobsFromTomorrow(db, tomorrowDateInput = "") {
     return {
       tomorrowDate,
       updatedCount: result.changes,
+      jobIds,
     };
   })();
 }
@@ -1023,8 +1024,7 @@ export function deleteJob(db, jobIdInput) {
   const jobId = normalizeId(jobIdInput, "Job ID");
 
   return db.transaction(() => {
-    const state = loadWorkspaceStateFromDb(db);
-    const job = state.jobs.find((entry) => entry.id === jobId);
+    const job = getJobById(db, jobId);
     if (!job) throw new WorkspaceJobError("Job not found.", 404);
 
     const deletedAt = nowIso();

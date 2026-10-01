@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -75,9 +76,11 @@ async function withServer(env, callback) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env);
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -85,6 +88,7 @@ async function withServer(env, callback) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -93,7 +97,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -108,7 +112,7 @@ function getDbState(dbPath) {
 test("POST /api/customers creates a customer with contacts, site, asset, and access note", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
-      const { response, payload } = await requestJson(baseUrl, "/api/customers", {
+      const { response, payload, workspace } = await requestJson(baseUrl, "/api/customers", {
         method: "POST",
         body: JSON.stringify({
           name: "Example Facilities",
@@ -148,8 +152,8 @@ test("POST /api/customers creates a customer with contacts, site, asset, and acc
 
       assert.equal(response.status, 200, payload.error);
       assert.equal(payload.result.name, "Example Facilities");
-      assert.ok(payload.state.customers.some((customer) => customer.id === payload.result.id));
-      const returnedCustomer = payload.state.customers.find((customer) => customer.id === payload.result.id);
+      assert.ok(workspace.customers.some((customer) => customer.id === payload.result.id));
+      const returnedCustomer = workspace.customers.find((customer) => customer.id === payload.result.id);
       assert.equal(returnedCustomer.contacts.find((contact) => contact.id === "contact-facilities-manager").email, "morgan@example-facilities.test");
       assert.equal(returnedCustomer.billingContactId, "contact-facilities-manager");
       assert.equal(returnedCustomer.sites[0].contactId, "contact-facilities-manager");
@@ -167,7 +171,7 @@ test("POST /api/customers creates a customer with contacts, site, asset, and acc
 test("PATCH /api/customers/:id updates customer fields and related job snapshots", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
-      const { response, payload } = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia", {
+      const { response, payload, workspace } = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia", {
         method: "PATCH",
         body: JSON.stringify({
           name: "Arcadia Updated Owners",
@@ -177,7 +181,7 @@ test("PATCH /api/customers/:id updates customer fields and related job snapshots
       });
 
       assert.equal(response.status, 200, payload.error);
-      const job = payload.state.jobs.find((entry) => entry.id === "demo-job-1001");
+      const job = workspace.jobs.find((entry) => entry.id === "demo-job-1001");
       assert.equal(job.customerName, "Arcadia Updated Owners");
       assert.equal(job.customerEmail, "updated@example.test");
       assert.equal(job.customerPhone, "0400 999 999");
@@ -194,15 +198,15 @@ test("DELETE /api/customers/:id archives the customer and related jobs, then res
       const deleteResult = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia", { method: "DELETE" });
       assert.equal(deleteResult.response.status, 200, deleteResult.payload.error);
       assert.equal(deleteResult.payload.result.deletedJobCount, 1);
-      assert.equal(deleteResult.payload.state.customers.some((customer) => customer.id === "demo-customer-arcadia"), false);
-      assert.equal(deleteResult.payload.state.jobs.some((job) => job.id === "demo-job-1001"), false);
-      assert.equal(deleteResult.payload.state.deletedCustomers.length, 1);
-      assert.equal(deleteResult.payload.state.deletedJobs.length, 1);
+      assert.equal(deleteResult.workspace.customers.some((customer) => customer.id === "demo-customer-arcadia"), false);
+      assert.equal(deleteResult.workspace.jobs.some((job) => job.id === "demo-job-1001"), false);
+      assert.equal(deleteResult.workspace.deletedCustomers.length, 1);
+      assert.equal(deleteResult.workspace.deletedJobs.length, 1);
 
       const restoreResult = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia/restore", { method: "POST" });
       assert.equal(restoreResult.response.status, 200, restoreResult.payload.error);
-      assert.equal(restoreResult.payload.state.customers.some((customer) => customer.id === "demo-customer-arcadia"), true);
-      assert.equal(restoreResult.payload.state.jobs.some((job) => job.id === "demo-job-1001"), false);
+      assert.equal(restoreResult.workspace.customers.some((customer) => customer.id === "demo-customer-arcadia"), true);
+      assert.equal(restoreResult.workspace.jobs.some((job) => job.id === "demo-job-1001"), false);
 
       const state = getDbState(dbPath);
       assert.equal(state.customers.some((customer) => customer.id === "demo-customer-arcadia"), true);
@@ -216,14 +220,14 @@ test("DELETE /api/deleted-customers empties only deleted customer records", asyn
     await withServer(env, async (baseUrl) => {
       const deleted = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
-      assert.equal(deleted.payload.state.deletedCustomers.length, 1);
-      assert.equal(deleted.payload.state.deletedJobs.length, 1);
+      assert.equal(deleted.workspace.deletedCustomers.length, 1);
+      assert.equal(deleted.workspace.deletedJobs.length, 1);
 
       const emptied = await requestJson(baseUrl, "/api/deleted-customers", { method: "DELETE" });
       assert.equal(emptied.response.status, 200, emptied.payload.error);
       assert.equal(emptied.payload.result.deletedCustomerCount, 1);
-      assert.equal(emptied.payload.state.deletedCustomers.length, 0);
-      assert.equal(emptied.payload.state.deletedJobs.length, 1);
+      assert.equal(emptied.workspace.deletedCustomers.length, 0);
+      assert.equal(emptied.workspace.deletedJobs.length, 1);
 
       const state = getDbState(dbPath);
       assert.equal(state.deletedCustomers.length, 0);
@@ -258,7 +262,7 @@ test("site update syncs matching job and maintenance-plan addresses", async () =
 
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
-      const { response, payload } = await requestJson(
+      const { response, payload, workspace } = await requestJson(
         baseUrl,
         "/api/customers/demo-customer-arcadia/sites/demo-site-front-entry",
         {
@@ -275,9 +279,9 @@ test("site update syncs matching job and maintenance-plan addresses", async () =
       );
 
       assert.equal(response.status, 200, payload.error);
-      assert.equal(payload.state.jobs.find((job) => job.id === "demo-job-1001").jobAddress, "55 Updated Lane, Sampleton VIC 3000");
-      assert.equal(payload.state.jobs.find((job) => job.id === "demo-job-1001").ocNumber, "OC-DEMO-001");
-      assert.equal(payload.state.maintenancePlans.find((plan) => plan.id === "demo-maintenance-plan").siteAddress, "55 Updated Lane, Sampleton VIC 3000");
+      assert.equal(workspace.jobs.find((job) => job.id === "demo-job-1001").jobAddress, "55 Updated Lane, Sampleton VIC 3000");
+      assert.equal(workspace.jobs.find((job) => job.id === "demo-job-1001").ocNumber, "OC-DEMO-001");
+      assert.equal(workspace.maintenancePlans.find((plan) => plan.id === "demo-maintenance-plan").siteAddress, "55 Updated Lane, Sampleton VIC 3000");
 
       const state = getDbState(dbPath);
       assert.equal(state.customers[0].sites[0].address, "55 Updated Lane, Sampleton VIC 3000");
@@ -300,7 +304,7 @@ test("site create and delete endpoints update only customer site records", async
         }),
       });
       assert.equal(createResult.response.status, 200, createResult.payload.error);
-      assert.equal(createResult.payload.state.customers[0].sites.some((site) => site.id === "demo-site-side-entry"), true);
+      assert.equal(createResult.workspace.customers[0].sites.some((site) => site.id === "demo-site-side-entry"), true);
 
       const deleteResult = await requestJson(
         baseUrl,
@@ -308,8 +312,8 @@ test("site create and delete endpoints update only customer site records", async
         { method: "DELETE" }
       );
       assert.equal(deleteResult.response.status, 200, deleteResult.payload.error);
-      assert.equal(deleteResult.payload.state.customers[0].sites.some((site) => site.id === "demo-site-side-entry"), false);
-      assert.equal(deleteResult.payload.state.jobs.some((job) => job.id === "demo-job-1001"), true);
+      assert.equal(deleteResult.workspace.customers[0].sites.some((site) => site.id === "demo-site-side-entry"), false);
+      assert.equal(deleteResult.workspace.jobs.some((job) => job.id === "demo-job-1001"), true);
     });
   });
 });

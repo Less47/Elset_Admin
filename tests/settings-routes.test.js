@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -79,9 +80,11 @@ async function withServer(env, callback, user = {}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env, { role: user.role || "admin", staffId: user.staffId || "demo-staff-admin" });
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -89,6 +92,7 @@ async function withServer(env, callback, user = {}) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -97,7 +101,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -187,9 +191,9 @@ test("PATCH /api/settings updates shared business identity, contact and payment 
         "replyToEmail",
         "workflowMode",
       ].sort());
-      assert.equal(result.payload.state.settings.companyName, "Updated Synthetic Business");
-      assert.equal(result.payload.state.settings.lateFeePercent, 2.5);
-      assert.equal(result.payload.state.settings.portalUrl, "https://example.test/client-portal");
+      assert.equal(result.workspace.settings.companyName, "Updated Synthetic Business");
+      assert.equal(result.workspace.settings.lateFeePercent, 2.5);
+      assert.equal(result.workspace.settings.portalUrl, "https://example.test/client-portal");
 
       const state = getDbState(dbPath);
       assert.equal(state.settings.companyEmail, "office@example.test");
@@ -222,7 +226,7 @@ test("document template routes update and reset quote and invoice defaults", asy
       assert.equal(quoteResult.payload.result.type, "quote");
       assert.equal(quoteResult.payload.result.template.accentColor, "#123456");
       assert.equal(quoteResult.payload.result.template.internalReferenceUrl, "https://example.test/template-reference");
-      assert.equal(quoteResult.payload.state.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
+      assert.equal(quoteResult.workspace.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
 
       const invoiceReset = await requestJson(baseUrl, "/api/document-templates/invoice/reset", { method: "POST" });
       assert.equal(invoiceReset.response.status, 200, invoiceReset.payload.error);
@@ -235,13 +239,13 @@ test("document template routes update and reset quote and invoice defaults", asy
         "termsText",
         "footerText",
       ]) {
-        const actual = invoiceReset.payload.state.invoiceTemplate[key];
+        const actual = invoiceReset.workspace.invoiceTemplate[key];
         const expected = defaultInvoiceTemplate[key];
         assert.equal(key === "accentColor" ? actual.toLowerCase() : actual, expected, `invoice ${key}`);
       }
-      assert.equal(invoiceReset.payload.state.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
-      assert.equal(invoiceReset.payload.state.settings.companyName, "ELSET Demo Pty Ltd");
-      assert.equal(invoiceReset.payload.state.settings.companyEmail, "admin@example.test");
+      assert.equal(invoiceReset.workspace.quoteTemplate.quoteHeading, "Synthetic Quote Heading");
+      assert.equal(invoiceReset.workspace.settings.companyName, "ELSET Demo Pty Ltd");
+      assert.equal(invoiceReset.workspace.settings.companyEmail, "admin@example.test");
 
       const quoteReset = await requestJson(baseUrl, "/api/document-templates/quote/reset", { method: "POST" });
       assert.equal(quoteReset.response.status, 200, quoteReset.payload.error);
@@ -254,14 +258,14 @@ test("document template routes update and reset quote and invoice defaults", asy
         "termsText",
         "footerText",
       ]) {
-        const actual = quoteReset.payload.state.quoteTemplate[key];
+        const actual = quoteReset.workspace.quoteTemplate[key];
         const expected = defaultQuoteTemplate[key];
         assert.equal(key === "accentColor" ? actual.toLowerCase() : actual, expected, `quote ${key}`);
       }
-      assert.equal(quoteReset.payload.state.quoteTemplate.internalReferenceUrl, undefined);
-      assert.equal(quoteReset.payload.state.invoiceTemplate.quoteHeading, defaultInvoiceTemplate.quoteHeading);
-      assert.equal(quoteReset.payload.state.settings.companyName, "ELSET Demo Pty Ltd");
-      assert.equal(quoteReset.payload.state.settings.companyEmail, "admin@example.test");
+      assert.equal(quoteReset.workspace.quoteTemplate.internalReferenceUrl, undefined);
+      assert.equal(quoteReset.workspace.invoiceTemplate.quoteHeading, defaultInvoiceTemplate.quoteHeading);
+      assert.equal(quoteReset.workspace.settings.companyName, "ELSET Demo Pty Ltd");
+      assert.equal(quoteReset.workspace.settings.companyEmail, "admin@example.test");
 
       const state = getDbState(dbPath);
       assert.equal(state.quoteTemplate.quoteHeading, defaultQuoteTemplate.quoteHeading);
@@ -352,8 +356,8 @@ test("settings reset routes restore shared preferences and reject global appeara
         body: JSON.stringify({ group: "preferences" }),
       });
       assert.equal(resetPreferences.response.status, 200, resetPreferences.payload.error);
-      assert.equal(resetPreferences.payload.state.settings.companyName, "Elset");
-      assert.equal(resetPreferences.payload.state.settings.workflowMode, "keep-me");
+      assert.equal(resetPreferences.workspace.settings.companyName, "Elset");
+      assert.equal(resetPreferences.workspace.settings.workflowMode, "keep-me");
     });
   });
 });

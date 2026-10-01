@@ -267,7 +267,7 @@ test("contact APIs enforce permissions, expose canonical state, validate site ow
   const request = (url, method, body, role = "admin") => fetch(`http://127.0.0.1:${server.address().port}${url}`, { method, headers: { "Content-Type": "application/json", "x-role": role }, ...(body ? { body: JSON.stringify(body) } : {}) });
   assert.equal((await request("/api/contacts", "POST", { name: "No permission" }, "technician")).status, 403);
   assert.equal((await request("/api/contacts", "POST", { id: "api", name: "API Person", position: "Manager" })).status, 200);
-  const assigned = await request("/api/customers/a/contacts/api", "PUT", { isBilling: true }); assert.equal(assigned.status, 200); assert.ok((await assigned.json()).state.contacts.some((entry) => entry.id === "api"));
+  const assigned = await request("/api/customers/a/contacts/api", "PUT", { isBilling: true }); assert.equal(assigned.status, 200); assert.ok((await assigned.json()).delta.customers.upsert.find((entry) => entry.id === "a").contacts.some((entry) => entry.id === "api"));
   assert.equal((await request("/api/customers/a/sites/s3/contacts/api", "PUT", {})).status, 404);
   assert.equal((await request("/api/customers/a/sites/s1/contacts/api", "PUT", { isPrimary: true })).status, 200);
   assert.equal((await request("/api/contacts/api", "DELETE")).status, 409);

@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -99,9 +100,11 @@ async function withServer(env, callback, user = {}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env, { role: user.role || "admin", staffId: user.staffId || "demo-staff-admin" });
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -109,6 +112,7 @@ async function withServer(env, callback, user = {}) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -117,7 +121,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -147,7 +151,7 @@ test("POST /api/inventory-items creates an inventory item and preserves optional
       assert.equal(result.payload.result.salePrice, 220);
       assert.equal(result.payload.result.partNumber, "PART-SYN-001");
       assert.equal(result.payload.result.description, "Synthetic item description.");
-      assert.equal(result.payload.state.inventoryItems.some((item) => item.id === "inventory-test-item"), true);
+      assert.equal(result.workspace.inventoryItems.some((item) => item.id === "inventory-test-item"), true);
 
       const state = getDbState(dbPath);
       assert.equal(state.inventoryItems.some((item) => item.id === "inventory-test-item"), true);
@@ -261,7 +265,7 @@ test("inventory routes preserve existing duplicate SKU behaviour", async () => {
         }),
       });
       assert.equal(second.response.status, 200, second.payload.error);
-      assert.equal(second.payload.state.inventoryItems.filter((item) => item.sku === "DUPLICATE-SKU").length, 2);
+      assert.equal(second.workspace.inventoryItems.filter((item) => item.sku === "DUPLICATE-SKU").length, 2);
     });
   });
 });
@@ -271,12 +275,12 @@ test("inventory item delete archives the item and restore brings it back", async
     await withServer(env, async (baseUrl) => {
       const deleted = await requestJson(baseUrl, "/api/inventory-items/demo-inventory-controller", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
-      assert.equal(deleted.payload.state.inventoryItems.some((item) => item.id === "demo-inventory-controller"), false);
+      assert.equal(deleted.workspace.inventoryItems.some((item) => item.id === "demo-inventory-controller"), false);
 
       const restored = await requestJson(baseUrl, "/api/inventory-items/demo-inventory-controller/restore", { method: "POST" });
       assert.equal(restored.response.status, 200, restored.payload.error);
       assert.equal(restored.payload.result.id, "demo-inventory-controller");
-      assert.equal(restored.payload.state.inventoryItems.some((item) => item.id === "demo-inventory-controller"), true);
+      assert.equal(restored.workspace.inventoryItems.some((item) => item.id === "demo-inventory-controller"), true);
 
       const state = getDbState(dbPath);
       assert.equal(state.inventoryItems.some((item) => item.id === "demo-inventory-controller"), true);

@@ -1,3 +1,4 @@
+import { registerDeltaTestServer, unregisterDeltaTestServer, beforeDeltaRequest, verifyDeltaResponse } from "./helpers/workspace-delta-client.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
@@ -82,9 +83,11 @@ async function withServer(env, callback, user = {}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  registerDeltaTestServer(baseUrl, env, { role: user.role || "admin", staffId: user.staffId || "demo-staff-admin" });
   try {
     return await callback(baseUrl);
   } finally {
+    unregisterDeltaTestServer(baseUrl);
     server.closeIdleConnections?.();
     server.closeAllConnections?.();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -92,6 +95,7 @@ async function withServer(env, callback, user = {}) {
 }
 
 async function requestJson(baseUrl, pathName, options = {}) {
+  const before = beforeDeltaRequest(baseUrl);
   const response = await fetch(`${baseUrl}${pathName}`, {
     ...options,
     headers: {
@@ -100,7 +104,7 @@ async function requestJson(baseUrl, pathName, options = {}) {
     },
   });
   const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  return { response, payload, workspace: verifyDeltaResponse(baseUrl, before, payload) };
 }
 
 function getDbState(dbPath) {
@@ -127,7 +131,7 @@ for (const role of ["admin", "office"]) test(`${role} can archive and restore an
     await withServer(env, async (baseUrl) => {
       const deleted = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE", body: JSON.stringify({ confirmSent: true }) });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
-      const state = deleted.payload.state;
+      const state = deleted.workspace;
       const persisted = getDbState(dbPath);
       assert.deepEqual(persisted.jobs.find((job) => job.id === original.id), { ...original, invoice: null, updatedAt: deleted.payload.result.deletedAt });
       assert.deepEqual(persisted.jobs.filter((job) => job.id !== original.id), before.jobs.filter((job) => job.id !== original.id));
@@ -144,7 +148,7 @@ for (const role of ["admin", "office"]) test(`${role} can archive and restore an
       const restored = await requestJson(baseUrl, `/api/deleted-invoices/${archive.id}/restore`, { method: "POST" });
       assert.equal(restored.response.status, 200, restored.payload.error);
       assert.deepEqual(restored.payload.result.invoice, original.invoice);
-      assert.equal(restored.payload.state.deletedInvoices.length, 0);
+      assert.equal(restored.workspace.deletedInvoices.length, 0);
       assert.deepEqual(getDbState(dbPath).jobs.find((job) => job.id === original.id).invoice, original.invoice);
     }, { role });
   }, deletableFixture(history));
@@ -315,7 +319,7 @@ test("quote routes calculate subtotal, GST, and total on the server", async () =
 
       const deleteQuote = await requestJson(baseUrl, "/api/jobs/demo-job-1001/quote", { method: "DELETE" });
       assert.equal(deleteQuote.response.status, 200, deleteQuote.payload.error);
-      assert.equal(deleteQuote.payload.state.jobs.find((job) => job.id === "demo-job-1001").quote, null);
+      assert.equal(deleteQuote.workspace.jobs.find((job) => job.id === "demo-job-1001").quote, null);
 
       const state = getDbState(dbPath);
       assert.equal(state.jobs.find((job) => job.id === "demo-job-1001").quote, null);
@@ -766,8 +770,8 @@ test("deleting and restoring a job preserves quotes, invoices, payments, and sen
     await withServer(env, async (baseUrl) => {
       const deleted = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
-      assert.equal(deleted.payload.state.deletedJobs[0].job.quote.sentHistory.length, 1);
-      assert.equal(deleted.payload.state.deletedJobs[0].job.invoice.payments.length, 1);
+      assert.equal(deleted.workspace.deletedJobs[0].job.quote.sentHistory.length, 1);
+      assert.equal(deleted.workspace.deletedJobs[0].job.invoice.payments.length, 1);
 
       const restored = await requestJson(baseUrl, "/api/jobs/demo-job-1001/restore", { method: "POST" });
       assert.equal(restored.response.status, 200, restored.payload.error);
@@ -807,8 +811,8 @@ test("deleting and restoring a job preserves sent history created through docume
 
       const deleted = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "DELETE" });
       assert.equal(deleted.response.status, 200, deleted.payload.error);
-      assert.equal(deleted.payload.state.deletedJobs[0].job.quote.sentHistory[0].id, "sent-quote-before-delete");
-      assert.equal(deleted.payload.state.deletedJobs[0].job.invoice.sentHistory[0].id, "sent-invoice-before-delete");
+      assert.equal(deleted.workspace.deletedJobs[0].job.quote.sentHistory[0].id, "sent-quote-before-delete");
+      assert.equal(deleted.workspace.deletedJobs[0].job.invoice.sentHistory[0].id, "sent-invoice-before-delete");
 
       const restored = await requestJson(baseUrl, "/api/jobs/demo-job-1001/restore", { method: "POST" });
       assert.equal(restored.response.status, 200, restored.payload.error);

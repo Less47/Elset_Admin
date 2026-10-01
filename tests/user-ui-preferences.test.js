@@ -157,8 +157,8 @@ test("shared company settings stay shared while global theme writes and reset ar
     const shared = await api("a", "PATCH", { settings: { companyName: "Company for everyone" } }, "/api/settings");
     assert.equal(shared.status, 200);
     const b = await api("b", "PATCH", { settings: { companyPhone: "0400 000 000" } }, "/api/settings");
-    assert.equal(b.body.state.settings.companyName, "Company for everyone");
-    assert.equal(b.body.state.settings.actionColor, "#123456");
+    assert.equal(b.body.delta.settings.companyName, "Company for everyone");
+    assert.equal(b.body.delta.settings.actionColor, "#123456");
     assert.equal((await api("tech", "PATCH", { settings: { companyName: "Forbidden" } }, "/api/settings")).status, 403);
     assert.deepEqual(loadWorkspaceStateFromDb(db).jobs, original.jobs);
   } finally { db.close(); }
