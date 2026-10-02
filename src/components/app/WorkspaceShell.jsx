@@ -1,9 +1,8 @@
 import { FilterPopover, PagePrimaryAction } from "@/components/shared/ResponsivePageControls";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
-import { ChevronRight, LogOut, Maximize2, Minimize2, Plus } from "lucide-react";
-import BuildIndicator from "@/components/app/BuildIndicator";
-import WorkspaceLogo from "@/components/app/WorkspaceLogo";
+import { Maximize2, Minimize2, Plus } from "lucide-react";
+import WorkspaceSidebar from "@/components/app/WorkspaceSidebar";
 import MobileWorkspaceNavigation from "@/components/app/MobileWorkspaceNavigation";
 import CalendarManager from "@/components/calendar/CalendarManager";
 import CustomerManager from "@/components/customers/CustomerManager";
@@ -34,10 +33,8 @@ import {
   getInvoiceStatus,
   getRecycleBinExpiryDate,
   getSiteDisplayName,
-  hexToRgba,
   normalizeDocument,
   parseDateInputValue,
-  settingsTabs,
   toDateInputValue,
   toTimestamp,
 } from "@/lib/app-support";
@@ -109,7 +106,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleUpdateStaff,
   } = actions;
   const roleMenuLabel = isTechnician ? "Technician" : isAdmin ? "Admin" : "Office";
-  const isIconOnlySidebar = themeSettings.sidebarWidth === "icon-only";
   const desktopServiceBoardFullScreen = isThreeColumnBoard && isServiceBoardFullScreen;
   const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
   const calendarWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "calendar";
@@ -233,145 +229,20 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         />
       ) : null}
 
-      {!desktopServiceBoardFullScreen && (
-        <aside className={isIconOnlySidebar ? "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[var(--sidebar-width)]" : "hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[var(--sidebar-width)]"}>
-          <div
-            className="overflow-hidden border-2 shadow-sm backdrop-blur lg:flex lg:h-screen lg:flex-col lg:rounded-none lg:border-y-0 lg:border-r-2 lg:border-l-0"
-            style={themePalette.sidebarShell}
-          >
-            <div className={isIconOnlySidebar ? "flex items-center gap-2 overflow-x-auto p-2 lg:block lg:flex-1 lg:overflow-y-auto" : "p-3 lg:flex-1 lg:overflow-y-auto lg:p-4"}>
-              <WorkspaceLogo url={themeSettings.workspaceLogoUrl} compact={isIconOnlySidebar} className={isIconOnlySidebar ? "lg:mx-auto" : ""} />
-
-              <nav
-                aria-label="Application"
-                className={isIconOnlySidebar ? "flex flex-1 items-center gap-2 overflow-x-auto lg:mt-4 lg:grid lg:justify-center" : "mt-3 grid gap-1.5"}
-              >
-                {visibleSideNavItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeSection === item.id;
-                  const isSettingsItem = item.id === "settings";
-
-                  return (
-                    <div key={item.id} className={isIconOnlySidebar ? "shrink-0 lg:grid lg:justify-center" : "space-y-2"}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const navigationStarted = setActiveSection(item.id);
-                          if (navigationStarted !== false && isSettingsItem && !activeSettingsTab) {
-                            setActiveSettingsTab("preferences");
-                          }
-                        }}
-                        className={
-                          isIconOnlySidebar
-                            ? "flex h-12 w-12 items-center justify-center rounded-2xl border p-0 text-left transition hover:translate-x-[1px] hover:shadow-sm"
-                            : "flex w-full items-start gap-2.5 rounded-2xl border p-3 text-left transition hover:translate-x-[1px] hover:shadow-sm"
-                        }
-                        style={isActive ? themePalette.sidebarActiveButton : themePalette.sidebarInactiveButton}
-                        title={item.label}
-                        aria-label={item.label}
-                        aria-current={isActive ? "page" : undefined}
-                      >
-                        <div
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl"
-                          style={isActive ? themePalette.sidebarActiveIcon : themePalette.sidebarInactiveIcon}
-                        >
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        {isIconOnlySidebar ? (
-                          <span className="sr-only">{item.label}</span>
-                        ) : (
-                          <div className="flex min-w-0 flex-1 items-center justify-between gap-3 self-center">
-                            <p className="font-semibold">{item.label}</p>
-                            {isSettingsItem ? (
-                              <ChevronRight className={`h-4 w-4 transition-transform ${isActive ? "rotate-90" : ""}`} />
-                            ) : null}
-                          </div>
-                        )}
-                      </button>
-
-                      {isSettingsItem && isActive && !isIconOnlySidebar ? (
-                        <div className="grid gap-1 pl-14 animate-in slide-in-from-top-1 fade-in-0 duration-200">
-                          {settingsTabs.filter((tab) => canManageBusiness || tab.value === "ui").map((tab) => {
-                            const isSettingsTabActive = activeSettingsTab === tab.value;
-
-                            return (
-                              <button
-                                key={tab.value}
-                                type="button"
-                                onClick={() => setActiveSettingsTab(tab.value)}
-                                className="flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition hover:translate-x-[1px]"
-                                style={
-                                  isSettingsTabActive
-                                    ? { ...themePalette.sidebarActiveButton, boxShadow: "none" }
-                                    : { ...themePalette.sidebarInactiveButton, boxShadow: "none" }
-                                }
-                              >
-                                <span
-                                  className="h-2.5 w-2.5 rounded-full"
-                                  style={{
-                                    backgroundColor: isSettingsTabActive
-                                      ? hexToRgba(themePalette.sidebarActiveButton.color, 0.9)
-                                      : hexToRgba(themePalette.sidebarInactiveButton.color, 0.52),
-                                  }}
-                                />
-                                <span className="font-medium">{tab.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </nav>
-
-              <div className={isIconOnlySidebar ? "ml-2 shrink-0 border-l pl-2 lg:ml-0 lg:mt-4 lg:grid lg:justify-center lg:border-l-0 lg:border-t lg:pl-0 lg:pt-4" : "mt-4 border-t pt-3"} style={{ borderColor: themePalette.borderColor }}>
-                <div className={isIconOnlySidebar ? "h-12 w-12 rounded-2xl border p-1 text-sm" : "rounded-2xl border p-3 text-sm"} style={themePalette.sidebarInactiveButton}>
-                  {isIconOnlySidebar ? (
-                    isAuthenticated ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-full w-full rounded-xl bg-card/80 p-0"
-                        onClick={handleLogout}
-                        title="Sign Out"
-                        aria-label="Sign Out"
-                      >
-                        <LogOut className="h-4 w-4" />
-                      </Button>
-                    ) : null
-                  ) : (
-                    <>
-                      <p className="font-semibold">{authUser?.name || "Signed in"}</p>
-                      <p className="mt-1 capitalize" style={{ color: themePalette.sidebarInactiveMuted }}>
-                        {authUser?.role || "staff"}
-                      </p>
-                      {authUser?.username ? (
-                        <p className="mt-1 text-xs uppercase tracking-[0.14em]" style={{ color: themePalette.sidebarInactiveMuted }}>
-                          {authUser.username}
-                        </p>
-                      ) : null}
-                      {isAuthenticated ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="mt-4 w-full rounded-xl bg-card/80"
-                          onClick={handleLogout}
-                        >
-                          <LogOut className="mr-2 h-4 w-4" /> Sign Out
-                        </Button>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 border-t pt-2" style={{ borderColor: themePalette.borderColor }}>
-                <BuildIndicator compact={isIconOnlySidebar} style={{ color: themePalette.sidebarInactiveMuted }} />
-              </div>
-            </div>
-          </div>
-        </aside>
-      )}
+      {!desktopServiceBoardFullScreen ? (
+        <WorkspaceSidebar
+          activeSection={activeSection}
+          items={visibleSideNavItems}
+          authUser={authUser}
+          isAuthenticated={isAuthenticated}
+          themeSettings={themeSettings}
+          onLogout={handleLogout}
+          onNavigate={(sectionId) => {
+            const navigationStarted = setActiveSection(sectionId);
+            if (navigationStarted !== false && sectionId === "settings" && !activeSettingsTab) setActiveSettingsTab("preferences");
+          }}
+        />
+      ) : null}
 
       <div
         className={
@@ -644,7 +515,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             activeSettingsTab={activeSettingsTab}
             onActiveSettingsTabChange={setActiveSettingsTab}
             settings={{ ...data.settings, ...personalPreferences.preferences }}
-            onWorkspaceLogoChange={actions.handleWorkspaceLogoChange}
+            onWorkspaceBrandingChange={actions.handleWorkspaceBrandingChange}
             activeTemplateType={activeTemplateType}
             onActiveTemplateTypeChange={setActiveTemplateType}
             templates={{

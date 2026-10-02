@@ -206,8 +206,8 @@ function normalizeSettingValue(key, value) {
   if (key === "addons") {
     throw new WorkspaceSettingsError("Use the Add-ons settings endpoint to change optional modules.");
   }
-  if (key === "workspaceLogo" || key === "workspaceLogoUrl") {
-    throw new WorkspaceSettingsError("Use the Workspace Branding upload/remove control to change the workspace logo.");
+  if (["workspaceLogo", "workspaceLogoUrl", "workspaceBrandMark", "workspaceBrandMarkUrl"].includes(key)) {
+    throw new WorkspaceSettingsError("Use the Workspace Branding upload/remove controls to change branding images.");
   }
 
   if (colorSettingKeys.has(key)) return normalizeHexColor(value, key);

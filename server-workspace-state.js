@@ -1,6 +1,6 @@
 import { readRows, mergeIds } from "./server-workspace-query.js";
 import { isWorkspaceSecretSettingKey } from "./server-workspace-setting-keys.js";
-import { WORKSPACE_LOGO_KEY, workspaceLogoUrl } from "./src/lib/workspace-logo.js";
+import { WORKSPACE_BRANDING_ASSETS, workspaceBrandingUrl } from "./src/lib/workspace-logo.js";
 import { effectiveMaintenancePlan } from "./src/lib/maintenance-recurrence.js";
 import { readMaintenanceExceptions } from "./server-maintenance-occurrence-store.js";
 import { maintenancePlanIdentity } from "./src/lib/maintenance-plan.js";
@@ -198,8 +198,10 @@ export function readWorkspaceRecords(db, selection) {
 
   const settings = settingsRows.reduce((nextSettings, row) => {
     if (isWorkspaceSecretSettingKey(row.key)) return nextSettings;
-    if (row.key === WORKSPACE_LOGO_KEY) {
-      nextSettings.workspaceLogoUrl = workspaceLogoUrl(parseJson(row.value_json, null)?.id);
+    const branding = Object.entries(WORKSPACE_BRANDING_ASSETS).find(([, asset]) => asset.key === row.key);
+    if (branding) {
+      const [kind, { urlKey }] = branding;
+      nextSettings[urlKey] = workspaceBrandingUrl(kind, parseJson(row.value_json, null)?.id);
       return nextSettings;
     }
     nextSettings[row.key] = parseJson(row.value_json, null);

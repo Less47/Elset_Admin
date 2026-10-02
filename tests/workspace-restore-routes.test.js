@@ -20,6 +20,8 @@ import { importWorkspaceJsonData, summarizeWorkspaceDb } from "../server-workspa
 import { beginWorkspaceRestore, endWorkspaceRestore } from "../server-workspace-restore-lock.js";
 import { restoreWorkspaceSqliteBackupPayload } from "../server-workspace-restore.js";
 import { loadWorkspaceStateFromDb } from "../server-workspace-state.js";
+import { validateWorkspaceBrandingAsset, readWorkspaceBrandingAsset } from "../server-workspace-logo.js";
+import { workspaceLogoUrl, workspaceBrandMarkUrl } from "../src/lib/workspace-logo.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -259,6 +261,42 @@ test("POST /api/admin/workspace-restore restores a verified SQLite backup and cr
     });
   } finally {
     fs.rmSync(source.tempDir, { recursive: true, force: true });
+  }
+});
+
+for (const withMark of [true, false]) test(`confirmed restore ${withMark ? "restores both branding images" : "accepts a logo-only backup and clears the previous brand mark"}`, async () => {
+  const bytes = fs.readFileSync(path.join(repoRoot, "public/elset-logo.png"));
+  const asset = await validateWorkspaceBrandingAsset(bytes, "image/png", "logo");
+  const fixture = readFixture();
+  fixture.settings.workspaceLogo = asset;
+  if (withMark) fixture.settings.workspaceBrandMark = asset;
+  const source = await createBackupBundleFromFixture(fixture);
+  const targetFixture = readFixture();
+  targetFixture.settings.workspaceBrandMark = asset;
+  try {
+    await withTempWorkspace(targetFixture, async ({ env, dbPath, authDbPath }) => {
+      await withServer(env, async baseUrl => {
+        const result = await requestJson(baseUrl, "/api/admin/workspace-restore", {
+          method: "POST", body: JSON.stringify({ backupData: source.bundle, restorePassword: "correct-password" }),
+        });
+        assert.equal(result.response.status, 200, result.payload.error);
+        assert.equal(result.payload.state.settings.workspaceLogoUrl, workspaceLogoUrl(asset.id));
+        assert.equal(result.payload.state.settings.workspaceBrandMarkUrl, withMark ? workspaceBrandMarkUrl(asset.id) : undefined);
+        assert.equal(result.payload.state.settings.workspaceLogo, undefined);
+        assert.equal(result.payload.state.settings.workspaceBrandMark, undefined);
+      });
+      const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false });
+      try {
+        assert.deepEqual(readWorkspaceBrandingAsset(db, "logo", asset.id).bytes, bytes);
+        if (withMark) assert.deepEqual(readWorkspaceBrandingAsset(db, "mark", asset.id).bytes, bytes);
+        else assert.equal(readWorkspaceBrandingAsset(db, "mark", asset.id), null);
+      } finally { db.close(); }
+      assert.equal(fs.readFileSync(authDbPath, "utf8"), "synthetic-auth-database");
+    });
+  } finally {
+    const target = path.resolve(source.tempDir);
+    assert.ok(target.startsWith(path.join(os.tmpdir(), "elset-workspace-restore-source-")));
+    fs.rmSync(target, { recursive: true, force: true });
   }
 });
 

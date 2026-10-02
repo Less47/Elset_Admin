@@ -1,4 +1,5 @@
 import { applyWorkspaceDelta } from "./workspace-delta";
+import { WORKSPACE_BRANDING_ASSETS } from "@/lib/workspace-logo";
 import { useLocation, useMatches, useNavigate } from "react-router";
 import { recordLinkState } from "@/lib/record-link-state";
 import { useCallback, useRef, useState } from "react";
@@ -1455,19 +1456,20 @@ export function useWorkspaceActions({
     return saved.ok;
   }
 
-  async function handleWorkspaceLogoChange(file) {
+  async function handleWorkspaceBrandingChange(kind, file) {
     if (!canManageBusiness) throw new Error("Workspace branding is not available for this account or storage mode.");
-    const response = await fetchWithAuth("/api/settings/workspace-logo", file
+    const { endpoint, urlKey, label } = WORKSPACE_BRANDING_ASSETS[kind];
+    const response = await fetchWithAuth(endpoint, file
       ? { method: "PUT", headers: { "Content-Type": file.type }, body: file }
       : { method: "DELETE" });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(payload.error || "Unable to save the workspace logo.");
-    setData((previous) => ({ ...previous, settings: { ...previous.settings, workspaceLogoUrl: payload.workspaceLogoUrl } }));
-    return payload.workspaceLogoUrl;
+    if (!response.ok || !payload.ok) throw new Error(payload.error || `Unable to save the ${label.toLowerCase()}.`);
+    setData((previous) => ({ ...previous, settings: { ...previous.settings, [urlKey]: payload[urlKey] } }));
+    return payload[urlKey];
   }
 
   return {
-    handleWorkspaceLogoChange,
+    handleWorkspaceBrandingChange,
     createJob,
     handleAddInvoicePayment,
     handleAddJobNote,

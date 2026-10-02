@@ -685,7 +685,7 @@ test.afterEach(async ({}, testInfo) => {
   }
 });
 
-test("build indicator identifies desktop and mobile assets without obstructing navigation", async ({ browser }, testInfo) => {
+test("build diagnostics stay in Settings About and leave desktop and mobile navigation clear", async ({ browser }, testInfo) => {
   const metadata = getBuildMetadata();
   for (const viewport of [
     { width: 1440, height: 900 },
@@ -717,7 +717,10 @@ test("build indicator identifies desktop and mobile assets without obstructing n
       await loginAs(page, "mobileadmin", mobile);
       if (mobile) await page.getByRole("button", { name: "Open navigation" }).click();
       const surface = mobile ? page.getByRole("dialog", { name: "Application navigation" }) : page.locator("aside");
-      const indicator = surface.locator("[data-build-indicator]");
+      await expect(surface.locator("[data-build-indicator]")).toHaveCount(0);
+      await surface.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Settings", exact: true }).click();
+      await page.locator("[data-workspace-about] summary").click();
+      const indicator = page.locator("[data-workspace-about] [data-build-indicator]");
       await indicator.scrollIntoViewIfNeeded();
       await expect(indicator).toBeInViewport();
       await expect(indicator.getByText("ELSET Admin", { exact: true })).toBeVisible();
@@ -729,9 +732,7 @@ test("build indicator identifies desktop and mobile assets without obstructing n
       if (metadata.buildTime) {
         const time = indicator.locator("time");
         const instant = new Date(metadata.buildTime);
-        const expectedDate = instant.toLocaleDateString("en-AU", viewport.compact
-          ? { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "Australia/Sydney" }
-          : { day: "numeric", month: "short", year: "numeric", timeZone: "Australia/Sydney" });
+        const expectedDate = instant.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "Australia/Sydney" });
         const expectedTime = instant.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", timeZone: "Australia/Sydney" });
         await expect(time).toHaveAttribute("datetime", metadata.buildTime);
         await expect(time.getByText(expectedDate, { exact: true })).toBeVisible();
@@ -741,24 +742,25 @@ test("build indicator identifies desktop and mobile assets without obstructing n
         await expect(time).toHaveAttribute("datetime", metadata.buildTime);
         await expect(time.getByText(expectedDate, { exact: true })).toBeVisible();
       } else {
-        await expect(indicator.getByText(viewport.compact ? "dev" : "Local development", { exact: true })).toBeVisible();
+        await expect(indicator.getByText("Local development", { exact: true })).toBeVisible();
         await expect(indicator.locator("time")).toHaveCount(0);
       }
       expect(await indicator.locator("button, a").count()).toBe(0);
       expect(await indicator.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 
+      if (mobile) await page.getByRole("button", { name: "Open navigation" }).click();
       const navigation = surface.getByRole("navigation", { name: "Application" });
       const recycleBin = navigation.getByRole("button", { name: "Recycle Bin", exact: true });
       await recycleBin.scrollIntoViewIfNeeded();
       await expect(recycleBin).toBeInViewport();
       const recycleBox = await recycleBin.boundingBox();
       const indicatorBox = await indicator.boundingBox();
-      expect(indicatorBox.height).toBeLessThanOrEqual(viewport.compact ? 96 : 48);
-      expect(recycleBox.y + recycleBox.height).toBeLessThanOrEqual(indicatorBox.y);
+      expect(indicatorBox.height).toBeLessThanOrEqual(48);
+      expect(recycleBox.y + recycleBox.height).toBeLessThanOrEqual(viewport.height);
       await expect(surface.getByRole("button", { name: /Sign out/i })).toBeInViewport();
       if (viewport.width === 375) {
-        await expect(indicator.locator("../..")).toHaveCSS("padding-bottom", "32px");
-        expect(indicatorBox.y + indicatorBox.height).toBeLessThanOrEqual(viewport.height - 20);
+        const logoutBox = await surface.getByRole("button", { name: /Sign out/i }).boundingBox();
+        expect(logoutBox.y + logoutBox.height).toBeLessThanOrEqual(viewport.height - 20);
       }
       const buildLabel = metadata.buildTime ? `${metadata.commit}-${metadata.buildTime.replaceAll(":", "-")}` : "local";
       await capture(page, testInfo, `build-indicator-${buildLabel}-${viewport.width}x${viewport.height}.png`, "build indicator and navigation");

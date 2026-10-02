@@ -247,7 +247,7 @@ async function openSettings(browser, width = 1440, height = 900, tab = "UI Setti
   page.on("request", (request) => {
     if (["PATCH", "PUT", "POST", "DELETE"].includes(request.method()) && new URL(request.url()).pathname.startsWith("/api/")) {
       const requestPath = new URL(request.url()).pathname;
-      writes.push({ path: requestPath, method: request.method(), body: requestPath === "/api/settings/workspace-logo" ? undefined : request.postDataJSON() });
+      writes.push({ path: requestPath, method: request.method(), body: /^\/api\/settings\/workspace-(logo|brand-mark)$/.test(requestPath) ? undefined : request.postDataJSON() });
     }
   });
   page.on("dialog", (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
@@ -462,14 +462,14 @@ test('workspace branding upload, persistence, themes, permissions and responsive
   };
   try {
     await expect(sidebarLogo(a.page).locator('[data-workspace-logo-fallback]')).toBeVisible();
-    expect((await sidebarLogo(a.page).boundingBox()).height).toBe(86);
+    expect((await sidebarLogo(a.page).boundingBox()).height).toBe(80);
     await expect(a.page.locator('aside')).not.toContainText('Manage the full workspace');
     await expect(a.page.locator('aside')).not.toContainText('Menu');
     await screenshot(a.page, 'desktop-no-logo');
     const png = fs.readFileSync(path.join(repoRoot, 'public/elset-logo.png'));
     await upload(a.page, png);
     await saveDraft(a.page);
-    await expect(branding(a.page).getByRole('status')).toHaveText('Workspace logo saved.');
+    await expect(branding(a.page).getByRole('status', { name: 'Company Logo save status' })).toHaveText('Workspace logo saved.');
     const firstUrl = await sidebarLogo(a.page).locator('img').getAttribute('src');
     await assertImage(sidebarLogo(a.page), firstUrl);
     await assertImage(branding(a.page).locator('[data-workspace-logo]'), firstUrl);
@@ -488,7 +488,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await assertImage(sidebarLogo(a.page), firstUrl);
     await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
     await expect(b.page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
-    expect(await sidebarLogo(a.page).evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(await sidebarLogo(b.page).evaluate(el => getComputedStyle(el).backgroundColor));
+    expect(await a.page.locator('aside.workspace-sidebar').evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(await b.page.locator('aside.workspace-sidebar').evaluate(el => getComputedStyle(el).backgroundColor));
     await navigate(a.page, 'Customers', 1440);
     await screenshot(a.page, 'desktop-uploaded-midnight');
     await preferences(a.page);
@@ -496,7 +496,7 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     const webp = await sharp(png).resize(220).webp().toBuffer();
     await upload(a.page, webp, 'image/webp', 'replacement.webp');
     await saveDraft(a.page);
-    await expect(branding(a.page).getByRole('status')).toHaveText('Workspace logo saved.');
+    await expect(branding(a.page).getByRole('status', { name: 'Company Logo save status' })).toHaveText('Workspace logo saved.');
     const secondUrl = await sidebarLogo(a.page).locator('img').getAttribute('src');
     expect(secondUrl).not.toBe(firstUrl);
     await assertImage(sidebarLogo(a.page), secondUrl);
@@ -547,9 +547,9 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await a.page.getByRole('option', { name: 'Icon only', exact: true }).click();
     await saveDraft(a.page);
     await expect(status(a.page)).toHaveText('Saved');
-    await assertImage(sidebarLogo(a.page), secondUrl);
-    expect((await sidebarLogo(a.page).boundingBox()).width).toBe(48);
-    expect((await sidebarLogo(a.page).locator('img').boundingBox()).width).toBeLessThanOrEqual(38);
+    await expect(sidebarLogo(a.page)).toHaveCount(0);
+    await expect(a.page.locator('aside [data-workspace-brand-mark-fallback]')).toBeVisible();
+    expect((await a.page.locator('aside.workspace-sidebar').boundingBox()).width).toBe(68);
     await screenshot(a.page, 'icon-only-midnight');
     // A failed asset load renders the icon, never a broken image.
     await b.page.route('**' + secondUrl, route => route.fulfill({ status: 404, body: '' }));
@@ -563,10 +563,10 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await branding(b.page).getByRole('button', { name: 'Remove Logo', exact: true }).click();
     await b.page.getByRole('dialog', { name: 'Remove workspace logo?' }).getByRole('button', { name: 'Remove Logo', exact: true }).click();
     await saveDraft(b.page);
-    await expect(branding(b.page).getByRole('status')).toHaveText('Workspace logo removed.');
+    await expect(branding(b.page).getByRole('status', { name: 'Company Logo save status' })).toHaveText('Workspace logo removed.');
     await expect(sidebarLogo(b.page).locator('[data-workspace-logo-fallback]')).toBeVisible();
     await a.page.reload();
-    await expect(sidebarLogo(a.page).locator('[data-workspace-logo-fallback]')).toBeVisible();
+    await expect(a.page.locator('aside [data-workspace-brand-mark-fallback]')).toBeVisible();
     await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'dark');
     await expect(b.page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
     expect([...a.writes, ...b.writes].filter(write => write.path === '/api/app-state')).toHaveLength(0);
@@ -574,6 +574,245 @@ test('workspace branding upload, persistence, themes, permissions and responsive
   } finally {
     await a.page.request.delete(baseUrl + '/api/settings/workspace-logo');
     await Promise.all([...extraContexts, a.context, b.context].map(context => context.close()));
+  }
+});
+
+test("brand mark and company logo stage, save, replace and remove independently", async ({ browser }) => {
+  const a = await openSettings(browser, 1440, 900, "Preferences");
+  const { page, writes } = a;
+  const logo = page.locator('[data-branding-editor="logo"]');
+  const mark = page.locator('[data-branding-editor="mark"]');
+  const png = fs.readFileSync(path.join(repoRoot, "public/elset-logo.png"));
+  const markPng = await sharp({ create: { width: 64, height: 64, channels: 4, background: "#0F90CD" } }).png().toBuffer();
+  const putFile = (kind, buffer, mimeType = "image/png") => page.getByLabel(kind === "mark" ? "Brand mark file" : "Workspace logo file").setInputFiles({ name: "branding.png", mimeType, buffer });
+  const saved = () => expect(saveButton(page)).toBeDisabled();
+  const readUrls = async () => (await (await page.request.get(baseUrl + "/api/app-state")).json()).state.settings;
+  const remove = async (kind) => {
+    const label = kind === "mark" ? "Brand Mark" : "Logo";
+    await (kind === "mark" ? mark : logo).getByRole("button", { name: `Remove ${label}`, exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: kind === "mark" ? "Remove brand mark?" : "Remove workspace logo?", exact: true });
+    if (kind === "mark") await expect(dialog).toContainText("The default workspace icon will be used in the icon-only sidebar after you save changes.");
+    await dialog.getByRole("button", { name: `Remove ${label}`, exact: true }).click();
+  };
+  try {
+    await putFile("logo", png); await putFile("mark", markPng);
+    for (const editor of [logo, mark]) {
+      await expect(editor.locator("img")).toHaveAttribute("src", /^blob:/);
+      await expect.poll(() => editor.locator("img").evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+      await expect(editor.locator("img")).toHaveCSS("object-fit", "contain");
+    }
+    expect(writes).toEqual([]);
+    await expect(page.getByRole("status", { name: "Settings save status", exact: true })).toHaveText("Unsaved changes");
+    await saveDraft(page); await saved();
+    const first = await readUrls();
+    expect(first.workspaceLogoUrl).toMatch(/workspace-logo\/[a-f0-9]{64}$/);
+    expect(first.workspaceBrandMarkUrl).toMatch(/workspace-brand-mark\/[a-f0-9]{64}$/);
+    expect(writes.map(write => write.path)).toEqual(["/api/settings/workspace-logo", "/api/settings/workspace-brand-mark"]);
+    writes.length = 0;
+    const replacement = await sharp(markPng).resize(48).webp().toBuffer();
+    await putFile("mark", replacement, "image/webp");
+    await saveDraft(page); await saved();
+    const next = await readUrls();
+    expect(next.workspaceBrandMarkUrl).not.toBe(first.workspaceBrandMarkUrl);
+    expect(next.workspaceLogoUrl).toBe(first.workspaceLogoUrl);
+    expect(writes.map(write => write.path)).toEqual(["/api/settings/workspace-brand-mark"]);
+    writes.length = 0;
+    await putFile("mark", Buffer.from("<svg/>"), "image/svg+xml");
+    await expect(mark.getByRole("alert")).toHaveText("Choose a PNG, JPEG or WebP image.");
+    await putFile("mark", Buffer.alloc(2 * 1024 * 1024 + 1));
+    await expect(mark.getByRole("alert")).toHaveText("Brand mark must be 2 MB or smaller.");
+    expect(writes).toEqual([]); await saved();
+    await remove("mark");
+    expect((await readUrls()).workspaceBrandMarkUrl).toBe(next.workspaceBrandMarkUrl);
+    await saveDraft(page); await saved();
+    expect((await readUrls()).workspaceBrandMarkUrl).toBeUndefined();
+    expect((await readUrls()).workspaceLogoUrl).toBe(first.workspaceLogoUrl);
+    await putFile("mark", markPng); await saveDraft(page); await saved();
+    await remove("logo"); await saveDraft(page); await saved();
+    expect((await readUrls()).workspaceLogoUrl).toBeUndefined();
+    expect((await readUrls()).workspaceBrandMarkUrl).toBe(first.workspaceBrandMarkUrl);
+    await page.reload();
+    await expect(mark.locator("img")).toHaveAttribute("src", first.workspaceBrandMarkUrl);
+    await expect(logo.locator("[data-workspace-logo-fallback]")).toBeVisible();
+  } finally {
+    await page.request.delete(baseUrl + "/api/settings/workspace-logo");
+    await page.request.delete(baseUrl + "/api/settings/workspace-brand-mark");
+    await a.context.close();
+  }
+});
+
+test("branding grouped saves retry only the failed image and discard restores both previews", async ({ browser }) => {
+  const a = await openSettings(browser, 1440, 900, "Preferences");
+  const { page, writes } = a;
+  const png = fs.readFileSync(path.join(repoRoot, "public/elset-logo.png"));
+  let failMark = true;
+  await page.route("**/api/settings/workspace-brand-mark", route => failMark && route.request().method() === "PUT" ? route.fulfill({ status: 503, json: { error: "Brand mark unavailable" } }) : route.continue());
+  try {
+    await page.getByLabel("Workspace logo file").setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: png });
+    await page.getByLabel("Brand mark file").setInputFiles({ name: "mark.png", mimeType: "image/png", buffer: png });
+    await saveDraft(page);
+    await expect(page.getByRole("alert")).toHaveText("Brand mark unavailable");
+    await expect(page.getByRole("status", { name: "Company Logo save status" })).toHaveText("Workspace logo saved.");
+    await expect(page.locator('[data-branding-editor="mark"] img')).toHaveAttribute("src", /^blob:/);
+    failMark = false;
+    await saveDraft(page); await expect(saveButton(page)).toBeDisabled();
+    expect(writes.filter(write => write.path.endsWith("workspace-logo"))).toHaveLength(1);
+    expect(writes.filter(write => write.path.endsWith("workspace-brand-mark"))).toHaveLength(2);
+    const originalLogo = await page.locator('[data-branding-editor="logo"] img').getAttribute("src");
+    const originalMark = await page.locator('[data-branding-editor="mark"] img').getAttribute("src");
+    const before = writes.length;
+    await page.getByLabel("Brand mark file").setInputFiles({ name: "corrupt.png", mimeType: "image/png", buffer: Buffer.from("fake") });
+    await saveDraft(page);
+    await expect(page.getByRole("alert")).toContainText("must be a PNG");
+    await expect(saveButton(page)).toBeEnabled();
+    await expect(page.locator('aside img')).toHaveAttribute("src", originalLogo);
+    await page.getByLabel("Workspace logo file").setInputFiles({ name: "new-logo.png", mimeType: "image/png", buffer: png });
+    await page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Customers", exact: true }).click();
+    await settingsDialog(page).getByRole("button", { name: "Stay", exact: true }).click();
+    await expect(page.locator('[data-branding-editor="logo"] img')).toHaveAttribute("src", /^blob:/);
+    await page.locator('.floating-page-toolbar').getByRole("button", { name: "UI Settings", exact: true }).click();
+    await settingsDialog(page).getByRole("button", { name: "Discard changes", exact: true }).click();
+    await page.locator('.floating-page-toolbar').getByRole("button", { name: "Preferences", exact: true }).click();
+    await expect(page.locator('[data-branding-editor="logo"] img')).toHaveAttribute("src", originalLogo);
+    await expect(page.locator('[data-branding-editor="mark"] img')).toHaveAttribute("src", originalMark);
+    expect(writes.length).toBe(before + 1); // Only the explicitly attempted corrupt upload.
+  } finally {
+    await page.unroute("**/api/settings/workspace-brand-mark");
+    await page.request.delete(baseUrl + "/api/settings/workspace-logo");
+    await page.request.delete(baseUrl + "/api/settings/workspace-brand-mark");
+    await a.context.close();
+  }
+});
+
+test("workspace sidebar visual matrix, brand switching, tooltips and short-screen keyboard access", async ({ browser }) => {
+  const a = await openSettings(browser, 1920, 1080, "Preferences");
+  const { page } = a;
+  const directory = path.join(repoRoot, "test-results/sidebar-redesign");
+  fs.mkdirSync(directory, { recursive: true });
+  const errors = []; page.on("pageerror", error => errors.push(error.message));
+  const png = fs.readFileSync(path.join(repoRoot, "public/elset-logo.png"));
+  const markPng = await sharp(Buffer.from('<svg width="64" height="64"><rect width="64" height="64" rx="10" fill="#0F90CD"/><path d="M20 16h28v8H28v6h16v8H28v6h20v8H20z" fill="white"/></svg>')).png().toBuffer();
+  const upload = async (kind, bytes) => {
+    const response = await page.request.put(baseUrl + `/api/settings/workspace-${kind === "logo" ? "logo" : "brand-mark"}`, { headers: { "Content-Type": "image/png" }, data: bytes });
+    expect(response.ok()).toBe(true); return (await response.json())[kind === "logo" ? "workspaceLogoUrl" : "workspaceBrandMarkUrl"];
+  };
+  const image = (kind) => page.locator(`aside [data-workspace-${kind === "logo" ? "logo" : "brand-mark"}] img`);
+  const sidebar = page.locator("aside.workspace-sidebar");
+  const shot = async name => {
+    await expect(page.getByText(/Loading reports/)).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: path.join(directory, name + ".png"), animations: "disabled" });
+  };
+  const appearance = async patch => {
+    expect((await page.request.patch(baseUrl + "/api/user-preferences", { data: patch })).ok()).toBe(true);
+    await page.reload();
+    await expect(sidebar).toBeVisible();
+  };
+  const flatRows = async () => {
+    for (const button of await sidebar.locator('.workspace-sidebar-item').all()) {
+      const style = await button.evaluate(el => { const s = getComputedStyle(el); return { border: s.borderTopWidth, shadow: s.boxShadow, background: s.backgroundColor, height: el.getBoundingClientRect().height }; });
+      expect(style.border).toBe("0px"); expect(style.shadow).toBe("none"); expect(style.height).toBeGreaterThanOrEqual(44);
+      if (!await button.getAttribute("aria-current")) expect(style.background).toBe("rgba(0, 0, 0, 0)");
+      else expect(style.background).not.toBe("rgba(0, 0, 0, 0)");
+    }
+  };
+  try {
+    const logoUrl = await upload("logo", png), markUrl = await upload("mark", markPng);
+    await page.reload(); await navigate(page, "Customers", 1920);
+    await expect(image("logo")).toHaveAttribute("src", logoUrl);
+    await expect(image("mark")).toHaveCount(0);
+    expect((await sidebar.boundingBox()).width).toBe(280);
+    await flatRows(); await shot("A-standard-1920-company-logo");
+    const scroll = sidebar.locator(".workspace-sidebar-scroll");
+    expect(await scroll.evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
+    await appearance({ sidebarWidth: "icon-only" });
+    await expect(image("mark")).toHaveAttribute("src", markUrl);
+    await expect(image("logo")).toHaveCount(0);
+    await expect(image("mark")).toHaveCSS("object-fit", "contain");
+    expect((await image("mark").boundingBox()).width).toBeLessThanOrEqual(36);
+    expect((await sidebar.boundingBox()).width).toBe(68);
+    await flatRows(); await shot("B-rail-1920-brand-mark");
+    for (const button of await sidebar.locator("button").all()) {
+      const label = await button.getAttribute("aria-label");
+      await button.scrollIntoViewIfNeeded(); await button.hover();
+      await expect(page.getByRole("tooltip")).toContainText(label === "Sign Out" ? "Log out" : label);
+      const tooltipContent = page.locator('[data-slot="tooltip-content"]');
+      // Radix measures and places the portal after it mounts.
+      await expect.poll(async () => (await tooltipContent.boundingBox())?.x ?? 0).toBeGreaterThanOrEqual(68);
+      const tooltipBox = await tooltipContent.boundingBox();
+      expect(tooltipBox.y).toBeGreaterThanOrEqual(0);
+      expect(tooltipBox.y + tooltipBox.height).toBeLessThanOrEqual(1080);
+      if (["Reports & Analytics", "Sign Out"].includes(label)) await shot(`tooltip-${label === "Sign Out" ? "logout" : "reports"}`);
+      await page.keyboard.press("Escape");
+      await page.mouse.move(800, 800); await button.focus();
+      await expect(page.getByRole("tooltip")).toContainText(label === "Sign Out" ? "Log out" : label);
+      await expect(button).toHaveCSS("outline-style", "solid");
+      await page.keyboard.press("Escape"); await button.evaluate(el => el.blur());
+    }
+    const customers = sidebar.getByRole("button", { name: "Customers", exact: true });
+    await customers.focus(); await page.keyboard.press("Tab");
+    await expect(sidebar.getByRole("button", { name: "Sites", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
+    const account = sidebar.getByRole("button", { name: "Account", exact: true });
+    await account.click();
+    await expect(page.getByRole("dialog", { name: "Account", exact: true })).toContainText("Mobile Admin");
+    await page.keyboard.press("Escape"); await expect(account).toBeFocused(); await page.keyboard.press("Escape");
+    await navigate(page, "Settings", 1920);
+    await expect(sidebar).not.toContainText("Preferences");
+    await expect(sidebar.getByRole("button", { name: "Settings", exact: true })).toHaveAttribute("aria-current", "page");
+    await shot("G-settings-active-rail");
+    await navigate(page, "Reports & Analytics", 1920);
+    await expect(sidebar.getByRole("button", { name: "Reports & Analytics", exact: true })).toHaveAttribute("aria-current", "page");
+    await shot("H-reports-active-rail");
+    await appearance({ sidebarWidth: "standard" });
+    await expect(image("logo")).toHaveAttribute("src", logoUrl);
+    for (const [width, pixels] of [["compact", 248], ["wide", 320], ["standard", 280]]) {
+      await appearance({ sidebarWidth: width }); expect((await sidebar.boundingBox()).width).toBe(pixels);
+    }
+    await appearance({ sidebarSurface: "#101826", sidebarHeader: "#233D5A", sidebarActive: "#5F87A5", actionColor: "#F69320" });
+    await shot("E-dark-standard");
+    await appearance({ sidebarWidth: "icon-only", roundedEdges: false });
+    await expect(sidebar.getByRole("button", { name: "Customers", exact: true })).toHaveCSS("border-radius", "0px");
+    await shot("E-dark-rail-square-edges");
+    await appearance({ sidebarSurface: "#FCFDFD", sidebarHeader: "#245B50", sidebarActive: "#B7DEC9", roundedEdges: true });
+    await shot("F-light-rail-rounded");
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await expect(sidebar.getByRole("button", { name: "Recycle Bin", exact: true })).toBeInViewport();
+    await expect(sidebar.getByRole("button", { name: "Account", exact: true })).toBeInViewport();
+    await expect(sidebar.getByRole("button", { name: "Sign Out", exact: true })).toBeInViewport();
+    for (const button of await sidebar.getByRole("navigation").getByRole("button").all()) { await button.focus(); await expect(button).toBeInViewport(); await page.keyboard.press("Escape"); }
+    await shot("I-short-desktop-rail");
+    await appearance({ sidebarWidth: "standard" }); await shot("I-short-desktop-standard");
+    await page.request.delete(baseUrl + "/api/settings/workspace-logo"); await page.reload();
+    await expect(sidebar.locator("[data-workspace-logo-fallback]")).toBeVisible(); await shot("C-standard-no-company-logo");
+    await upload("logo", png);
+    await page.request.delete(baseUrl + "/api/settings/workspace-brand-mark");
+    await appearance({ sidebarWidth: "icon-only" });
+    await expect(sidebar.locator("[data-workspace-brand-mark-fallback]")).toBeVisible();
+    await expect(sidebar.locator("img")).toHaveCount(0); await shot("D-rail-no-brand-mark");
+    // Missing marks never borrow a valid company logo. Mobile retains the company logo.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    const drawer = page.getByRole("dialog", { name: "Application navigation" });
+    await expect(drawer.locator("[data-workspace-logo] img")).toHaveAttribute("src", logoUrl);
+    await expect(drawer.locator("[data-workspace-brand-mark]")).toHaveCount(0);
+    await shot("mobile-company-logo-with-personal-rail-setting");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
+    await expect(page.locator("[data-build-indicator]")).toHaveCount(0);
+    await navigate(page, "Settings", 390);
+    await page.locator("[data-workspace-about] summary").click();
+    await expect(page.locator("[data-workspace-about] [data-build-indicator]")).toBeVisible();
+    await page.locator('.floating-page-toolbar').getByRole("button", { name: "Preferences", exact: true }).click();
+    const logoEditor = page.locator('[data-branding-editor="logo"]'), markEditor = page.locator('[data-branding-editor="mark"]');
+    const l = await logoEditor.boundingBox(), m = await markEditor.boundingBox();
+    expect(m.y).toBeGreaterThanOrEqual(l.y + l.height);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot("mobile-branding-stacked"); expect(errors).toEqual([]);
+  } finally {
+    await page.request.delete(baseUrl + "/api/settings/workspace-logo");
+    await page.request.delete(baseUrl + "/api/settings/workspace-brand-mark");
+    await a.context.close();
   }
 });
 

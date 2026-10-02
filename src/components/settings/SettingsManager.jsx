@@ -6,6 +6,7 @@ import SettingsDraftScope, { SettingsSaveButton } from "./SettingsDraftScope";
 import { SettingsDraftContext } from "./settings-draft-context";
 import ThemeColourField from "./ThemeColourField";
 import WorkspaceBranding from "./WorkspaceBranding";
+import BuildIndicator from "@/components/app/BuildIndicator";
 import AddonsSettings from "./AddonsSettings";
 import PriceListSettings from "./PriceListSettings";
 import { FormField } from "@/components/shared/FormField";
@@ -266,7 +267,7 @@ function SettingsContent({
   settings,
   settingsPersistence,
   onSettingsPreview,
-  onWorkspaceLogoChange,
+  onWorkspaceBrandingChange,
   activeTemplateType,
   onActiveTemplateTypeChange,
   templates,
@@ -513,7 +514,7 @@ function SettingsContent({
       {canManageWorkspaceSettings && activeSettingsTab === "preferences" && (
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="grid gap-4">
-            <WorkspaceBranding url={normalizedSettings.workspaceLogoUrl} onChange={onWorkspaceLogoChange} enabled />
+            <WorkspaceBranding logoUrl={normalizedSettings.workspaceLogoUrl} brandMarkUrl={normalizedSettings.workspaceBrandMarkUrl} onChange={onWorkspaceBrandingChange} enabled />
             <Card className="rounded-3xl border-border shadow-sm">
               <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -1228,6 +1229,10 @@ function SettingsContent({
           </Card>
         </div>
       )}
+      <details className="rounded-xl border border-border bg-card px-4 py-3" data-workspace-about>
+        <summary className="cursor-pointer text-sm font-medium">About ELSET Admin</summary>
+        <div className="pt-3"><BuildIndicator /></div>
+      </details>
       </PageBody>
     </fieldset>
     </PageWorkspace>

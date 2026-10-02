@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { CalendarDays, LogOut, Menu, Plus, X } from "lucide-react";
-import BuildIndicator from "@/components/app/BuildIndicator";
 import WorkspaceLogo from "@/components/app/WorkspaceLogo";
 import { Button } from "@/components/ui/button";
 import {
@@ -187,9 +186,6 @@ export default function MobileWorkspaceNavigation({
                 <LogOut className="h-4 w-4" />
                 Sign out
               </Button>
-            </div>
-            <div className="mt-2">
-              <BuildIndicator style={{ color: themePalette.sidebarInactiveMuted }} />
             </div>
           </div>
         </DialogContent>
