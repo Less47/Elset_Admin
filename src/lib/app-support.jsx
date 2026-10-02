@@ -9,6 +9,8 @@ import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
 import { maintenancePlanIdentity } from "./maintenance-plan.js";
 import { siteAddressMetadata } from "./site-location.js";
+import { normalizeSiteAddress } from "./site-address.js";
+export { normalizeSiteAddress } from "./site-address.js";
 
 import {
   BarChart3,
@@ -1115,10 +1117,6 @@ export function normalizeCustomerRecord(customer, fallbackCreatedAt) {
     siteAccessNotes,
     createdAt: normalizedCustomer.createdAt || fallbackCreatedAt || new Date().toISOString(),
   };
-}
-
-export function normalizeSiteAddress(address) {
-  return String(address || "").replace(/\s+/g, " ").trim();
 }
 
 export function normalizeSiteAccessNoteRecord(note) {

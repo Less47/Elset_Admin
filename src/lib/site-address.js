@@ -8,3 +8,7 @@ export function formatStreetAndSuburb(address) {
     .replace(/\b\d{4}\b/g, "").replace(/\s+/g, " ").trim();
   return suburb && suburb !== street ? `${street}, ${suburb}` : street;
 }
+
+export function normalizeSiteAddress(address) {
+  return String(address || "").replace(/\s+/g, " ").trim();
+}

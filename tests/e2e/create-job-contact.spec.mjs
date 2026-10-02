@@ -99,3 +99,18 @@ test("new site can have no contacts and requester stays independently selectable
   const payload = await submit(page); expect(payload.siteInput.contactAssignments).toEqual([]); expect(payload.job.onsiteContact).toBeNull();
   expect(payload.job.requesterContact.name).toBe("Independent Requester");
 });
+
+test("a customer with only historical and inferred addresses requires explicit Add as Site", async ({ page }) => {
+  await page.route("**/api/**", (route) => route.fulfill({ json: { results: [] } }));
+  await page.goto(baseUrl + "/__contact-regression");
+  await page.getByRole("textbox", { name: "Search customers" }).fill("History Only Customer");
+  await page.locator('[aria-label="Customer search results"] button').click();
+  await expect(page.getByLabel("Site address", { exact: true })).toHaveValue("");
+  await expect(page.locator('[aria-label="Saved sites"] button')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create Job", exact: true })).toBeDisabled();
+  await page.getByRole("region", { name: "Previous job addresses" }).getByRole("button", { name: "Add as Site: 9 History Only St" }).click();
+  const payload = await submit(page);
+  expect(payload.siteInput.address).toBe("9 History Only St");
+  expect(payload.siteInput.id).toBeUndefined();
+  expect(payload.job.jobAddress).toBe("9 History Only St");
+});

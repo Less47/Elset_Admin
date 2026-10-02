@@ -1,5 +1,6 @@
 import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEditor";
 import { getJobContactGroups, getSitePrimaryContact } from "@/lib/contact-model";
+import { buildCreateJobSiteOptions } from "@/lib/create-job-sites";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Plus, Search, UserRound } from "lucide-react";
@@ -19,13 +20,13 @@ import {
 } from "@/components/workspace/RecordWorkspace";
 import {
   buildContactSnapshot,
-  buildCustomerSites,
   customerTypeOptions,
   formatCustomerType,
   formatSiteType,
   getCustomerContacts,
   getCustomerBillingContact,
   getCustomerSiteAccessNote,
+  getCustomerSiteProfile,
   getSiteDisplayName,
   normalizeSiteAddress,
   siteTypeOptions,
@@ -129,13 +130,14 @@ export default function CreateJobPage({
     () => orderedCustomers.find((entry) => entry.id === selectedCustomerId) || null,
     [orderedCustomers, selectedCustomerId]
   );
-  const selectedCustomerJobs = useMemo(
-    () => jobs.filter((entry) => entry.customerId === selectedCustomerId),
-    [jobs, selectedCustomerId]
-  );
+  const siteOptions = useMemo(() => {
+    const options = buildCreateJobSiteOptions(selectedCustomer, jobs);
+    const withProfile = (site) => getCustomerSiteProfile(selectedCustomer, site.address) || site;
+    return { ...options, savedSites: options.savedSites.map(withProfile), primarySite: options.primarySite ? withProfile(options.primarySite) : null };
+  }, [selectedCustomer, jobs]);
   const selectedCustomerSites = useMemo(
-    () => (selectedCustomer ? buildCustomerSites(selectedCustomer, selectedCustomerJobs) : []),
-    [selectedCustomer, selectedCustomerJobs]
+    () => [...(siteOptions.primarySite ? [siteOptions.primarySite] : []), ...siteOptions.savedSites],
+    [siteOptions]
   );
   const selectedCustomerContacts = useMemo(
     () => (selectedCustomer ? getCustomerContacts(selectedCustomer) : []),
@@ -195,7 +197,7 @@ export default function CreateJobPage({
       ? { notes: siteDraft.accessNotes }
       : null;
   const hasCustomer = customerMode === "new" ? Boolean(customer.name.trim()) : Boolean(selectedCustomerId);
-  const hasAddress = Boolean(normalizeSiteAddress(selectedJobAddress));
+  const hasAddress = Boolean(normalizeSiteAddress(selectedJobAddress)) && (customerMode === "new" || siteMode === "create" || Boolean(selectedSite));
   const hasTitle = Boolean(job.title.trim());
   const hasDescription = Boolean(job.description.trim());
   const canSave = hasCustomer && hasAddress && hasTitle && hasDescription && !isSubmitting && !addressPending;
@@ -209,9 +211,18 @@ export default function CreateJobPage({
 
   const selectSite = (site) => {
     markDirty();
+    setSiteMode("select");
     setJob((current) => ({ ...current, jobAddress: site.address, onsiteContact: buildContactSnapshot(getSitePrimaryContact(site), "On-site contact") }));
     setChangingSite(false);
     setTouched((current) => ({ ...current, site: true }));
+  };
+
+  const addSite = (address = "") => {
+    markDirty();
+    setSiteMode("create");
+    setChangingSite(false);
+    setSiteDraft({ ...createEmptySiteDraft(), address });
+    setJob((current) => ({ ...current, onsiteContact: null }));
   };
 
   const handleSubmit = async () => {
@@ -442,7 +453,7 @@ export default function CreateJobPage({
           id="create-job-site"
           panel
           title="Site"
-          description={customerMode === "new" ? "Add the first site for this customer." : "Choose a saved site or add a site for this job."}
+          description={customerMode === "new" ? "Add the first site for this customer." : "Choose a saved site, use the customer's current primary address, or add a site for this job."}
         >
           {customerMode === "existing" && !selectedCustomer ? (
             <WorkspaceMessage>Select a customer to see their saved sites.</WorkspaceMessage>
@@ -453,6 +464,7 @@ export default function CreateJobPage({
                   <div className="flex flex-wrap items-center gap-2">
                     <MapPin className="h-4 w-4 text-status-info" aria-hidden="true" />
                     <p className="font-semibold text-foreground">{getSiteDisplayName(selectedSite)}</p>
+                    <Badge variant="secondary">{selectedSite._inferredProfile ? "Customer primary address" : "Saved site"}</Badge>
                     {selectedSite.siteType ? <Badge variant="secondary">{formatSiteType(selectedSite.siteType)}</Badge> : null}
                     <span className="inline-flex items-center gap-1 text-xs font-medium text-status-success"><Check className="h-3.5 w-3.5" /> Selected</span>
                   </div>
@@ -465,17 +477,21 @@ export default function CreateJobPage({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" className="h-11 rounded-lg" onClick={() => setChangingSite(true)}>Change site</Button>
-                  <Button type="button" variant="ghost" className="h-11 rounded-lg" onClick={() => {
-                    markDirty();
-                    setSiteMode("create");
-                    setSiteDraft({ ...createEmptySiteDraft(), address: selectedCustomer?.address || "" });
-                  }}><Plus className="h-4 w-4" /> Add site</Button>
+                  <Button type="button" variant="ghost" className="h-11 rounded-lg" onClick={() => addSite()}><Plus className="h-4 w-4" /> Add site</Button>
                 </div>
               </div>
             ) : (
               <div className="grid gap-4">
-                <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-card/70" aria-label="Saved sites">
-                  {selectedCustomerSites.map((site) => (
+                {siteOptions.primarySite ? <div className="grid gap-2" aria-label="Customer primary address">
+                  <p className="text-sm font-medium">Customer primary address</p>
+                  <p className="text-sm text-muted-foreground">This current customer address can be used without a saved site record.</p>
+                  <Button type="button" variant="outline" className="h-auto min-h-11 justify-self-start whitespace-normal text-left" onClick={() => selectSite(siteOptions.primarySite)}>{siteOptions.primarySite.address}</Button>
+                </div> : null}
+                <div className="grid gap-2">
+                  <p className="text-sm font-medium">Saved Sites</p>
+                  <div className="record-result-list divide-y divide-slate-200 overflow-hidden rounded-lg bg-card/70" aria-label="Saved sites">
+                  {siteOptions.savedSites.length === 0 ? <p className="p-3 text-sm text-muted-foreground">No saved sites.</p> : null}
+                  {siteOptions.savedSites.map((site) => (
                     <button
                       key={site.id}
                       type="button"
@@ -492,12 +508,9 @@ export default function CreateJobPage({
                       <span className="mt-0.5 shrink-0 rounded-md border bg-card px-2 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-foreground">Select</span>
                     </button>
                   ))}
+                  </div>
                 </div>
-                <Button type="button" variant="outline" className="h-11 justify-self-start rounded-lg" onClick={() => {
-                  markDirty();
-                  setSiteMode("create");
-                  setSiteDraft({ ...createEmptySiteDraft(), address: selectedCustomer?.address || "" });
-                }}><Plus className="h-4 w-4" /> Add a new site</Button>
+                <Button type="button" variant="outline" className="h-11 justify-self-start rounded-lg" onClick={() => addSite()}><Plus className="h-4 w-4" /> Add a new site</Button>
               </div>
             )
           ) : (
@@ -507,8 +520,9 @@ export default function CreateJobPage({
                   markDirty();
                   setSiteMode("select");
                   selectSite(selectedCustomerSites[0]);
-                }}>Use a saved site</Button>
+                }}>Use an existing address</Button>
               ) : null}
+              <p className="text-sm text-muted-foreground">This site will be added to the customer when you create the job.</p>
               <div className="grid gap-1.5">
                 <Label htmlFor="new-site-address">{customerMode === "new" ? "Primary site address" : "Site address"}</Label>
                 <GoogleAddressAutocompleteInput
@@ -557,6 +571,17 @@ export default function CreateJobPage({
               </div>
             </div>
           )}
+
+          {customerMode === "existing" && (changingSite || siteMode === "create") && siteOptions.previousJobAddresses.length > 0 ? (
+            <div className="mt-4 grid gap-2" role="region" aria-label="Previous job addresses">
+              <p className="text-sm font-medium">Previous job addresses</p>
+              <p className="text-sm text-muted-foreground">These addresses are not saved sites. Add an address as a site to use it for this job.</p>
+              {siteOptions.previousJobAddresses.map((address) => <div key={address} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                <span className="min-w-0 break-words text-sm">{address}</span>
+                <Button type="button" variant="outline" className="h-11 rounded-lg" aria-label={`Add as Site: ${address}`} onClick={() => addSite(address)}>Add as Site</Button>
+              </div>)}
+            </div>
+          ) : null}
 
           {selectedSiteAccessNote?.notes ? (
             <div className="mt-5 border-l-4 border-status-warning-border bg-status-warning-surface px-4 py-3 text-sm text-status-warning">

@@ -10,8 +10,11 @@ const initialCustomers = [{
     { id: "contact-b", name: "Mary Jane Brown", role: "Reception", phone: "0400 000 222" },
   ],
   sites: [{ id: "contact-site", address: "1 Existing Street, Melbourne VIC 3000" }],
+}, {
+  id: "history-only-customer", name: "History Only Customer", address: "", contacts: [],
+  sites: [{ id: "generated-history-profile", address: "9 History Only St", _inferredProfile: true }],
 }];
-const jobs = [];
+const jobs = [{ id: "history-only-job", customerId: "history-only-customer", jobAddress: "9 History Only St" }];
 const staff = [];
 const registerNavigationBlocker = () => () => {};
 

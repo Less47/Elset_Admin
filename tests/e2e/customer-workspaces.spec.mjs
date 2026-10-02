@@ -1019,6 +1019,98 @@ test("job contact selectors group current customer/site/billing records and keep
   expect(next.result.onsiteContact).toMatchObject({ phone: "999", position: "Director" });
 });
 
+for (const width of [1440, 390]) test(`Create Job separates saved sites from previous addresses and explicitly adds a site at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await login(page);
+  const id = `site-ownership-${width}`, savedAddress = `${width} Saved St`, previousAddress = `${width} Previous St`;
+  const person = `${id}-person`, billing = `${id}-billing`;
+  const supervisorName = `Site Ownership Supervisor ${width}`;
+  for (const [contactId, name] of [[person, supervisorName], [billing, "Ownership Billing"]]) {
+    await apiJson(page, "POST", "/api/contacts", { id: contactId, name });
+  }
+  await apiJson(page, "POST", "/api/customers", { id, name: `Site Ownership ${width}`,
+    contactAssignments: [{ contactId: billing, isBilling: true, isPrimary: true }],
+    sites: [{ id: `${id}-saved`, address: savedAddress, contactAssignments: [{ contactId: person, isPrimary: true, roles: ["Caretaker"] }] }] });
+  await apiJson(page, "POST", "/api/customers", { id: `${id}-foreign`, name: "Other address owner", sites: [{ address: previousAddress }] });
+  const history = await apiJson(page, "POST", "/api/jobs", { customer: { id }, job: { title: "Historical site fixture", jobAddress: savedAddress } });
+  await apiJson(page, "PATCH", `/api/jobs/${history.result.id}`, { jobAddress: previousAddress });
+  const rejected = await page.request.post(`${baseUrl}/api/jobs`, { data: { customer: { id }, job: { title: "Unowned address", jobAddress: previousAddress } } });
+  expect(rejected.status()).toBe(400);
+  expect((await rejected.json()).error).toBe("Selected site does not belong to the customer.");
+  const openCreate = async () => {
+    await page.goto(`${baseUrl}/jobs/new`);
+    await page.getByRole("textbox", { name: "Search customers" }).fill(`Site Ownership ${width}`);
+    await page.locator('[aria-label="Customer search results"] button').click();
+    await page.getByRole("button", { name: "Change site", exact: true }).click();
+  };
+  const save = async (title) => {
+    await page.getByLabel("Job title").fill(title);
+    await page.getByLabel("Description of work").fill("Create Job site ownership regression.");
+    await page.getByRole("button", { name: "Create Job", exact: true }).click();
+    await expect(page.locator(".record-workspace h1")).toHaveText(title);
+    return readWorkspaceState().jobs.find((job) => job.title === title);
+  };
+  await openCreate();
+  const saved = page.locator('[aria-label="Saved sites"]');
+  await expect(saved.getByRole("button")).toHaveCount(1);
+  await expect(saved).not.toContainText(previousAddress);
+  await expect(page.getByRole("region", { name: "Previous job addresses" })).toContainText(previousAddress);
+  await noModalOrOverflow(page);
+  await page.screenshot({ path: test.info().outputPath(`create-job-sites-${width}.png`), fullPage: true });
+  await saved.getByRole("button", { name: new RegExp(savedAddress) }).click();
+  const savedJob = await save(`Saved site regression ${width}`);
+  expect(savedJob.jobAddress).toBe(savedAddress);
+  expect(savedJob.onsiteContact.id).toBe(person);
+  expect(savedJob.billingContact.id).toBe(billing);
+  expect(savedJob.requesterContact).toBeNull();
+  await openCreate();
+  await page.getByRole("button", { name: `Add as Site: ${previousAddress}`, exact: true }).click();
+  await expect(page.getByLabel("Site address", { exact: true })).toHaveValue(previousAddress);
+  await expect(page.getByText("This site will be added to the customer when you create the job.")).toBeVisible();
+  await page.getByText("Job contacts (optional)", { exact: true }).click();
+  await expect(page.getByRole("region", { name: "On-site contact", exact: true }).getByLabel("Name", { exact: true })).toHaveValue("");
+  const editor = page.locator('#create-job-site [aria-label="Site contact management"]');
+  await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+  await editor.getByRole("combobox", { name: "Search contacts" }).fill(supervisorName);
+  await editor.getByRole("option", { name: new RegExp(supervisorName) }).click();
+  await editor.getByRole("checkbox", { name: "Primary contact" }).check();
+  const requester = page.getByRole("region", { name: "Requester", exact: true });
+  await requester.getByRole("combobox").click();
+  await page.getByRole("option", { name: "Ownership Billing - Primary", exact: true }).click();
+  const addedJob = await save(`Added previous site regression ${width}`);
+  expect(addedJob.jobAddress).toBe(previousAddress);
+  expect(addedJob.onsiteContact.id).toBe(person);
+  expect(addedJob.billingContact.id).toBe(billing);
+  expect(addedJob.requesterContact.id).toBe(billing);
+  const customer = readWorkspaceState().customers.find((entry) => entry.id === id);
+  expect(customer.sites).toHaveLength(2);
+  expect(customer.sites.find((site) => site.address === previousAddress).contactAssignments[0]).toMatchObject({ contactId: person, isPrimary: true });
+  await openCreate();
+  await expect(saved).toContainText(previousAddress);
+  await expect(page.getByRole("region", { name: "Previous job addresses" })).toHaveCount(0);
+});
+
+test("Create Job labels an inferred primary address separately and saves it without creating a site", async ({ page }) => {
+  await login(page);
+  const id = "inferred-primary-regression", address = "25 Primary Only St";
+  await apiJson(page, "POST", "/api/customers", { id, name: "Inferred Primary Regression", address });
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db"), migrate: false });
+  try { db.prepare("DELETE FROM sites WHERE customer_id=?").run(id); } finally { db.close(); }
+  await page.goto(`${baseUrl}/jobs/new`);
+  await page.getByRole("textbox", { name: "Search customers" }).fill("Inferred Primary Regression");
+  await page.locator('[aria-label="Customer search results"] button').click();
+  await expect(page.locator("#create-job-site")).toContainText("Customer primary address");
+  await page.getByRole("button", { name: "Change site", exact: true }).click();
+  await expect(page.locator('[aria-label="Saved sites"] button')).toHaveCount(0);
+  await page.locator('[aria-label="Customer primary address"]').getByRole("button", { name: address }).click();
+  await page.getByLabel("Job title").fill("Primary address regression");
+  await page.getByLabel("Description of work").fill("Primary address without a persisted site.");
+  await page.getByRole("button", { name: "Create Job", exact: true }).click();
+  await expect(page.locator(".record-workspace h1")).toHaveText("Primary address regression");
+  expect(readWorkspaceState().customers.find((customer) => customer.id === id).sites).toHaveLength(0);
+  expect(readWorkspaceState().jobs.find((job) => job.title === "Primary address regression").jobAddress).toBe(address);
+});
+
 test("ServiceM8 preview and import retain primary, secondary and site-only contacts through the Settings screen", async ({ page }) => {
   await login(page, { pathname: "/settings" });
   await page.getByRole("button", { name: "Data Backup", exact: true }).last().click();

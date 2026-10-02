@@ -238,8 +238,7 @@ function getTomorrowPlanningOrder(db, tomorrowDate) {
 function validateExistingSiteForCreate(customer, jobAddress) {
   const normalizedAddress = normalizeSiteAddress(jobAddress);
   if (!normalizedAddress) throw new WorkspaceJobError("Job address is required.");
-  if (!Array.isArray(customer.sites) || customer.sites.length === 0) return;
-  const matchesSite = customer.sites.some((site) => normalizeSiteAddress(site.address).toLowerCase() === normalizedAddress.toLowerCase());
+  const matchesSite = (customer.sites || []).some((site) => normalizeSiteAddress(site.address).toLowerCase() === normalizedAddress.toLowerCase());
   const matchesCustomerAddress = normalizeSiteAddress(customer.address).toLowerCase() === normalizedAddress.toLowerCase();
   if (!matchesSite && !matchesCustomerAddress) {
     throw new WorkspaceJobError("Selected site does not belong to the customer.", 400);
@@ -613,6 +612,7 @@ export function createJob(db, input) {
         }
         customer = addOrReplaceCustomerSite(customer, input.siteInput, now);
         insertOrReplaceCustomer(db, customer);
+        validateExistingSiteForCreate(customer, jobForInsert.jobAddress);
       } else {
         const maintenancePlan = getMaintenancePlanForJobCreate(
           db,
