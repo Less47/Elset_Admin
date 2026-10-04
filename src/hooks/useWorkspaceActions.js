@@ -678,7 +678,7 @@ export function useWorkspaceActions({
     return true;
   }
 
-  async function handleSaveDocument(jobId, type, doc, { paymentBaseline } = {}) {
+  async function handleSaveDocument(jobId, type, doc, { paymentBaseline, createOnly = false } = {}) {
     if (!canManageBusiness) return false;
 
     const job = data.jobs.find((entry) => entry.id === jobId);
@@ -692,7 +692,7 @@ export function useWorkspaceActions({
     const saved = await saveDocumentApiRequest({
       path: documentPath(jobId, documentType),
       method: "PUT",
-      body: { [documentType]: documentToSave },
+      body: { [documentType]: documentToSave, ...(documentType === "invoice" && createOnly ? { createOnly: true } : {}) },
       errorMessage: `Unable to save the ${documentType}.`,
     });
     if (!saved.ok) return false;

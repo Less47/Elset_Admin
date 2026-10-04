@@ -123,6 +123,27 @@ function deletableFixture(history = [], payments = []) {
   return fixture;
 }
 
+test("create-only converted invoice saves once and never overwrites an existing invoice", async () => {
+  const fixture = readFixture();
+  fixture.jobs.find((job) => job.id === "demo-job-1001").invoice = null;
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const original = getDbState(dbPath).jobs.find((job) => job.id === "demo-job-1001");
+    const invoice = { type: "invoice", issueDate: "2026-10-05", dueDate: "2026-10-12", notes: "", items: [{ id: "converted-line", description: "Reviewed labour", qty: 2.5, rate: 145 }], payments: [], sentHistory: [] };
+    const saved = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "PUT", body: JSON.stringify({ invoice, createOnly: true }) });
+    assert.equal(saved.response.status, 200, saved.payload.error);
+    const before = getDbState(dbPath);
+    assert.deepEqual(before.jobs.find((job) => job.id === original.id).quote, original.quote);
+    const stale = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "PUT", body: JSON.stringify({ invoice: { ...invoice, notes: "Stale conversion", items: [{ ...invoice.items[0], rate: 999 }] }, createOnly: true }) });
+    assert.equal(stale.response.status, 409);
+    assert.match(stale.payload.error, /invoice already exists/);
+    assert.deepEqual(getDbState(dbPath), before);
+    // Normal invoice editing continues through the same endpoint.
+    const edited = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "PUT", body: JSON.stringify({ invoice: { ...invoice, notes: "Normal edit" } }) });
+    assert.equal(edited.response.status, 200, edited.payload.error);
+    assert.equal(getDbState(dbPath).jobs.find((job) => job.id === original.id).invoice.notes, "Normal edit");
+  }), fixture);
+});
+
 for (const role of ["admin", "office"]) test(`${role} can archive and restore an unpaid invoice without changing linked records`, async () => {
   const history = role === "office" ? [sentHistoryPayload("archive-send", "invoice", { stampText: "", emailPurpose: "invoice" }), sentHistoryPayload("archive-resend", "invoice", { stampText: "", emailPurpose: "invoice" })] : [];
   await withTempWorkspace(async ({ env, dbPath }) => {

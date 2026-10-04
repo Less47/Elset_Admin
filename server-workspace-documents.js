@@ -658,13 +658,14 @@ export function deleteQuoteForJob(db, jobIdInput) {
   })();
 }
 
-export function replaceInvoiceForJob(db, jobIdInput, input) {
+export function replaceInvoiceForJob(db, jobIdInput, input, { createOnly = false } = {}) {
   assertPlainObject(input, "Invoice");
   const jobId = normalizeId(jobIdInput, "Job ID");
 
   return db.transaction(() => {
     ensureJobExists(db, jobId);
     const existingRow = getInvoiceRowForJob(db, jobId);
+    if (createOnly && existingRow) throw new WorkspaceDocumentError("An invoice already exists for this job. Open the saved invoice to review it.", 409);
     const invoiceId = writeInvoiceTree(db, jobId, input, { existingRow });
     const updatedAt = nowIso();
     updateJobTouchedAt(db, jobId, updatedAt);

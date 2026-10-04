@@ -1,9 +1,12 @@
+import { useEffect } from "react";
 import { useLocation, useMatches, useNavigate, useOutletContext, useParams } from "react-router";
 import CreateJobPage from "./CreateJobPage";
 import JobDetailsPage from "./JobDetailsPage";
 import DocumentEditor from "@/components/documents/DocumentEditor";
 import { RecordWorkspace, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
-import { readFileAsDataUrl } from "@/lib/app-support";
+import { buildDefaultDoc, readFileAsDataUrl } from "@/lib/app-support";
+import { recordLinkState } from "@/lib/record-link-state";
+import { buildInvoiceDraftFromQuote, invoiceConversionDraft } from "@/lib/quote-to-invoice";
 
 export function CreateJobRoute() {
   const { session, data, workspaceActions } = useOutletContext();
@@ -38,6 +41,7 @@ export function JobDetailsRoute() {
   const { jobId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const match = useMatches().at(-1);
   const backLabel = location.state?.returnTo?.label || "Service Board";
   const onBack = () => navigate(location.state?.returnTo ? -1 : "/", { replace: !location.state?.returnTo });
   const handleJobPhotoUpload = async (files) => {
@@ -87,6 +91,14 @@ export function JobDetailsRoute() {
             onOpenDocument={session.canManageBusiness ? (type) => {
               if (workspaceViewModel.selectedFreshJob) workspaceActions.handleOpenDoc(workspaceViewModel.selectedFreshJob, type);
             } : null}
+            onSendQuoteToInvoice={session.canManageBusiness ? () => {
+              const job = workspaceViewModel.selectedFreshJob;
+              if (!job?.quote || job.invoice) return;
+              navigate(`/jobs/${encodeURIComponent(job.id)}/invoice`, { state: {
+                ...recordLinkState(location, match, data.jobs),
+                quoteInvoiceDraft: { jobId: job.id, document: buildInvoiceDraftFromQuote(job.quote, buildDefaultDoc(job, "invoice")) },
+              } });
+            } : null}
             onOpenSentDocument={session.canManageBusiness ? (type) => {
               if (workspaceViewModel.selectedFreshJob) workspaceActions.handleOpenSentDocumentCopy(workspaceViewModel.selectedFreshJob, type);
             } : null}
@@ -110,6 +122,15 @@ export function DocumentRoute() {
   const location = useLocation();
   const navigate = useNavigate();
   const routeSelectedJob = data.jobs.find((job) => job.id === jobId);
+  const initialDraft = invoiceConversionDraft(routeSelectedJob, documentType, location.state);
+  useEffect(() => {
+    if (!location.state?.quoteInvoiceDraft) return;
+    // The editor captures its draft on mount. Consume the transfer without
+    // changing the return path, so refresh/Forward cannot replay the conversion.
+    const state = { ...location.state };
+    delete state.quoteInvoiceDraft;
+    navigate(location.pathname + location.search, { replace: true, state });
+  }, [location, navigate]);
   const backLabel = location.state?.returnTo?.label || `Job #${routeSelectedJob?.jobNumber || "Details"}`;
   const onBack = () => navigate(location.state?.returnTo ? -1 : `/jobs/${encodeURIComponent(jobId)}`, { replace: !location.state?.returnTo });
   return session.canManageBusiness && routeSelectedJob
@@ -119,6 +140,7 @@ export function DocumentRoute() {
               key={`${jobId}-${documentType}`}
               job={routeSelectedJob}
               type={documentType}
+              initialDraft={initialDraft}
               backLabel={location.state?.returnTo?.label || `Job #${routeSelectedJob.jobNumber}`}
               onBack={onBack}
               onSave={(doc, options) => workspaceActions.handleSaveDocument(routeSelectedJob.id, documentType, doc, options)}

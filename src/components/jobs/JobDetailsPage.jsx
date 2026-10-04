@@ -1,7 +1,7 @@
 import { getJobContactGroups } from "@/lib/contact-model";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useMemo, useState } from "react";
-import { Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
+import { ArrowRight, Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import SiteNavigationLink from "@/components/shared/SiteNavigationLink";
@@ -113,6 +113,7 @@ export default function JobDetailsPage({
   onOpenDocument,
   onOpenSentDocument,
   onOpenSiteProfile,
+  onSendQuoteToInvoice,
   onStatusChange,
   onUpdateJobDetails,
   showCommercialDocuments,
@@ -458,7 +459,7 @@ export default function JobDetailsPage({
                   <TabsContent value="documents" className="mt-0">
                     <WorkspaceSection title="Documents" description="Existing quote and invoice actions remain connected to the current document workflow.">
                       <div className="grid gap-4 md:grid-cols-2">
-                        <article className="record-thin-border rounded-lg border-status-info-border bg-status-info-surface p-3">
+                        <article className="record-thin-border flex flex-col rounded-lg border-status-info-border bg-status-info-surface p-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <FileText className="h-5 w-5 text-status-info" />
@@ -468,7 +469,10 @@ export default function JobDetailsPage({
                             </div>
                             {job.quote?.sentHistory?.length && onOpenSentDocument ? <Button type="button" variant="outline" className="h-11 rounded-lg bg-card" onClick={() => onOpenSentDocument("quote")}>Open sent</Button> : null}
                           </div>
-                          {onOpenDocument ? <Button type="button" className="mt-4 h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("quote")}>Open Quote Editor</Button> : null}
+                          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
+                            {onOpenDocument ? <Button type="button" className="h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("quote")}>Open Quote Editor</Button> : null}
+                            {job.quote && !job.invoice && onSendQuoteToInvoice ? <Button type="button" className="ml-auto h-11 rounded-lg hover:opacity-90" onClick={onSendQuoteToInvoice}>Send to Invoice <ArrowRight className="h-4 w-4" aria-hidden="true" /></Button> : null}
+                          </div>
                         </article>
 
                         <article className="record-thin-border rounded-lg border-status-success-border bg-status-success-surface p-3">

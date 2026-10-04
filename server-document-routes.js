@@ -103,7 +103,7 @@ export function createDocumentRouter({
   router.put(
     "/api/jobs/:id/invoice",
     ...middleware,
-    handleDocumentRoute((db, req) => replaceInvoiceForJob(db, req.params.id, getRequestBody(req, "invoice")), env)
+    handleDocumentRoute((db, req) => replaceInvoiceForJob(db, req.params.id, getRequestBody(req, "invoice"), { createOnly: req.body?.createOnly === true }), env)
   );
 
   router.patch(

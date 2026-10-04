@@ -511,6 +511,216 @@ async function openWorkspace(browser, {width=1440,height=900,jobId=EXISTING_JOB,
 }
 const editor=page=>page.locator('[data-document-workspace]');
 const dbJob=id=>readWorkspaceState().jobs.find(job=>job.id===id);
+
+function prepareConversionQuote() {
+  const job = dbJob(NEW_JOB);
+  job.quote = {
+    type: "quote", issueDate: "2020-02-03", notes: "Quoted scope only; work is not yet completed",
+    items: [
+      { id: "convert-labour", description: "Quoted gate labour", qty: "2.5", rate: 145, unit: "hour", taxTreatment: "taxable", priceListItemId: "catalog-labour", specification: { model: "M1", tags: ["service"] } },
+      { id: "convert-travel", description: "Quoted travel", qty: "3", rate: 25 },
+    ],
+    sentHistory: [{ id: "convert-quote-email", sentAt: "2020-02-03T01:00:00.000Z", toEmail: job.customerEmail, subject: "Saved quote email" }],
+  };
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try { db.prepare("DELETE FROM jobs WHERE id = ?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
+  return dbJob(NEW_JOB);
+}
+
+async function openDocuments(page, jobId = NEW_JOB) {
+  await page.goto(`${baseUrl}/jobs/${jobId}`);
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
+}
+
+for (const width of [320, 390, 820, 1440]) {
+  test(`quote to invoice conversion stays unsaved, copies independent lines and saves normally at ${width}px`, async ({ browser }, info) => {
+    const before = prepareConversionQuote();
+    const { context, page, writes } = await openWorkspace(browser, { width, height: width <= 390 ? 844 : 1000, jobId: NEW_JOB, type: "invoice", username: width === 390 ? "mobileoffice" : "mobileadmin" });
+    try {
+      // Compare with the actual normal editor defaults, including its date policy.
+      const issueDate = await page.getByLabel("Issue date", { exact: true }).inputValue();
+      const dueDate = await page.getByLabel("Due date", { exact: true }).inputValue();
+      await openDocuments(page);
+      const quoteCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Quote", exact: true }) });
+      const openQuote = quoteCard.getByRole("button", { name: "Open Quote Editor", exact: true });
+      const convert = quoteCard.getByRole("button", { name: "Send to Invoice", exact: true });
+      await expect(openQuote).toBeVisible();
+      await expect(convert).toBeVisible();
+      await convert.scrollIntoViewIfNeeded();
+      const bounds = await convert.boundingBox(), leftBounds = await openQuote.boundingBox();
+      expect(bounds.height).toBe(44);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      if (width === 1440) { expect(bounds.y).toBe(leftBounds.y); expect(bounds.x).toBeGreaterThan(leftBounds.x + leftBounds.width); }
+      await noModalOrOverflow(page);
+      await capture(page, info, `quote-to-invoice-documents-${width}`);
+      await convert.click();
+      await expect(page).toHaveURL(`${baseUrl}/jobs/${NEW_JOB}/invoice`);
+      await expect(page.getByRole("heading", { name: "New Invoice", exact: true })).toBeVisible();
+      await expect(page.getByText("Invoice draft created from Quote. Review the details, then save when ready.", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Issue date", { exact: true })).toHaveValue(issueDate);
+      await expect(page.getByLabel("Due date", { exact: true })).toHaveValue(dueDate);
+      await expect(page.getByLabel("Work completed", { exact: true })).toHaveValue("");
+      for (const [index, line] of before.quote.items.entries()) {
+        await expect(page.getByLabel(`Item ${index + 1} description`, { exact: true })).toHaveValue(line.description);
+        await expect(page.getByLabel(`Item ${index + 1} quantity`, { exact: true })).toHaveValue(String(line.qty));
+        await expect(page.getByLabel(`Item ${index + 1} rate`, { exact: true })).toHaveValue(String(line.rate));
+      }
+      await expect(page.locator(".document-payment")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Preview & Send Invoice", exact: true })).toBeDisabled();
+      expect(writes).toEqual([]);
+      expect(dbJob(NEW_JOB)).toEqual(before);
+      expect(await page.evaluate(() => history.state.usr.quoteInvoiceDraft)).toBeUndefined();
+      // Same-page Router replacement has already rerendered the editor without
+      // erasing the draft. Further editing must also leave the saved Quote alone.
+      await page.getByLabel("Item 1 description", { exact: true }).fill("Reviewed gate labour");
+      await page.getByLabel("Work completed", { exact: true }).fill("Work completed after review");
+      expect(dbJob(NEW_JOB)).toEqual(before);
+      await noModalOrOverflow(page);
+      await capture(page, info, `quote-to-invoice-editor-${width}`);
+      await save(page, "invoice");
+      const saved = dbJob(NEW_JOB);
+      expect(saved.quote).toEqual(before.quote);
+      expect(saved.invoice).toMatchObject({ issueDate, dueDate, notes: "Work completed after review", payments: [], sentHistory: [], paymentNotes: "", paymentManagement: "manual" });
+      expect(saved.invoice.items[0]).toMatchObject({ ...before.quote.items[0], id: saved.invoice.items[0].id, description: "Reviewed gate labour" });
+      expect(saved.invoice.items[1]).toEqual({ ...before.quote.items[1], id: saved.invoice.items[1].id });
+      saved.invoice.items.forEach((line, index) => expect(line.id).not.toBe(before.quote.items[index].id));
+      expect(writes.map(({ path, method }) => ({ path, method }))).toEqual([{ path: `/api/jobs/${NEW_JOB}/invoice`, method: "PUT" }]);
+      expect(writes[0].body.createOnly).toBe(true);
+      await expect(page.getByRole("button", { name: "Preview & Send Invoice", exact: true })).toBeEnabled();
+      await page.reload();
+      await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("Reviewed gate labour");
+      expect(dbJob(NEW_JOB).invoice).toEqual(saved.invoice);
+      await openDocuments(page);
+      await expect(page.getByRole("button", { name: "Send to Invoice", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Open Invoice Editor", exact: true })).toBeVisible();
+    } finally { await context.close(); }
+  });
+}
+
+test("quote to invoice action is absent for missing quotes, existing invoices and technicians", async ({ browser }) => {
+  for (const [jobId, username, commercial] of [[NEW_JOB, "mobileadmin", true], [EXISTING_JOB, "mobileadmin", true], [NEW_JOB, "mobiletech", false]]) {
+    if (username === "mobiletech") prepareConversionQuote();
+    const { context, page, writes } = await openWorkspace(browser, { jobId, username });
+    try {
+      await page.goto(`${baseUrl}/jobs/${jobId}`);
+      if (commercial) await page.getByRole("tab", { name: "Documents", exact: true }).click();
+      else await expect(page.getByRole("tab", { name: "Documents", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Send to Invoice", exact: true })).toHaveCount(0);
+      expect(writes).toEqual([]);
+    } finally { await context.close(); }
+  }
+});
+
+test("quote to invoice discard and browser Forward do not create or replay the draft", async ({ browser }) => {
+  const before = prepareConversionQuote();
+  const { context, page, writes } = await openWorkspace(browser, { jobId: NEW_JOB });
+  try {
+    await openDocuments(page);
+    await page.getByRole("button", { name: "Send to Invoice", exact: true }).click();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue(before.quote.items[0].description);
+    await page.getByRole("button", { name: "Back to Job #1200", exact: true }).click();
+    const prompt = page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true });
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue(before.quote.items[0].description);
+    await page.goBack();
+    await prompt.getByRole("button", { name: "Discard", exact: true }).click();
+    await expect(page).toHaveURL(`${baseUrl}/jobs/${NEW_JOB}`);
+    expect(dbJob(NEW_JOB)).toEqual(before);
+    await page.goForward();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Work completed", { exact: true })).toHaveValue("");
+    expect(writes).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("quote to invoice refresh and direct loading restore normal blank invoice defaults", async ({ browser }) => {
+  const before = prepareConversionQuote();
+  const { context, page, writes } = await openWorkspace(browser, { jobId: NEW_JOB, type: "invoice" });
+  try {
+    const issueDate = await page.getByLabel("Issue date", { exact: true }).inputValue();
+    const dueDate = await page.getByLabel("Due date", { exact: true }).inputValue();
+    await openDocuments(page);
+    await page.getByRole("button", { name: "Send to Invoice", exact: true }).click();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue(before.quote.items[0].description);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.reload();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Issue date", { exact: true })).toHaveValue(issueDate);
+    await expect(page.getByLabel("Due date", { exact: true })).toHaveValue(dueDate);
+    await expect(page.getByLabel("Work completed", { exact: true })).toHaveValue("");
+    await expect(page.getByText("Invoice draft created from Quote. Review the details, then save when ready.", { exact: true })).toHaveCount(0);
+    await page.goto(`${baseUrl}/jobs/${NEW_JOB}/invoice`);
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("");
+    expect(dbJob(NEW_JOB)).toEqual(before);
+    expect(writes).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("quote to invoice stale route state cannot replace an existing invoice", async ({ browser }) => {
+  const before = dbJob(EXISTING_JOB);
+  const { context, page, writes } = await openWorkspace(browser, { type: "invoice" });
+  try {
+    await page.evaluate(({ jobId, document }) => {
+      history.replaceState({ ...history.state, usr: { ...history.state?.usr, quoteInvoiceDraft: { jobId, document } } }, "");
+    }, { jobId: EXISTING_JOB, document: { type: "invoice", issueDate: "2020-01-01", notes: "Stale scope", items: [{ id: "stale-line", description: "Stale quote", qty: 99, rate: 999 }], payments: [], sentHistory: [] } });
+    await page.reload();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue(before.invoice.items[0].description);
+    await expect(page.getByLabel("Issue date", { exact: true })).toHaveValue(before.invoice.issueDate);
+    await expect(page.getByLabel("Work completed", { exact: true })).toHaveValue(before.invoice.notes);
+    await expect(page.getByText("Invoice draft created from Quote. Review the details, then save when ready.", { exact: true })).toHaveCount(0);
+    expect(dbJob(EXISTING_JOB)).toEqual(before);
+    expect(writes).toEqual([]);
+    await save(page, "invoice");
+    expect(dbJob(EXISTING_JOB).invoice).toEqual(before.invoice);
+    expect(dbJob(EXISTING_JOB).quote).toEqual(before.quote);
+  } finally { await context.close(); }
+});
+
+test("quote to invoice preview cannot send or persist before Save Invoice", async ({ browser }) => {
+  const before = prepareConversionQuote();
+  const { context, page, writes } = await openWorkspace(browser, { jobId: NEW_JOB });
+  try {
+    await openDocuments(page);
+    await page.getByRole("button", { name: "Send to Invoice", exact: true }).click();
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(page.getByTitle("Invoice PDF preview")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm & Send Invoice", exact: true })).toBeDisabled();
+    expect(writes.map((entry) => entry.path)).toEqual(["/api/quotes/preview-pdf"]);
+    expect(dbJob(NEW_JOB)).toEqual(before);
+    await page.getByRole("button", { name: "Back to Invoice editor", exact: true }).click();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue(before.quote.items[0].description);
+  } finally { await context.close(); }
+});
+
+test("quote to invoice concurrent creation is rejected and reloading opens the saved invoice", async ({ browser }) => {
+  const before = prepareConversionQuote();
+  const { context, page, writes } = await openWorkspace(browser, { jobId: NEW_JOB });
+  try {
+    await openDocuments(page);
+    await page.getByRole("button", { name: "Send to Invoice", exact: true }).click();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue(before.quote.items[0].description);
+    const competingInvoice = { type: "invoice", issueDate: "2026-09-30", dueDate: "2026-10-07", notes: "Saved by another office user", items: [{ id: "competing-line", description: "Existing invoice work", qty: 1, rate: 250 }], payments: [], sentHistory: [] };
+    const created = await context.request.put(`${baseUrl}/api/jobs/${NEW_JOB}/invoice`, { data: { invoice: competingInvoice } });
+    expect(created.ok(), await created.text()).toBe(true);
+    const saved = dbJob(NEW_JOB);
+    const conflict = page.waitForResponse((response) => response.request().method() === "PUT" && response.url().endsWith(`/api/jobs/${NEW_JOB}/invoice`));
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Save Invoice", exact: true }).click();
+    expect((await conflict).status()).toBe(409);
+    await expect(page.locator(".document-error")).toContainText("Unable to save the invoice");
+    expect(dbJob(NEW_JOB)).toEqual(saved);
+    expect(saved.quote).toEqual(before.quote);
+    expect(writes).toHaveLength(1);
+    expect(writes[0].body.createOnly).toBe(true);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.reload();
+    await expect(page.getByLabel("Item 1 description", { exact: true })).toHaveValue("Existing invoice work");
+    await expect(page.getByLabel("Work completed", { exact: true })).toHaveValue(competingInvoice.notes);
+    expect(dbJob(NEW_JOB)).toEqual(saved);
+  } finally { await context.close(); }
+});
+
 function prepareDeletionInvoice({ sent = false, receipt = false, payments = [] } = {}) {
   const state = readWorkspaceState();
   const job = state.jobs.find((entry) => entry.id === EXISTING_JOB);
