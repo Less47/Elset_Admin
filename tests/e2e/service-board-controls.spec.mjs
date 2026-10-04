@@ -10,7 +10,8 @@ import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import Database from "better-sqlite3";
 import { insertJobTree } from "../../server-workspace-jobs.js";
-import { insertQuoteTree } from "../../server-workspace-documents.js";
+import { insertQuoteTree, insertInvoiceTree } from "../../server-workspace-documents.js";
+import { updateWorkspaceAddons } from "../../server-workspace-addons.js";
 import { normalizeStoredData } from "../../server-store.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
 import { contrastRatio } from "../../src/lib/theme-tokens.js";
@@ -101,6 +102,155 @@ const layoutCases = [
   { id: "todo-26", note: "W".repeat(25), rate: 422.5, indicator: true },
   { id: "todo-25", note: "W".repeat(25), rate: 11223.34, indicator: false },
 ];
+
+function seedQuickBooksIndicators(provider = "quickbooks") {
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  try {
+    updateWorkspaceAddons(db, { quickbooks: provider === "quickbooks", xero: provider === "xero" });
+    for (const [index, owner, paid] of [[175, "manual", true], [174, "manual", false], [173, "quickbooks", false], [170, "xero", false]]) {
+      const id = `completed-${index}`;
+      insertInvoiceTree(db, id, { id: `qb-board-invoice-${index}`, issueDate: "2026-10-05", dueDate: "2099-10-05",
+        items: [{ description: "Service", qty: 1, rate: 100 }],
+        sentHistory: [{ id: `sent-${index}`, sentAt: "2026-10-05", toEmail: "fixture@example.test" }],
+        payments: paid ? [{ id: `paid-${index}`, amount: 110, date: "2026-10-05" }] : [] });
+      if (owner !== "manual") db.prepare(`INSERT INTO integration_entity_mappings
+        (id, workspace_id, provider, external_tenant_id, local_entity_type, local_entity_id, external_entity_id, created_at, updated_at)
+        VALUES (?, (SELECT workspace_id FROM integration_workspace), ?, 'fixture-company', 'invoice', ?, ?, '2026-10-05', '2026-10-05')`)
+        .run(`mapping-${index}`, owner, `qb-board-invoice-${index}`, `external-${index}`);
+    }
+    for (const index of [175, 171]) insertQuoteTree(db, `completed-${index}`, { id: `qb-board-quote-${index}`, items: [{ description: "Quoted work", qty: 1, rate: 100 }],
+      sentHistory: [{ id: `quote-sent-${index}`, sentAt: "2026-10-05", toEmail: "fixture@example.test" }] });
+    db.prepare("UPDATE jobs SET maintenance_plan_name='Quarterly service', service_board_note='Waiting on parts' WHERE id='completed-175'").run();
+  } finally { db.close(); }
+}
+
+const qbWarning = (target) => target.locator('[data-service-board-indicator="quickbooks-unsynced"]');
+const qbBoardCard = (page, index) => column(page).locator(`[data-service-board-job-id="completed-${index}"], [data-mobile-job-id="completed-${index}"]`);
+
+async function assertQuickBooksPill(target, expanded) {
+  const pill = qbWarning(target);
+  await expect(pill).toBeVisible();
+  await expect(pill).toHaveAttribute("aria-label", "Not in QuickBooks");
+  await expect(pill).toHaveAttribute("title", "Not in QuickBooks");
+  await expect(pill).toHaveAttribute("data-indicator-expanded", String(expanded));
+  await expect(pill).toHaveText(expanded ? "!Not in QuickBooks" : "!");
+  const geometry = await pill.evaluate((element) => {
+    const circle = element.querySelector("[data-quickbooks-warning-centre]");
+    const rect = (node) => { const r = node.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; };
+    const hex = (color) => {
+      const ctx = document.createElement("canvas").getContext("2d"); ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1);
+      return "#" + [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).map((c) => c.toString(16).padStart(2, "0")).join("");
+    };
+    return { outer: rect(element), inner: rect(circle), foreground: hex(getComputedStyle(element).color), background: hex(getComputedStyle(element).backgroundColor),
+      circleBackground: hex(getComputedStyle(circle).backgroundColor), exclamationColor: hex(getComputedStyle(circle).color),
+      circleText: circle.textContent, clipped: element.scrollWidth > element.clientWidth };
+  });
+  expect(geometry.circleText).toBe("!");
+  expect(geometry.inner.width).toBe(geometry.inner.height);
+  expect(geometry.inner.left).toBeGreaterThan(geometry.outer.left);
+  expect(geometry.inner.right).toBeLessThan(geometry.outer.right);
+  expect(geometry.inner.top).toBeGreaterThanOrEqual(geometry.outer.top);
+  expect(geometry.inner.bottom).toBeLessThanOrEqual(geometry.outer.bottom);
+  expect(geometry.circleBackground).toBe("#ffffff");
+  expect(geometry.foreground).toBe("#ffffff");
+  expect(geometry.exclamationColor).toBe(geometry.background);
+  expect(contrastRatio(geometry.foreground, geometry.background)).toBeGreaterThanOrEqual(4.5);
+  expect(geometry.clipped).toBe(false);
+  if (!expanded) expect(geometry.outer.width).toBeGreaterThan(geometry.outer.height);
+  return geometry;
+}
+
+for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], [1440, "midnight-signal"], [320, "elset"], [390, "midnight-signal"]]) {
+  test(`QuickBooks pill, legend and coexisting indicators fit all views at ${width}px ${theme}`, async ({ browser }, info) => {
+    seedQuickBooksIndicators();
+    const before = readWorkspace();
+    const { context, page, writes } = await openBoard(browser, { width, height: 1180 }, themePresets.find((preset) => preset.id === theme));
+    const mobile = width < 768;
+    try {
+      const setLabels = async (enabled) => {
+        if (mobile) {
+          await page.getByRole("button", { name: "Open board filters", exact: true }).click();
+          const filters = page.getByRole("dialog", { name: "Board filters", exact: true });
+          await filters.getByRole("checkbox", { name: "Show indicator labels" }).setChecked(enabled);
+          await filters.locator("summary").filter({ hasText: "Legend" }).click();
+          await assertQuickBooksPill(filters, false);
+          await expect(filters.getByText("Not in QuickBooks", { exact: true })).toBeVisible();
+          await capture(page, info, `qb-legend-${width}-${theme}-${enabled}`);
+          await page.keyboard.press("Escape");
+        } else {
+          await page.getByText("Show tag info", { exact: true }).locator("..").getByRole("checkbox").setChecked(enabled);
+          await assertQuickBooksPill(page.getByText("Legend", { exact: true }).locator(".."), false);
+        }
+      };
+      for (const enabled of [false, true]) {
+        await setLabels(enabled);
+        for (const view of mobile ? ["Mobile"] : ["List", "Grid", "Compact"]) {
+          if (!mobile) await page.getByRole("button", { name: `Completed ${view} view`, exact: true }).click();
+          for (const index of [175, 174]) await assertQuickBooksPill(qbBoardCard(page, index), enabled);
+          for (const index of [173, 172, 171, 170]) await expect(qbWarning(qbBoardCard(page, index))).toHaveCount(0);
+          const paid = qbBoardCard(page, 175);
+          await expect(paid.getByTitle("Invoice Paid", { exact: true })).toBeVisible();
+          await expect(paid.getByTitle("Quoted", { exact: true })).toBeVisible();
+          await expect(paid.getByTitle("Maintenance", { exact: true })).toBeVisible();
+          if (!enabled) {
+            const paidDot = await paid.getByTitle("Invoice Paid", { exact: true }).boundingBox();
+            const warningPill = await qbWarning(paid).boundingBox();
+            expect(paidDot.width).toBe(paidDot.height);
+            expect(warningPill.width).toBeGreaterThan(warningPill.height);
+            await expect(paid.getByTitle("Invoice Paid", { exact: true }).locator("[data-quickbooks-warning-centre]")).toHaveCount(0);
+          }
+          await expect(paid.getByLabel("Job note: Waiting on parts")).toBeVisible();
+          await expect(qbBoardCard(page, 174).getByTitle("Unpaid", { exact: true })).toBeVisible();
+          for (const index of [175, 174]) {
+            const target = qbBoardCard(page, index);
+            await target.scrollIntoViewIfNeeded();
+            const overlaps = await target.evaluate((element) => {
+              const pill = element.querySelector('[data-service-board-indicator="quickbooks-unsynced"]').getBoundingClientRect();
+              const outer = element.getBoundingClientRect();
+              const collisions = [...element.querySelectorAll('button, [data-service-board-note], [title$=" value"], [data-job-card-number], [data-job-card-customer]')]
+                .filter((node) => !node.contains(element.querySelector('[data-service-board-indicator="quickbooks-unsynced"]')))
+                .filter((node) => { const r = node.getBoundingClientRect(); return r.width && r.height && pill.left < r.right && pill.right > r.left && pill.top < r.bottom && pill.bottom > r.top; });
+              return { collisions: collisions.map((node) => node.outerHTML), within: pill.left >= outer.left && pill.right <= outer.right };
+            });
+            expect(overlaps.collisions, `${width}px ${view} labels=${enabled} job=${index}`).toEqual([]);
+            expect(overlaps.within, `${width}px ${view} labels=${enabled} job=${index}`).toBe(true);
+          }
+          await assertLayout(page, { width, height: 1180 });
+          await paid.scrollIntoViewIfNeeded();
+          await capture(page, info, `qb-board-${width}-${theme}-${view}-${enabled}`);
+        }
+      }
+      expect(readWorkspace()).toEqual(before);
+      expect(writes.filter((write) => write.path !== "/api/user-preferences")).toEqual([]);
+    } finally { await context.close(); }
+  });
+}
+
+for (const provider of ["", "xero"]) test(`QuickBooks warning and legend are absent with ${provider || "disabled accounting"}`, async ({ browser }) => {
+  seedQuickBooksIndicators(provider);
+  const { context, page } = await openBoard(browser);
+  try { await expect(qbWarning(page)).toHaveCount(0); }
+  finally { await context.close(); }
+});
+
+for (const width of [390, 1440]) test(`Tomorrow retains its existing commercial indicator treatment at ${width}px`, async ({ browser }) => {
+  seedQuickBooksIndicators();
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  db.prepare("UPDATE jobs SET service_board_tomorrow_date=(SELECT service_board_tomorrow_date FROM jobs WHERE id='todo-30'), service_board_tomorrow_order=0 WHERE id='completed-175'").run();
+  db.close();
+  const { context, page } = await openBoard(browser, { width, height: 1180 });
+  try {
+    if (width < 768) {
+      await page.getByRole("button", { name: "Tomorrow, 31 planned jobs", exact: true }).click();
+      await assertQuickBooksPill(page.locator('[data-mobile-board-view="Tomorrow"] [data-mobile-job-id="completed-175"]'), false);
+    } else {
+      await page.locator("[data-desktop-tomorrow-tab]").click();
+      const target = page.locator('[data-tomorrow-job-id="completed-175"]');
+      await expect(target).toBeVisible();
+      await expect(qbWarning(target)).toHaveCount(0);
+    }
+  } finally { await context.close(); }
+});
 
 function seedNoteLayoutCases() {
   const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
@@ -561,7 +711,11 @@ test.afterAll(async () => {
 
 test.beforeEach(() => {
   const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
-  try { db.transaction(() => { db.exec("DELETE FROM jobs"); for (const job of workspaceFixture().jobs) insertJobTree(db, job); })(); }
+  try { db.transaction(() => {
+    db.exec("DELETE FROM integration_entity_mappings; DELETE FROM jobs");
+    updateWorkspaceAddons(db, { quickbooks: false, xero: false });
+    for (const job of workspaceFixture().jobs) insertJobTree(db, job);
+  })(); }
   finally { db.close(); }
   const authDb = new Database(path.join(dataDir, "auth.db"));
   try { authDb.exec("DELETE FROM user_ui_preferences"); } finally { authDb.close(); }

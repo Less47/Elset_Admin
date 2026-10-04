@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { statusThemes } from "@/lib/job-status";
 import JobNotePill from "./JobNotePill";
+import ServiceBoardIndicatorSymbol from "./ServiceBoardIndicatorSymbol";
 import {
   buildJobCardIndicators,
   formatStreetAndSuburb,
@@ -23,7 +24,7 @@ function MobileIndicatorList({ indicators, showLabels }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Job indicators">
       {indicators.map((indicator) => (
-        <span
+        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : <span
           key={indicator.id}
           className={showLabels
             ? "inline-flex items-center gap-1.5 rounded-full bg-card/80 px-2 py-1 text-[10px] font-semibold text-text-secondary"
@@ -45,6 +46,7 @@ function MobileIndicatorList({ indicators, showLabels }) {
 
 // statusDateKey keeps date-based invoice indicators fresh across day changes.
 const MobileJobCard = memo(function MobileJobCard({
+  accountingProvider,
   noteEditMode = false,
   onEditNote,
   canManageTomorrow,
@@ -66,6 +68,7 @@ const MobileJobCard = memo(function MobileJobCard({
   const indicators = buildJobCardIndicators({
     job,
     invoiceStatus: getInvoiceStatus(job),
+    accountingProvider,
   });
   const openLabel = [
     noteEditMode ? `Edit note for Job #${job.jobNumber}` : `Open Job #${job.jobNumber}`,
@@ -115,7 +118,7 @@ const MobileJobCard = memo(function MobileJobCard({
           <span className="shrink-0">{scheduledLabel}</span>
         </div>
 
-        <div className="mt-2.5 flex min-w-0 items-center justify-between gap-2">
+        <div className="mt-2.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <Badge className={urgencyTone[job.urgency] || urgencyTone.Low}>{job.urgency || "Low"}</Badge>
             {showStatus ? <Badge className={statusTheme.badge}>{job.status}</Badge> : null}

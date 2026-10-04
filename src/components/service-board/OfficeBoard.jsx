@@ -11,12 +11,13 @@ import { statuses, statusThemes } from "@/lib/job-status";
 import CompletedShowMore from "./CompletedShowMore";
 import JobNoteModeButton from "./JobNoteModeButton";
 import JobNotePill from "./JobNotePill";
+import ServiceBoardIndicatorSymbol from "./ServiceBoardIndicatorSymbol";
 import { useCompletedJobLimit } from "./useCompletedJobLimit";
 import {
   buildJobCardIndicators,
   formatStreetAndSuburb,
   getJobValueMeta,
-  serviceBoardIndicatorLegend,
+  getServiceBoardIndicatorLegend,
   serviceBoardSortOptions,
   sortJobsForColumn,
 } from "./service-board-utils";
@@ -90,6 +91,7 @@ function ServiceBoardSortSelect({ status, sortMode, onChange }) {
 }
 
 export function ServiceBoardTagLegend({
+  accountingProvider,
   noteEditMode = false,
   onToggleNoteEditMode,
   showTagLabels,
@@ -102,9 +104,9 @@ export function ServiceBoardTagLegend({
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 ${isHeroTone ? "border-white/20" : "border-border"}`}>
       <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${isHeroTone ? "text-inherit" : "text-muted-foreground"}`}>Legend</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        {serviceBoardIndicatorLegend.map((indicator) => (
+        {getServiceBoardIndicatorLegend(accountingProvider).map((indicator) => (
           <div key={indicator.id} className={`inline-flex items-center gap-1.5 text-[11px] ${isHeroTone ? "text-inherit" : "text-text-secondary"}`}>
-            <span className={`h-2 w-2 rounded-full ${indicator.dotClassName}`} />
+            <ServiceBoardIndicatorSymbol indicator={indicator} />
             <span>{indicator.label}</span>
           </div>
         ))}
@@ -310,13 +312,13 @@ export function ServiceBoardTomorrowPanel({
   );
 }
 
-function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
+function JobCardIndicators({ indicators, showTagLabels, showQuickBooksLabel = showTagLabels, className = "mt-2" }) {
   if (indicators.length === 0) return null;
 
   return (
     <div className={`flex min-w-0 max-w-full flex-wrap items-center gap-1.5 ${className}`}>
       {indicators.map((indicator) =>
-        showTagLabels ? (
+        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showQuickBooksLabel} /> : showTagLabels ? (
           <div
             key={indicator.id}
             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary"
@@ -340,6 +342,7 @@ function JobCardIndicators({ indicators, showTagLabels, className = "mt-2" }) {
 
 // The statusDateKey prop also invalidates memoization when date-based invoice indicators change.
 const JobCard = memo(function JobCard({
+  accountingProvider,
   job,
   noteEditMode = false,
   onEditNote,
@@ -388,7 +391,11 @@ const JobCard = memo(function JobCard({
   const cardIndicators = buildJobCardIndicators({
     job,
     invoiceStatus,
+    accountingProvider,
   });
+  const hasQuickBooksWarning = cardIndicators.some((indicator) => indicator.id === "quickbooks-unsynced");
+  // Expanded warnings need the full grid row to keep the label readable beside the Tomorrow action.
+  const expandedQuickBooksWarning = showTagLabels && hasQuickBooksWarning;
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
   const handleCardDoubleClick = () => {
     if (noteEditMode) return;
@@ -469,14 +476,15 @@ const JobCard = memo(function JobCard({
         onTouchStart={!noteEditMode && onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
         title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
       >
-        <JobCardIndicators
+        {!hasQuickBooksWarning ? <JobCardIndicators
           indicators={cardIndicators}
           showTagLabels={false}
           className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-1/2 gap-1.5"
-        />
+        /> : null}
         {tomorrowAction}
         <Card className={cardClassName}>
           <CardContent className={`min-w-0 max-w-full [overflow-wrap:anywhere] ${cardContentClassName}`}>
+            {hasQuickBooksWarning ? <JobCardIndicators indicators={cardIndicators} showTagLabels={false} showQuickBooksLabel={showTagLabels} className="mb-1 pr-12 lg:pr-9" /> : null}
             <button
               type="button"
               data-job-card-body
@@ -529,7 +537,7 @@ const JobCard = memo(function JobCard({
   return (
     <div
       {...noteInteraction}
-      className={`group relative box-border w-full min-w-0 max-w-full ${isGridView ? "h-full" : ""}`}
+      className={`group relative box-border w-full min-w-0 max-w-full ${isGridView ? "h-full" : ""} ${isGridView && expandedQuickBooksWarning ? "col-span-full" : ""}`}
       draggable={draggable && !noteEditMode}
       onDragStart={handleDragStart}
       onDoubleClick={handleCardDoubleClick}
@@ -537,7 +545,7 @@ const JobCard = memo(function JobCard({
       title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
     >
       {isGridView ? <JobNotePill note={job.serviceBoardNote} variant="floating" withFloatingPrice={Boolean(jobValueMeta)} /> : null}
-      {isGridView ? (
+      {isGridView && !hasQuickBooksWarning ? (
         <JobCardIndicators
           indicators={cardIndicators}
           showTagLabels={false}
@@ -557,6 +565,7 @@ const JobCard = memo(function JobCard({
       ) : null}
       <Card className={cardClassName}>
         <CardContent className={`min-w-0 max-w-full [overflow-wrap:anywhere] ${cardContentClassName}`}>
+          {isGridView && hasQuickBooksWarning ? <JobCardIndicators indicators={cardIndicators} showTagLabels={false} showQuickBooksLabel={showTagLabels} className="mb-2 pr-12 lg:pr-9" /> : null}
           {isGridView ? (
             <div className="flex h-full min-w-0 flex-col justify-between gap-2">
               <div className="space-y-1">
@@ -629,6 +638,7 @@ const JobCard = memo(function JobCard({
 });
 
 export function OfficeBoard({
+  accountingProvider,
   jobs,
   noteEditMode = false,
   onEditNote,
@@ -879,6 +889,7 @@ export function OfficeBoard({
                 ) : (
                   visibleJobs.map((job) => (
                     <JobCard
+                      accountingProvider={accountingProvider}
                       noteEditMode={noteEditMode}
                       onEditNote={editNote}
                       key={`${job.id}-${viewMode}`}

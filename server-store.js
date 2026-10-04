@@ -717,6 +717,8 @@ function normalizeDocumentRecord(document, fallbackType) {
     dueDate,
     paymentNotes: String(document.paymentNotes || "").trim(),
     payments: normalizeInvoicePayments(document, invoiceTotal, dueDate || baseDocument.issueDate),
+    // Preserve the provider projected from invoice mappings through app-state reads.
+    ...(["manual", "xero", "quickbooks"].includes(document.paymentManagement) ? { paymentManagement: document.paymentManagement } : {}),
   };
 }
 

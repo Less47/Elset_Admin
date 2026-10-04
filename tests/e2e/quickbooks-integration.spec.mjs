@@ -142,6 +142,54 @@ async function syncPayments(context, page, payments) {
   await card(page).getByRole("button", { name: "Sync with QuickBooks", exact: true }).click();
   await expect(card(page)).toContainText("Payment sync: Up to date");
 }
+
+for (const width of [390, 1440]) test(`authoritative QuickBooks invoice reconciliation removes the board warning without reload at ${width}px`, async ({ browser }, info) => {
+  const { context, page } = await open(browser, { width, path: "/" });
+  try {
+    await connectApi(context);
+    // Load the newly enabled add-on once; all subsequent navigation stays in the SPA.
+    await page.reload();
+    if (width < 768) await page.getByRole("tab", { name: /^Completed / }).click();
+    const boardJob = () => page.locator('[data-service-board-job-id="costing-job"], [data-mobile-job-id="costing-job"]');
+    const warning = () => boardJob().getByRole("img", { name: "Not in QuickBooks", exact: true });
+    await expect(warning()).toBeVisible();
+    await expect(page.locator('[data-service-board-job-id="quote-only"], [data-mobile-job-id="quote-only"]').getByRole("img", { name: "Not in QuickBooks" })).toHaveCount(0);
+    await capture(page, info, `board-before-qb-sync-${width}`, boardJob());
+    const marker = await page.evaluate(() => { window.__boardSyncSession = Math.random(); return window.__boardSyncSession; });
+    if (width < 768) await boardJob().getByRole("button", { name: /^Open Job #7101/ }).click();
+    else await boardJob().dblclick();
+    await page.getByRole("tab", { name: "Documents", exact: true }).click();
+    await page.getByRole("button", { name: "Open Invoice Editor", exact: true }).click();
+    const synced = page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/jobs/costing-job/invoice/integrations/quickbooks/sync");
+    await card(page).getByRole("button", { name: "Send to QuickBooks", exact: true }).click();
+    expect((await (await synced).json()).result.invoice.paymentManagement).toBe("quickbooks");
+    await expect(card(page).getByRole("status")).toHaveText("Synced");
+    const mapping = withDb(db => db.prepare("SELECT * FROM integration_entity_mappings WHERE local_entity_type='invoice' AND local_entity_id=(SELECT id FROM invoices WHERE job_id='costing-job')").get());
+    expect(mapping.provider).toBe("quickbooks");
+    await page.getByRole("button", { name: "Back to Job #7101", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Service Board", exact: true }).click();
+    if (width < 768) await page.getByRole("tab", { name: /^Completed / }).click();
+    await expect(boardJob()).toBeVisible();
+    await expect(warning()).toHaveCount(0);
+    expect(await page.evaluate(() => window.__boardSyncSession)).toBe(marker);
+    await capture(page, info, `board-after-qb-sync-${width}`, boardJob());
+    const persisted = withDb(db => db.prepare("SELECT extra_json FROM invoices WHERE job_id='costing-job'").get());
+    expect(JSON.parse(persisted.extra_json)).toEqual({});
+    // Even a failed later update keeps the invoice mapping, so the warning stays absent.
+    if (width < 768) await boardJob().getByRole("button", { name: /^Open Job #7101/ }).click();
+    else await boardJob().dblclick();
+    await page.getByRole("tab", { name: "Documents", exact: true }).click();
+    await page.getByRole("button", { name: "Open Invoice Editor", exact: true }).click();
+    await page.route("**/api/jobs/costing-job/invoice/integrations/quickbooks/sync", route => route.fulfill({ status: 503, json: { error: "Synthetic later update failure" } }));
+    await card(page).getByRole("button", { name: "Update QuickBooks", exact: true }).click();
+    await expect(card(page)).toContainText("Synthetic later update failure");
+    await page.getByRole("button", { name: "Back to Job #7101", exact: true }).click();
+    await page.getByRole("button", { name: "Back to Service Board", exact: true }).click();
+    if (width < 768) await page.getByRole("tab", { name: /^Completed / }).click();
+    await expect(warning()).toHaveCount(0);
+    expect(await page.evaluate(() => window.__boardSyncSession)).toBe(marker);
+  } finally { await context.close(); }
+});
 test("explicit settings retain provider configuration drafts through status, failure, and guarded commands", async ({ browser }) => {
   const { context, page } = await open(browser);
   try {

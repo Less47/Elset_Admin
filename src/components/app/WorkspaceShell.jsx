@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { activeAccountingProvider } from "@/lib/addons";
 import {
   addMonths,
   buildCustomerSites,
@@ -46,6 +47,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
+  const accountingProvider = activeAccountingProvider(workspaceAddons.addons);
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
   const {
     activeSection,
@@ -187,6 +189,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         </div>
 
         <ServiceBoardTagLegend
+          accountingProvider={accountingProvider}
           noteEditMode={jobNotes.active}
           onToggleNoteEditMode={jobNotes.toggle}
           tone={isHeroTone ? "hero" : "default"}
@@ -315,6 +318,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                   <PageBody className="space-y-4">
                     {noteStatus}
                   <OfficeBoard
+                    accountingProvider={accountingProvider}
                     noteEditMode={jobNotes.active}
                     onEditNote={jobNotes.open}
                     jobs={filteredJobs}
@@ -356,6 +360,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
               </>
             ) : (
               <MobileServiceBoard
+                accountingProvider={accountingProvider}
                 noteStatus={noteStatus}
                 noteEditMode={jobNotes.active}
                 onToggleNoteEditMode={jobNotes.toggle}

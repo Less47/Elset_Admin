@@ -22,6 +22,7 @@ import {
 } from "./service-board-utils";
 
 export default function MobileServiceBoard({
+  accountingProvider,
   noteStatus,
   noteEditMode = false,
   onToggleNoteEditMode,
@@ -216,6 +217,7 @@ export default function MobileServiceBoard({
           <div className={`grid ${visibleJobs.some((job) => job.serviceBoardNote) ? "gap-3 pb-2" : "gap-2"}`}>
             {visibleJobs.map((job) => (
               <MobileJobCard
+                accountingProvider={accountingProvider}
                 noteEditMode={noteEditMode}
                 onEditNote={editNote}
                 key={job.id}
@@ -240,6 +242,7 @@ export default function MobileServiceBoard({
 
       </PageBody>
       <MobileBoardFilters
+        accountingProvider={accountingProvider}
         activeFilterCount={activeFilterCount}
         onClearFilters={() => onUrgencyChange(false)}
         onOpenChange={setFiltersOpen}

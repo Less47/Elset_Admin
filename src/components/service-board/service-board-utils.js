@@ -19,13 +19,20 @@ export const serviceBoardSortOptions = [
   { value: "value", label: "Highest Value" },
 ];
 
+const quickBooksUnsyncedIndicator = { id: "quickbooks-unsynced", label: "Not in QuickBooks", type: "quickbooks-warning" };
+
 export const serviceBoardIndicatorLegend = [
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
   { id: "invoice-attention", label: "Invoice needs attention", dotClassName: "bg-rose-500" },
+  quickBooksUnsyncedIndicator,
   { id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" },
 ];
+
+export function getServiceBoardIndicatorLegend(accountingProvider) {
+  return serviceBoardIndicatorLegend.filter((indicator) => indicator.id !== "quickbooks-unsynced" || accountingProvider === "quickbooks");
+}
 
 export function getJobValueMeta(job) {
   if (job?.invoice) {
@@ -105,7 +112,7 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
   });
 }
 
-export function buildJobCardIndicators({ job, invoiceStatus }) {
+export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider }) {
   const indicators = [];
   const quoteSent = Boolean(job.quote?.sentHistory?.length);
   const showInvoiceStatus = Boolean(job.invoice) || job.status === "Completed";
@@ -124,6 +131,13 @@ export function buildJobCardIndicators({ job, invoiceStatus }) {
     } else {
       indicators.push({ id: "invoice-pending", label: invoiceStatus.label, dotClassName: "bg-violet-500" });
     }
+  }
+
+  // Mapping ownership is independent of invoice issuance, payment and sync errors.
+  // Xero-owned invoices cannot be sent to QuickBooks, even after a provider switch.
+  if (accountingProvider === "quickbooks" && job.invoice
+    && !["quickbooks", "xero"].includes(job.invoice.paymentManagement)) {
+    indicators.push(quickBooksUnsyncedIndicator);
   }
 
   if (job.maintenancePlanName) {

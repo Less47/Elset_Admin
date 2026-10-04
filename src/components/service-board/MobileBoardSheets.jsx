@@ -13,7 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { statuses, statusThemes } from "@/lib/job-status";
-import { serviceBoardIndicatorLegend } from "./service-board-utils";
+import { getServiceBoardIndicatorLegend } from "./service-board-utils";
+import ServiceBoardIndicatorSymbol from "./ServiceBoardIndicatorSymbol";
 
 const mobileSheetClassName = "bottom-0 left-0 top-auto max-h-[min(86dvh,46rem)] w-full max-w-none translate-x-0 translate-y-0 gap-0 rounded-b-none rounded-t-3xl border-x-0 border-b-0 p-0 data-closed:slide-out-to-bottom-4 data-open:slide-in-from-bottom-4 motion-reduce:transition-none motion-reduce:data-closed:animate-none motion-reduce:data-open:animate-none sm:left-1/2 sm:w-[min(100%-2rem,38rem)] sm:-translate-x-1/2 sm:rounded-b-3xl sm:border-x sm:border-b";
 
@@ -42,6 +43,7 @@ function SheetHeader({ children, description }) {
 }
 
 export function MobileBoardFilters({
+  accountingProvider,
   activeFilterCount,
   onClearFilters,
   onOpenChange,
@@ -131,9 +133,9 @@ export function MobileBoardFilters({
                 <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide</span>
               </summary>
               <div className="grid grid-cols-2 gap-x-3 gap-y-3 border-t p-panel text-xs text-text-secondary">
-                {serviceBoardIndicatorLegend.map((indicator) => (
+                {getServiceBoardIndicatorLegend(accountingProvider).map((indicator) => (
                   <div key={indicator.id} className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${indicator.dotClassName}`} />
+                    <ServiceBoardIndicatorSymbol indicator={indicator} dotSizeClassName="h-2.5 w-2.5" />
                     <span>{indicator.label}</span>
                   </div>
                 ))}
