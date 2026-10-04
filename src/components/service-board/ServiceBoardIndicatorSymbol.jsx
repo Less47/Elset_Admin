@@ -10,7 +10,7 @@ export default function ServiceBoardIndicatorSymbol({ indicator, showLabel = fal
       title={indicator.label}
       data-service-board-indicator={indicator.id}
       data-indicator-expanded={showLabel}
-      className="inline-flex min-w-0 max-w-full items-center justify-center gap-1.5 rounded-full bg-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-4 tracking-wide text-white"
+      className={`inline-flex min-w-0 max-w-full items-center justify-center rounded-full bg-emerald-700 text-[10px] font-semibold uppercase leading-4 tracking-wide text-white ${showLabel ? "gap-1.5 px-1.5 py-0.5" : "h-[18px] w-[18px] shrink-0 p-0"}`}
     >
       <span
         aria-hidden="true"

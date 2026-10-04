@@ -107,7 +107,7 @@ function seedQuickBooksIndicators(provider = "quickbooks") {
   const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
   try {
     updateWorkspaceAddons(db, { quickbooks: provider === "quickbooks", xero: provider === "xero" });
-    for (const [index, owner, paid] of [[175, "manual", true], [174, "manual", false], [173, "quickbooks", false], [170, "xero", false]]) {
+    for (const [index, owner, paid] of [[175, "manual", true], [174, "manual", false], [173, "quickbooks", false], [170, "xero", false], [169, "manual", false]]) {
       const id = `completed-${index}`;
       insertInvoiceTree(db, id, { id: `qb-board-invoice-${index}`, issueDate: "2026-10-05", dueDate: "2099-10-05",
         items: [{ description: "Service", qty: 1, rate: 100 }],
@@ -118,7 +118,7 @@ function seedQuickBooksIndicators(provider = "quickbooks") {
         VALUES (?, (SELECT workspace_id FROM integration_workspace), ?, 'fixture-company', 'invoice', ?, ?, '2026-10-05', '2026-10-05')`)
         .run(`mapping-${index}`, owner, `qb-board-invoice-${index}`, `external-${index}`);
     }
-    for (const index of [175, 171]) insertQuoteTree(db, `completed-${index}`, { id: `qb-board-quote-${index}`, items: [{ description: "Quoted work", qty: 1, rate: 100 }],
+    for (const index of [175, 171, 169]) insertQuoteTree(db, `completed-${index}`, { id: `qb-board-quote-${index}`, items: [{ description: "Quoted work", qty: 1, rate: 100 }],
       sentHistory: [{ id: `quote-sent-${index}`, sentAt: "2026-10-05", toEmail: "fixture@example.test" }] });
     db.prepare("UPDATE jobs SET maintenance_plan_name='Quarterly service', service_board_note='Waiting on parts' WHERE id='completed-175'").run();
   } finally { db.close(); }
@@ -143,7 +143,8 @@ async function assertQuickBooksPill(target, expanded) {
     };
     return { outer: rect(element), inner: rect(circle), foreground: hex(getComputedStyle(element).color), background: hex(getComputedStyle(element).backgroundColor),
       circleBackground: hex(getComputedStyle(circle).backgroundColor), exclamationColor: hex(getComputedStyle(circle).color),
-      circleText: circle.textContent, clipped: element.scrollWidth > element.clientWidth };
+      circleText: circle.textContent, paddingLeft: getComputedStyle(element).paddingLeft, paddingRight: getComputedStyle(element).paddingRight,
+      clipped: element.scrollWidth > element.clientWidth };
   });
   expect(geometry.circleText).toBe("!");
   expect(geometry.inner.width).toBe(geometry.inner.height);
@@ -156,16 +157,53 @@ async function assertQuickBooksPill(target, expanded) {
   expect(geometry.exclamationColor).toBe(geometry.background);
   expect(contrastRatio(geometry.foreground, geometry.background)).toBeGreaterThanOrEqual(4.5);
   expect(geometry.clipped).toBe(false);
-  if (!expanded) expect(geometry.outer.width).toBeGreaterThan(geometry.outer.height);
+  expect((geometry.inner.top + geometry.inner.bottom) / 2).toBeCloseTo((geometry.outer.top + geometry.outer.bottom) / 2, 1);
+  if (!expanded) {
+    expect((geometry.inner.left + geometry.inner.right) / 2).toBeCloseTo((geometry.outer.left + geometry.outer.right) / 2, 1);
+    expect(geometry.outer.width).toBe(18);
+    expect(geometry.outer.height).toBe(18);
+    expect(geometry.paddingLeft).toBe("0px");
+    expect(geometry.paddingRight).toBe("0px");
+  }
   return geometry;
 }
 
+async function assertFloatingIndicators(target) {
+  const group = target.locator("[data-job-card-indicators]");
+  await expect(group).toHaveCount(1);
+  await expect(group).toHaveAttribute("data-indicator-presentation", "compact");
+  const geometry = await group.evaluate((element) => {
+    const card = element.closest("[data-service-board-job-id]");
+    const cardBox = card.getBoundingClientRect(), rowBox = element.getBoundingClientRect(), style = getComputedStyle(element);
+    return { position: style.position, left: style.left, top: style.top, directChild: element.parentElement === card,
+      cardTop: cardBox.top, rowTop: rowBox.top, rowBottom: rowBox.bottom, cardLeft: cardBox.left, rowLeft: rowBox.left,
+      text: element.textContent.trim(), centers: [...element.children].map((child) => { const box = child.getBoundingClientRect(); return (box.top + box.bottom) / 2; }) };
+  });
+  expect(geometry.position).toBe("absolute");
+  expect(geometry.left).toBe("0px");
+  expect(geometry.top).toBe("0px");
+  expect(geometry.directChild).toBe(true);
+  expect(geometry.rowLeft).toBeCloseTo(geometry.cardLeft, 1);
+  expect((geometry.rowTop + geometry.rowBottom) / 2).toBeCloseTo(geometry.cardTop, 1);
+  expect(geometry.rowTop).toBeLessThan(geometry.cardTop);
+  expect(geometry.rowBottom).toBeGreaterThan(geometry.cardTop);
+  expect(["", "!"]).toContain(geometry.text);
+  for (const center of geometry.centers) expect(center).toBeCloseTo(geometry.cardTop, 1);
+}
+
+const cardLayout = (target) => target.evaluate((card) => {
+  const bounds = card.getBoundingClientRect(), parent = card.parentElement.getBoundingClientRect(), style = getComputedStyle(card);
+  return { width: bounds.width, height: bounds.height, left: bounds.left - parent.left, top: bounds.top - parent.top,
+    gridColumn: style.gridColumn, fullSpan: card.classList.contains("col-span-full") };
+});
+
 for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], [1440, "midnight-signal"], [320, "elset"], [390, "midnight-signal"]]) {
-  test(`QuickBooks pill, legend and coexisting indicators fit all views at ${width}px ${theme}`, async ({ browser }, info) => {
+  test(`floating QuickBooks circle, List-only labels and stable card layouts at ${width}px ${theme}`, async ({ browser }, info) => {
     seedQuickBooksIndicators();
     const before = readWorkspace();
     const { context, page, writes } = await openBoard(browser, { width, height: 1180 }, themePresets.find((preset) => preset.id === theme));
     const mobile = width < 768;
+    const compactLayouts = new Map();
     try {
       const setLabels = async (enabled) => {
         if (mobile) {
@@ -186,28 +224,42 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
         await setLabels(enabled);
         for (const view of mobile ? ["Mobile"] : ["List", "Grid", "Compact"]) {
           if (!mobile) await page.getByRole("button", { name: `Completed ${view} view`, exact: true }).click();
-          for (const index of [175, 174]) await assertQuickBooksPill(qbBoardCard(page, index), enabled);
+          const expanded = enabled && (mobile || view === "List");
+          for (const index of [175, 174, 169]) await assertQuickBooksPill(qbBoardCard(page, index), expanded);
           for (const index of [173, 172, 171, 170]) await expect(qbWarning(qbBoardCard(page, index))).toHaveCount(0);
           const paid = qbBoardCard(page, 175);
           await expect(paid.getByTitle("Invoice Paid", { exact: true })).toBeVisible();
           await expect(paid.getByTitle("Quoted", { exact: true })).toBeVisible();
           await expect(paid.getByTitle("Maintenance", { exact: true })).toBeVisible();
-          if (!enabled) {
+          if (!expanded) {
             const paidDot = await paid.getByTitle("Invoice Paid", { exact: true }).boundingBox();
             const warningPill = await qbWarning(paid).boundingBox();
             expect(paidDot.width).toBe(paidDot.height);
-            expect(warningPill.width).toBeGreaterThan(warningPill.height);
+            expect(warningPill.width).toBe(warningPill.height);
             await expect(paid.getByTitle("Invoice Paid", { exact: true }).locator("[data-quickbooks-warning-centre]")).toHaveCount(0);
           }
           await expect(paid.getByLabel("Job note: Waiting on parts")).toBeVisible();
           await expect(qbBoardCard(page, 174).getByTitle("Unpaid", { exact: true })).toBeVisible();
-          for (const index of [175, 174]) {
+          for (const index of [175, 174, 173, 172, 171, 170, 169]) {
             const target = qbBoardCard(page, index);
             await target.scrollIntoViewIfNeeded();
+            if (!mobile) {
+              if (!expanded) await assertFloatingIndicators(target);
+              else await expect(target.locator("[data-job-card-indicators]")).toHaveAttribute("data-indicator-presentation", "expanded");
+              const layout = await cardLayout(target);
+              expect(layout.fullSpan).toBe(false);
+              if (view !== "List") {
+                const key = `${view}-${index}`;
+                if (!enabled) compactLayouts.set(key, layout);
+                else expect(layout).toEqual(compactLayouts.get(key));
+                if (view === "Grid") expect(layout.width).toBeCloseTo((await cardLayout(qbBoardCard(page, 173))).width, 1);
+              }
+            }
+            if (![175, 174, 169].includes(index)) continue;
             const overlaps = await target.evaluate((element) => {
               const pill = element.querySelector('[data-service-board-indicator="quickbooks-unsynced"]').getBoundingClientRect();
               const outer = element.getBoundingClientRect();
-              const collisions = [...element.querySelectorAll('button, [data-service-board-note], [title$=" value"], [data-job-card-number], [data-job-card-customer]')]
+              const collisions = [...element.querySelectorAll('button, [data-service-board-note], [title$=" value"], [data-grid-job-value], [data-job-card-number], [data-job-card-customer]')]
                 .filter((node) => !node.contains(element.querySelector('[data-service-board-indicator="quickbooks-unsynced"]')))
                 .filter((node) => { const r = node.getBoundingClientRect(); return r.width && r.height && pill.left < r.right && pill.right > r.left && pill.top < r.bottom && pill.bottom > r.top; });
               return { collisions: collisions.map((node) => node.outerHTML), within: pill.left >= outer.left && pill.right <= outer.right };
@@ -216,7 +268,7 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
             expect(overlaps.within, `${width}px ${view} labels=${enabled} job=${index}`).toBe(true);
           }
           await assertLayout(page, { width, height: 1180 });
-          await paid.scrollIntoViewIfNeeded();
+          await paid.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
           await capture(page, info, `qb-board-${width}-${theme}-${view}-${enabled}`);
         }
       }
@@ -231,6 +283,32 @@ for (const provider of ["", "xero"]) test(`QuickBooks warning and legend are abs
   const { context, page } = await openBoard(browser);
   try { await expect(qbWarning(page)).toHaveCount(0); }
   finally { await context.close(); }
+});
+
+for (const width of [768, 1440]) test(`QuickBooks warning presence cannot change Grid or Compact card dimensions at ${width}px`, async ({ browser }) => {
+  seedQuickBooksIndicators();
+  const { context, page } = await openBoard(browser, { width, height: 1180 });
+  try {
+    const expected = new Map();
+    for (const view of ["Grid", "Compact"]) {
+      await page.getByRole("button", { name: `Completed ${view} view`, exact: true }).click();
+      for (const index of [175, 174, 169]) {
+        await assertFloatingIndicators(qbBoardCard(page, index));
+        expected.set(`${view}-${index}`, await cardLayout(qbBoardCard(page, index)));
+      }
+    }
+    const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+    try { updateWorkspaceAddons(db, { quickbooks: false }); } finally { db.close(); }
+    await page.reload();
+    for (const view of ["Grid", "Compact"]) {
+      await page.getByRole("button", { name: `Completed ${view} view`, exact: true }).click();
+      for (const index of [175, 174, 169]) {
+        await expect(qbWarning(qbBoardCard(page, index))).toHaveCount(0);
+        await assertFloatingIndicators(qbBoardCard(page, index));
+        expect(await cardLayout(qbBoardCard(page, index))).toEqual(expected.get(`${view}-${index}`));
+      }
+    }
+  } finally { await context.close(); }
 });
 
 for (const width of [390, 1440]) test(`Tomorrow retains its existing commercial indicator treatment at ${width}px`, async ({ browser }) => {
@@ -325,7 +403,8 @@ for (const width of [768, 1024, 1440]) test(`note layout handles all pill combin
             else if (entry.indicator) {
               await expect(target.getByLabel("Maintenance", { exact: true })).toBeVisible();
               expect(values.indicator).not.toBeNull();
-              expect(values.number.top - values.indicator.bottom, label).toBeCloseTo(4, 1);
+              expect((values.indicator.top + values.indicator.bottom) / 2, label).toBeCloseTo(values.card.top, 1);
+              expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);
             } else {
               expect(values.indicator, label).toBeNull();
               expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);

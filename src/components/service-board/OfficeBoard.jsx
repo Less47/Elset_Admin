@@ -312,13 +312,13 @@ export function ServiceBoardTomorrowPanel({
   );
 }
 
-function JobCardIndicators({ indicators, showTagLabels, showQuickBooksLabel = showTagLabels, className = "mt-2" }) {
+function JobCardIndicators({ indicators, showLabels, className = "mt-2" }) {
   if (indicators.length === 0) return null;
 
   return (
-    <div className={`flex min-w-0 max-w-full flex-wrap items-center gap-1.5 ${className}`}>
+    <div data-job-card-indicators data-indicator-presentation={showLabels ? "expanded" : "compact"} className={`flex min-w-0 max-w-full flex-wrap items-center gap-1.5 ${className}`}>
       {indicators.map((indicator) =>
-        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showQuickBooksLabel} /> : showTagLabels ? (
+        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : showLabels ? (
           <div
             key={indicator.id}
             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary"
@@ -367,6 +367,7 @@ const JobCard = memo(function JobCard({
   const jobValueMeta = getJobValueMeta(job);
   const isGridView = viewMode === "grid";
   const isCompactView = viewMode === "compact";
+  const showIndicatorLabels = viewMode === "list" && showTagLabels;
   const [isCompactExpanded, setIsCompactExpanded] = useState(false);
   const priceRef = useRef(null);
   useEffect(() => {
@@ -393,9 +394,13 @@ const JobCard = memo(function JobCard({
     invoiceStatus,
     accountingProvider,
   });
-  const hasQuickBooksWarning = cardIndicators.some((indicator) => indicator.id === "quickbooks-unsynced");
-  // Expanded warnings need the full grid row to keep the label readable beside the Tomorrow action.
-  const expandedQuickBooksWarning = showTagLabels && hasQuickBooksWarning;
+  const floatingIndicators = !showIndicatorLabels ? (
+    <JobCardIndicators
+      indicators={cardIndicators}
+      showLabels={showIndicatorLabels}
+      className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-1/2 gap-1.5"
+    />
+  ) : null;
   const stopDoubleClickPropagation = (event) => event.stopPropagation();
   const handleCardDoubleClick = () => {
     if (noteEditMode) return;
@@ -433,7 +438,8 @@ const JobCard = memo(function JobCard({
     </div>
   ) : null;
   const compactAddress = formatStreetAndSuburb(job.jobAddress);
-  const tomorrowActionPositionClassName = "right-1.5 top-1.5";
+  // Clear the lower half of the shared 18px floating indicator row.
+  const tomorrowActionPositionClassName = "right-1.5 top-2.5";
   const tomorrowAction = isPlannedForTomorrow ? (
     <span
       className={`absolute z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-status-info-surface text-[10px] font-bold text-status-info shadow-sm ring-2 ring-border ${tomorrowActionPositionClassName}`}
@@ -476,15 +482,10 @@ const JobCard = memo(function JobCard({
         onTouchStart={!noteEditMode && onTouchDragStart ? (event) => onTouchDragStart(job, event) : undefined}
         title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
       >
-        {!hasQuickBooksWarning ? <JobCardIndicators
-          indicators={cardIndicators}
-          showTagLabels={false}
-          className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-1/2 gap-1.5"
-        /> : null}
+        {floatingIndicators}
         {tomorrowAction}
         <Card className={cardClassName}>
           <CardContent className={`min-w-0 max-w-full [overflow-wrap:anywhere] ${cardContentClassName}`}>
-            {hasQuickBooksWarning ? <JobCardIndicators indicators={cardIndicators} showTagLabels={false} showQuickBooksLabel={showTagLabels} className="mb-1 pr-12 lg:pr-9" /> : null}
             <button
               type="button"
               data-job-card-body
@@ -537,7 +538,7 @@ const JobCard = memo(function JobCard({
   return (
     <div
       {...noteInteraction}
-      className={`group relative box-border w-full min-w-0 max-w-full ${isGridView ? "h-full" : ""} ${isGridView && expandedQuickBooksWarning ? "col-span-full" : ""}`}
+      className={`group relative box-border w-full min-w-0 max-w-full ${isGridView ? "h-full" : ""}`}
       draggable={draggable && !noteEditMode}
       onDragStart={handleDragStart}
       onDoubleClick={handleCardDoubleClick}
@@ -545,13 +546,7 @@ const JobCard = memo(function JobCard({
       title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
     >
       {isGridView ? <JobNotePill note={job.serviceBoardNote} variant="floating" withFloatingPrice={Boolean(jobValueMeta)} /> : null}
-      {isGridView && !hasQuickBooksWarning ? (
-        <JobCardIndicators
-          indicators={cardIndicators}
-          showTagLabels={false}
-          className="pointer-events-none absolute left-0 top-0 z-20 -translate-y-1/2 gap-1.5"
-        />
-      ) : null}
+      {floatingIndicators}
       {tomorrowAction}
       {isGridView && jobValueMeta ? (
         <div
@@ -565,11 +560,10 @@ const JobCard = memo(function JobCard({
       ) : null}
       <Card className={cardClassName}>
         <CardContent className={`min-w-0 max-w-full [overflow-wrap:anywhere] ${cardContentClassName}`}>
-          {isGridView && hasQuickBooksWarning ? <JobCardIndicators indicators={cardIndicators} showTagLabels={false} showQuickBooksLabel={showTagLabels} className="mb-2 pr-12 lg:pr-9" /> : null}
           {isGridView ? (
             <div className="flex h-full min-w-0 flex-col justify-between gap-2">
               <div className="space-y-1">
-                {tomorrowAction ? <span aria-hidden="true" className="float-right h-8 w-10 max-lg:h-11 max-lg:w-12" /> : null}
+                {tomorrowAction ? <span aria-hidden="true" className="float-right h-9 w-10 max-lg:h-12 max-lg:w-12" /> : null}
                 <p data-job-card-number className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
                 <p data-job-card-customer className="text-xs font-medium leading-4 text-foreground">{job.customerName}</p>
                 <p className="text-[11px] font-normal leading-4 text-foreground">{job.title}</p>
@@ -579,11 +573,11 @@ const JobCard = memo(function JobCard({
             </div>
           ) : (
             <>
-          {cardIndicators.length > 0 ? <div data-job-card-indicators className="mb-1 flex min-h-6 items-center pr-8 max-lg:min-h-10 max-lg:pr-12">
-            <JobCardIndicators indicators={cardIndicators} showTagLabels={showTagLabels} className="" />
+          {showIndicatorLabels && cardIndicators.length > 0 ? <div className="mb-1 flex min-h-6 items-center pr-8 max-lg:min-h-10 max-lg:pr-12">
+            <JobCardIndicators indicators={cardIndicators} showLabels={showIndicatorLabels} className="" />
           </div> : null}
 
-          <div className={`flex items-start justify-between gap-2 ${cardIndicators.length === 0 && tomorrowAction ? "pr-10 max-lg:pr-12" : ""}`}>
+          <div className={`flex items-start justify-between gap-2 ${(!showIndicatorLabels || cardIndicators.length === 0) && tomorrowAction ? "pr-10 max-lg:pr-12" : ""}`}>
             <div className="min-w-0 flex-1">
               <p data-job-card-number className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
               <p className="font-semibold leading-5 text-foreground">{job.customerName}</p>
