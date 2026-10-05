@@ -1,12 +1,11 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
 import { getCustomerById, getJobById, getMaintenancePlanById, readWorkspaceRecords } from "./server-workspace-state.js";
 import { getWorkspaceAddons, requireWorkspaceAddon } from "./server-workspace-addons.js";
 import { readWorkspaceLogo } from "./server-workspace-logo.js";
 import { changeJobStatus } from "./server-workspace-jobs.js";
-import { maintenanceChecklistItems, maintenanceReportCounts, MAINTENANCE_RESULTS, MAINTENANCE_SEVERITIES, MAINTENANCE_ACKNOWLEDGEMENTS } from "./src/lib/maintenance-checklist.js";
+import { maintenanceChecklistItems, maintenanceReportCounts, MAINTENANCE_RESULTS, MAINTENANCE_SEVERITIES } from "./src/lib/maintenance-checklist.js";
 import { isMaintenanceDate } from "./src/lib/maintenance-recurrence.js";
 
 export class MaintenanceServiceError extends Error {
@@ -167,24 +166,6 @@ export function updateMaintenanceServiceNotes(db, jobId, input) {
   }).immediate();
 }
 
-export async function validateMaintenanceSignature(value) {
-  if (typeof value !== "string" || value.length > 175000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) {
-    throw new MaintenanceServiceError("Draw a PNG signature of up to 128 KB.");
-  }
-  const bytes = Buffer.from(value.slice(value.indexOf(",") + 1), "base64");
-  if (bytes.length > 128 * 1024 || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-    throw new MaintenanceServiceError("Draw a valid PNG signature of up to 128 KB.");
-  }
-  try {
-    const image = sharp(bytes, { failOn: "warning", limitInputPixels: 960000 });
-    const metadata = await image.metadata();
-    if (metadata.format !== "png" || metadata.width < 64 || metadata.width > 1600 || metadata.height < 32 || metadata.height > 600 || (metadata.pages || 1) !== 1) throw new Error("dimensions");
-    const stats = await image.stats();
-    if (!stats.channels.some(channel => channel.stdev > 0) || (metadata.hasAlpha && stats.channels.at(-1)?.max === 0)) throw new Error("blank");
-    return `data:image/png;base64,${bytes.toString("base64")}`;
-  } catch { throw new MaintenanceServiceError("Draw a readable signature (64-1600 pixels wide, 32-600 pixels high)."); }
-}
-
 function snapshotBranding(db) {
   const state = readWorkspaceRecords(db, { quoteTemplate: true, settings: true });
   const template = state.quoteTemplate || {};
@@ -199,9 +180,6 @@ function snapshotBranding(db) {
 
 export async function completeMaintenanceService(db, jobId, input, user, { returnChange = false } = {}) {
   draftForMutation(db, jobId, input?.revision);
-  if (!Object.hasOwn(MAINTENANCE_ACKNOWLEDGEMENTS, input?.signatureStatus)) throw new MaintenanceServiceError("Choose the customer acknowledgement.");
-  const representative = input.signatureStatus === "signed" ? boundedText(input.representativeName, "Representative name", 180, true) : "";
-  const signature = input.signatureStatus === "signed" ? await validateMaintenanceSignature(input.signatureData) : "";
   return db.transaction(() => {
     const report = draftForMutation(db, jobId, input.revision);
     const unanswered = report.items.filter(item => !item.result);
@@ -217,10 +195,14 @@ export async function completeMaintenanceService(db, jobId, input, user, { retur
     const serviceDate = input.serviceDate ?? report.serviceDate;
     if (!isMaintenanceDate(serviceDate)) throw new MaintenanceServiceError("Enter a valid service date.");
     const snapshot = { ...report.snapshot, branding: snapshotBranding(db), completedBy: { id: user.id, name: user.name || user.username || "" } };
-    db.prepare(`UPDATE maintenance_service_reports SET status='completed',service_date=?,service_notes=?,signature_status=?,
-      customer_representative_name=?,customer_signature_data=?,signed_at=?,completed_at=?,technician_id=?,technician_name=?,
+    // Released schema 16 requires a nonempty legacy signature_status on completion.
+    // Use its existing neutral fallback solely for storage compatibility; ignore
+    // acknowledgement input and preserve any already-stored legacy fields.
+    db.prepare(`UPDATE maintenance_service_reports SET status='completed',service_date=?,service_notes=?,
+      signature_status=CASE WHEN signature_status='' THEN 'unavailable' ELSE signature_status END,
+      completed_at=?,technician_id=?,technician_name=?,
       updated_at=?,revision=revision+1,snapshot_json=? WHERE id=?`)
-      .run(serviceDate, notes, input.signatureStatus, representative, signature, signature ? timestamp : "", timestamp,
+      .run(serviceDate, notes, timestamp,
         staffId || user.id, staffName || user.name || user.username || "Technician", timestamp, JSON.stringify(snapshot), report.id);
     // Reuse the ordinary job completion path inside the same transaction. This
     // also records occurrence completion and the plan's last-completed date.

@@ -11,6 +11,7 @@ import { themePresets } from "../../src/lib/theme-presets.js";
 import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { createMaintenancePlan, generateMaintenanceJob } from "../../server-workspace-maintenance.js";
+import { getMaintenancePlanById } from "../../server-workspace-state.js";
 import { getWorkspaceAddons, updateWorkspaceAddons } from "../../server-workspace-addons.js";
 import { addJobPhoto, deleteJobPhoto, createJob, deleteJob } from "../../server-workspace-jobs.js";
 import { getMaintenanceServiceReport, updateMaintenanceServiceResult, completeMaintenanceService } from "../../server-workspace-maintenance-service.js";
@@ -80,26 +81,31 @@ async function capture(page, info, name, target) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 }
 
-for (const width of [390, 820, 1440]) test(`structured plan, technician defect/signature, history/report/email at ${width}px`, async ({ browser }, info) => {
+for (const width of [390, 820, 1440]) test(`structured plan, technician defect/completion, history/report/email at ${width}px`, async ({ browser }, info) => {
   const admin = await login(browser, width), page = admin.page;
   await page.goto(`${url}/maintenance/${current.plan.id}`);
   const checklist = page.locator("[data-plan-checklist]");
-  await expect(checklist.getByRole("listitem")).toHaveCount(12);
+  await expect(checklist.locator(".maintenance-plan-checklist tbody tr")).toHaveCount(12);
+  await expect(checklist.getByRole("table", { name: "Plan checklist", exact: true })).toBeVisible();
+  await expect(checklist.getByRole("columnheader")).toHaveText(["No.", "Checklist item"]);
   await expect(checklist.getByText("Inspect overall system condition", { exact: true })).toBeVisible();
   await expect(checklist.locator("details,summary")).toHaveCount(0);
   await expect(page.getByText(/standard, locked|10 standard checks/)).toHaveCount(0);
   await capture(page, info, `plan-layout-${width}`);
   const columns = await page.locator("[data-plan-details], .maintenance-plan-history, .maintenance-plan-template, [data-plan-jobs]").evaluateAll(nodes => nodes.map(node => ({ key: node.className, x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y, w: node.getBoundingClientRect().width })));
   if (width === 1440) {
+    const body = await page.locator(".record-workspace-body").evaluate(node => ({ width: node.getBoundingClientRect().width, maxWidth: getComputedStyle(node).maxWidth, parent: node.parentElement.getBoundingClientRect().width }));
+    expect(body.maxWidth).toBe("none"); expect(body.width).toBe(body.parent);
     expect(columns[2].x).toBeGreaterThan(columns[0].x);
     expect(columns[3].x).toBeGreaterThan(columns[2].x);
     expect(columns[1].x).toBe(columns[0].x);
     expect(columns[0].w / columns[2].w).toBeCloseTo(35 / 30, 1);
   } else {
-    expect(columns[3].y).toBeGreaterThan(columns[0].y);
-    expect(columns[1].y).toBeGreaterThan(columns[3].y);
+    expect(columns[1].y).toBeGreaterThan(columns[0].y);
     expect(columns[2].y).toBeGreaterThan(columns[1].y);
+    expect(columns[3].y).toBeGreaterThan(columns[2].y);
   }
+  expect(await page.locator("[data-plan-jobs]").evaluate(node => getComputedStyle(node).borderTopWidth)).toBe("1px");
   await checklist.getByRole("button", { name: "Edit Checklist", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/maintenance/${current.plan.id}$`));
   const originalIds = dbRead(db => db.prepare("SELECT id FROM maintenance_checklist_items WHERE maintenance_plan_id=? ORDER BY position").all(current.plan.id).map(item => item.id));
@@ -127,8 +133,13 @@ for (const width of [390, 820, 1440]) test(`structured plan, technician defect/s
   await jobPage.goto(`${url}/jobs/${current.job.id}`);
   await jobPage.getByRole("tab", { name: "Checklist", exact: true }).click();
   await expect(jobPage.getByRole("heading", { name: "Maintenance Checklist", exact: true })).toBeVisible();
+  const table = jobPage.getByRole("table", { name: "Maintenance job checklist", exact: true });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("columnheader")).toHaveText(["Check box✓", "No.", "Item", "Report defect", "Mark N/A"]);
+  await expect(jobPage.getByLabel("Acknowledgement", { exact: true })).toHaveCount(0);
+  await expect(jobPage.getByLabel("Representative name", { exact: true })).toHaveCount(0);
+  if (width === 1440) expect(await table.locator("[data-service-result]").first().evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(42);
   await capture(jobPage, info, `technician-checklist-${width}`);
-  await jobPage.getByLabel("Acknowledgement", { exact: true }).selectOption("unavailable");
   await jobPage.getByRole("button", { name: "Complete Maintenance Service", exact: true }).click();
   await expect(jobPage.getByRole("alert")).toContainText("12 unanswered checks");
   const checks = jobPage.locator("[data-service-result]");
@@ -139,6 +150,10 @@ for (const width of [390, 820, 1440]) test(`structured plan, technician defect/s
   for (let i = 0; i < 12; i++) {
     if (i === 1) continue;
     if (i === 11) {
+      await checks.nth(i).getByRole("button", { name: /^Mark N\/A:/ }).click();
+      await expect.poll(() => report().items[i].result).toBe("na");
+      await checks.nth(i).getByRole("button", { name: /^Mark N\/A:/ }).click();
+      await expect.poll(() => report().items[i].result).toBe(null);
       await checks.nth(i).getByRole("button", { name: /^Mark N\/A:/ }).click();
       await expect.poll(() => report().items[i].result).toBe("na");
     } else {
@@ -170,18 +185,10 @@ for (const width of [390, 820, 1440]) test(`structured plan, technician defect/s
   await jobPage.getByRole("button", { name: "Save service notes", exact: true }).click();
   await expect.poll(() => report().serviceNotes).toContain("System tested at departure");
   await expect(jobPage.getByLabel("Service Notes", { exact: true })).toHaveValue("System tested at departure. Defect explained to the representative.");
-  await jobPage.getByLabel("Acknowledgement", { exact: true }).selectOption("signed");
-  await jobPage.getByLabel("Representative name", { exact: true }).fill("Alex Site Representative");
-  const canvas = jobPage.getByRole("img", { name: "Customer signature drawing area", exact: true });
-  await canvas.scrollIntoViewIfNeeded();
-  const box = await canvas.boundingBox();
-  await jobPage.mouse.move(box.x + box.width * .1, box.y + box.height * .6); await jobPage.mouse.down();
-  await jobPage.mouse.move(box.x + box.width * .3, box.y + box.height * .2, { steps: 10 });
-  await jobPage.mouse.move(box.x + box.width * .65, box.y + box.height * .65, { steps: 15 }); await jobPage.mouse.up();
-  await capture(jobPage, info, `signature-${width}`, canvas);
+  await capture(jobPage, info, `completion-${width}`, jobPage.getByRole("button", { name: "Complete Maintenance Service", exact: true }));
   await jobPage.getByRole("button", { name: "Complete Maintenance Service", exact: true }).click();
   await expect(jobPage.getByRole("heading", { name: "Maintenance Service Report", exact: true })).toBeVisible();
-  expect(report().status).toBe("completed"); expect(report().signatureStatus).toBe("signed"); expect(report().counts.defects).toBe(1); expect(report().counts.na).toBe(1);
+  expect(report().status).toBe("completed"); expect(report().signatureData).toBe(""); expect(report().counts.defects).toBe(1); expect(report().counts.na).toBe(1);
   await expect(jobPage.getByRole("combobox", { name: "Update job status", exact: true })).toContainText("Completed");
   await expect(jobPage.getByRole("button", { name: "Email Service Report", exact: true })).toHaveCount(0);
   await expect(jobPage.locator("[data-service-result]")).toHaveCount(0);
@@ -189,12 +196,14 @@ for (const width of [390, 820, 1440]) test(`structured plan, technician defect/s
   await page.goto(`${url}/maintenance/${current.plan.id}`);
   await expect(page.getByRole("heading", { name: "Service History", exact: true })).toBeVisible();
   const history = page.getByRole("heading", { name: "Service History", exact: true }).locator("xpath=ancestor::section[1]");
-  await expect(history).toContainText("Customer signed");
+  await expect(history).toContainText("Completed");
+  await expect(history).not.toContainText(/customer signed|customer unavailable|declined signature|acknowledgement/i);
   await capture(page, info, `service-history-${width}`, history);
   await history.getByRole("button", { name: "View Report", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/maintenance-reports/${report().id}$`));
   await page.getByRole("button", { name: "View Report", exact: true }).click();
   await expect(page.locator("[data-maintenance-report-preview]")).toContainText("Safety beam housing damaged.");
+  await expect(page.locator("[data-maintenance-report-preview]")).not.toContainText(/acknowledgement|customer signed|representative name|signed:/i);
   await capture(page, info, `report-preview-${width}`);
   const downloadEvent = page.waitForEvent("download"); await page.getByRole("button", { name: "Download PDF", exact: true }).click();
   const download = await downloadEvent; expect(download.suggestedFilename()).toMatch(/^maintenance-service-job-/);
@@ -233,7 +242,8 @@ test("disabled execution stays hidden while completed archived reports remain re
   await expect(admin.page.getByRole("heading", { name: "Maintenance Service Report", exact: true })).toBeVisible();
   await expect(admin.page.getByRole("button", { name: "Email Service Report", exact: true })).toHaveCount(0);
   await admin.page.getByRole("button", { name: "View Report", exact: true }).click();
-  await expect(admin.page.locator("[data-maintenance-report-preview]")).toContainText("Customer declined signature");
+  await expect(admin.page.locator("[data-maintenance-report-preview]")).toContainText("Completed by");
+  await expect(admin.page.locator("[data-maintenance-report-preview]")).not.toContainText(/acknowledgement|declined signature/i);
   await admin.page.goto(`${url}/maintenance-reports`);
   await expect(admin.page.getByLabel("Completed service reports", { exact: true })).toContainText(`Job #${current.job.jobNumber}`);
   await admin.page.goto(`${url}/maintenance/${current.plan.id}/edit`);
@@ -292,7 +302,7 @@ test("new plan has ten editable starters; inline remove-all, cancel, unsaved gua
   await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await expect(page.locator("[data-maintenance-detail]")).toBeVisible();
   const id = new URL(page.url()).pathname.split("/").at(-1), checklist = page.locator("[data-plan-checklist]");
-  await expect(checklist.getByRole("listitem")).toHaveCount(10);
+  await expect(checklist.locator(".maintenance-plan-checklist tbody tr")).toHaveCount(10);
   await expect(checklist).toContainText("Create with an edited starter");
   await checklist.getByRole("button", { name: "Edit Checklist", exact: true }).click();
   await checklist.getByLabel("Checklist item 1", { exact: true }).fill("Unsaved starter");
@@ -376,18 +386,25 @@ test("deleted job photos stay visible as unavailable while defects can still be 
   await tech.context.close();
 });
 
-for (const status of ["unavailable", "declined"]) test(`technician completes with customer ${status}; disabled add-on retains historical job view`, async ({ browser }, info) => {
+for (const status of ["technician", "legacy-signed"]) test(`completion without acknowledgement preserves ${status} data and disabled historical job view`, async ({ browser }, info) => {
+  const legacySignature = await signedImage();
   dbRead(db => {
+    if (status === "legacy-signed") db.prepare(`UPDATE maintenance_service_reports SET signature_status='signed', customer_representative_name=?,customer_signature_data=?,signed_at=? WHERE job_id=?`).run("Legacy Representative", legacySignature, "2026-10-05T01:00:00Z", current.job.id);
     let initial = report();
     for (const item of initial.items) initial = updateMaintenanceServiceResult(db, current.job.id, item.id, { revision: initial.revision, result: "na" }, { id: "test-tech", role: "technician" });
   });
   const tech = await login(browser, 390, "technician"), page = tech.page;
   await page.goto(`${url}/jobs/${current.job.id}`); await page.getByRole("tab", { name: "Checklist", exact: true }).click();
-  await page.getByLabel("Acknowledgement", { exact: true }).selectOption(status);
+  await expect(page.getByLabel("Acknowledgement", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Representative name", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Customer signature drawing area" })).toHaveCount(0);
   await capture(page, info, `complete-${status}-390`, page.getByRole("button", { name: "Complete Maintenance Service", exact: true }));
   await page.getByRole("button", { name: "Complete Maintenance Service", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Maintenance Service Report", exact: true })).toBeVisible();
-  expect(report().signatureStatus).toBe(status);
+  expect(report().signatureStatus).toBe(status === "legacy-signed" ? "signed" : "unavailable");
+  expect(report().signatureData).toBe(status === "legacy-signed" ? legacySignature : "");
+  await page.getByRole("button", { name: "View Report", exact: true }).click();
+  await expect(page.locator("[data-maintenance-report-preview]")).not.toContainText(/acknowledgement|Legacy Representative|customer signed/i);
   const completed = report();
   dbRead(db => updateWorkspaceAddons(db, { maintenanceChecklists: false }));
   await page.reload();
@@ -395,6 +412,35 @@ for (const status of ["unavailable", "declined"]) test(`technician completes wit
   await expect(page.getByRole("heading", { name: "Maintenance Service Report", exact: true })).toBeVisible();
   expect(report()).toEqual(completed);
   await tech.context.close();
+});
+
+for (const width of [390, 820, 1440, 1920]) test(`${width}px plan fills available space with ${width >= 1280 ? "three columns" : "stacked sections"} and 1px history separators`, async ({ browser }, info) => {
+  const db = openWorkspaceDb({ dbPath: path.join(directory, "elset-workspace.db") });
+  try {
+    let job = current.job;
+    for (let visit = 0; visit < 2; visit++) {
+      let saved = getMaintenanceServiceReport(db, job.id);
+      for (const item of saved.items) saved = updateMaintenanceServiceResult(db, job.id, item.id, { revision: saved.revision, result: "completed" }, actor);
+      await completeMaintenanceService(db, job.id, { revision: saved.revision }, actor);
+      if (!visit) {
+        const plan = getMaintenancePlanById(db, current.plan.id);
+        job = generateMaintenanceJob(db, plan.id, { occurrenceKey: plan.nextOccurrence.key, revision: plan.maintenanceRevision }).job;
+      }
+    }
+  } finally { db.close(); }
+  const admin = await login(browser, width), page = admin.page;
+  await page.goto(`${url}/maintenance/${current.plan.id}`);
+  await expect(page.locator(".maintenance-history-entry")).toHaveCount(2);
+  const layout = await page.locator("[data-maintenance-detail]").evaluate(node => {
+    const body = node.parentElement, style = getComputedStyle(body);
+    return { width: node.getBoundingClientRect().width, available: body.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), columns: getComputedStyle(node).gridTemplateColumns.split(" ").length };
+  });
+  expect(layout.width).toBeCloseTo(layout.available, 0); expect(layout.columns).toBe(width >= 1280 ? 3 : 1);
+  expect(await page.locator(".maintenance-history-entry").first().evaluate(node => getComputedStyle(node).borderBottomWidth)).toBe("1px");
+  expect(await page.locator(".maintenance-history-entry").last().evaluate(node => getComputedStyle(node).borderBottomWidth)).toBe("0px");
+  await expect(page.locator(".maintenance-plan-history")).not.toContainText(/acknowledgement|customer signed|customer unavailable|declined signature/i);
+  await capture(page, info, width === 1920 ? "full-width-history-1920" : `multi-entry-history-${width}`);
+  await admin.context.close();
 });
 
 for (const width of [390, 820, 1440]) test(`all eight themes keep plan columns, inline editor and Job Checklist readable at ${width}px`, async ({ browser }, info) => {
@@ -405,7 +451,7 @@ for (const width of [390, 820, 1440]) test(`all eight themes keep plan columns, 
     expect(preference.ok()).toBe(true);
     await page.goto(`${url}/maintenance/${current.plan.id}`);
     const checklist = page.locator("[data-plan-checklist]");
-    await expect(checklist.getByRole("listitem")).toHaveCount(12);
+    await expect(checklist.locator(".maintenance-plan-checklist tbody tr")).toHaveCount(12);
     surfaces.push(await page.locator(".record-workspace").evaluate(node => getComputedStyle(node).backgroundColor));
     await capture(page, info, `theme-${preset.id}-plan-${width}`);
     await checklist.getByRole("button", { name: "Edit Checklist", exact: true }).click();
@@ -416,7 +462,7 @@ for (const width of [390, 820, 1440]) test(`all eight themes keep plan columns, 
     await page.getByRole("tab", { name: "Checklist", exact: true }).click();
     await expect(page.locator("[data-service-result]").nth(0).getByRole("checkbox")).toBeVisible();
     await capture(page, info, `theme-${preset.id}-job-${width}`, page.locator("[data-maintenance-service-checklist]"));
-    expect(await page.locator("[data-service-result]").nth(0).locator("label").boundingBox().then(box => box.height)).toBeGreaterThanOrEqual(44);
+    expect(await page.locator("[data-service-result]").nth(0).locator(".maintenance-completed-choice").boundingBox().then(box => box.height)).toBeGreaterThanOrEqual(width >= 1280 ? 32 : 44);
   }
   expect(new Set(surfaces).size).toBe(8);
   await admin.context.close();

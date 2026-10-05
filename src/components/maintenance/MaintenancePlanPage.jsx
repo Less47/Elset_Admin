@@ -130,7 +130,7 @@ function PlanChecklist({ plan, enabled, actions }) {
       <MaintenanceChecklistEditor items={draft} onChange={setDraft} />
       <div className="mt-4 flex flex-wrap items-center gap-2"><Button className="h-11" variant="outline" type="button" onClick={() => { markSaved(); setEditing(false); setError(""); }}>Cancel</Button><Button className="h-11" type="submit">{busy ? "Saving…" : "Save Checklist"}</Button></div>
       {dirty ? <p className="mt-2 text-xs text-muted-foreground">Unsaved checklist changes</p> : null}
-    </fieldset></form> : items.length ? <ol className="maintenance-plan-checklist list-decimal pl-5 text-sm">{items.map(item => <li key={item.id}>{item.text}</li>)}</ol> : <p className="text-sm text-muted-foreground">No checklist saved yet.</p>}
+    </fieldset></form> : items.length ? <table className="maintenance-checklist-table maintenance-plan-checklist" aria-label="Plan checklist"><thead><tr><th scope="col">No.</th><th scope="col">Checklist item</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td className="maintenance-number-cell">{item.position}</td><td>{item.text}</td></tr>)}</tbody></table> : <p className="text-sm text-muted-foreground">No checklist saved yet.</p>}
   </section>;
 }
 
@@ -172,7 +172,7 @@ export default function MaintenancePlanPage() {
     finally { saving.current = false; setBusy(false); }
   }
   const defaultTechnician = data.staff.find(staff => staff.id === plan.defaultTechnicianId)?.name || "Unassigned";
-  return <RecordWorkspace title={plan.planName} eyebrow="Maintenance Plan" subtitle={`${customer?.name || "Unknown customer"} · ${plan.siteAddress}`} backLabel={backLabel} onBack={onBack} status={<Badge className={status.className}>{status.label}</Badge>} headerActions={<Button variant="outline" size="sm" onClick={() => navigate(`/maintenance/${encodeURIComponent(plan.id)}/edit`, { state: linkState })}>Edit Plan</Button>}>
+  return <RecordWorkspace maxWidth="max-w-none" title={plan.planName} eyebrow="Maintenance Plan" subtitle={`${customer?.name || "Unknown customer"} · ${plan.siteAddress}`} backLabel={backLabel} onBack={onBack} status={<Badge className={status.className}>{status.label}</Badge>} headerActions={<Button variant="outline" size="sm" onClick={() => navigate(`/maintenance/${encodeURIComponent(plan.id)}/edit`, { state: linkState })}>Edit Plan</Button>}>
     {error ? <div role="alert" className="mb-4"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
     <div className="maintenance-plan-workspace" data-maintenance-detail>
       <section className="maintenance-plan-details" data-plan-details>

@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
-import { maintenanceReportCounts, MAINTENANCE_SEVERITIES, MAINTENANCE_ACKNOWLEDGEMENTS } from "@/lib/maintenance-checklist";
+import { maintenanceReportCounts, MAINTENANCE_SEVERITIES } from "@/lib/maintenance-checklist";
 import { maintenanceServiceRequest } from "@/lib/maintenance-service-api";
-import MaintenanceSignature from "./MaintenanceSignature";
 import MaintenanceServiceReport from "./MaintenanceServiceReport";
 import "./MaintenanceService.css";
 
@@ -32,12 +31,11 @@ function DefectEditor({ item, saved, photos, busy, onSave, onCancel, onDirty }) 
 export default function MaintenanceServiceChecklist({ job, enabled, initialReport, fetchWithAuth, canEmail, customer, onAddonDisabled, onCompleted }) {
   const [report, setReport] = useState(initialReport), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [notes, setNotes] = useState(initialReport?.serviceNotes || ""), [date, setDate] = useState(initialReport?.serviceDate || "");
-  const [ack, setAck] = useState(""), [representative, setRepresentative] = useState(""), [signature, setSignature] = useState("");
   const [remaining, setRemaining] = useState([]), [defectDirty, setDefectDirty] = useState({});
   const [editingDefect, setEditingDefect] = useState(null);
   const pending = useRef(false);
   const base = `/api/jobs/${encodeURIComponent(job.id)}/maintenance-service`;
-  const dirty = report?.status === "draft" && (notes !== report.serviceNotes || date !== report.serviceDate || Boolean(ack || signature || representative) || Object.values(defectDirty).some(Boolean));
+  const dirty = report?.status === "draft" && (notes !== report.serviceNotes || date !== report.serviceDate || Object.values(defectDirty).some(Boolean));
   useUnsavedChanges(Boolean(dirty), { busy });
   const dirtyCallback = useRef((id, value) => setDefectDirty(current => current[id] === value ? current : { ...current, [id]: value })).current;
   async function mutate(path, body, method = "POST") {
@@ -54,7 +52,7 @@ export default function MaintenanceServiceChecklist({ job, enabled, initialRepor
       const result = await maintenanceServiceRequest(fetchWithAuth, `${base}${path}`, { method, body: JSON.stringify({ ...body, revision: report?.revision }) });
       setReport(result.report);
       if (!report || path === "/complete" || (path === "" && method === "PATCH")) { setNotes(result.report.serviceNotes); setDate(result.report.serviceDate); }
-      if (path === "/complete") { setAck(""); setRepresentative(""); setSignature(""); setDefectDirty({}); onCompleted?.(result.jobChange); }
+      if (path === "/complete") { setDefectDirty({}); onCompleted?.(result.jobChange); }
       return result.report;
     } catch (failure) {
       setReport(previous);
@@ -65,7 +63,7 @@ export default function MaintenanceServiceChecklist({ job, enabled, initialRepor
   }
   async function reload() {
     setBusy(true); setError("");
-    try { const result = await maintenanceServiceRequest(fetchWithAuth, base); setReport(result.report); setNotes(result.report?.serviceNotes || ""); setDate(result.report?.serviceDate || ""); setEditingDefect(null); setDefectDirty({}); setAck(""); setRepresentative(""); setSignature(""); }
+    try { const result = await maintenanceServiceRequest(fetchWithAuth, base); setReport(result.report); setNotes(result.report?.serviceNotes || ""); setDate(result.report?.serviceDate || ""); setEditingDefect(null); setDefectDirty({}); }
     catch (failure) { setError(failure.message); } finally { setBusy(false); }
   }
   function complete() {
@@ -75,7 +73,7 @@ export default function MaintenanceServiceChecklist({ job, enabled, initialRepor
       if (unanswered.length) document.getElementById(`maintenance-result-${unanswered[0].id}`)?.focus();
       return;
     }
-    mutate("/complete", { signatureStatus: ack, representativeName: representative, signatureData: signature, serviceNotes: notes, serviceDate: date, expectedJobStatus: job.status });
+    mutate("/complete", { serviceNotes: notes, serviceDate: date, expectedJobStatus: job.status });
   }
   if (!report && (!enabled || !job.maintenancePlanId)) return null;
   return <WorkspaceSection title={report?.status === "completed" ? "Completed maintenance" : "Maintenance Checklist"} className="mb-5" description={report?.status === "completed" ? "Historical service record" : "Record the inspection for this visit. The checklist is fixed when this visit starts."}>
@@ -84,25 +82,25 @@ export default function MaintenanceServiceChecklist({ job, enabled, initialRepor
       : report.status === "completed" ? <MaintenanceServiceReport report={report} fetchWithAuth={fetchWithAuth} enabled={enabled} canEmail={canEmail} customer={customer} onAddonDisabled={onAddonDisabled} onHistory={send => setReport(current => ({ ...current, sentHistory: [send, ...current.sentHistory] }))} />
       : enabled ? <div className="maintenance-service-execution grid gap-4" data-maintenance-service-checklist>
         <div className="maintenance-service-progress" role="status"><p className="text-sm font-semibold">{report.counts.total - report.counts.unanswered} of {report.counts.total} answered</p><p className="text-xs text-muted-foreground">{report.counts.completed} completed · {report.counts.defects} {report.counts.defects === 1 ? "defect" : "defects"} · {report.counts.na} N/A · {report.counts.unanswered} remaining</p></div>
-        <ol className="maintenance-service-items">{report.items.map(item => {
+        <table className="maintenance-checklist-table maintenance-job-checklist" aria-label="Maintenance job checklist">
+          <thead><tr><th scope="col"><span className="sr-only">Check box</span><span aria-hidden="true">✓</span></th><th scope="col">No.</th><th scope="col">Item</th><th scope="col">Report defect</th><th scope="col">Mark N/A</th></tr></thead>
+          <tbody>{report.items.map(item => {
           const saved = report.defects.find(defect => defect.resultId === item.id);
-          return <li key={item.id} className="maintenance-service-item" data-service-result={item.id}>
-            <label className="maintenance-completed-choice"><input id={`maintenance-result-${item.id}`} type="checkbox" aria-label={`Completed: ${item.text}`} checked={item.result === "completed"} disabled={busy || editingDefect === item.id} onChange={event => mutate(`/checklist/${encodeURIComponent(item.id)}`, { result: event.target.checked ? "completed" : null }, "PATCH")} /><span className="text-sm font-medium">{item.position}. {item.text}</span></label>
-            <div className="maintenance-item-actions"><Button className="h-11" type="button" size="sm" variant="ghost" aria-label={`${saved ? "Edit Defect" : "Report defect"}: ${item.text}`} disabled={busy || Boolean(editingDefect)} onClick={() => setEditingDefect(item.id)}>{saved ? "Edit Defect" : "Report defect"}</Button>
-              <Button className="h-11" type="button" size="sm" variant="ghost" aria-label={`Mark N/A: ${item.text}`} aria-pressed={item.result === "na"} disabled={busy || editingDefect === item.id} onClick={() => mutate(`/checklist/${encodeURIComponent(item.id)}`, { result: item.result === "na" ? null : "na" }, "PATCH")}>{item.result === "na" ? "N/A · Clear" : "Mark N/A"}</Button></div>
-            {saved ? <div className="maintenance-defect-summary text-sm"><p className="font-semibold text-status-danger">Defect · {MAINTENANCE_SEVERITIES[saved.severity]}</p><p className="whitespace-pre-wrap">{saved.description}</p>{saved.recommendedAction ? <p className="mt-1 text-xs text-text-secondary">Recommended: {saved.recommendedAction}</p> : null}{saved.photoRefs.some(id => !(job.photos || []).some(photo => photo.id === id)) ? <p className="text-xs text-muted-foreground">Linked photo unavailable</p> : null}</div> : item.result === "na" ? <p className="maintenance-outcome-note text-xs text-muted-foreground">Not applicable · answered</p> : null}
-            {editingDefect === item.id ? <DefectEditor key={item.id} item={item} saved={saved} photos={job.photos || []} busy={busy} onDirty={dirtyCallback} onCancel={() => setEditingDefect(null)} onSave={async draft => { if (await mutate("/defects", { ...draft, resultId: item.id })) setEditingDefect(null); }} /> : null}
-          </li>;
-        })}</ol>
+          return <Fragment key={item.id}><tr className="maintenance-service-item" data-service-result={item.id}>
+            <td className="maintenance-check-cell"><label className="maintenance-completed-choice"><input id={`maintenance-result-${item.id}`} type="checkbox" aria-label={`Completed: ${item.text}`} checked={item.result === "completed"} disabled={busy || editingDefect === item.id} onChange={event => mutate(`/checklist/${encodeURIComponent(item.id)}`, { result: event.target.checked ? "completed" : null }, "PATCH")} /></label></td>
+            <td className="maintenance-number-cell">{item.position}</td>
+            <td className="maintenance-item-cell"><label htmlFor={`maintenance-result-${item.id}`} className="cursor-pointer font-medium">{item.text}</label>
+              {saved ? <div className="maintenance-defect-summary text-xs"><p className="font-semibold text-status-danger">Defect · {MAINTENANCE_SEVERITIES[saved.severity]}</p><p className="whitespace-pre-wrap">{saved.description}</p>{saved.recommendedAction ? <p className="text-text-secondary">Recommended: {saved.recommendedAction}</p> : null}{saved.photoRefs.some(id => !(job.photos || []).some(photo => photo.id === id)) ? <p className="text-muted-foreground">Linked photo unavailable</p> : null}</div> : item.result === "na" ? <p className="maintenance-outcome-note text-xs text-muted-foreground">Not applicable · answered</p> : null}
+            </td>
+            <td className="maintenance-defect-action"><Button type="button" size="sm" variant="ghost" aria-label={`${saved ? "Edit Defect" : "Report defect"}: ${item.text}`} disabled={busy || Boolean(editingDefect)} onClick={() => setEditingDefect(item.id)}>{saved ? "Edit Defect" : "Report defect"}</Button></td>
+            <td className="maintenance-na-action"><Button type="button" size="sm" variant="ghost" aria-label={`Mark N/A: ${item.text}`} aria-pressed={item.result === "na"} disabled={busy || editingDefect === item.id} onClick={() => mutate(`/checklist/${encodeURIComponent(item.id)}`, { result: item.result === "na" ? null : "na" }, "PATCH")}>{item.result === "na" ? "N/A · Clear" : "Mark N/A"}</Button></td>
+          </tr>{editingDefect === item.id ? <tr className="maintenance-defect-editor-row"><td colSpan={5}><DefectEditor item={item} saved={saved} photos={job.photos || []} busy={busy} onDirty={dirtyCallback} onCancel={() => setEditingDefect(null)} onSave={async draft => { if (await mutate("/defects", { ...draft, resultId: item.id })) setEditingDefect(null); }} /></td></tr> : null}</Fragment>;
+        })}</tbody></table>
         <label className="grid gap-1.5 text-sm font-medium">Service date<Input type="date" value={date} onChange={event => setDate(event.target.value)} disabled={busy} /></label>
         <label className="grid gap-1.5 text-sm font-medium">Service Notes<Textarea aria-label="Service Notes" rows={4} maxLength={20000} value={notes} onChange={event => setNotes(event.target.value)} disabled={busy} /></label>
         <Button className="h-11 justify-self-start" type="button" variant="outline" size="sm" disabled={busy} onClick={() => mutate("", { serviceNotes: notes, serviceDate: date }, "PATCH")}>Save service notes</Button>
-        <fieldset className="grid gap-3 border-t pt-4" disabled={busy}><legend className="text-sm font-semibold">Customer acknowledgement</legend>
-          <label className="grid gap-1.5 text-sm">Acknowledgement<select aria-label="Acknowledgement" className="h-11 rounded-lg border bg-card px-3" value={ack} onChange={event => { setAck(event.target.value); setSignature(""); }}><option value="">Choose acknowledgement</option>{Object.entries(MAINTENANCE_ACKNOWLEDGEMENTS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          {ack === "signed" ? <><label className="grid gap-1.5 text-sm">Representative name<Input maxLength={180} value={representative} onChange={event => setRepresentative(event.target.value)} /></label><MaintenanceSignature onChange={setSignature} disabled={busy} /></> : null}
-        </fieldset>
         {Object.values(defectDirty).some(Boolean) ? <p className="text-xs text-status-danger">Save each edited defect before completing the service.</p> : null}
-        <div className="flex flex-wrap items-center gap-3 border-t pt-3"><Button className="h-auto min-h-11 whitespace-normal" type="button" disabled={busy || Boolean(editingDefect)} onClick={complete}>{busy ? "Saving…" : "Complete Maintenance Service"}</Button><p className="text-xs text-muted-foreground">Completion marks the job completed and locks this report, its notes and signature.</p></div>
+        <div className="flex flex-wrap items-center gap-3 border-t pt-3"><Button className="h-auto min-h-11 whitespace-normal" type="button" disabled={busy || Boolean(editingDefect)} onClick={complete}>{busy ? "Saving…" : "Complete Maintenance Service"}</Button><p className="text-xs text-muted-foreground">Completion marks the job completed and locks this report and its notes.</p></div>
       </div> : null}
   </WorkspaceSection>;
 }

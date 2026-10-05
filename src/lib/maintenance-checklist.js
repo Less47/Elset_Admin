@@ -14,7 +14,6 @@ export const DEFAULT_MAINTENANCE_CHECKLIST = Object.freeze([
 
 export const MAINTENANCE_RESULTS = Object.freeze({ completed: "Completed", defect: "Defect", na: "N/A" });
 export const MAINTENANCE_SEVERITIES = Object.freeze({ advisory: "Advisory", action_required: "Action required", urgent: "Urgent" });
-export const MAINTENANCE_ACKNOWLEDGEMENTS = Object.freeze({ signed: "Customer signed", unavailable: "Customer unavailable", declined: "Customer declined signature" });
 
 export function starterMaintenanceChecklist(planId) {
   return maintenanceChecklistItems(DEFAULT_MAINTENANCE_CHECKLIST, planId);

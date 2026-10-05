@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import sharp from "sharp";
 import { DOCUMENT_LAYOUT } from "./quote-pdf.js";
-import { MAINTENANCE_ACKNOWLEDGEMENTS, MAINTENANCE_SEVERITIES } from "./src/lib/maintenance-checklist.js";
+import { MAINTENANCE_SEVERITIES } from "./src/lib/maintenance-checklist.js";
 
 const { pageWidth: W, pageHeight: H, margin: M } = DOCUMENT_LAYOUT;
 const INK = rgb(.08, .12, .16), MUTED = rgb(.35, .4, .45), GREEN = rgb(.02, .39, .29);
@@ -108,14 +108,6 @@ export async function generateMaintenanceServicePdf(report) {
     }
   }
   heading("Service notes"); paragraph(report.serviceNotes || "No additional service notes.");
-  room(report.signatureStatus === "signed" ? 200 : 70);
-  heading("Customer acknowledgement"); paragraph(MAINTENANCE_ACKNOWLEDGEMENTS[report.signatureStatus]);
-  if (report.signatureStatus === "signed") {
-    paragraph(`Representative: ${report.representativeName}`);
-    const signature = await embed(report.signatureData);
-    if (signature) { const dimensions = signature.scaleToFit(260, 90); room(dimensions.height + 24); page.drawImage(signature, { x: M, y: y - dimensions.height, ...dimensions }); y -= dimensions.height + 18; }
-    paragraph(`Signed: ${report.signedAt}`, { size: 9, color: MUTED });
-  }
   const completionText = `${report.technicianName}\nCompleted: ${report.completedAt}`;
   room(34 + wrap(completionText).length * 15);
   heading("Technician completion"); paragraph(completionText);

@@ -6,7 +6,7 @@ import http from "node:http";
 import test from "node:test";
 import express from "express";
 import sharp from "sharp";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
 import { openWorkspaceDb, migrateWorkspaceSchema, assertWorkspaceSchema, WORKSPACE_SCHEMA_VERSION } from "../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb, getMaintenancePlanById } from "../server-workspace-state.js";
@@ -15,7 +15,7 @@ import { createMaintenancePlan, updateMaintenancePlan, generateMaintenanceJob, d
 import { createJob, changeJobStatus, deleteJob, emptyDeletedJobs, addJobPhoto, deleteJobPhoto } from "../server-workspace-jobs.js";
 import { createWorkspaceSqliteBackupBundle, materializeWorkspaceSqliteBackup } from "../server-workspace-backup.js";
 import { initializeMaintenanceService, getMaintenanceServiceReport, getMaintenanceServiceHistory, updateMaintenanceServiceResult,
-  updateMaintenanceServiceDefect, updateMaintenanceServiceNotes, completeMaintenanceService, validateMaintenanceSignature, persistMaintenanceServiceSend } from "../server-workspace-maintenance-service.js";
+  updateMaintenanceServiceDefect, updateMaintenanceServiceNotes, completeMaintenanceService, persistMaintenanceServiceSend } from "../server-workspace-maintenance-service.js";
 import { createMaintenanceServiceRouter } from "../server-maintenance-service-routes.js";
 import { maintenanceChecklistItems, starterMaintenanceChecklist, DEFAULT_MAINTENANCE_CHECKLIST } from "../src/lib/maintenance-checklist.js";
 import { maintenanceServiceEmailDraft } from "../src/lib/maintenance-service-email.js";
@@ -29,6 +29,9 @@ const planInput = { id: "service-plan", customerId: "demo-customer-arcadia", sit
   frequency: "six-monthly", nextDueDate: "2026-10-05", defaultTechnicianId: "demo-staff-admin", checklist: ["Legacy custom inspection"] };
 const tables = ["maintenance_service_send_history", "maintenance_service_defects", "maintenance_service_checklist_results", "maintenance_service_reports"];
 const signature = async () => `data:image/png;base64,${(await sharp(Buffer.from('<svg width="720" height="240"><path d="M20 130 Q100 30 140 120 T300 95 L470 145" fill="none" stroke="black" stroke-width="5"/></svg>')).png().toBuffer()).toString("base64")}`;
+const defectPhoto = async () => `data:image/png;base64,${(await sharp(Buffer.from('<svg width="480" height="220"><rect width="480" height="220" fill="#e8eef0"/><rect x="100" y="20" width="38" height="180" fill="#45565b"/><rect x="128" y="75" width="100" height="48" rx="5" fill="#35474d"/><circle cx="212" cy="99" r="9" fill="#a1c4d2"/><path d="M174 75 L186 92 L177 107 L191 123" fill="none" stroke="#c82e36" stroke-width="5"/><path d="M227 99 H420" stroke="#c82e36" stroke-width="2" stroke-dasharray="8 8"/></svg>')).png().toBuffer()).toString("base64")}`;
+const pdfImageCount = async bytes => (await PDFDocument.load(bytes)).context.enumerateIndirectObjects().filter(([, object]) =>
+  object instanceof PDFRawStream && object.dict.get(PDFName.of("Subtype")) === PDFName.of("Image")).length;
 function workspace(t, { enabled = true, dbPath = ":memory:", checklist = planInput.checklist } = {}) {
   const db = openWorkspaceDb({ dbPath }); t.after(() => db.close());
   importWorkspaceJsonData(db, { ...fixture, maintenancePlans: [], jobs: [] });
@@ -42,9 +45,20 @@ function answerAll(db, jobId, outcome = "completed") {
   for (const item of report.items) report = updateMaintenanceServiceResult(db, jobId, item.id, { revision: report.revision, result: outcome }, actor);
   return report;
 }
-async function finish(db, jobId, status = "unavailable", extra = {}) {
+async function finish(db, jobId, extra = {}) {
   const report = answerAll(db, jobId);
-  return completeMaintenanceService(db, jobId, { revision: report.revision, signatureStatus: status, ...extra }, actor);
+  return completeMaintenanceService(db, jobId, { revision: report.revision, ...extra }, actor);
+}
+
+// Fixture for reports completed by the released customer-signature workflow.
+async function legacyFinish(db, jobId, status = "signed") {
+  const report = getMaintenanceServiceReport(db, jobId), timestamp = "2026-10-05T01:00:00.000Z";
+  db.prepare(`UPDATE maintenance_service_reports SET status='completed',signature_status=?,
+    customer_representative_name=?,customer_signature_data=?,signed_at=?,completed_at=?,technician_name=? WHERE id=?`)
+    .run(status, status === "signed" ? "Legacy Site Representative" : "", status === "signed" ? await signature() : "",
+      status === "signed" ? timestamp : "", timestamp, "Legacy Technician", report.id);
+  changeJobStatus(db, jobId, "Completed");
+  return getMaintenanceServiceReport(db, jobId);
 }
 
 test("maintenance add-on defaults off, preserves legacy text and creates no reports while disabled", t => {
@@ -208,20 +222,20 @@ test("defects require valid severity and description; photos belong to the job; 
   const { bytes } = await generateMaintenanceServicePdf(completed);
   assert.match((await readPdfTextRuns(bytes)).flat().map(run => run.text).join("\n"), /image unavailable/);
 });
-for (const status of ["unavailable", "declined", "signed"]) test(`completion records ${status}, notes, counts, technician and immutable history`, async t => {
+for (const status of [undefined, "unavailable", "declined", "signed"]) test(`technician completion without acknowledgement ignores legacy input ${status}, preserves counts and immutable history`, async t => {
   const f = workspace(t); let report = answerAll(f.db, f.job.id);
   report = updateMaintenanceServiceResult(f.db, f.job.id, report.items[0].id, { revision: report.revision, result: "na" }, actor);
   report = updateMaintenanceServiceNotes(f.db, f.job.id, { revision: report.revision, serviceNotes: "Tested at departure", serviceDate: "2026-10-06" });
-  const input = { revision: report.revision, signatureStatus: status, ...(status === "signed" ? { representativeName: "Site Representative", signatureData: await signature() } : {}) };
+  const input = { revision: report.revision, ...(status ? { signatureStatus: status, representativeName: "Ignored representative", signatureData: "Ignored invalid signature" } : {}) };
   const completed = await completeMaintenanceService(f.db, f.job.id, input, actor);
   assert.equal(completed.status, "completed"); assert.equal(completed.serviceNotes, "Tested at departure"); assert.equal(completed.counts.na, 1);
   assert.equal(completed.counts.completed, 10); assert.ok(completed.technicianName); assert.ok(completed.completedAt);
-  assert.equal(Boolean(completed.signedAt), status === "signed"); assert.equal(Boolean(completed.signatureData), status === "signed");
+  assert.equal(completed.signedAt, ""); assert.equal(completed.signatureData, ""); assert.equal(completed.representativeName, "");
   assert.throws(() => updateMaintenanceServiceNotes(f.db, f.job.id, { revision: completed.revision, serviceNotes: "Tamper" }), /read-only/);
   assert.throws(() => f.db.prepare("UPDATE maintenance_service_checklist_results SET notes='tamper' WHERE id=?").run(report.items[0].id), /read-only/);
   assert.throws(() => f.db.prepare("DELETE FROM maintenance_service_reports WHERE id=?").run(report.id), /preserved/);
   assert.equal(getMaintenanceServiceHistory(f.db, f.plan().id).length, 1);
-  assert.equal(getMaintenanceServiceHistory(f.db, f.plan().id)[0].signatureStatus, status);
+  assert.equal(getMaintenanceServiceHistory(f.db, f.plan().id)[0].signatureStatus, "unavailable"); // schema 16 storage compatibility only
   assert.equal(f.db.prepare("SELECT status FROM jobs WHERE id=?").get(f.job.id).status, "Completed");
   assert.ok(f.plan().lastCompletedAt);
   assert.ok(f.db.prepare("SELECT completed_at FROM maintenance_occurrence_exceptions WHERE job_id=?").get(f.job.id).completed_at);
@@ -240,19 +254,30 @@ test("service/job completion rolls back together on a stale job status or a late
   report = await completeMaintenanceService(f.db, f.job.id, { revision: report.revision, signatureStatus: "declined", expectedJobStatus: "In Progress" }, actor, { returnChange: true });
   assert.equal(report.jobChange.job.status, "Completed"); assert.ok(report.jobChange.maintenancePlan.lastCompletedAt);
 });
-test("signed completion requires representative and bounded readable PNG, rejecting blank/corrupt/wrong formats", async t => {
-  const f = workspace(t); const report = answerAll(f.db, f.job.id);
-  await assert.rejects(completeMaintenanceService(f.db, f.job.id, { revision: report.revision, signatureStatus: "signed", representativeName: "", signatureData: await signature() }, actor), /Representative/);
-  const transparent = await sharp(Buffer.from(Array.from({ length: 64 * 32 * 4 }, (_, index) => index % 4 === 3 ? 0 : (Math.floor(index / 4) % 2) * 255)),
-    { raw: { width: 64, height: 32, channels: 4 } }).toColourspace("b-w").png().toBuffer();
-  const undersized = await sharp(Buffer.from('<svg width="32" height="32"><path d="M1 10 L20 25" stroke="black"/></svg>')).png().toBuffer();
-  for (const invalid of ["", "data:image/jpeg;base64,AA==", "data:image/png;base64,AA==", `data:image/png;base64,${"A".repeat(180000)}`,
-    `data:image/png;base64,${transparent.toString("base64")}`, `data:image/png;base64,${undersized.toString("base64")}`,
-    `data:image/png;base64,${(await sharp({ create: { width: 720, height: 240, channels: 4, background: "white" } }).png().toBuffer()).toString("base64")}`]) {
-    await assert.rejects(validateMaintenanceSignature(invalid));
-  }
-  assert.ok(await validateMaintenanceSignature(await signature()));
-  assert.equal(f.report().status, "draft");
+for (const status of ["signed", "unavailable", "declined"]) test(`legacy completed ${status} report remains intact and readable while PDF omits acknowledgement`, async t => {
+  const f = workspace(t); answerAll(f.db, f.job.id);
+  const legacy = await legacyFinish(f.db, f.job.id, status);
+  const stored = f.db.prepare("SELECT * FROM maintenance_service_reports WHERE id=?").get(legacy.id);
+  updateWorkspaceAddons(f.db, { maintenanceChecklists: false });
+  assert.deepEqual(f.report(), legacy); assert.equal(getMaintenanceServiceHistory(f.db, f.plan().id)[0].signatureStatus, status);
+  const pdf = await generateMaintenanceServicePdf(legacy);
+  const text = (await readPdfTextRuns(pdf.bytes)).flat().map(run => run.text).join("\n");
+  assert.doesNotMatch(text, /customer acknowledgement|customer signed|customer unavailable|declined signature|representative|signed:/i);
+  const withoutLegacyFields = await generateMaintenanceServicePdf({ ...legacy, signatureStatus: "", representativeName: "", signatureData: "", signedAt: "" });
+  assert.equal(await pdfImageCount(pdf.bytes), await pdfImageCount(withoutLegacyFields.bytes));
+  assert.match(text, /Legacy Technician/); assert.match(text, /Completed:/);
+  assert.deepEqual(f.db.prepare("SELECT * FROM maintenance_service_reports WHERE id=?").get(legacy.id), stored);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 16);
+});
+
+test("normal technician report PDF contains completion without customer acknowledgement", async t => {
+  const f = workspace(t, { checklist: [] }); const completed = await finish(f.db, f.job.id);
+  const generated = await generateMaintenanceServicePdf(completed);
+  const text = (await readPdfTextRuns(generated.bytes)).flat().map(run => run.text).join("\n");
+  assert.match(text, /Technician completion/i); assert.match(text, /Completed:/);
+  assert.doesNotMatch(text, /acknowledgement|representative|signature|signed:/i);
+  fs.mkdirSync(new URL("../tmp/pdfs/", import.meta.url), { recursive: true });
+  fs.writeFileSync(new URL("../tmp/pdfs/maintenance-service-normal-qa.pdf", import.meta.url), generated.bytes);
 });
 test("completed reports survive plan archive, job recycle and permanent job removal", async t => {
   const f = workspace(t); const completed = await finish(f.db, f.job.id);
@@ -267,11 +292,11 @@ test("SQLite backup/restore includes canonical reports, defects, signatures, sen
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const image = await signature();
   addJobPhoto(f.db, f.job.id, { id: "backup-defect-photo", name: "Backup photo.png", url: image });
-  let draft = answerAll(f.db, f.job.id);
-  draft = updateMaintenanceServiceDefect(f.db, f.job.id, draft.items[0].id, { revision: draft.revision, severity: "advisory",
+  const draft = answerAll(f.db, f.job.id);
+  updateMaintenanceServiceDefect(f.db, f.job.id, draft.items[0].id, { revision: draft.revision, severity: "advisory",
     description: "Recorded defect retained in backup", recommendedAction: "Inspect on the next visit", photoRefs: ["backup-defect-photo"] }, actor);
-  const finished = await completeMaintenanceService(f.db, f.job.id, { revision: draft.revision, signatureStatus: "signed",
-    representativeName: "Backup Representative", signatureData: image }, actor);
+  const finished = await legacyFinish(f.db, f.job.id);
+  assert.ok(finished.signatureData); assert.equal(finished.representativeName, "Legacy Site Representative");
   persistMaintenanceServiceSend(f.db, finished.id, { ...emailInput, ok: true, sentAt: new Date().toISOString(),
     fromEmail: "sender@example.test", replyToEmail: "reply@example.test", messageId: "backup-provider-id",
     acceptedRecipients: emailInput.to, rejectedRecipients: [], unconfirmedRecipients: [], warning: "" }, actor);
@@ -285,21 +310,25 @@ test("SQLite backup/restore includes canonical reports, defects, signatures, sen
   const restored = openWorkspaceDb({ dbPath: staged.tempDbPath, readonly: true, migrate: false });
   try { assert.deepEqual(getMaintenanceServiceReport(restored, f.job.id), completed); } finally { restored.close(); }
 });
-test("PDF paginates long checklists/defects, embeds branding/photos/signature and keeps historical plan text", async t => {
+test("PDF paginates long checklists/defects, embeds branding/photos, omits legacy signatures and keeps historical plan text", async t => {
   const custom = Array.from({ length: 55 }, (_, i) => `Custom inspection ${i + 1} ${"long details ".repeat(8)}`);
   const f = workspace(t, { checklist: custom });
   const logo = await sharp({ create: { width: 300, height: 80, channels: 3, background: "#167451" } }).png().toBuffer();
   saveWorkspaceLogo(f.db, await validateWorkspaceLogo(logo, "image/png"));
   let report = answerAll(f.db, f.job.id);
-  addJobPhoto(f.db, f.job.id, { id: "pdf-photo", name: "Recorded beam.png", url: await signature() });
+  addJobPhoto(f.db, f.job.id, { id: "pdf-photo", name: "Recorded beam.png", url: await defectPhoto() });
   report = updateMaintenanceServiceDefect(f.db, f.job.id, report.items[3].id, { revision: report.revision, severity: "action_required", description: "Long defect text. ".repeat(120), recommendedAction: "Replace damaged drive", photoRefs: ["pdf-photo"] }, actor);
-  report = await completeMaintenanceService(f.db, f.job.id, { revision: report.revision, signatureStatus: "signed", representativeName: "Alex Site", signatureData: await signature(), serviceNotes: "Long service notes. ".repeat(120) }, actor);
+  report = updateMaintenanceServiceNotes(f.db, f.job.id, { revision: report.revision, serviceNotes: "Long service notes. ".repeat(120) });
+  f.db.prepare(`UPDATE maintenance_service_reports SET signature_status='signed',customer_representative_name=?,
+    customer_signature_data=?,signed_at=? WHERE id=?`).run("Legacy Site Representative", await signature(), "2026-10-05T01:00:00.000Z", report.id);
+  report = await completeMaintenanceService(f.db, f.job.id, { revision: report.revision }, actor);
   updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [{ id: "later", text: "New plan text must not appear" }] });
   saveWorkspaceLogo(f.db, null);
   const generated = await generateMaintenanceServicePdf(f.report());
   const pages = await readPdfTextRuns(generated.bytes), text = pages.flat().map(run => run.text).join("\n");
   assert.ok(pages.length >= 5); assert.match(text, /MAINTENANCE SERVICE REPORT/); assert.match(text, /PASS/); assert.match(text, /DEFECT/);
-  assert.match(text, /Action required/); assert.match(text, /Replace damaged drive/); assert.match(text, /Alex Site/); assert.match(text, /Technician/i);
+  assert.match(text, /Action required/); assert.match(text, /Replace damaged drive/); assert.match(text, /Technician/i);
+  assert.doesNotMatch(text, /acknowledgement|Legacy Site Representative|signature|signed:/i);
   assert.match(text, /Custom inspection 55/); assert.doesNotMatch(text, /New plan text/); assert.match(text, /Completed:/);
   assert.ok(report.snapshot.branding.logo); assert.equal((await PDFDocument.load(generated.bytes)).getPageCount(), pages.length);
   for (const page of pages) for (const run of page) assert.ok(run.y >= 24 && run.y <= 810, `Text stays in page bounds: ${run.text}`);
