@@ -6,7 +6,7 @@ import { getCustomerById, getJobById, getMaintenancePlanById, readWorkspaceRecor
 import { getWorkspaceAddons, requireWorkspaceAddon } from "./server-workspace-addons.js";
 import { readWorkspaceLogo } from "./server-workspace-logo.js";
 import { changeJobStatus } from "./server-workspace-jobs.js";
-import { maintenanceChecklistTemplate, maintenanceReportCounts, MAINTENANCE_RESULTS, MAINTENANCE_SEVERITIES, MAINTENANCE_ACKNOWLEDGEMENTS } from "./src/lib/maintenance-checklist.js";
+import { maintenanceChecklistItems, maintenanceReportCounts, MAINTENANCE_RESULTS, MAINTENANCE_SEVERITIES, MAINTENANCE_ACKNOWLEDGEMENTS } from "./src/lib/maintenance-checklist.js";
 import { isMaintenanceDate } from "./src/lib/maintenance-recurrence.js";
 
 export class MaintenanceServiceError extends Error {
@@ -91,7 +91,7 @@ export function initializeMaintenanceService(db, jobId) {
       VALUES(?,?,?,?,?,?,?)`).run(reportId, plan.id, jobId, job.scheduledDate || timestamp.slice(0, 10), timestamp, timestamp, JSON.stringify(snapshot));
     const insert = db.prepare(`INSERT INTO maintenance_service_checklist_results(id,report_id,source_item_id,source_key,standard,position,text)
       VALUES(?,?,?,?,?,?,?)`);
-    maintenanceChecklistTemplate(plan.checklistItems || plan.checklist, plan.id).forEach(item => {
+    maintenanceChecklistItems(plan.checklistItems || plan.checklist, plan.id).forEach(item => {
       insert.run(crypto.randomUUID(), reportId, item.id, item.key, Number(item.standard), item.position, item.text);
     });
     touch(db, timestamp);
@@ -141,7 +141,7 @@ export function updateMaintenanceServiceResult(db, jobId, resultId, input, user)
   return db.transaction(() => {
     const report = draftForMutation(db, jobId, input?.revision);
     if (!report.items.some(item => item.id === resultId)) throw new MaintenanceServiceError("Checklist item not found.", 404);
-    if (!Object.hasOwn(MAINTENANCE_RESULTS, input?.result)) throw new MaintenanceServiceError("Select Completed, Defect or N/A.");
+    if (input?.result !== null && !Object.hasOwn(MAINTENANCE_RESULTS, input?.result)) throw new MaintenanceServiceError("Select Completed, Defect or N/A, or clear the answer.");
     const notes = boundedText(input.notes ?? report.items.find(item => item.id === resultId).notes, "Item notes", 2000);
     if (input.result === "defect" && input.defect) saveDefect(db, report, resultId, input.defect, user);
     else if (input.result !== "defect") db.prepare("DELETE FROM maintenance_service_defects WHERE report_id=? AND checklist_result_id=?").run(report.id, resultId);
@@ -206,6 +206,7 @@ export async function completeMaintenanceService(db, jobId, input, user, { retur
     const report = draftForMutation(db, jobId, input.revision);
     const unanswered = report.items.filter(item => !item.result);
     const invalidDefects = report.items.filter(item => item.result === "defect" && !report.defects.some(defect => defect.resultId === item.id));
+    if (!report.items.length) throw new MaintenanceServiceError("This visit has no checklist items. Add checks to the plan before generating the next visit; this empty snapshot cannot be completed.", 400);
     if (unanswered.length || invalidDefects.length) throw new MaintenanceServiceError(
       `${unanswered.length} unanswered ${unanswered.length === 1 ? "check" : "checks"}; ${invalidDefects.length} ${invalidDefects.length === 1 ? "defect needs" : "defects need"} a description and severity.`,
       400, { unansweredItems: unanswered.map(item => ({ id: item.id, text: item.text })), invalidDefectItems: invalidDefects.map(item => ({ id: item.id, text: item.text })) });

@@ -17,7 +17,7 @@ import { createWorkspaceSqliteBackupBundle, materializeWorkspaceSqliteBackup } f
 import { initializeMaintenanceService, getMaintenanceServiceReport, getMaintenanceServiceHistory, updateMaintenanceServiceResult,
   updateMaintenanceServiceDefect, updateMaintenanceServiceNotes, completeMaintenanceService, validateMaintenanceSignature, persistMaintenanceServiceSend } from "../server-workspace-maintenance-service.js";
 import { createMaintenanceServiceRouter } from "../server-maintenance-service-routes.js";
-import { maintenanceChecklistTemplate, STANDARD_MAINTENANCE_CHECKLIST } from "../src/lib/maintenance-checklist.js";
+import { maintenanceChecklistItems, starterMaintenanceChecklist, DEFAULT_MAINTENANCE_CHECKLIST } from "../src/lib/maintenance-checklist.js";
 import { maintenanceServiceEmailDraft } from "../src/lib/maintenance-service-email.js";
 import { generateMaintenanceServicePdf } from "../server-maintenance-service-pdf.js";
 import { readPdfTextRuns } from "./helpers/pdf-text.js";
@@ -32,8 +32,8 @@ const signature = async () => `data:image/png;base64,${(await sharp(Buffer.from(
 function workspace(t, { enabled = true, dbPath = ":memory:", checklist = planInput.checklist } = {}) {
   const db = openWorkspaceDb({ dbPath }); t.after(() => db.close());
   importWorkspaceJsonData(db, { ...fixture, maintenancePlans: [], jobs: [] });
-  const legacy = createMaintenancePlan(db, { ...planInput, checklist });
   if (enabled) updateWorkspaceAddons(db, { maintenanceChecklists: true });
+  const legacy = createMaintenancePlan(db, { ...planInput, ...(enabled ? { checklist: undefined, checklistItems: [...starterMaintenanceChecklist(planInput.id), ...checklist.map((text, i) => ({ id: "legacy-custom-" + i, text }))] } : { checklist }) });
   const job = generateMaintenanceJob(db, legacy.id, { occurrenceKey: legacy.nextOccurrence.key, revision: legacy.maintenanceRevision, jobId: "service-job" }).job;
   return { db, job, plan: () => getMaintenancePlanById(db, legacy.id), report: () => getMaintenanceServiceReport(db, job.id) };
 }
@@ -53,61 +53,81 @@ test("maintenance add-on defaults off, preserves legacy text and creates no repo
   assert.deepEqual(f.plan().checklist, ["Legacy custom inspection"]);
   assert.equal(f.report(), null);
   assert.throws(() => initializeMaintenanceService(f.db, f.job.id), error => error.code === "ADDON_DISABLED");
-  assert.throws(() => updateMaintenancePlan(f.db, f.plan().id, { customChecklist: [] }), error => error.code === "ADDON_DISABLED");
+  assert.throws(() => updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [] }), error => error.code === "ADDON_DISABLED");
   const updated = updateMaintenancePlan(f.db, f.plan().id, { checklist: "Retained newline\nSecond check" });
   assert.deepEqual(updated.checklist, ["Retained newline", "Second check"]);
 });
-test("central standards keep stable identity and order; similar legacy custom text is preserved", () => {
-  const legacy = [STANDARD_MAINTENANCE_CHECKLIST[0].text, "Inspect custom gate"];
-  const items = maintenanceChecklistTemplate(legacy, "plan");
-  assert.equal(items.length, 12); assert.equal(items[10].text, legacy[0]);
-  assert.deepEqual(items.slice(0, 10).map(item => item.key), STANDARD_MAINTENANCE_CHECKLIST.map(item => item.key));
-  assert.deepEqual(maintenanceChecklistTemplate(items, "plan"), items);
+test("starter items are defaults only; normalization preserves actual legacy text and identity", () => {
+  const items = starterMaintenanceChecklist("plan");
+  assert.equal(items.length, 10);
+  assert.deepEqual(items.map(item => item.text), DEFAULT_MAINTENANCE_CHECKLIST.map(item => item.text));
+  assert.deepEqual(maintenanceChecklistItems(items, "plan"), items);
+  const legacy = [DEFAULT_MAINTENANCE_CHECKLIST[0].text, "Inspect custom gate"];
+  assert.deepEqual(maintenanceChecklistItems(legacy, "plan").map(item => item.text), legacy);
+  assert.deepEqual(maintenanceChecklistItems([], "plan"), []);
 });
-
-test("enabling a legacy plan at its 300-item limit preserves every custom check during ordinary edits", t => {
+test("new enabled plans default to ten editable items; explicit empty templates stay empty", t => {
+  const f = workspace(t);
+  const { checklist: _checklist, id: _id, ...input } = planInput;
+  const created = createMaintenancePlan(f.db, input);
+  assert.deepEqual(created.checklist, DEFAULT_MAINTENANCE_CHECKLIST.map(item => item.text));
+  const empty = createMaintenancePlan(f.db, { ...input, checklistItems: [] });
+  assert.equal(empty.checklistItems.length, 0);
+  assert.equal(f.db.prepare("PRAGMA user_version").get().user_version, 16);
+});
+test("enabling an existing 300-item legacy plan adds no defaults or changes during ordinary edits", t => {
   const checklist = Array.from({ length: 300 }, (_, index) => `Legacy check ${index + 1}`);
-  const f = workspace(t, { checklist });
-  assert.equal(f.report().items.length, 310);
-  const edited = updateMaintenancePlan(f.db, f.plan().id, { notes: "Plan notes updated" });
-  assert.equal(edited.checklistItems.length, 310);
-  assert.deepEqual(edited.checklist.slice(10), checklist);
-  assert.deepEqual(f.report().items.slice(10).map(item => item.text), checklist);
-});
-test("structured plan custom items add, edit, remove and reorder with protected standard items", t => {
-  const f = workspace(t);
-  const saved = updateMaintenancePlan(f.db, f.plan().id, { customChecklist: [{ id: "custom-a", text: "Loop" }, { id: "custom-b", text: "Fire interface" }] });
-  assert.equal(saved.checklistItems.length, 12); assert.deepEqual(saved.checklist.slice(0, 10), STANDARD_MAINTENANCE_CHECKLIST.map(item => item.text));
-  const reordered = updateMaintenancePlan(f.db, saved.id, { customChecklist: [{ id: "custom-b", text: "Updated interface" }, { id: "custom-a", text: "Loop" }] });
-  assert.equal(reordered.checklistItems[10].id, "custom-b");
-  const removed = updateMaintenancePlan(f.db, saved.id, { customChecklist: [{ id: "custom-b", text: "Updated interface" }] });
-  assert.equal(removed.checklist.length, 11);
-  for (const invalid of [removed.checklistItems.slice(1), [{ ...removed.checklistItems[0], text: "Tampered" }, ...removed.checklistItems.slice(1)], [...removed.checklistItems].reverse()]) {
-    assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: invalid }), /standard checklist/);
-  }
-  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { customChecklist: [{ id: "standard", key: STANDARD_MAINTENANCE_CHECKLIST[0].key, text: "Fake" }] }), /additional checklist/);
-  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: "Malformed structured items" }), /must be an array/);
-  assert.equal(f.plan().checklistItems.length, 11);
-  updateMaintenancePlan(f.db, saved.id, { notes: "Notes only" }); // enabling an old plan must not reject ordinary edits
-});
-test("disabled legacy editor retains standard identities and historical snapshots while editing additional text", t => {
-  const f = workspace(t);
-  const template = updateMaintenancePlan(f.db, f.plan().id, { customChecklist: [{ id: "retained-custom", text: "Original custom" }] });
-  updateWorkspaceAddons(f.db, { maintenanceChecklists: false });
-  const retained = [...template.checklistItems.slice(0, 10), { ...template.checklistItems[10], text: "Legacy edited custom" }];
-  const saved = updateMaintenancePlan(f.db, template.id, { checklistItems: retained });
-  assert.equal(saved.checklistItems[10].id, "retained-custom");
-  assert.deepEqual(saved.checklistItems.slice(0, 10), template.checklistItems.slice(0, 10));
-  assert.throws(() => updateMaintenancePlan(f.db, template.id, { checklistItems: retained.slice(1) }), /standard checklist/);
-  assert.throws(() => updateMaintenancePlan(f.db, template.id, { checklist: ["Discard standard identities"] }), /Retain the protected/);
+  const f = workspace(t, { enabled: false, checklist });
   updateWorkspaceAddons(f.db, { maintenanceChecklists: true });
-  assert.equal(maintenanceChecklistTemplate(f.plan().checklistItems, template.id).length, 11);
-  assert.equal(f.report().items.at(-1).text, "Legacy custom inspection");
+  const original = initializeMaintenanceService(f.db, f.job.id);
+  const edited = updateMaintenancePlan(f.db, f.plan().id, { notes: "Plan notes updated" });
+  assert.equal(edited.checklistItems.length, 300);
+  assert.deepEqual(edited.checklist, checklist);
+  assert.deepEqual(f.report().items, original.items);
+});
+test("old standard metadata is editable: rename every item, reorder, insert anywhere, remove all and rebuild", t => {
+  const f = workspace(t), original = f.report();
+  const prior = starterMaintenanceChecklist(f.plan().id).map(item => ({ ...item, standard: true }));
+  const saved = updateMaintenancePlan(f.db, f.plan().id, { checklistItems: prior });
+  const renamed = saved.checklistItems.map((item, i) => ({ ...item, text: `Renamed check ${i + 1}` })).reverse();
+  const edited = updateMaintenancePlan(f.db, saved.id, { checklistItems: [{ id: "inserted-first", text: "First custom check" }, ...renamed], revision: saved.maintenanceRevision });
+  assert.deepEqual(edited.checklistItems.slice(1).map(item => item.id), prior.map(item => item.id).reverse());
+  assert.deepEqual(edited.checklistItems.map(item => item.position), Array.from({ length: 11 }, (_, i) => i + 1));
+  assert.equal(edited.checklist[1], "Renamed check 10");
+  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: prior, revision: saved.maintenanceRevision }), /has changed/);
+  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: "Malformed" }), /must be an array/);
+  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: null }), /must be an array/);
+  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: [prior[0], prior[0]] }), /unique identities/);
+  assert.throws(() => updateMaintenancePlan(f.db, saved.id, { checklistItems: [{ id: "long", text: "x".repeat(2001) }] }), /2000/);
+  const removed = updateMaintenancePlan(f.db, saved.id, { checklistItems: [] });
+  assert.deepEqual(removed.checklistItems, []);
+  updateMaintenancePlan(f.db, saved.id, { notes: "Ordinary edit keeps an empty checklist" });
+  assert.deepEqual(f.plan().checklist, []);
+  const rebuilt = updateMaintenancePlan(f.db, saved.id, { checklistItems: [{ id: "rebuilt-check", text: "Entirely new checklist" }] });
+  assert.deepEqual(rebuilt.checklist, ["Entirely new checklist"]);
+  assert.deepEqual(f.report(), original);
+});
+test("disabling blocks structured checklist writes, preserves template IDs and allows ordinary plan edits", t => {
+  const f = workspace(t), original = f.report(), template = f.plan();
+  updateWorkspaceAddons(f.db, { maintenanceChecklists: false });
+  assert.throws(() => updateMaintenancePlan(f.db, template.id, { checklistItems: [] }), error => error.code === "ADDON_DISABLED");
+  const saved = updateMaintenancePlan(f.db, template.id, { notes: "Notes while disabled" });
+  assert.deepEqual(saved.checklistItems, template.checklistItems);
+  assert.deepEqual(f.report(), original);
+});
+test("completion rejects an empty visit without changing the released schema or report snapshot", async t => {
+  const f = workspace(t);
+  const plan = updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [] });
+  const job = generateMaintenanceJob(f.db, plan.id, { occurrenceKey: plan.nextOccurrence.key, revision: plan.maintenanceRevision }).job;
+  const report = getMaintenanceServiceReport(f.db, job.id);
+  assert.deepEqual(report.items, []);
+  await assert.rejects(completeMaintenanceService(f.db, job.id, { revision: report.revision, signatureStatus: "unavailable" }, actor), /no checklist items/);
+  assert.deepEqual(getMaintenanceServiceReport(f.db, job.id), report);
 });
 test("generated reports snapshot current items; plan edits affect only future jobs", t => {
   const f = workspace(t);
   const original = f.report(); assert.equal(original.items.length, 11);
-  updateMaintenancePlan(f.db, f.plan().id, { customChecklist: [{ id: "future-check", text: "Future inspection" }] });
+  updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [{ id: "future-check", text: "Future inspection" }] });
   assert.deepEqual(f.report().items, original.items);
   const plan = f.plan();
   const next = generateMaintenanceJob(f.db, plan.id, { occurrenceKey: plan.nextOccurrence.key, revision: plan.maintenanceRevision, jobId: "future-job" }).job;
@@ -118,7 +138,7 @@ test("pre-feature job initializes once lazily without changing its later snapsho
   const f = workspace(t, { enabled: false }); assert.equal(f.report(), null);
   updateWorkspaceAddons(f.db, { maintenanceChecklists: true });
   const report = initializeMaintenanceService(f.db, f.job.id);
-  updateMaintenancePlan(f.db, f.plan().id, { customChecklist: [] });
+  updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [] });
   assert.deepEqual(initializeMaintenanceService(f.db, f.job.id), report);
   assert.equal(f.db.prepare("SELECT count(*) n FROM maintenance_service_reports").get().n, 1);
 });
@@ -130,6 +150,36 @@ test("completion identifies every unanswered check, validates outcome values and
   assert.equal(updated.items[0].notes, "Inspected");
   assert.throws(() => updateMaintenanceServiceResult(f.db, f.job.id, initial.items[1].id, { revision: initial.revision, result: "na" }, actor), error => error.code === "STALE_REPORT");
   assert.equal(f.report().counts.unanswered, 10);
+});
+test("unchecking Completed clears the answer and notes survive; clearing defect and N/A updates progress atomically", t => {
+  const f = workspace(t);
+  let report = f.report(); const item = report.items[0];
+  report = updateMaintenanceServiceResult(f.db, f.job.id, item.id, { revision: report.revision, result: "completed", notes: "Inspected" }, actor);
+  report = updateMaintenanceServiceResult(f.db, f.job.id, item.id, { revision: report.revision, result: null }, actor);
+  assert.equal(report.items[0].result, null); assert.equal(report.items[0].notes, "Inspected");
+  assert.equal(report.counts.completed, 0); assert.equal(report.counts.unanswered, 11);
+  report = updateMaintenanceServiceDefect(f.db, f.job.id, item.id, { revision: report.revision, severity: "advisory", description: "Wear observed" }, actor);
+  assert.equal(report.counts.defects, 1);
+  report = updateMaintenanceServiceResult(f.db, f.job.id, item.id, { revision: report.revision, result: null }, actor);
+  assert.deepEqual(report.defects, []); assert.equal(report.counts.defects, 0); assert.equal(report.counts.unanswered, 11);
+  report = updateMaintenanceServiceResult(f.db, f.job.id, item.id, { revision: report.revision, result: "na" }, actor);
+  assert.equal(report.counts.na, 1); assert.equal(report.counts.unanswered, 10);
+  report = updateMaintenanceServiceResult(f.db, f.job.id, item.id, { revision: report.revision, result: null }, actor);
+  assert.equal(report.counts.na, 0); assert.equal(report.counts.unanswered, 11);
+  assert.throws(() => updateMaintenanceServiceResult(f.db, f.job.id, item.id, { revision: report.revision }, actor), /Select Completed/);
+});
+test("a 12-item visit remains frozen after the template grows to 14; completed history remains unchanged", async t => {
+  const f = workspace(t);
+  const completed = await finish(f.db, f.job.id);
+  let plan = updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [...f.plan().checklistItems, { id: "twelfth", text: "Twelfth check" }] });
+  const first = generateMaintenanceJob(f.db, plan.id, { occurrenceKey: plan.nextOccurrence.key, revision: plan.maintenanceRevision }).job;
+  const original = getMaintenanceServiceReport(f.db, first.id); assert.equal(original.items.length, 12);
+  plan = updateMaintenancePlan(f.db, plan.id, { checklistItems: [...plan.checklistItems, { id: "thirteenth", text: "Thirteenth check" }, { id: "fourteenth", text: "Fourteenth check" }] });
+  const second = generateMaintenanceJob(f.db, plan.id, { occurrenceKey: plan.nextOccurrence.key, revision: plan.maintenanceRevision }).job;
+  assert.equal(getMaintenanceServiceReport(f.db, second.id).items.length, 14);
+  assert.deepEqual(getMaintenanceServiceReport(f.db, first.id), original);
+  assert.deepEqual(f.report(), completed);
+  assert.equal(getMaintenanceServiceHistory(f.db, plan.id).length, 1);
 });
 test("defects require valid severity and description; photos belong to the job; atomic result/defect updates", async t => {
   const f = workspace(t); let report = answerAll(f.db, f.job.id);
@@ -244,7 +294,7 @@ test("PDF paginates long checklists/defects, embeds branding/photos/signature an
   addJobPhoto(f.db, f.job.id, { id: "pdf-photo", name: "Recorded beam.png", url: await signature() });
   report = updateMaintenanceServiceDefect(f.db, f.job.id, report.items[3].id, { revision: report.revision, severity: "action_required", description: "Long defect text. ".repeat(120), recommendedAction: "Replace damaged drive", photoRefs: ["pdf-photo"] }, actor);
   report = await completeMaintenanceService(f.db, f.job.id, { revision: report.revision, signatureStatus: "signed", representativeName: "Alex Site", signatureData: await signature(), serviceNotes: "Long service notes. ".repeat(120) }, actor);
-  updateMaintenancePlan(f.db, f.plan().id, { customChecklist: [{ id: "later", text: "New plan text must not appear" }] });
+  updateMaintenancePlan(f.db, f.plan().id, { checklistItems: [{ id: "later", text: "New plan text must not appear" }] });
   saveWorkspaceLogo(f.db, null);
   const generated = await generateMaintenanceServicePdf(f.report());
   const pages = await readPdfTextRuns(generated.bytes), text = pages.flat().map(run => run.text).join("\n");

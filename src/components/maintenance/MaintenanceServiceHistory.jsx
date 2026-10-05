@@ -15,14 +15,13 @@ export default function MaintenanceServiceHistory({ planId, enabled, fetchWithAu
       .then(result => { if (active) setReports(result.reports); }).catch(failure => { if (active) setError(failure.message); });
     return () => { active = false; };
   }, [planId, fetchWithAuth, enabled]);
-  if (!enabled && !reports.length) return null;
-  return <WorkspaceSection panel title="Service History">
+  return <WorkspaceSection title="Service History">
     {error ? <div role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
-    {reports.length ? <ol className="grid gap-3">{reports.map(report => <li className="border-b pb-3 last:border-0 last:pb-0" key={report.id}>
+    {reports.length ? <ol className="maintenance-history-rows">{reports.map(report => <li className="border-b py-3 first:pt-0 last:border-0" key={report.id}>
       <p className="text-sm font-medium">{formatMaintenanceDate(report.serviceDate)} · Job #{report.jobNumber}</p>
       <p className="mt-1 text-xs text-muted-foreground">{report.technicianName} · Completed · {report.defectCount ? `${report.defectCount} ${report.defectCount === 1 ? "defect" : "defects"}` : "No defects"}</p>
       <p className="text-xs text-muted-foreground">{MAINTENANCE_ACKNOWLEDGEMENTS[report.signatureStatus]}</p>
-      <Button className="mt-2" type="button" variant="outline" size="sm" onClick={() => navigate(`/maintenance-reports/${encodeURIComponent(report.id)}`)}>View Report</Button>
+      <Button className="mt-2 h-11" type="button" variant="outline" size="sm" onClick={() => navigate(`/maintenance-reports/${encodeURIComponent(report.id)}`)}>View Report</Button>
     </li>)}</ol> : <p className="text-sm text-muted-foreground">No completed service reports yet.</p>}
   </WorkspaceSection>;
 }

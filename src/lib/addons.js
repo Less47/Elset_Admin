@@ -3,7 +3,7 @@ export const ADDONS = Object.freeze({
   maintenanceChecklists: Object.freeze({
     key: "maintenanceChecklists", name: "Maintenance Checklists & Reports", category: "Operations",
     description: "Perform structured maintenance inspections, record defects, capture customer acknowledgement and generate professional maintenance service reports.",
-    includes: ["Standard maintenance checklist", "Plan-specific checklist items", "Technician checklist workflow", "Defect reporting", "Defect photos", "Customer signature/acknowledgement", "Maintenance service report PDF", "Service report email history"],
+    includes: ["Editable maintenance checklist with 10 starter items", "Plan-specific checklist items", "Technician checklist workflow", "Defect reporting", "Defect photos", "Customer signature/acknowledgement", "Maintenance service report PDF", "Service report email history"],
     disableDescription: "Checklist/report controls will be hidden and no new service reports can be created. Existing completed checklists, defects and service reports are preserved and remain readable.",
     defaultEnabled: false,
   }),

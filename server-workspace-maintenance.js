@@ -3,7 +3,7 @@ import { moneyToCents } from "./server-workspace-financials.js";
 import { createJob } from "./server-workspace-jobs.js";
 import { getWorkspaceAddons, requireWorkspaceAddon } from "./server-workspace-addons.js";
 import { initializeMaintenanceService } from "./server-workspace-maintenance-service.js";
-import { maintenanceChecklistTemplate, STANDARD_MAINTENANCE_CHECKLIST } from "./src/lib/maintenance-checklist.js";
+import { starterMaintenanceChecklist } from "./src/lib/maintenance-checklist.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
 import { getCustomerById, getJobById, getMaintenancePlanById, getJobsForMaintenancePlan, readWorkspaceRecords } from "./server-workspace-state.js";
 import { advanceMaintenanceDate, changeMaintenanceSchedule, expandMaintenanceOccurrences, isMaintenanceDate, maintenanceSchedule, nextMaintenanceOccurrence } from "./src/lib/maintenance-recurrence.js";
@@ -35,7 +35,7 @@ const maintenanceKnownKeys = new Set([
   "nextOccurrence", "occurrenceExceptions", "revision", "dateChange", "occurrenceKey", "occurrenceDate", "scope",
 ]);
 
-const checklistKnownKeys = new Set(["id", "text", "label", "notes"]);
+const checklistKnownKeys = new Set(["id", "position", "text", "label", "notes"]);
 
 export class WorkspaceMaintenanceError extends Error {
   constructor(message, statusCode = 400) {
@@ -174,9 +174,8 @@ function normalizeChecklistItems(items, planId) {
     ? items
     : text(items).split(/\r?\n/);
 
-  const standardCount = source.filter(item => item?.standard === true
-    && STANDARD_MAINTENANCE_CHECKLIST.some(standard => standard.key === item.key)).length;
-  if (source.length > 300 + standardCount) throw new WorkspaceMaintenanceError("Checklist contains too many items.");
+  // Keep all templates accepted by the released implementation (300 + 10).
+  if (source.length > 310) throw new WorkspaceMaintenanceError("Checklist contains too many items.");
 
   return source
     .map((item, index) => {
@@ -257,34 +256,13 @@ function normalizeMaintenancePlanInput(input, existing = null, db = null, explic
   const siteAddress = normalizeSiteAddress(source.siteAddress);
   if (!siteAddress) throw new WorkspaceMaintenanceError("Site address is required.");
   if (source.active !== undefined && typeof source.active !== "boolean") throw new WorkspaceMaintenanceError("Plan status is invalid.");
-  let checklist = input.checklistItems ?? (input.checklist !== undefined ? input.checklist : existing?.checklistItems ?? source.checklist ?? []);
-  if (input.customChecklist !== undefined) {
+  let checklist = input.customChecklist ?? input.checklistItems ?? input.checklist ?? existing?.checklistItems ?? [];
+  if (explicitChecklistItems || input.customChecklist !== undefined) {
     requireWorkspaceAddon(db, "maintenanceChecklists");
-    if (!Array.isArray(input.customChecklist) || input.customChecklist.some(item => !item || typeof item !== "object" || item.standard || String(item.key || "").startsWith("standard-"))) {
-      throw new WorkspaceMaintenanceError("Only additional checklist items can be edited.");
-    }
-    checklist = input.customChecklist;
+    if (!Array.isArray(input.customChecklist ?? input.checklistItems)) throw new WorkspaceMaintenanceError("Checklist items must be an array.");
   }
-  const protectedTemplate = existing?.checklistItems?.some(item => item.standard === true);
-  if (protectedTemplate && input.checklistItems === undefined && input.customChecklist === undefined && input.checklist !== undefined) {
-    // A legacy text-only write cannot discard protected item identities.
-    // Structured clients send the retained standard rows explicitly.
-    if (JSON.stringify(normalizeChecklistItems(input.checklist, id).map(item => item.text)) !== JSON.stringify(existing.checklist)) {
-      throw new WorkspaceMaintenanceError("Retain the protected standard checklist items when editing this plan.");
-    }
-    checklist = existing.checklistItems;
-  }
-  if ((db && getWorkspaceAddons(db).maintenanceChecklists) || protectedTemplate) {
-    if (explicitChecklistItems && input.customChecklist === undefined) {
-      if (!Array.isArray(checklist)) throw new WorkspaceMaintenanceError("Checklist items must be an array.");
-      const standards = checklist.filter(item => item?.standard || String(item?.key || "").startsWith("standard-"));
-      if (standards.length !== 10 || STANDARD_MAINTENANCE_CHECKLIST.some((item, index) => standards[index]?.key !== item.key
-        || standards[index]?.text !== item.text || checklist[index] !== standards[index])) {
-        throw new WorkspaceMaintenanceError("The ten standard checklist items cannot be edited, removed or reordered.");
-      }
-    }
-    checklist = maintenanceChecklistTemplate(checklist, id);
-  }
+  if (!existing && input.checklistItems === undefined && input.checklist === undefined && input.customChecklist === undefined
+    && db && getWorkspaceAddons(db).maintenanceChecklists) checklist = starterMaintenanceChecklist(id);
   const normalizedChecklist = normalizeChecklistItems(checklist, id);
   if (db && getWorkspaceAddons(db).maintenanceChecklists && (new Set(normalizedChecklist.map(item => item.id)).size !== normalizedChecklist.length
     || new Set(normalizedChecklist.map(item => item.extra.key || item.id)).size !== normalizedChecklist.length

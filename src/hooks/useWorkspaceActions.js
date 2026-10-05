@@ -399,7 +399,7 @@ export function useWorkspaceActions({
     const existingPlan = (data.maintenancePlans || []).find((entry) => entry.id === planId);
     if (!existingPlan) return false;
 
-    const customer = data.customers.find((entry) => entry.id === updates.customerId);
+    const customer = data.customers.find((entry) => entry.id === (updates.customerId || existingPlan.customerId));
     if (!customer) {
       window.alert("Select a valid customer before saving the maintenance plan.");
       return false;

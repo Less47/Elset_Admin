@@ -7,6 +7,7 @@ import { maintenanceServiceEmailDraft } from "./src/lib/maintenance-service-emai
 import { normalizeDocumentEmail } from "./src/lib/document-email.js";
 import { generateMaintenanceServicePdf } from "./server-maintenance-service-pdf.js";
 import { WorkspaceJobError } from "./server-workspace-jobs.js";
+import { getMaintenancePlanById } from "./server-workspace-state.js";
 import {
   MaintenanceServiceError, assertMaintenanceServiceAccess, getMaintenanceServiceReport, getMaintenanceServiceHistory,
   initializeMaintenanceService, updateMaintenanceServiceResult, updateMaintenanceServiceDefect, updateMaintenanceServiceNotes,
@@ -49,9 +50,10 @@ export function createMaintenanceServiceRouter({ requireAuth, requireRole, env =
     // Disabled workspaces may still read completed reports. Empty reads allow the
     // Job page to discover historical records without revealing execution controls.
     const report = getMaintenanceServiceReport(db, req.params.id);
-    assertMaintenanceServiceAccess(db, req.params.id, req.user, { historical: report?.status === "completed" });
+    const job = assertMaintenanceServiceAccess(db, req.params.id, req.user, { historical: report?.status === "completed" });
     if (report && req.user.role === "technician") report.sentHistory = [];
-    res.json({ ok: true, report: !maintenanceServiceAvailable(db) && report?.status !== "completed" ? null : report });
+    res.json({ ok: true, report: !maintenanceServiceAvailable(db) && report?.status !== "completed" ? null : report,
+      canInitialize: maintenanceServiceAvailable(db) && Boolean(job?.maintenancePlanId && getMaintenancePlanById(db, job.maintenancePlanId)) });
   }, { readonly: true }));
   router.post(base, auth, roles(), parser, handle((db, req, res) => {
     assertMaintenanceServiceAccess(db, req.params.id, req.user);

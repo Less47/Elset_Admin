@@ -1,12 +1,13 @@
 import { getJobContactGroups } from "@/lib/contact-model";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import SiteNavigationLink from "@/components/shared/SiteNavigationLink";
 import JobCostingTab from "@/components/jobs/JobCostingTab";
 import MaintenanceServiceChecklist from "@/components/maintenance/MaintenanceServiceChecklist";
+import { maintenanceServiceRequest } from "@/lib/maintenance-service-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -132,6 +133,16 @@ export default function JobDetailsPage({
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [pendingStatus, setPendingStatus] = useState("");
   const [pageError, setPageError] = useState("");
+  const [maintenance, setMaintenance] = useState(null);
+  const checklistEnabled = isAddonEnabled(addons, "maintenanceChecklists");
+  useEffect(() => {
+    if (!job?.id || !fetchWithAuth) return;
+    let active = true;
+    maintenanceServiceRequest(fetchWithAuth, `/api/jobs/${encodeURIComponent(job.id)}/maintenance-service`)
+      .then(result => { if (active) setMaintenance({ ...result, jobId: job.id }); })
+      .catch(failure => { if (active && checklistEnabled && job.maintenancePlanId) setPageError(failure.message); });
+    return () => { active = false; };
+  }, [job?.id, job?.maintenancePlanId, fetchWithAuth, checklistEnabled]);
 
   const orderedStaff = useMemo(
     () => [...(staff || [])].sort((a, b) => a.name.localeCompare(b.name)),
@@ -188,8 +199,11 @@ export default function JobDetailsPage({
     !addressPending && overviewDraft.title.trim() && overviewDraft.description.trim() && normalizeSiteAddress(overviewDraft.jobAddress)
   );
   const showCosting = showCommercialDocuments && isAddonEnabled(addons, "jobCosting");
+  const service = maintenance?.jobId === job.id ? maintenance : null;
+  const showChecklist = checklistEnabled && Boolean(job.maintenancePlanId && (service?.report || service?.canInitialize));
   const visibleTabs = [
     { value: "overview", label: "Overview" },
+    ...(showChecklist ? [{ value: "checklist", label: "Checklist" }] : []),
     { value: "schedule", label: "Schedule" },
     ...(showCommercialDocuments ? [{ value: "documents", label: "Documents" }] : []),
     ...(showCosting ? [{ value: "costing", label: "Costing" }] : []),
@@ -300,8 +314,11 @@ export default function JobDetailsPage({
               </div>
 
               <div className="bg-card/80 p-panel">
+                {showChecklist ? <TabsContent value="checklist" forceMount hidden={activeTab !== "checklist"} className="mt-0 data-[state=inactive]:hidden">
+                  <MaintenanceServiceChecklist key={job.id} initialReport={service.report} job={job} customer={customer} enabled={checklistEnabled} canEmail={showCommercialDocuments} fetchWithAuth={fetchWithAuth} onAddonDisabled={onAddonDisabled} onCompleted={onMaintenanceServiceCompleted} />
+                </TabsContent> : null}
                 <TabsContent value="overview" className="mt-0">
-                  <MaintenanceServiceChecklist job={job} customer={customer} enabled={isAddonEnabled(addons, "maintenanceChecklists")} canEmail={showCommercialDocuments} fetchWithAuth={fetchWithAuth} onAddonDisabled={onAddonDisabled} onCompleted={onMaintenanceServiceCompleted} />
+                  {!showChecklist && service?.report?.status === "completed" ? <MaintenanceServiceChecklist key={job.id} initialReport={service.report} job={job} customer={customer} enabled={checklistEnabled} canEmail={showCommercialDocuments} fetchWithAuth={fetchWithAuth} onAddonDisabled={onAddonDisabled} /> : null}
                   <WorkspaceSection
                     title="Job summary"
                     description="The core customer, site, and work information for this job."

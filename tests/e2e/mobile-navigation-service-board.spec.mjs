@@ -2360,10 +2360,12 @@ test("Create Job preserves nested customer and site work and confirms discarding
     await page.getByRole("button", { name: "Add New Customer", exact: true }).click();
     await page.getByLabel("Customer or company name").fill("Created inside job workspace");
     await page.getByLabel("Primary site address").fill("44 Test Street, Melbourne VIC 3000");
-    const siteContactEditor = page.locator("#create-job-site .contact-snapshot-editor");
+    const siteContactEditor = page.locator('#create-job-site [aria-label="Site contact management"]');
+    await siteContactEditor.getByRole("button", { name: "Add Contact", exact: true }).click();
+    await siteContactEditor.getByRole("button", { name: "New contact", exact: true }).click();
     await siteContactEditor.getByLabel("Name", { exact: true }).pressSequentially("John Smith");
-    await siteContactEditor.getByLabel("Role", { exact: true }).fill("");
-    await siteContactEditor.getByLabel("Role", { exact: true }).pressSequentially("Building Manager");
+    await siteContactEditor.getByLabel("Roles at this site", { exact: true }).pressSequentially("Building Manager");
+    await siteContactEditor.getByRole("checkbox", { name: "Primary contact", exact: true }).check();
     await page.getByLabel("Job title").fill("New customer workspace job");
     await page.getByLabel("Description of work").fill("Create the customer, site, and job through the existing atomic job API.");
     const newCustomerResponse = page.waitForResponse((response) =>
@@ -2552,8 +2554,7 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await expect(page.getByRole("button", { name: "Customers", exact: true })).toHaveAttribute("aria-current", "page");
 
     await page.getByRole("button", { name: "Job History", exact: true }).click();
-    const historyRow = page.locator('[title="Double-click to open job"]', { hasText: "Job #1001" });
-    await historyRow.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("group", { name: /^Open Job #1001:/ }).press("Enter");
     await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
     await page.getByRole("button", { name: "Back to Job History" }).click();
     await expect(page.getByRole("button", { name: "Job History", exact: true })).toHaveAttribute("aria-current", "page");
@@ -2565,8 +2566,7 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await expect(page.getByRole("button", { name: "Invoices", exact: true })).toHaveAttribute("aria-current", "page");
 
     await page.getByRole("button", { name: "Customers", exact: true }).click();
-    const customerRow = page.locator('[title="Double-click to open customer profile"]', { hasText: "Arcadia Example Apartments" });
-    await customerRow.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("group", { name: "Open profile for Arcadia Example Apartments", exact: true }).press("Enter");
     await expect(page).toHaveURL(baseUrl + "/customers/demo-customer-arcadia");
     await expect(page.getByRole("tab")).toHaveCount(0);
     await page.getByRole("button", { name: "Open Job #1001", exact: true }).click();
@@ -2575,8 +2575,8 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await page.getByRole("button", { name: "Back to Customer Profile" }).click();
 
     await page.getByRole("button", { name: "Sites", exact: true }).click();
-    const siteRow = page.locator('[title="Double-click to open site profile"]', { hasText: "10 Example Lane, Sampleton VIC 3000" });
-    await siteRow.getByRole("button", { name: "Open", exact: true }).click();
+    const siteRow = page.getByRole("group", { name: /^Open site / }).filter({ hasText: "10 Example Lane, Sampleton VIC 3000" });
+    await siteRow.press("Enter");
     await expect(page).toHaveURL(/\/customers\/demo-customer-arcadia\/sites\//);
     await page.getByRole("tab", { name: /Job History/ }).click();
     await page.getByRole("button", { name: "Open Job #1001", exact: true }).click();
