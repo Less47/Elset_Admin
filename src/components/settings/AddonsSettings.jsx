@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Calculator } from "lucide-react";
+import { Calculator, ClipboardCheck } from "lucide-react";
 import AccountingSettings from "./AccountingSettings";
 import AddonDetails from "./AddonDetails";
 import { useSettingsDraft } from "@/hooks/useSettingsDraft";
@@ -37,7 +37,7 @@ export default function AddonsSettings({ workspaceAddons, available, fetchWithAu
         <button type="button" className="absolute inset-0 z-0 cursor-pointer rounded-[inherit] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" aria-label={`About ${addon.name}`} aria-haspopup="dialog" onClick={(event) => { detailTrigger.current = event.currentTarget; setDetails(addon.key); }} />
         <div className="mb-2 flex items-start justify-between gap-2">
           <div data-addon-icon aria-hidden="true" className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl font-semibold ${addon.key === "quickbooks" ? "bg-[#2ca01c] text-white text-xl" : addon.key === "xero" ? "bg-[#0077c8] text-white text-sm" : "bg-status-info-surface text-status-info"}`}>
-            {addon.key === "quickbooks" ? "qb" : addon.key === "xero" ? "xero" : <Calculator className="h-5 w-5" />}
+            {addon.key === "quickbooks" ? "qb" : addon.key === "xero" ? "xero" : addon.key === "maintenanceChecklists" ? <ClipboardCheck className="h-5 w-5" /> : <Calculator className="h-5 w-5" />}
           </div>
           <div className="relative z-10 flex min-w-0 items-center gap-2">
             {accounting ? <AccountingSettings provider={addon.key} addon={addon} enabled={isAddonEnabled(persistedAddons, addon.key)} showStatus={enabled} available={available} fetchWithAuth={fetchWithAuth} open={details === addon.key} onOpenChange={(open) => setDetails(open ? addon.key : "")} providerWarning={providerWarning} returnFocusRef={detailTrigger} /> : <Badge className={enabled ? "bg-status-success-surface text-status-success" : "bg-muted text-muted-foreground"}>{enabled ? "Enabled" : "Disabled"}</Badge>}
@@ -50,7 +50,7 @@ export default function AddonsSettings({ workspaceAddons, available, fetchWithAu
             </button>
           </div>
         </div>
-        <h3 className="pointer-events-none text-sm font-semibold">{addon.name}</h3><p id={`addon-description-${addon.key}`} className="pointer-events-none mt-1 text-xs leading-5 text-text-secondary">{addon.key === "jobCosting" ? "Track job costs, profit and margin." : `Sync invoices and payments with ${addon.name}.`}</p>
+        <h3 className="pointer-events-none text-sm font-semibold">{addon.name}</h3><p id={`addon-description-${addon.key}`} className="pointer-events-none mt-1 text-xs leading-5 text-text-secondary">{addon.key === "maintenanceChecklists" ? "Inspect, record defects and deliver service reports." : addon.key === "jobCosting" ? "Track job costs, profit and margin." : `Sync invoices and payments with ${addon.name}.`}</p>
         <span className="pointer-events-none mt-auto pt-3 text-xs text-text-secondary">View details</span>
         {!accounting ? <AddonDetails addon={addon} open={details === addon.key} onOpenChange={(open) => setDetails(open ? addon.key : "")} returnFocusRef={detailTrigger} /> : null}
       </article>;

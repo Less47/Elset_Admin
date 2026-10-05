@@ -34,7 +34,7 @@ function seed(t, dbPath) {
   return db;
 }
 function schema14(db) {
-  db.exec("DROP TABLE site_contact_links; DROP TABLE customer_contact_links; DROP TABLE contacts; DELETE FROM workspace_schema_migrations WHERE version=15; UPDATE workspace_info SET schema_version=14; PRAGMA user_version=14;");
+  db.exec("DROP TABLE maintenance_service_send_history; DROP TABLE maintenance_service_defects; DROP TABLE maintenance_service_checklist_results; DROP TABLE maintenance_service_reports; DROP TABLE site_contact_links; DROP TABLE customer_contact_links; DROP TABLE contacts; DELETE FROM workspace_schema_migrations WHERE version>=15; UPDATE workspace_info SET schema_version=14; PRAGMA user_version=14;");
 }
 function legacyFixture(t) {
   const db = database(t); importWorkspaceJsonData(db, demo); schema14(db);
@@ -76,7 +76,7 @@ test("14 to 15 preserves every original business row, snapshot byte, amount, ID 
   const before = Object.fromEntries(tables.map((table) => [table, rows(db, table)]));
   const financials = summarizeWorkspaceDb(db).financials;
   migrateWorkspaceSchema(db);
-  assert.equal(readWorkspaceSchemaVersion(db), 15);
+  assert.equal(readWorkspaceSchemaVersion(db), 16);
   for (const table of tables) if (!["workspace_info", "workspace_schema_migrations"].includes(table)) assert.deepEqual(rows(db, table), before[table], table);
   assert.deepEqual(summarizeWorkspaceDb(db).financials, financials);
   assert.deepEqual(db.pragma("foreign_key_check"), []);
@@ -129,7 +129,7 @@ test("late migration failure rolls back schema, relationships and metadata toget
   db.exec("CREATE TRIGGER fail_contact_migration BEFORE INSERT ON workspace_schema_migrations WHEN NEW.version=15 BEGIN SELECT RAISE(ABORT,'fixture failure'); END;");
   assert.throws(() => migrateWorkspaceSchema(db), /fixture failure/);
   assert.equal(readWorkspaceSchemaVersion(db), 14); assert.ok(!db.prepare("SELECT 1 FROM sqlite_schema WHERE name='contacts'").get());
-  db.exec("DROP TRIGGER fail_contact_migration"); migrateWorkspaceSchema(db); assert.equal(readWorkspaceSchemaVersion(db), 15);
+  db.exec("DROP TRIGGER fail_contact_migration"); migrateWorkspaceSchema(db); assert.equal(readWorkspaceSchemaVersion(db), 16);
 });
 
 test("one identity can be direct at two customers and assigned to three sites without acquiring ownership", (t) => {
@@ -297,12 +297,12 @@ for (const legacy of [false, true]) test(`${legacy ? "schema-14" : "schema-15"} 
     const target = openWorkspaceDb({ dbPath }); target.close();
   } else db.close();
   const uploaded = JSON.stringify(bundle);
-  const staged = materializeWorkspaceSqliteBackup(bundle, path.join(directory, "staged")); assert.equal(staged.validation.schemaVersion, 15); assert.equal(JSON.stringify(bundle), uploaded);
+  const staged = materializeWorkspaceSqliteBackup(bundle, path.join(directory, "staged")); assert.equal(staged.validation.schemaVersion, 16); assert.equal(JSON.stringify(bundle), uploaded);
   fs.writeFileSync(path.join(directory, "auth.db"), "synthetic-auth-marker");
   await restoreWorkspaceSqliteBackupPayload(bundle, { env });
   const restored = openWorkspaceDb({ dbPath, readonly: true, migrate: false });
   try {
-    assert.equal(readWorkspaceSchemaVersion(restored), 15); assert.deepEqual(restored.pragma("foreign_key_check"), []);
+    assert.equal(readWorkspaceSchemaVersion(restored), 16); assert.deepEqual(restored.pragma("foreign_key_check"), []);
     const customer = state(restored).customers.find((entry) => entry.id === "a");
     const expected = legacy ? "legacy-person" : "p";
     assert.equal(customer.contacts[0].id, expected); assert.equal(customer.contacts[0].isBilling, true); assert.equal(customer.sites[0].contacts[0].id, expected);

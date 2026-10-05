@@ -1386,6 +1386,7 @@ export function normalizeMaintenancePlanRecord(plan) {
     estimatedDurationHours: Math.max(0, normalizeNumber(plan.estimatedDurationHours, 0)),
     contractPrice: Math.max(0, normalizeNumber(plan.contractPrice, 0)),
     checklist: normalizeChecklistItems(plan.checklist),
+    ...(Array.isArray(plan.checklistItems) ? { checklistItems: plan.checklistItems } : {}),
     notes: String(plan.notes || "").trim(),
     lastGeneratedAt: plan.lastGeneratedAt || "",
     lastGeneratedJobId: String(plan.lastGeneratedJobId || "").trim(),

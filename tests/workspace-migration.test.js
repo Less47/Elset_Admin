@@ -62,7 +62,7 @@ test("creates a fresh workspace SQLite database with schema metadata", () => {
     `).get();
 
     assert.equal(migration.version, WORKSPACE_SCHEMA_VERSION);
-    assert.equal(migration.name, "contact-relationship-model");
+    assert.equal(migration.name, "maintenance-checklists-service-reports");
     assert.equal(db.pragma("foreign_keys", { simple: true }), 1);
   });
 });

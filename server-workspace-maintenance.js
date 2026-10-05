@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import { moneyToCents } from "./server-workspace-financials.js";
 import { createJob } from "./server-workspace-jobs.js";
+import { getWorkspaceAddons, requireWorkspaceAddon } from "./server-workspace-addons.js";
+import { initializeMaintenanceService } from "./server-workspace-maintenance-service.js";
+import { maintenanceChecklistTemplate, STANDARD_MAINTENANCE_CHECKLIST } from "./src/lib/maintenance-checklist.js";
 import { WORKSPACE_SCHEMA_VERSION } from "./server-workspace-db.js";
 import { getCustomerById, getJobById, getMaintenancePlanById, getJobsForMaintenancePlan, readWorkspaceRecords } from "./server-workspace-state.js";
 import { advanceMaintenanceDate, changeMaintenanceSchedule, expandMaintenanceOccurrences, isMaintenanceDate, maintenanceSchedule, nextMaintenanceOccurrence } from "./src/lib/maintenance-recurrence.js";
@@ -21,6 +24,8 @@ const maintenanceKnownKeys = new Set([
   "estimatedDurationHours",
   "contractPrice",
   "checklist",
+  "checklistItems",
+  "customChecklist",
   "notes",
   "lastGeneratedAt",
   "lastGeneratedJobId",
@@ -169,7 +174,9 @@ function normalizeChecklistItems(items, planId) {
     ? items
     : text(items).split(/\r?\n/);
 
-  if (source.length > 300) throw new WorkspaceMaintenanceError("Checklist contains too many items.");
+  const standardCount = source.filter(item => item?.standard === true
+    && STANDARD_MAINTENANCE_CHECKLIST.some(standard => standard.key === item.key)).length;
+  if (source.length > 300 + standardCount) throw new WorkspaceMaintenanceError("Checklist contains too many items.");
 
   return source
     .map((item, index) => {
@@ -237,7 +244,7 @@ function getPlanState(db, planId) {
   return getMaintenancePlanById(db, planId);
 }
 
-function normalizeMaintenancePlanInput(input, existing = null) {
+function normalizeMaintenancePlanInput(input, existing = null, db = null, explicitChecklistItems = false) {
   assertPlainObject(input, "Maintenance plan");
   const source = {
     ...(existing || {}),
@@ -250,6 +257,38 @@ function normalizeMaintenancePlanInput(input, existing = null) {
   const siteAddress = normalizeSiteAddress(source.siteAddress);
   if (!siteAddress) throw new WorkspaceMaintenanceError("Site address is required.");
   if (source.active !== undefined && typeof source.active !== "boolean") throw new WorkspaceMaintenanceError("Plan status is invalid.");
+  let checklist = input.checklistItems ?? (input.checklist !== undefined ? input.checklist : existing?.checklistItems ?? source.checklist ?? []);
+  if (input.customChecklist !== undefined) {
+    requireWorkspaceAddon(db, "maintenanceChecklists");
+    if (!Array.isArray(input.customChecklist) || input.customChecklist.some(item => !item || typeof item !== "object" || item.standard || String(item.key || "").startsWith("standard-"))) {
+      throw new WorkspaceMaintenanceError("Only additional checklist items can be edited.");
+    }
+    checklist = input.customChecklist;
+  }
+  const protectedTemplate = existing?.checklistItems?.some(item => item.standard === true);
+  if (protectedTemplate && input.checklistItems === undefined && input.customChecklist === undefined && input.checklist !== undefined) {
+    // A legacy text-only write cannot discard protected item identities.
+    // Structured clients send the retained standard rows explicitly.
+    if (JSON.stringify(normalizeChecklistItems(input.checklist, id).map(item => item.text)) !== JSON.stringify(existing.checklist)) {
+      throw new WorkspaceMaintenanceError("Retain the protected standard checklist items when editing this plan.");
+    }
+    checklist = existing.checklistItems;
+  }
+  if ((db && getWorkspaceAddons(db).maintenanceChecklists) || protectedTemplate) {
+    if (explicitChecklistItems && input.customChecklist === undefined) {
+      if (!Array.isArray(checklist)) throw new WorkspaceMaintenanceError("Checklist items must be an array.");
+      const standards = checklist.filter(item => item?.standard || String(item?.key || "").startsWith("standard-"));
+      if (standards.length !== 10 || STANDARD_MAINTENANCE_CHECKLIST.some((item, index) => standards[index]?.key !== item.key
+        || standards[index]?.text !== item.text || checklist[index] !== standards[index])) {
+        throw new WorkspaceMaintenanceError("The ten standard checklist items cannot be edited, removed or reordered.");
+      }
+    }
+    checklist = maintenanceChecklistTemplate(checklist, id);
+  }
+  const normalizedChecklist = normalizeChecklistItems(checklist, id);
+  if (db && getWorkspaceAddons(db).maintenanceChecklists && (new Set(normalizedChecklist.map(item => item.id)).size !== normalizedChecklist.length
+    || new Set(normalizedChecklist.map(item => item.extra.key || item.id)).size !== normalizedChecklist.length
+    || normalizedChecklist.some(item => item.text.length > 2000))) throw new WorkspaceMaintenanceError("Checklist items need unique identities and text of up to 2000 characters.");
 
   return {
     id,
@@ -267,7 +306,7 @@ function normalizeMaintenancePlanInput(input, existing = null) {
     lastCompletedAt: trimText(source.lastCompletedAt),
     createdAt: trimText(existing?.createdAt || source.createdAt) || now,
     updatedAt: now,
-    checklist: normalizeChecklistItems(source.checklist || [], id),
+    checklist: normalizedChecklist,
     extra: { ...pickExtra(source, maintenanceKnownKeys),
       siteId: normalizeOptionalId(source.siteId, "Site ID"),
       assetId: normalizeOptionalId(source.assetId, "Asset ID"),
@@ -413,7 +452,7 @@ function restoreMaintenancePlanFromArchiveRow(db, row) {
 export function createMaintenancePlan(db, input) {
   return db.transaction(() => {
     const canonical = canonicalMaintenancePlanInput(input, null, [getCustomerById(db, input?.customerId)].filter(Boolean));
-    const plan = normalizeMaintenancePlanInput(canonical);
+    const plan = normalizeMaintenancePlanInput(canonical, null, db, input.checklistItems !== undefined);
     if (db.prepare("SELECT id FROM maintenance_plans WHERE id = ?").get(plan.id)) {
       throw new WorkspaceMaintenanceError("A maintenance plan with that ID already exists.", 409);
     }
@@ -437,7 +476,8 @@ export function updateMaintenancePlan(db, planIdInput, input) {
     if (!existing) throw new WorkspaceMaintenanceError("Maintenance plan not found.", 404);
 
     const canonical = canonicalMaintenancePlanInput(input, existing, [getCustomerById(db, input.customerId || existing.customerId)].filter(Boolean));
-    let plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, existing);
+    if (Object.hasOwn(input, "checklist") && !Object.hasOwn(input, "checklistItems")) delete canonical.checklistItems;
+    let plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, existing, db, input.checklistItems !== undefined);
     ensureCustomerExists(db, plan.customerId);
     ensureStaffExists(db, plan.defaultTechnicianId);
     validateOptionalSiteAndAsset(db, canonical, plan.customerId);
@@ -449,7 +489,7 @@ export function updateMaintenancePlan(db, planIdInput, input) {
       const operation = { ...input.dateChange, nextDueDate: plan.nextDueDate, revision: input.revision };
       if (changesFrequency && operation.scope !== "schedule") throw new WorkspaceMaintenanceError("Choose Change maintenance schedule to update the frequency.");
       const scheduled = applyOccurrenceChange(db, existing, operation, plan.frequency);
-      plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, scheduled);
+      plan = normalizeMaintenancePlanInput({ ...canonical, id: planId }, scheduled, db, input.checklistItems !== undefined);
       plan.extra.maintenanceRevision = existing.maintenanceRevision + 1;
     }
     insertOrReplaceMaintenancePlan(db, plan);
@@ -713,6 +753,7 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
         maintenanceDueDate: dueDate,
       },
     });
+    if (getWorkspaceAddons(db).maintenanceChecklists) initializeMaintenanceService(db, job.id);
 
     const updatedAt = nowIso();
     const previous = plan.occurrenceExceptions?.find((entry) => entry.key === occurrence.key);

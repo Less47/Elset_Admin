@@ -7,6 +7,7 @@ import { RecordWorkspace, WorkspaceMessage } from "@/components/workspace/Record
 import { buildDefaultDoc, readFileAsDataUrl } from "@/lib/app-support";
 import { recordLinkState } from "@/lib/record-link-state";
 import { buildInvoiceDraftFromQuote, invoiceConversionDraft } from "@/lib/quote-to-invoice";
+import { mergeMaintenanceJobCompletion } from "@/hooks/workspace-job-status";
 
 export function CreateJobRoute() {
   const { session, data, workspaceActions } = useOutletContext();
@@ -37,7 +38,7 @@ export function CreateJobRoute() {
 }
 
 export function JobDetailsRoute() {
-  const { session, data, workspaceActions, workspaceViewModel, workspaceAddons } = useOutletContext();
+  const { session, data, workspaceActions, workspaceViewModel, workspaceAddons, setData } = useOutletContext();
   const { jobId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -66,6 +67,7 @@ export function JobDetailsRoute() {
             addons={workspaceAddons.addons}
             fetchWithAuth={session.fetchWithAuth}
             onAddonDisabled={workspaceAddons.refresh}
+            onMaintenanceServiceCompleted={change => setData(previous => mergeMaintenanceJobCompletion(previous, change))}
             key={workspaceViewModel.selectedFreshJob?.id || `missing-${jobId}`}
             backLabel={backLabel}
             canDeleteJob={session.canManageBusiness}

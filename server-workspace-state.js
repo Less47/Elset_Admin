@@ -294,6 +294,7 @@ export function readWorkspaceRecords(db, selection) {
     estimatedDurationHours: row.estimated_duration_hours,
     contractPrice: centsToMoney(row.contract_price_cents),
     checklist: (checklistByPlanId.get(row.id) || []).map((item) => item.text),
+    checklistItems: (checklistByPlanId.get(row.id) || []).map((item) => mergeExtra({ id: item.id, text: item.text, position: item.position }, item.extra_json)),
     notes: row.notes,
     lastGeneratedAt: row.last_generated_at,
     lastGeneratedJobId: row.last_generated_job_id,

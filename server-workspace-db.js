@@ -8,12 +8,13 @@ import { accountingPaymentSchemaSql } from "./server-accounting-payment-schema.j
 import { accountingV3SchemaSql } from "./server-accounting-v3-schema.js";
 import { accountingPaymentOutboxSchemaSql } from "./server-accounting-payment-outbox-schema.js";
 import { contactSchemaSql, migrateLegacyContacts } from "./server-contact-schema.js";
+import { maintenanceServiceSchemaSql } from "./server-maintenance-service-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 15;
+export const WORKSPACE_SCHEMA_VERSION = 16;
 
 const migrations = [
   {
@@ -568,6 +569,7 @@ const migrations = [
   },
   { version: 14, name: "quickbooks-payment-outbox", sql: accountingPaymentOutboxSchemaSql },
   { version: 15, name: "contact-relationship-model", sql: contactSchemaSql, after: migrateLegacyContacts },
+  { version: 16, name: "maintenance-checklists-service-reports", sql: maintenanceServiceSchemaSql },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -611,6 +613,13 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 export function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 16) {
+    db.prepare(`SELECT id,maintenance_plan_id,job_id,service_date,technician_id,technician_name,status,service_notes,signature_status,
+      customer_representative_name,customer_signature_data,signed_at,completed_at,created_at,updated_at,revision,snapshot_json FROM maintenance_service_reports LIMIT 0`).all();
+    db.prepare("SELECT id,report_id,source_item_id,source_key,standard,position,text,result,notes FROM maintenance_service_checklist_results LIMIT 0").all();
+    db.prepare("SELECT id,report_id,checklist_result_id,severity,description,recommended_action,photo_refs_json,created_by,created_at,updated_at FROM maintenance_service_defects LIMIT 0").all();
+    db.prepare("SELECT id,report_id,sent_at,sender_id,payload_json FROM maintenance_service_send_history LIMIT 0").all();
+  }
   if (version >= 14) {
     db.prepare("SELECT external_snapshot_json FROM integration_external_payments LIMIT 0").all();
     db.prepare("SELECT request_json FROM integration_operations LIMIT 0").all();
@@ -626,7 +635,7 @@ export function assertWorkspaceSchemaObjects(db, version) {
   const objects = new Set(db.prepare("SELECT type || ':' || name AS object FROM sqlite_schema").all().map((row) => row.object));
   for (const migration of migrations.filter((entry) => entry.version <= version)) {
     // The migration definitions remain the source of truth for required objects.
-    for (const match of migration.sql.matchAll(/CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+(?:IF NOT EXISTS\s+)?(\w+)/gi)) {
+    for (const match of migration.sql.matchAll(/CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX|TRIGGER)\s+(?:IF NOT EXISTS\s+)?(\w+)/gi)) {
       const renamed = [...migration.sql.matchAll(/ALTER\s+TABLE\s+(\w+)\s+RENAME\s+TO\s+(\w+)/gi)].find((rename) => rename[1] === match[2]);
       if (!objects.has(`${match[1].toLowerCase()}:${renamed?.[2] || match[2]}`)) {
         throw new Error(`SQLite workspace schema ${version} is missing required ${match[1].toLowerCase()} ${match[2]}.`);

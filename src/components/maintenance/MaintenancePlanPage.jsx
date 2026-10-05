@@ -14,6 +14,10 @@ import { maintenanceCustomerSites, maintenancePlanName, maintenancePlanSite } fr
 import { MaintenanceMetrics } from "./MaintenanceManager";
 import MaintenanceDateChoice from "./MaintenanceDateChoice";
 import MaintenanceRecordPicker from "./MaintenanceRecordPicker";
+import MaintenanceChecklistEditor from "./MaintenanceChecklistEditor";
+import MaintenanceServiceHistory from "./MaintenanceServiceHistory";
+import { maintenanceChecklistTemplate } from "@/lib/maintenance-checklist";
+import "./MaintenanceService.css";
 import "./Maintenance.css";
 
 function draftFor(plan, customers) {
@@ -21,11 +25,12 @@ function draftFor(plan, customers) {
   return { customerId: plan?.customerId || "", siteId: site?.id || plan?.siteId || "", siteAddress: site?.address || plan?.siteAddress || "", assetId: plan?.assetId || "",
     frequency: normalizeMaintenanceFrequency(plan?.frequency), nextDueDate: plan?.nextDueDate || slugDate(),
     estimatedDurationHours: String(plan?.estimatedDurationHours ?? 1), contractPrice: (plan?.contractPriceSet ?? plan?.contractPrice > 0) ? String(plan.contractPrice) : "",
-    checklistText: (plan?.checklist || []).join("\n"), notes: plan?.notes || "", active: plan?.active !== false,
+    checklistText: (plan?.checklistItems?.some(item => item.standard) ? plan.checklistItems.filter(item => !item.standard).map(item => item.text) : plan?.checklist || []).join("\n"), notes: plan?.notes || "", active: plan?.active !== false,
+    customChecklist: maintenanceChecklistTemplate(plan?.checklistItems || plan?.checklist || [], plan?.id).filter(item => !item.standard),
     defaultTechnicianId: plan?.defaultTechnicianId || "" };
 }
 
-function MaintenanceEditor({ plan, data, actions, backLabel, onBack }) {
+function MaintenanceEditor({ plan, data, actions, backLabel, onBack, checklistEnabled }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [original] = useState(() => plan);
@@ -63,11 +68,20 @@ function MaintenanceEditor({ plan, data, actions, backLabel, onBack }) {
     saving.current = true; setBusy(true); setError("");
     try {
       const input = { ...draft, planName, siteAddress: site?.address || draft.siteAddress, estimatedDurationHours: Number(draft.estimatedDurationHours || 0), contractPrice: Number(draft.contractPrice || 0),
-        contractPriceSet: draft.contractPrice.trim() !== "", checklist: normalizeChecklistItems(draft.checklistText),
+        contractPriceSet: draft.contractPrice.trim() !== "", ...(checklistEnabled ? { customChecklist: draft.customChecklist } : { checklist: normalizeChecklistItems(draft.checklistText) }),
         revision: original?.maintenanceRevision || 0,
         ...(scope ? { dateChange: { scope, occurrenceKey: original.nextOccurrence?.key } } : {}),
       };
       delete input.checklistText;
+      if (!checklistEnabled) {
+        delete input.customChecklist;
+        if (original?.checklistItems?.some(item => item.standard)) {
+          const custom = original.checklistItems.filter(item => !item.standard);
+          input.checklistItems = maintenanceChecklistTemplate(normalizeChecklistItems(draft.checklistText)
+            .map((text, index) => ({ ...custom[index], id: custom[index]?.id || crypto.randomUUID(), text })), original.id);
+          delete input.checklist;
+        }
+      }
       const saved = original ? await actions.handleUpdateMaintenancePlan(original.id, input) : await actions.handleCreateMaintenancePlan(input);
       if (!saved) return;
       markSaved();
@@ -89,7 +103,7 @@ function MaintenanceEditor({ plan, data, actions, backLabel, onBack }) {
           <p className="text-xs text-muted-foreground">Active plans appear automatically on the Calendar.</p>
         </div></WorkspaceSection>
         <div className="maintenance-detail-column"><WorkspaceSection panel title="Visit Defaults"><div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1.5 text-sm font-medium">Estimated hours<Input type="number" min="0" step="0.5" {...field("estimatedDurationHours")} /></label><label className="grid gap-1.5 text-sm font-medium">Contract price<Input type="number" min="0" step="0.01" placeholder="Not set" {...field("contractPrice")} /></label></div></WorkspaceSection>
-          <WorkspaceSection panel title="Checklist"><label className="grid gap-1.5 text-xs text-text-secondary">One item per line<Textarea rows={6} {...field("checklistText")} /></label></WorkspaceSection>
+          <WorkspaceSection panel title="Checklist">{checklistEnabled ? <MaintenanceChecklistEditor items={draft.customChecklist} onChange={customChecklist => setDraft(previous => ({ ...previous, customChecklist }))} /> : <label className="grid gap-1.5 text-xs text-text-secondary">One item per line<Textarea rows={6} {...field("checklistText")} /></label>}</WorkspaceSection>
           <WorkspaceSection panel title="Notes"><Textarea aria-label="Plan notes" rows={3} {...field("notes")} /></WorkspaceSection>
         </div>
       </fieldset>
@@ -100,7 +114,8 @@ function MaintenanceEditor({ plan, data, actions, backLabel, onBack }) {
 }
 
 export default function MaintenancePlanPage() {
-  const { workspaceActions: actions, data, session } = useOutletContext();
+  const { workspaceActions: actions, data, session, workspaceAddons } = useOutletContext();
+  const checklistEnabled = workspaceAddons.addons.maintenanceChecklists === true;
   const { planId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -116,11 +131,12 @@ export default function MaintenancePlanPage() {
   const [error, setError] = useState("");
   const saving = useRef(false);
   if (!session.canManageBusiness) return <RecordWorkspace title="Maintenance" backLabel={backLabel} onBack={onBack}><WorkspaceMessage tone="error">You do not have permission to view maintenance plans.</WorkspaceMessage></RecordWorkspace>;
-  if (mode === "create-maintenance" || (plan && mode === "edit-maintenance")) return <MaintenanceEditor key={location.pathname} plan={plan} data={data} onBack={onBack} actions={actions} backLabel={backLabel} />;
+  if (mode === "create-maintenance" || (plan && mode === "edit-maintenance")) return <MaintenanceEditor key={location.pathname} plan={plan} data={data} onBack={onBack} actions={actions} backLabel={backLabel} checklistEnabled={checklistEnabled} />;
   if (!plan) return <RecordWorkspace title="Maintenance Plan" backLabel={backLabel} onBack={() => onBack()}><WorkspaceMessage>This maintenance plan was not found.</WorkspaceMessage></RecordWorkspace>;
   const customer = data.customers.find((entry) => entry.id === plan.customerId);
   const jobs = data.jobs.filter((job) => job.maintenancePlanId === plan.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const status = getMaintenancePlanStatus(plan, data.jobs);
+  const checklist = checklistEnabled ? maintenanceChecklistTemplate(plan.checklistItems || plan.checklist, plan.id) : plan.checklist;
   const activity = [
     ...jobs.map((job) => ({ key: `generated-${job.id}`, date: job.createdAt, text: `Generated Job #${job.jobNumber}` })),
     ...(plan.occurrenceExceptions || []).filter((entry) => entry.completedAt).map((entry) => ({ key: `completed-${entry.key}`, date: entry.completedAt, text: `Completed maintenance for ${formatDate(entry.snapshot?.scheduleCorrectionBaseline?.date || entry.overrideDate || entry.snapshot?.date || entry.originalDate)}` })),
@@ -141,7 +157,8 @@ export default function MaintenancePlanPage() {
       <div className="maintenance-detail-column"><WorkspaceSection panel title="Plan Details" trailing={<Button size="sm" disabled={busy || !plan.active} onClick={generate}>{busy ? "Generating…" : "Generate Job"}</Button>}><dl className="grid gap-3 text-sm"><div><dt className="text-xs text-muted-foreground">Customer</dt><dd className="font-medium">{customer?.name || "Unknown customer"}</dd></div><div><dt className="text-xs text-muted-foreground">Site</dt><dd>{plan.siteAddress}</dd></div><div className="flex gap-6"><div><dt className="text-xs text-muted-foreground">Frequency</dt><dd>{getMaintenanceFrequencyMeta(plan.frequency).label}</dd></div><div><dt className="text-xs text-muted-foreground">Status</dt><dd>{plan.active ? "Active" : "Inactive"}</dd></div></div></dl><MaintenanceMetrics plan={plan} />{plan.notes ? <p className="mt-4 whitespace-pre-wrap text-sm text-text-secondary">{plan.notes}</p> : null}</WorkspaceSection>
         <WorkspaceSection panel title="Recent Activity"><div className="grid gap-2 text-xs text-text-secondary"><p>Last generated: <strong>{plan.lastGeneratedAt ? formatDate(plan.lastGeneratedAt) : "Not yet"}</strong></p><p>Last completed: <strong>{plan.lastCompletedAt ? formatDate(plan.lastCompletedAt) : "Not yet"}</strong></p></div>{activity.length ? <ol className="mt-4 grid gap-3">{activity.map((entry) => <li key={entry.key} className="border-l-2 border-border pl-3 text-sm"><p>{entry.text}</p><time className="text-xs text-muted-foreground">{formatDate(entry.date)}</time></li>)}</ol> : <p className="mt-3 text-sm text-muted-foreground">No activity yet.</p>}</WorkspaceSection>
       </div>
-      <div className="maintenance-detail-column"><WorkspaceSection panel title="Checklist">{plan.checklist.length ? <ol className="grid list-decimal gap-2 pl-5 text-sm text-text-secondary">{plan.checklist.map((item, index) => <li key={index}>{typeof item === "string" ? item : item.text}</li>)}</ol> : <p className="text-sm text-muted-foreground">No checklist saved yet.</p>}</WorkspaceSection>
+      <div className="maintenance-detail-column"><WorkspaceSection panel title="Checklist" trailing={checklistEnabled ? <Button type="button" size="sm" variant="outline" onClick={() => navigate(`/maintenance/${encodeURIComponent(plan.id)}/edit`, { state: linkState })}>Edit Checklist</Button> : null}>{checklistEnabled ? <p className="mb-3 text-xs text-muted-foreground">10 standard checks · {checklist.filter(item => !item.standard).length} additional checks</p> : null}{checklist.length ? <details open={!checklistEnabled}><summary className="cursor-pointer text-sm font-medium">View Checklist</summary><ol className="mt-3 grid list-decimal gap-2 pl-5 text-sm text-text-secondary">{checklist.map((item, index) => <li key={item.id || index}>{typeof item === "string" ? item : item.text}{item.standard ? <span className="ml-1 text-xs text-muted-foreground">(standard, locked)</span> : null}</li>)}</ol></details> : <p className="text-sm text-muted-foreground">No checklist saved yet.</p>}</WorkspaceSection>
+        <MaintenanceServiceHistory planId={plan.id} enabled={checklistEnabled} fetchWithAuth={session.fetchWithAuth} />
         <WorkspaceSection panel title="Generated Jobs">{jobs.length ? <div className="grid gap-3">{jobs.map((job) => <article className="rounded-lg border border-border p-3" key={job.id}><div className="flex items-center justify-between gap-2"><strong className="text-sm">Job #{job.jobNumber}</strong><Badge variant="secondary">{job.status}</Badge></div><p className="mt-1 text-xs text-muted-foreground">Scheduled: {job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</p><Button variant="outline" size="sm" className="mt-2" onClick={() => actions.handleOpenJob(job)}>Open Job</Button></article>)}</div> : <p className="text-sm text-muted-foreground">No jobs generated. Recurring visits are already on the Calendar.</p>}</WorkspaceSection>
         <details className="rounded-xl border border-status-danger-border bg-card p-4"><summary className="cursor-pointer text-xs font-semibold text-status-danger">Delete maintenance plan</summary><p className="my-3 text-xs text-text-secondary">Stop this recurring plan and move it to the archive. Generated jobs are retained.</p><Button variant="destructive" size="sm" onClick={async () => { if (await actions.handleDeleteMaintenancePlan(plan.id)) navigate("/maintenance"); }}>Delete Plan</Button></details>
       </div>

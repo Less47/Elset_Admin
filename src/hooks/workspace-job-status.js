@@ -1,3 +1,5 @@
+import { effectiveMaintenancePlan } from "../lib/maintenance-recurrence.js";
+
 const statusFields = ["status", "updatedAt", "serviceBoardTomorrowDate", "serviceBoardTomorrowOrder"];
 const pick = (job, keys = statusFields) => Object.fromEntries(keys.map((key) => [key, job[key]]));
 
@@ -13,6 +15,19 @@ export function mergeJobStatusFields(state, jobId, fields, expected) {
     return { ...job, ...patch };
   });
   return changed ? { ...state, jobs } : state;
+}
+
+export function mergeMaintenanceJobCompletion(state, { job, maintenancePlan }) {
+  const current = job ? mergeJobStatusFields(state, job.id, job) : state;
+  if (!maintenancePlan) return current;
+  return { ...current, maintenancePlans: current.maintenancePlans.map(plan => {
+    if (plan.id !== maintenancePlan.id || (plan.maintenanceRevision || 0) > maintenancePlan.maintenanceRevision) return plan;
+    const { completedOccurrences, ...fields } = maintenancePlan;
+    const completed = new Map(completedOccurrences.map(entry => [entry.key, entry.completedAt]));
+    return effectiveMaintenancePlan({ ...plan, ...fields,
+      occurrenceExceptions: (plan.occurrenceExceptions || []).map(entry => completed.has(entry.key) ? { ...entry, completedAt: completed.get(entry.key) } : entry),
+    }, current.jobs);
+  }) };
 }
 
 export async function requestJobStatusUpdate({ fetchWithAuth, jobId, status, expectedStatus }) {

@@ -36,6 +36,8 @@ export const workspaceRoutes = [
     ] },
   ] },
   { path: "invoices", id: "invoices", Component: SectionRoute, handle: { section: "invoices" } },
+  { path: "maintenance-reports/:reportId", id: "maintenance-service-report", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenanceServiceReportPage.jsx")).default }), handle: { section: "maintenance", record: true, label: "Maintenance" } },
+  { path: "maintenance-reports", id: "maintenance-service-history", lazy: async () => ({ Component: (await import("./components/maintenance/MaintenanceServiceReportPage.jsx")).default }), handle: { section: "maintenance", record: true, label: "Maintenance" } },
   { path: "statistics", id: "statistics", Component: SectionRoute, handle: { section: "statistics" } },
   { path: "map", id: "map", Component: SectionRoute, handle: { section: "map" } },
   { path: "settings", id: "settings", Component: SectionRoute, handle: { section: "settings" } },

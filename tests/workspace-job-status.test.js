@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createJobStatusQueue, mergeJobStatusFields, requestJobStatusUpdate } from "../src/hooks/workspace-job-status.js";
+import { createJobStatusQueue, mergeJobStatusFields, mergeMaintenanceJobCompletion, requestJobStatusUpdate } from "../src/hooks/workspace-job-status.js";
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 function fixture() {
@@ -112,4 +112,20 @@ test("status requests use a compact conditional PATCH and reject malformed ackno
   assert.equal(request.url, "/api/jobs/a/status?response=delta");
   assert.deepEqual(JSON.parse(request.options.body), { status: "In Progress", expectedStatus: "To Do" });
   await assert.rejects(requestJobStatusUpdate({ fetchWithAuth, jobId: "wrong", status: "In Progress", expectedStatus: "To Do" }), /Unable to update/);
+});
+
+test("service completion retains concurrent job notes and newer maintenance plan edits", () => {
+  const f = fixture();
+  const plan = { id: "plan-a", planName: "Concurrent plan edit", maintenanceRevision: 8, lastCompletedAt: "previous" };
+  const state = { ...f.state, maintenancePlans: [plan] };
+  const merged = mergeMaintenanceJobCompletion(state, {
+    job: saved("Completed", { serviceBoardTomorrowDate: "", serviceBoardTomorrowOrder: null }).job,
+    maintenancePlan: { id: plan.id, maintenanceRevision: 7, lastCompletedAt: "older-response", completedOccurrences: [] },
+  });
+  assert.equal(merged.jobs[0].status, "Completed");
+  assert.equal(merged.jobs[0].serviceBoardTomorrowDate, "");
+  assert.equal(merged.jobs[0].serviceBoardNote, "Parts");
+  assert.equal(merged.jobs[0].quote, state.jobs[0].quote);
+  assert.equal(merged.jobs[1], state.jobs[1]);
+  assert.equal(merged.maintenancePlans[0], plan);
 });

@@ -161,6 +161,7 @@ function getNonEmptyEntityTables(db) {
     "invoice_line_items",
     "payments",
     "maintenance_plans",
+    "maintenance_service_reports",
     "inventory_items",
     "price_list_items",
     "deleted_records",

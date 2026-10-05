@@ -31,6 +31,7 @@ import { registerDocumentRoutes } from "./server-document-routes.js";
 import { registerInventoryRoutes } from "./server-inventory-routes.js";
 import { registerJobRoutes } from "./server-job-routes.js";
 import { registerMaintenanceRoutes } from "./server-maintenance-routes.js";
+import { createMaintenanceServiceRouter } from "./server-maintenance-service-routes.js";
 import { registerSettingsRoutes } from "./server-settings-routes.js";
 import { registerAddonRoutes } from "./server-addon-routes.js";
 import { registerJobCostingRoutes } from "./server-job-costing-routes.js";
@@ -240,6 +241,7 @@ export function createServerApp({ accountingFetch } = {}) {
 
   app.post("/api/quotes/send", ...documentMiddleware, sendDocumentEmail);
   app.post("/api/documents/send", ...documentMiddleware, sendDocumentEmail);
+  app.use(createMaintenanceServiceRouter({ requireAuth, requireRole }));
 
   const accountingWorker = registerXeroWebhook(app, { fetchImpl: accountingFetch });
   registerQuickBooksWebhook(app, { fetchImpl: accountingFetch, worker: accountingWorker });

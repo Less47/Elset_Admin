@@ -6,6 +6,7 @@ import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddres
 import ContactSnapshotEditor from "@/components/shared/ContactSnapshotEditor";
 import SiteNavigationLink from "@/components/shared/SiteNavigationLink";
 import JobCostingTab from "@/components/jobs/JobCostingTab";
+import MaintenanceServiceChecklist from "@/components/maintenance/MaintenanceServiceChecklist";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -103,6 +104,7 @@ export default function JobDetailsPage({
   fetchWithAuth,
   job,
   onAddonDisabled,
+  onMaintenanceServiceCompleted,
   onAddNote,
   onAddPhotos,
   onBack,
@@ -299,6 +301,7 @@ export default function JobDetailsPage({
 
               <div className="bg-card/80 p-panel">
                 <TabsContent value="overview" className="mt-0">
+                  <MaintenanceServiceChecklist job={job} customer={customer} enabled={isAddonEnabled(addons, "maintenanceChecklists")} canEmail={showCommercialDocuments} fetchWithAuth={fetchWithAuth} onAddonDisabled={onAddonDisabled} onCompleted={onMaintenanceServiceCompleted} />
                   <WorkspaceSection
                     title="Job summary"
                     description="The core customer, site, and work information for this job."

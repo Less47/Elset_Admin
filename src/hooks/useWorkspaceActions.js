@@ -3,7 +3,7 @@ import { WORKSPACE_BRANDING_ASSETS } from "@/lib/workspace-logo";
 import { useLocation, useMatches, useNavigate } from "react-router";
 import { recordLinkState } from "@/lib/record-link-state";
 import { useCallback, useRef, useState } from "react";
-import { createJobStatusQueue, mergeJobStatusFields, requestJobStatusUpdate } from "./workspace-job-status";
+import { createJobStatusQueue, mergeJobStatusFields, mergeMaintenanceJobCompletion, requestJobStatusUpdate } from "./workspace-job-status";
 import { normalizeServiceBoardNote } from "@/lib/service-board-note";
 import { effectiveMaintenancePlan } from "@/lib/maintenance-recurrence";
 import { siteAddressMetadata, updatedSiteAddressMetadata } from "@/lib/site-location";
@@ -829,14 +829,7 @@ export function useWorkspaceActions({
       merge: (fields, expected) => setData((previous) => mergeJobStatusFields(previous, jobId, fields, expected)),
       onSaved: ({ maintenancePlan }) => {
         if (!maintenancePlan) return;
-        setData((previous) => ({ ...previous, maintenancePlans: previous.maintenancePlans.map((plan) => {
-          if (plan.id !== maintenancePlan.id || (plan.maintenanceRevision || 0) > maintenancePlan.maintenanceRevision) return plan;
-          const { completedOccurrences, ...fields } = maintenancePlan;
-          const completed = new Map(completedOccurrences.map((entry) => [entry.key, entry.completedAt]));
-          return effectiveMaintenancePlan({ ...plan, ...fields,
-            occurrenceExceptions: (plan.occurrenceExceptions || []).map((entry) => completed.has(entry.key) ? { ...entry, completedAt: completed.get(entry.key) } : entry),
-          }, previous.jobs);
-        }) }));
+        setData(previous => mergeMaintenanceJobCompletion(previous, { maintenancePlan }));
       },
       onError: (error) => window.alert(error instanceof Error ? error.message : "Unable to update the job status."),
     });

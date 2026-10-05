@@ -1,4 +1,6 @@
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
+import { useNavigate } from "react-router";
+import { Button } from "@/components/ui/button";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { Plus, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +96,7 @@ export function MaintenanceMetrics({ plan }) {
 }
 
 export default function MaintenanceManager({ maintenancePlans, customers, jobs, onOpenPlan }) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("filter");
@@ -118,7 +121,7 @@ export default function MaintenanceManager({ maintenancePlans, customers, jobs, 
   const stats = [["Plans", rows.length], ["Overdue", rows.filter((row) => row.status.id === "overdue").length], ["Due soon", rows.filter((row) => row.status.id === "due-soon").length], ["Active", rows.reduce((sum, row) => sum + row.activeJobs, 0)], ["Contract", money(rows.filter((row) => row.plan.active).reduce((sum, row) => sum + Number(row.plan.contractPrice || 0), 0))]];
 
   const filterSelect = (id) => <Select value={filter} onValueChange={setFilter}><SelectTrigger id={id} className="data-toolbar-field bg-card"><SelectValue /></SelectTrigger><SelectContent>{filters.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>;
-  const addAction = <PagePrimaryAction onClick={() => onOpenPlan("new")}><Plus className="h-4 w-4" /> Add Maintenance Plan</PagePrimaryAction>;
+  const addAction = <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" className="h-11" onClick={() => navigate("/maintenance-reports")}>Service Reports</Button><PagePrimaryAction onClick={() => onOpenPlan("new")}><Plus className="h-4 w-4" /> Add Maintenance Plan</PagePrimaryAction></div>;
   const summary = <dl className="maintenance-summary" aria-label="Maintenance summary">{stats.map(([label, value]) => <div key={label}><dt>{label}{label === "Active" ? <span className="sr-only"> jobs</span> : label === "Contract" ? <span className="sr-only"> value</span> : null}</dt><dd>{value}</dd></div>)}</dl>;
   return <PageWorkspace className="maintenance-dashboard" data-maintenance-dashboard style={maintenanceToolbarStyle(toolbarSurface)}>
     <PageTopBar>

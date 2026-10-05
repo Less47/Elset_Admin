@@ -29,6 +29,16 @@ export async function submitDocumentEmail({ job, document, template, type, stamp
     throw new DocumentEmailError(type, "ATTACHMENT_FAILED");
   }
 
+  return submitPdfEmail({ type, email, attachment, emailSettings, defaultFromEmail, transportConfig }, { createTransport });
+}
+
+// Shared provider submission and acceptance semantics for document domains.
+// Attachment generation belongs to the caller, including maintenance reports.
+export async function submitPdfEmail({ type, email: input, attachment, emailSettings, defaultFromEmail, transportConfig }, {
+  createTransport = nodemailer.createTransport,
+} = {}) {
+  const { email, errors } = normalizeDocumentEmail(input);
+  if (Object.keys(errors).length) throw new DocumentEmailError(type, "INVALID_EMAIL", { fieldErrors: errors });
   const fromEmail = emailSettings?.fromEmail || defaultFromEmail || ADMIN_EMAIL;
   const replyToEmail = emailSettings?.replyToEmail || fromEmail;
   let info;

@@ -1,0 +1,16 @@
+.maintenance-service-items { display: grid; gap: 0; min-width: 0; }
+.maintenance-service-item { border-bottom: 1px solid var(--border); padding: 14px 0; min-width: 0; overflow-wrap: anywhere; }
+.maintenance-service-item:first-child { padding-top: 0; }
+.maintenance-result-buttons { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; margin-top: 9px; max-width: 360px; }
+.maintenance-result-buttons button { min-height: 44px; padding-inline: 5px; }
+.maintenance-defect-editor { display: grid; gap: 10px; margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--status-danger); min-width: 0; }
+.maintenance-signature-canvas { width: 100%; max-width: 720px; aspect-ratio: 3 / 1; border: 1px solid var(--border); border-radius: 8px; background: white; touch-action: none; }
+.maintenance-photo-choice { display: flex; max-width: 100%; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.maintenance-custom-check { display: flex; min-width: 0; gap: 6px; align-items: end; }
+.maintenance-custom-check input { margin-top: 4px; }
+.maintenance-service-report { overflow-wrap: anywhere; }
+@media (max-width: 460px) {
+  .maintenance-custom-check { flex-wrap: wrap; }
+  .maintenance-custom-check label { flex-basis: 100%; }
+  .maintenance-custom-check > div { margin-left: auto; }
+}

@@ -1,5 +1,5 @@
 export function documentSendErrorMessage(type, code) {
-  const label = type === "invoice" ? "Invoice" : "Quote";
+  const label = type === "maintenance" ? "Service report" : type === "invoice" ? "Invoice" : "Quote";
   switch (code) {
     case "ATTACHMENT_FAILED": return `Could not prepare ${label.toLowerCase()} attachment. Please try again.`;
     case "EMAIL_NOT_CONFIGURED": return `${label} could not be sent. Ask an administrator to check the email settings.`;
