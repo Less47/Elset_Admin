@@ -65,6 +65,7 @@ function collectScope(db, domain, req, result, scope = {}) {
         add("maintenancePlans", ids(related("maintenance_plans", "customer_id", customerIds)));
         if (deleting) add("deletedJobs", scope.jobs || []);
       } else if (route.includes("/sites") && !route.includes("/contacts")) {
+        if (req.method === "DELETE") add("jobs", db.prepare("SELECT id FROM jobs WHERE site_id=?").all(req.params.siteId).map(row => row.id));
         add("maintenancePlans", ids(related("maintenance_plans", "customer_id", customerIds)));
         if (req.method === "PATCH") {
           const site = db.prepare("SELECT address FROM sites WHERE customer_id = ? AND id = ?").get(id, req.params.siteId);

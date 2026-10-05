@@ -1,3 +1,4 @@
+import { removeMediaSchemaForLegacyFixture } from "./helpers/workspace-media-schema.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -45,12 +46,13 @@ test("committed schema 10 migrates once through 11, 12 and 13 to 14, preserving 
   assert.throws(() => db.prepare("INSERT INTO payments(id,invoice_id,created_at,source) VALUES('bad','i','fixture','unknown')").run(), /CHECK/);
   assert.deepEqual(db.pragma("foreign_key_check"), []); assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
   db.close(); db = openWorkspaceDb({ dbPath });
-  assert.equal(db.pragma("user_version", { simple: true }), 16); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
+  assert.equal(db.pragma("user_version", { simple: true }), 17); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
   assert.equal(db.prepare("SELECT encrypted_access_token FROM workspace_integrations").get().encrypted_access_token, "existing-ciphertext");
 });
 
 test("schema 13 to 14 preserves accounting rows and rolls back the entire outbox migration on failure", t => {
   const db = openWorkspaceDb({ dbPath: ':memory:' }); t.after(() => db.close());
+  removeMediaSchemaForLegacyFixture(db);
   db.exec("DROP TABLE maintenance_service_send_history; DROP TABLE maintenance_service_defects; DROP TABLE maintenance_service_checklist_results; DROP TABLE maintenance_service_reports; DROP TABLE site_contact_links; DROP TABLE customer_contact_links; DROP TABLE contacts; DROP TABLE integration_payment_outbox; ALTER TABLE integration_external_payments DROP COLUMN external_snapshot_json; ALTER TABLE integration_operations DROP COLUMN request_json; DELETE FROM workspace_schema_migrations WHERE version>=14; UPDATE workspace_info SET schema_version=13; PRAGMA user_version=13;");
   db.exec("INSERT INTO integration_operations SELECT workspace_id,'quickbooks','123','invoice','invoice','hash','existing-key',123,'PENDING' FROM integration_workspace;");
   const before = db.prepare("SELECT * FROM integration_operations").all();
@@ -61,7 +63,7 @@ test("schema 13 to 14 preserves accounting rows and rolls back the entire outbox
   assert.ok(!db.prepare("SELECT 1 FROM sqlite_schema WHERE name='integration_payment_outbox'").get());
   db.exec("DROP TRIGGER fail_v14"); const versions = [];
   migrateWorkspaceSchema(db, { onMigration: ({ toVersion }) => versions.push(toVersion) });
-  assert.deepEqual(versions, [14, 15, 16]); assert.deepEqual(db.prepare("SELECT * FROM integration_operations").all(), before.map(row => ({ ...row, request_json: '' })));
+  assert.deepEqual(versions, [14, 15, 16, 17]); assert.deepEqual(db.prepare("SELECT * FROM integration_operations").all(), before.map(row => ({ ...row, request_json: '' })));
   migrateWorkspaceSchema(db, { onMigration() { assert.fail('Already migrated'); } });
   assert.deepEqual(db.pragma('foreign_key_check'), []); assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
 });

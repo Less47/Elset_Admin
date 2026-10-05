@@ -1463,6 +1463,7 @@ export function useWorkspaceActions({
 
   return {
     handleWorkspaceBrandingChange,
+    handleStaffPhotoSaved: (staffId, avatar) => setData(previous => ({ ...previous, staff: previous.staff.map(member => member.id === staffId ? { ...member, ...avatar } : member), jobs: previous.jobs.map(job => job.assignedTechnicianId === staffId ? { ...job, assignedTechnicianAvatarUrl: avatar.avatarUrl } : job) })),
     createJob,
     handleAddInvoicePayment,
     handleAddJobNote,

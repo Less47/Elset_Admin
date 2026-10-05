@@ -1,5 +1,7 @@
 import { getJobContactGroups } from "@/lib/contact-model";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import StaffIdentity from "@/components/shared/StaffIdentity";
+import SitePhotoGallery from "@/components/sites/SitePhotoGallery";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Camera, ChevronLeft, ChevronRight, FileText, MapPin, Pencil, Trash2, UserRound } from "lucide-react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
@@ -43,6 +45,7 @@ function buildOverviewDraft(job) {
     title: job?.title || "",
     description: job?.description || "",
     jobAddress: job?.jobAddress || "",
+    siteId: job?.siteId || "",
     clientReference: job?.ocNumber || "",
     requesterContact: job?.requesterContact || null,
     onsiteContact: job?.onsiteContact || null,
@@ -106,6 +109,7 @@ export default function JobDetailsPage({
   job,
   onAddonDisabled,
   onMaintenanceServiceCompleted,
+  onOpenJob,
   onAddNote,
   onAddPhotos,
   onBack,
@@ -288,7 +292,7 @@ export default function JobDetailsPage({
             <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-1">
               <InfoItem label="Site"><SiteNavigationLink destination={navigationDestination} /></InfoItem>
               <InfoItem label="Scheduled">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</InfoItem>
-              <InfoItem label="Technician">{job.assignedTechnicianName || "Unassigned"}</InfoItem>
+              <InfoItem label="Technician"><StaffIdentity staff={orderedStaff.find(entry => entry.id === job.assignedTechnicianId) || { avatarUrl: job.assignedTechnicianAvatarUrl }} name={job.assignedTechnicianName || "Unassigned"} /></InfoItem>
               <InfoItem label="Urgency"><Badge className={urgencyClassName(job.urgency)}>{job.urgency || "Low"}</Badge></InfoItem>
             </dl>
             {canEditJob ? (
@@ -340,7 +344,7 @@ export default function JobDetailsPage({
                         </div>
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-address">Site address</Label>
-                          <GoogleAddressAutocompleteInput id="edit-job-address" className="h-11" value={{ address: overviewDraft.jobAddress }} onSelectionPending={setAddressPending} onChange={(value) => setOverviewDraft((current) => ({ ...current, jobAddress: value.address }))} placeholder="Search the job site address" />
+                          <GoogleAddressAutocompleteInput id="edit-job-address" className="h-11" value={{ address: overviewDraft.jobAddress }} onSelectionPending={setAddressPending} onChange={(value) => setOverviewDraft((current) => ({ ...current, jobAddress: value.address, siteId: "" }))} placeholder="Search the job site address" />
                           {!normalizeSiteAddress(overviewDraft.jobAddress) ? <p className="text-sm text-status-danger">This field is required.</p> : null}
                         </div>
                         {customerSites.length > 0 ? (
@@ -348,7 +352,7 @@ export default function JobDetailsPage({
                             <p className="text-sm font-medium text-text-secondary">Saved sites</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {customerSites.map((site) => (
-                                <Button key={site.id} type="button" disabled={addressPending} variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address }))}>
+                                <Button key={site.id} type="button" disabled={addressPending} variant={normalizeSiteAddress(overviewDraft.jobAddress) === site.address ? "secondary" : "outline"} className="h-11 max-w-full rounded-lg" onClick={() => setOverviewDraft((current) => ({ ...current, jobAddress: site.address, siteId: customer.sites?.some(entry => !entry._inferredProfile && entry.id === (site.siteProfileId || site.id)) ? (site.siteProfileId || site.id) : "" }))}>
                                   <span className="truncate">{site.address}</span>
                                 </Button>
                               ))}
@@ -446,7 +450,7 @@ export default function JobDetailsPage({
                           <SelectTrigger className="h-11" aria-label="Assigned technician"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
-                            {orderedStaff.map((entry) => <SelectItem key={entry.id} value={entry.id}>{entry.name}{entry.role ? ` · ${entry.role}` : ""}</SelectItem>)}
+                            {orderedStaff.map((entry) => <SelectItem key={entry.id} value={entry.id}><StaffIdentity staff={entry} />{entry.role ? ` · ${entry.role}` : ""}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -523,6 +527,7 @@ export default function JobDetailsPage({
                 </TabsContent> : null}
 
                 <TabsContent value="notes" className="mt-0">
+                  {job.siteId ? <WorkspaceSection title="Site photo history"><SitePhotoGallery siteId={job.siteId} fetchWithAuth={fetchWithAuth} canManage={canEditJob} onOpenJob={onOpenJob} /></WorkspaceSection> : null}
                   <WorkspaceSection title="Job notes" description="Add field notes, faults found, and parts needed.">
                     <div className="grid gap-3">
                       <Label htmlFor="new-job-note">New note</Label>

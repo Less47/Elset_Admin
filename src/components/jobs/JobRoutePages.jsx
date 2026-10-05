@@ -77,6 +77,7 @@ export function JobDetailsRoute() {
             job={workspaceViewModel.selectedFreshJob}
             staff={data.staff}
             showCommercialDocuments={session.canManageBusiness}
+            onOpenJob={id => { const job = data.jobs.find(entry => entry.id === id); if (job) workspaceActions.handleOpenJob(job); }}
             onBack={onBack}
             onStatusChange={(status) => workspaceViewModel.selectedFreshJob
               ? workspaceActions.handleStatusChange(workspaceViewModel.selectedFreshJob.id, status)

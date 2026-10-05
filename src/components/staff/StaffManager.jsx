@@ -1,4 +1,6 @@
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
+import StaffAvatar from "@/components/shared/StaffAvatar";
+import StaffPhotoEditor from "./StaffPhotoEditor";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -48,12 +50,15 @@ function StaffFormDialog({
   canManageLoginAccess = false,
   linkedLoginAccount = null,
   onSaveLoginAccount,
+  fetchWithAuth,
+  onPhotoSaved,
 }) {
   const [draftStaff, setDraftStaff] = useState({ name: "", role: "", email: "", phone: "" });
   const [draftLogin, setDraftLogin] = useState({ username: "", role: "technician", password: "", confirmPassword: "" });
   const [isLoginAccessExpanded, setIsLoginAccessExpanded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -92,16 +97,17 @@ function StaffFormDialog({
   const loginUsernameMissing = wantsLoginAccessUpdate && draftLogin.username.trim().length === 0;
   const canSaveLoginAccess = !wantsLoginAccessUpdate
     || (!loginUsernameMissing && !loginPasswordTooShort && !loginPasswordsDoNotMatch);
-  const canSubmit = canSave && canSaveLoginAccess && !isSaving;
+  const canSubmit = canSave && canSaveLoginAccess && !isSaving && !photoBusy;
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !isSaving && onOpenChange(nextOpen)}>
-      <DialogContent className="rounded-3xl sm:max-w-2xl">
+    <Dialog open={open} onOpenChange={(nextOpen) => !isSaving && !photoBusy && onOpenChange(nextOpen)}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-3xl sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl">{initialStaff ? "Edit Staff Member" : "Add Staff Member"}</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4">
+          {initialStaff ? <StaffPhotoEditor key={initialStaff.id} staff={initialStaff} fetchWithAuth={fetchWithAuth} onSaved={onPhotoSaved} onBusyChange={setPhotoBusy} /> : <p className="text-xs text-muted-foreground">Create the Staff member, then edit their profile to add a photo.</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Full name">
               <Input value={draftStaff.name} onChange={(e) => setDraftStaff((prev) => ({ ...prev, name: e.target.value }))} />
@@ -204,7 +210,7 @@ function StaffFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" disabled={isSaving} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={isSaving || photoBusy} onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
@@ -256,6 +262,8 @@ export default function StaffManager({
   loginAccounts = [],
   loginAccountsError = "",
   onSaveLoginAccount,
+  fetchWithAuth,
+  onPhotoSaved,
 }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name-asc");
@@ -421,6 +429,7 @@ export default function StaffManager({
                 return (
                   <MobileRecordCard key={staffMember.id} labelledBy={headingId} recordId={staffMember.id}>
                     <MobileRecordHeader>
+                      <StaffAvatar staff={staffMember} />
                       <div className="min-w-0">
                         <h3 id={headingId} className="line-clamp-2 font-semibold text-foreground [overflow-wrap:anywhere]">
                           {staffMember.name}
@@ -479,6 +488,7 @@ export default function StaffManager({
                       className="data-grid-row grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_82px] gap-px bg-surface-selected transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
+                        <StaffAvatar staff={staffMember} className="float-left mr-2" />
                         <p className="truncate font-semibold text-foreground">{staffMember.name}</p>
                         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{staffMember.role || "Role not set"}</p>
                       </div>
@@ -521,6 +531,7 @@ export default function StaffManager({
                       className="data-grid-row grid grid-cols-[1.45fr_1.1fr_1.1fr_1fr_120px_130px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                     >
                       <div className="min-w-0">
+                        <StaffAvatar staff={staffMember} className="float-left mr-2" />
                         <p className="truncate font-semibold text-foreground">{staffMember.name}</p>
                         <div className="mt-1 flex gap-2 text-xs text-muted-foreground">
                           <span className="shrink-0 font-mono uppercase tracking-[0.12em]">{staffMember.id.slice(0, 8)}</span>
@@ -556,6 +567,8 @@ export default function StaffManager({
     </PageWorkspace>
 
       <StaffFormDialog
+        fetchWithAuth={fetchWithAuth}
+        onPhotoSaved={onPhotoSaved}
         open={staffDialogOpen}
         onOpenChange={setStaffDialogOpen}
         initialStaff={editingStaff}

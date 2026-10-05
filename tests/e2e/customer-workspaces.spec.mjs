@@ -1137,7 +1137,7 @@ test("download and confirmed restore preserve contacts and assignments through t
   await page.getByRole("button", { name: "Data Backup", exact: true }).last().click();
   const pending = page.waitForEvent("download"); await page.getByRole("button", { name: "Download Backup", exact: true }).click();
   const downloaded = await pending; const backupPath = info.outputPath("contact-backup.json"); await downloaded.saveAs(backupPath);
-  const payload = JSON.parse(fs.readFileSync(backupPath, "utf8")); expect(payload.metadata.workspace.schemaVersion).toBe(15);
+  const payload = JSON.parse(fs.readFileSync(backupPath, "utf8")); expect(payload.metadata.workspace.schemaVersion).toBe(17);
   expect(payload.metadata.workspace.summary.counts.contacts).toBeGreaterThan(0);
   const before = readWorkspaceState();
   await apiJson(page, "PATCH", "/api/contacts/backup-browser-person", { phone: "changed after backup" });

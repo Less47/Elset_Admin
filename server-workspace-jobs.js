@@ -141,7 +141,16 @@ const jobKnownKeys = new Set([
   "externalRefs",
 ]);
 const noteKnownKeys = new Set(["id", "author", "text", "createdAt"]);
+jobKnownKeys.add("siteId");
 const attachmentKnownKeys = new Set(["id", "name", "url", "path", "mimeType", "mime_type", "sizeBytes", "size_bytes", "createdAt", "kind"]);
+
+function explicitSiteId(db, siteId, customerId) {
+  const id = trimText(siteId);
+  if (id && !db.prepare("SELECT id FROM sites WHERE id=? AND customer_id=?").get(id, customerId)) {
+    throw new WorkspaceJobError("Selected Site does not belong to the customer.", 400);
+  }
+  return id;
+}
 
 function getCustomerState(db, customerId) {
   return getCustomerById(db, customerId);
@@ -324,6 +333,7 @@ function normalizeJobBase(input, customer, {
     assignedTechnicianId,
     assignedTechnicianName: trimText(input.assignedTechnicianName ?? existingJob?.assignedTechnicianName),
     customerId: customer.id,
+    siteId: explicitSiteId(this.db, input.siteId ?? existingJob?.siteId, customer.id),
     customerName: customer.name,
     customerEmail: customer.email || billingContact?.email || "",
     customerPhone: customer.phone || billingContact?.phone || "",
@@ -397,8 +407,8 @@ function insertJobCore(db, job) {
       assigned_technician_name, customer_id, customer_name, customer_email, customer_phone, job_address,
       oc_number, requester_contact_json, onsite_contact_json, billing_contact_json, maintenance_plan_id,
       maintenance_plan_name, maintenance_due_date, service_board_tomorrow_date, service_board_tomorrow_order,
-      created_at, updated_at, external_refs_json, extra_json, service_board_note
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, updated_at, external_refs_json, extra_json, service_board_note, site_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.id,
     job.jobNumber,
@@ -429,7 +439,8 @@ function insertJobCore(db, job) {
     job.updatedAt,
     objectJson(job.externalRefs),
     objectJson(job.extra),
-    normalizeServiceBoardNote(job.serviceBoardNote)
+    normalizeServiceBoardNote(job.serviceBoardNote),
+    nullableText(explicitSiteId(db, job.siteId, job.customerId))
   );
 }
 
@@ -480,6 +491,7 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
     customerEmail: "customer_email",
     customerPhone: "customer_phone",
     jobAddress: "job_address",
+    siteId: "site_id",
     ocNumber: "oc_number",
     requesterContact: "requester_contact_json",
     onsiteContact: "onsite_contact_json",
@@ -502,7 +514,7 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
       values.push(normalizeServiceBoardNote(value));
     } else if (key.endsWith("Contact")) {
       values.push(value ? json(value) : null);
-    } else if (key === "assignedTechnicianId" || key === "maintenancePlanId") {
+    } else if (key === "assignedTechnicianId" || key === "maintenancePlanId" || key === "siteId") {
       values.push(nullableText(value));
     } else if (key === "serviceBoardTomorrowOrder") {
       values.push(value === null || value === undefined || value === "" ? null : Number(value));
@@ -602,6 +614,7 @@ export function createJob(db, input) {
         throw new WorkspaceJobError("A customer with that ID already exists.", 409);
       }
       insertOrReplaceCustomer(db, customer);
+      jobForInsert.siteId = site.id;
     } else {
       const customerId = normalizeId(input.customer?.id || jobInput.customerId, "Customer ID");
       customer = getCustomerState(db, customerId);
@@ -610,7 +623,9 @@ export function createJob(db, input) {
         if (!normalizeSiteAddress(jobForInsert.jobAddress)) {
           jobForInsert.jobAddress = input.siteInput.address;
         }
-        customer = addOrReplaceCustomerSite(customer, input.siteInput, now);
+        const newSite = normalizeSiteRecord(input.siteInput);
+        customer = addOrReplaceCustomerSite(customer, newSite, now);
+        jobForInsert.siteId = newSite.id;
         insertOrReplaceCustomer(db, customer);
         validateExistingSiteForCreate(customer, jobForInsert.jobAddress);
       } else {
@@ -655,6 +670,12 @@ export function updateJobDetails(db, jobIdInput, input) {
     if (!getCustomerState(db, existingJob.customerId)) throw new WorkspaceJobError("Customer not found.", 404);
 
     const updates = { ...input };
+    if (Object.prototype.hasOwnProperty.call(updates, "siteId")) {
+      updates.siteId = explicitSiteId(db, updates.siteId, existingJob.customerId);
+    } else if (Object.prototype.hasOwnProperty.call(updates, "jobAddress") && normalizeSiteAddress(updates.jobAddress) !== existingJob.jobAddress) {
+      // Editing a free-text address does not identify a saved Site.
+      updates.siteId = "";
+    }
     if (Object.prototype.hasOwnProperty.call(updates, "status")) {
       updates.status = normalizeOption(updates.status, statusValues, "");
       if (!updates.status) throw new WorkspaceJobError("Job status is invalid.");
@@ -1090,6 +1111,7 @@ export function restoreDeletedJob(db, jobIdInput) {
     }
 
     job = syncJobWithCustomer(job, customer);
+    if (job.siteId && !db.prepare("SELECT id FROM sites WHERE id=? AND customer_id=?").get(job.siteId, customer.id)) job.siteId = "";
     job.jobNumber = allocateJobNumber(db, job.jobNumber);
     job.updatedAt = nowIso();
     ensureStaffExists(db, job.assignedTechnicianId);

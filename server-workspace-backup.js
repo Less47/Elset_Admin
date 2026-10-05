@@ -20,6 +20,7 @@ export const MAX_SQLITE_BACKUP_PAYLOAD_BYTES = 275 * 1024 * 1024;
 
 const expectedWorkspaceTables = [
   "workspace_schema_migrations",
+  "workspace_media",
   "workspace_info",
   "settings",
   "document_templates",

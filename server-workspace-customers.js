@@ -330,7 +330,10 @@ function insertServiceM8Ref(db, entityType, entityId, externalRefs) {
 function replaceCustomerSites(db, customer) {
   const ids = new Set(customer.sites.map((site) => site.id));
   for (const row of db.prepare("SELECT id FROM sites WHERE customer_id=?").all(customer.id)) {
-    if (!ids.has(row.id)) db.prepare("DELETE FROM sites WHERE id=? AND customer_id=?").run(row.id, customer.id);
+    if (!ids.has(row.id)) {
+      db.prepare("DELETE FROM workspace_media WHERE owner_type='site' AND owner_id=?").run(row.id);
+      db.prepare("DELETE FROM sites WHERE id=? AND customer_id=?").run(row.id, customer.id);
+    }
   }
   const insertSite = db.prepare(`
     INSERT INTO sites (
@@ -573,6 +576,11 @@ export function restoreCustomer(db, customerIdInput) {
 
 export function emptyDeletedCustomers(db) {
   return db.transaction(() => {
+    for (const row of db.prepare("SELECT payload_json FROM deleted_records WHERE kind='customer'").all()) {
+      for (const site of parseJson(row.payload_json, {})?.sites || []) {
+        if (!db.prepare("SELECT 1 FROM sites WHERE id=?").get(site.id)) db.prepare("DELETE FROM workspace_media WHERE owner_type='site' AND owner_id=?").run(site.id);
+      }
+    }
     const result = db.prepare("DELETE FROM deleted_records WHERE kind = 'customer'").run();
     const updatedAt = nowIso();
     touchWorkspaceInfo(db, updatedAt);
@@ -675,6 +683,7 @@ export function deleteCustomerSite(db, customerIdInput, siteIdInput) {
       throw new WorkspaceCustomerError("Site not found.", 404);
     }
 
+    db.prepare("DELETE FROM workspace_media WHERE owner_type='site' AND owner_id=?").run(siteId);
     db.prepare("DELETE FROM sites WHERE customer_id = ? AND id = ?").run(customerId, siteId);
     db.prepare("DELETE FROM site_access_notes WHERE customer_id = ? AND lower(address) = lower(?)").run(customerId, existingSite.address);
     touchWorkspaceInfo(db);

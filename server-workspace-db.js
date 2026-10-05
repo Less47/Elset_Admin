@@ -9,12 +9,13 @@ import { accountingV3SchemaSql } from "./server-accounting-v3-schema.js";
 import { accountingPaymentOutboxSchemaSql } from "./server-accounting-payment-outbox-schema.js";
 import { contactSchemaSql, migrateLegacyContacts } from "./server-contact-schema.js";
 import { maintenanceServiceSchemaSql } from "./server-maintenance-service-schema.js";
+import { workspaceMediaSchemaSql } from "./server-workspace-media-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 16;
+export const WORKSPACE_SCHEMA_VERSION = 17;
 
 const migrations = [
   {
@@ -570,6 +571,7 @@ const migrations = [
   { version: 14, name: "quickbooks-payment-outbox", sql: accountingPaymentOutboxSchemaSql },
   { version: 15, name: "contact-relationship-model", sql: contactSchemaSql, after: migrateLegacyContacts },
   { version: 16, name: "maintenance-checklists-service-reports", sql: maintenanceServiceSchemaSql },
+  { version: 17, name: "staff-site-media-explicit-job-site", sql: workspaceMediaSchemaSql },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -613,6 +615,10 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 export function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 17) {
+    db.prepare("SELECT id,owner_type,owner_id,name,mime_type,size_bytes,image,thumbnail,caption,uploaded_by,created_at FROM workspace_media LIMIT 0").all();
+    db.prepare("SELECT site_id FROM jobs LIMIT 0").all();
+  }
   if (version >= 16) {
     db.prepare(`SELECT id,maintenance_plan_id,job_id,service_date,technician_id,technician_name,status,service_notes,signature_status,
       customer_representative_name,customer_signature_data,signed_at,completed_at,created_at,updated_at,revision,snapshot_json FROM maintenance_service_reports LIMIT 0`).all();

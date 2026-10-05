@@ -1,6 +1,7 @@
 import { useLocation, useMatches, useNavigate, useOutletContext, useParams } from "react-router";
 import { recordLinkState } from "@/lib/record-link-state";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import StaffIdentity from "@/components/shared/StaffIdentity";
 import { useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,7 @@ export default function MaintenancePlanPage() {
           <div><dt>Site</dt><dd>{plan.siteAddress}</dd></div>
           <div><dt>Frequency</dt><dd>{getMaintenanceFrequencyMeta(plan.frequency).label}</dd></div>
           <div><dt>Next due date</dt><dd>{formatDate(plan.nextDueDate)}</dd></div>
-          <div><dt>Default technician</dt><dd>{defaultTechnician}</dd></div>
+          <div><dt>Default technician</dt><dd><StaffIdentity staff={data.staff.find(staff => staff.id === plan.defaultTechnicianId)} name={defaultTechnician} /></dd></div>
           <div><dt>Estimated duration</dt><dd>{plan.estimatedDurationHours || 0} hours</dd></div>
           <div><dt>Contract price</dt><dd data-contract-price={(plan.contractPriceSet ?? plan.contractPrice > 0) ? "set" : "missing"}>{(plan.contractPriceSet ?? plan.contractPrice > 0) ? new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD" }).format(plan.contractPrice) : "Not set"}</dd></div>
           <div><dt>Status</dt><dd>{plan.active ? "Active" : "Inactive"}</dd></div>

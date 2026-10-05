@@ -487,6 +487,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
 
         {canManageBusiness && activeSection === "staff" ? (
           <StaffManager
+            fetchWithAuth={auth.fetchWithAuth}
+            onPhotoSaved={actions.handleStaffPhotoSaved}
             staff={data.staff}
             onCreateStaff={handleCreateStaff}
             onUpdateStaff={handleUpdateStaff}

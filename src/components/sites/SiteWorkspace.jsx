@@ -1,6 +1,7 @@
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
 import { useRef, useState } from "react";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
+import SitePhotoGallery from "./SitePhotoGallery";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
 import ContactAssignmentsEditor, { ContactList } from "@/components/shared/ContactAssignmentsEditor";
 import { getSiteContacts } from "@/lib/contact-model";
@@ -18,7 +19,7 @@ import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts,
 const NOT_SET_VALUE = "not-set";
 const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
-export default function SiteWorkspace({ customer, site, contacts = [], jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile }) {
+export default function SiteWorkspace({ customer, site, contacts = [], jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, fetchWithAuth, canManagePhotos = false }) {
   const isEditingSite = editing || !site;
   const [initial] = useState(() => buildSiteProfileDraft(site));
   const [draftSite, setDraftSite] = useState(initial);
@@ -35,6 +36,7 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
   const siteJobs = [...jobs].filter((job) => normalizeSiteAddress(job.jobAddress).toLowerCase() === activeAddress.toLowerCase()).sort((a, b) => toTimestamp(b.updatedAt) - toTimestamp(a.updatedAt));
   const openJobs = siteJobs.filter((job) => job.status !== "Completed").length;
   const hasSavedProfile = Boolean(site?.siteProfileId);
+  const mediaSiteId = customer?.sites?.find(entry => !entry._inferredProfile && entry.id === site?.siteProfileId)?.id || "";
   const canSave = Boolean(activeAddress) && !saving && !addressPending;
   const canAddAsset = Boolean(newAssetDraft.name.trim());
   const updateDraftAsset = (assetId, key, value) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.map((asset) => asset.id === assetId ? { ...asset, [key]: value } : asset) }));
@@ -51,7 +53,7 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
     finally { submitting.current = false; setSaving(false); }
   };
-  const currentTab = ["overview", "contacts", "assets", "maintenance", "jobs"].includes(tab) ? tab : "overview";
+  const currentTab = ["overview", "contacts", "assets", "maintenance", "jobs", "photos"].includes(tab) ? tab : "overview";
   return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={!site ? "New Site" : isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
     subtitle={site?.address || "Site details and gates / projects"} maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} onBack={() => onBack()}
     headerActions={!isEditingSite ? <Button type="button" className="h-11" onClick={onEdit}>Edit Site Profile</Button> : null}>
@@ -63,6 +65,7 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="assets">Gates / Projects <span className="text-xs">{(activeSite?.assets || []).length}</span></TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="jobs">Job History <span className="text-xs">{siteJobs.length}</span></TabsTrigger>
           <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="maintenance">Maintenance <span className="text-xs">{maintenancePlans.length}</span></TabsTrigger>
+          <TabsTrigger className="min-h-11 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" value="photos">Photos</TabsTrigger>
         </TabsList></div>
         <TabsContent value="overview" className="min-w-0"><WorkspaceSection title="Site details" panel>
           <fieldset disabled={saving} className={isEditingSite ? "grid min-w-0 items-start gap-3 sm:grid-cols-2" : "grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
@@ -285,6 +288,9 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
               </div>
             
         </fieldset></WorkspaceSection></TabsContent>
+        <TabsContent value="photos" className="min-w-0"><WorkspaceSection title="Photos">
+          {mediaSiteId && !isEditingSite ? <SitePhotoGallery siteId={mediaSiteId} fetchWithAuth={fetchWithAuth} canManage={canManagePhotos} onOpenJob={id => { const job = jobs.find(entry => entry.id === id); if (job) onOpenJob(job); }} /> : <p className="text-sm text-muted-foreground">Save the Site profile, then open its Photos tab to upload photos.</p>}
+        </WorkspaceSection></TabsContent>
         <TabsContent value="jobs" className="min-w-0"><WorkspaceSection title="Job History"><CustomerJobHistory jobs={siteJobs} onOpenJob={onOpenJob} /></WorkspaceSection></TabsContent>
         <TabsContent value="maintenance" className="min-w-0"><WorkspaceSection title="Maintenance contracts"><ProfileMaintenanceContracts plans={maintenancePlans} jobs={jobs} onOpenPlan={onOpenPlan} /></WorkspaceSection></TabsContent>
       </Tabs>

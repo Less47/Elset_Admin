@@ -10,6 +10,8 @@ const staffKnownKeys = new Set([
   "phone",
   "createdAt",
   "updatedAt",
+  "avatarMediaId",
+  "avatarUrl",
 ]);
 
 export class WorkspaceStaffError extends Error {

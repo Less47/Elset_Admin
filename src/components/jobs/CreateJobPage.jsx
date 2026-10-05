@@ -2,6 +2,7 @@ import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEdit
 import { getJobContactGroups, getSitePrimaryContact } from "@/lib/contact-model";
 import { buildCreateJobSiteOptions } from "@/lib/create-job-sites";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import StaffIdentity from "@/components/shared/StaffIdentity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Plus, Search, UserRound } from "lucide-react";
 import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
@@ -245,6 +246,7 @@ export default function CreateJobPage({
       const saved = await onSave({
         job: {
           ...job,
+          siteId: !shouldCreateSite && siteOptions.savedSites.some(site => site.id === selectedSite?.id) ? selectedSite.id : "",
           onsiteContact: buildContactSnapshot(job.onsiteContact, "On-site contact") || siteContact,
           jobAddress,
           ocNumber: (job.ocNumber || "").trim(),
@@ -669,7 +671,7 @@ export default function CreateJobPage({
                 <SelectTrigger className="h-11" aria-label="Assigned technician"><SelectValue placeholder="Choose a technician" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={UNASSIGNED_VALUE}>Unassigned</SelectItem>
-                  {orderedStaff.map((entry) => <SelectItem key={entry.id} value={entry.id}>{entry.name}{entry.role ? ` · ${entry.role}` : ""}</SelectItem>)}
+                  {orderedStaff.map((entry) => <SelectItem key={entry.id} value={entry.id}><StaffIdentity staff={entry} />{entry.role ? ` · ${entry.role}` : ""}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

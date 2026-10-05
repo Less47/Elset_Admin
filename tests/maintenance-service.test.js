@@ -1,3 +1,4 @@
+import { removeMediaSchemaForLegacyFixture } from "./helpers/workspace-media-schema.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -87,7 +88,7 @@ test("new enabled plans default to ten editable items; explicit empty templates 
   assert.deepEqual(created.checklist, DEFAULT_MAINTENANCE_CHECKLIST.map(item => item.text));
   const empty = createMaintenancePlan(f.db, { ...input, checklistItems: [] });
   assert.equal(empty.checklistItems.length, 0);
-  assert.equal(f.db.prepare("PRAGMA user_version").get().user_version, 16);
+  assert.equal(f.db.prepare("PRAGMA user_version").get().user_version, 17);
 });
 test("enabling an existing 300-item legacy plan adds no defaults or changes during ordinary edits", t => {
   const checklist = Array.from({ length: 300 }, (_, index) => `Legacy check ${index + 1}`);
@@ -316,7 +317,7 @@ for (const status of ["signed", "unavailable", "declined"]) test(`legacy complet
   assert.equal(await pdfImageCount(pdf.bytes), await pdfImageCount(withoutLegacyFields.bytes));
   assert.match(text, /Legacy Technician/); assert.match(text, /Completed:/);
   assert.deepEqual(f.db.prepare("SELECT * FROM maintenance_service_reports WHERE id=?").get(legacy.id), stored);
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 16);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 17);
 });
 
 test("normal technician report PDF contains completion without customer acknowledgement", async t => {
@@ -386,6 +387,7 @@ test("PDF paginates long checklists/defects, embeds branding/photos, omits legac
 });
 
 function legacy15(db) {
+  removeMediaSchemaForLegacyFixture(db);
   for (const table of tables) db.exec(`DROP TABLE ${table}`);
   db.exec("DELETE FROM workspace_schema_migrations WHERE version=16; UPDATE workspace_info SET schema_version=15; PRAGMA user_version=15;");
 }
@@ -393,12 +395,12 @@ test("schema 15 upgrades once to 16, preserving plan/checklist/business rows wit
   const f = workspace(t, { enabled: false }); legacy15(f.db);
   const before = loadWorkspaceStateFromDb(f.db), applied = [];
   migrateWorkspaceSchema(f.db, { onMigration: step => applied.push(step) });
-  assert.deepEqual(applied, [{ fromVersion: 15, toVersion: 16 }]);
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 16); assert.deepEqual(assertWorkspaceSchema(f.db), { schemaVersion: 16 });
+  assert.deepEqual(applied, [{ fromVersion: 15, toVersion: 16 }, { fromVersion: 16, toVersion: 17 }]);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 17); assert.deepEqual(assertWorkspaceSchema(f.db), { schemaVersion: 17 });
   assert.deepEqual(loadWorkspaceStateFromDb(f.db), before);
   assert.equal(f.db.prepare("SELECT count(*) n FROM maintenance_service_reports").get().n, 0);
   migrateWorkspaceSchema(f.db, { onMigration: () => assert.fail("Migration repeated") });
-  f.db.pragma("user_version=17"); assert.throws(() => migrateWorkspaceSchema(f.db), /refusing to downgrade/);
+  f.db.pragma("user_version=18"); assert.throws(() => migrateWorkspaceSchema(f.db), /refusing to downgrade/);
 });
 test("schema 15->16 rolls back all DDL, ledger and metadata on failure; trigger assertions fail closed", t => {
   const f = workspace(t, { enabled: false }); legacy15(f.db);

@@ -49,6 +49,7 @@ export function summarizeWorkspaceDb(db) {
 
   return {
     counts: {
+      ...(db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='workspace_media'").get() ? { workspaceMedia: countTable(db, "workspace_media") } : {}),
       ...contactCounts,
       ...serviceCounts,
       staff: countTable(db, "staff"),

@@ -210,7 +210,10 @@ export function readWorkspaceRecords(db, selection) {
 
   const templatesByType = new Map(templateRows.map((row) => [row.type, row]));
 
-  const staff = staffRows.map((row) => mergeExtra({
+  const avatarOwnerIds = [...new Set([...staffRows.map(row => row.id), ...jobRows.map(row => row.assigned_technician_id)].filter(Boolean))];
+  const avatarRows = avatarOwnerIds.length && db.prepare("SELECT 1 FROM sqlite_schema WHERE name='workspace_media' AND type='table'").get() ? db.prepare("SELECT id,owner_id FROM workspace_media WHERE owner_type='staff' AND owner_id IN (SELECT value FROM json_each(?))").all(JSON.stringify(avatarOwnerIds)) : [];
+  const avatarIds = new Map(avatarRows.map(row => [row.owner_id, row.id]));
+  const staff = staffRows.map((row) => ({ ...mergeExtra({
     id: row.id,
     name: row.name,
     role: row.role,
@@ -218,7 +221,7 @@ export function readWorkspaceRecords(db, selection) {
     phone: row.phone,
     createdAt: row.created_at,
     updatedAt: row.updated_at || undefined,
-  }, row.extra_json));
+  }, row.extra_json), avatarMediaId: avatarIds.get(row.id) || null, avatarUrl: avatarIds.has(row.id) ? `/api/media/${encodeURIComponent(avatarIds.get(row.id))}/thumbnail` : "" }));
 
   const customers = customerRows.map((row) => mergeExtra({
     id: row.id,
@@ -316,7 +319,9 @@ export function readWorkspaceRecords(db, selection) {
       status: row.status,
       scheduledDate: row.scheduled_date,
       assignedTechnicianId: row.assigned_technician_id || "",
+      siteId: row.site_id || "",
       assignedTechnicianName: row.assigned_technician_name,
+      assignedTechnicianAvatarUrl: avatarIds.has(row.assigned_technician_id) ? `/api/media/${encodeURIComponent(avatarIds.get(row.assigned_technician_id))}/thumbnail` : "",
       customerId: row.customer_id,
       customerName: row.customer_name,
       customerEmail: row.customer_email,

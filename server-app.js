@@ -41,6 +41,7 @@ import { registerXeroWebhook } from "./server-xero-webhooks.js";
 import { registerQuickBooksWebhook } from "./server-quickbooks-webhooks.js";
 import { createMapLocationsRouter } from "./server-map-locations-routes.js";
 import { createWorkspaceLogoRouter } from "./server-workspace-logo-routes.js";
+import { createWorkspaceMediaRouter } from "./server-workspace-media-routes.js";
 import { createUserPreferencesRouter } from "./server-user-preferences-routes.js";
 import { createPriceListRouter } from "./server-price-list-routes.js";
 import { registerStaffRoutes } from "./server-staff-routes.js";
@@ -245,6 +246,7 @@ export function createServerApp({ accountingFetch } = {}) {
 
   const accountingWorker = registerXeroWebhook(app, { fetchImpl: accountingFetch });
   registerQuickBooksWebhook(app, { fetchImpl: accountingFetch, worker: accountingWorker });
+  app.use(createWorkspaceMediaRouter({ requireAuth, requireRole }));
   app.use("/api/admin/workspace-restore", express.json({ limit: MAX_SQLITE_BACKUP_PAYLOAD_BYTES }));
   app.use(express.json({ limit: "15mb" }));
   app.use(createMapLocationsRouter({

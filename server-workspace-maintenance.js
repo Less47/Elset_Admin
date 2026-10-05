@@ -726,6 +726,7 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
         assignedTechnicianName: staff?.name || "",
         customerId: customer.id,
         jobAddress: plan.siteAddress || customer.address,
+        siteId: plan.siteId || "",
         maintenancePlanId: plan.id,
         maintenancePlanName: plan.planName,
         maintenanceDueDate: dueDate,

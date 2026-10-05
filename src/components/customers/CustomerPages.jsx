@@ -47,6 +47,7 @@ export default function CustomerPages() {
   }
   if (siteRoute) {
     return <SiteWorkspace contacts={data.contacts} key={location.pathname} customer={customer} site={site} jobs={jobs} editing={mode !== "site-details"}
+      fetchWithAuth={session.fetchWithAuth} canManagePhotos={canManageBusiness}
       maintenancePlans={siteContracts} onOpenPlan={actions.handleOpenMaintenancePlan}
       tab={tab} onTabChange={setTab} backLabel={mode === "edit-site" ? "Site Profile" : backLabel}
       onBack={onBack} onEdit={() => navigate(`${sitePath}/edit`, { state: linkState })}
