@@ -79,6 +79,14 @@ function MaintenanceEditor({ plan, data, actions, backLabel, onBack, checklistEn
     } catch (failure) { setError(failure.message || "Unable to save this maintenance plan."); }
     finally { saving.current = false; setBusy(false); setChoice(false); }
   }
+  async function remove() {
+    if (saving.current) return;
+    saving.current = true; setBusy(true); setError("");
+    try {
+      if (await actions.handleDeleteMaintenancePlan(original.id)) { markSaved(); navigate("/maintenance"); }
+    } catch (failure) { setError(failure.message || "Unable to delete this maintenance plan."); }
+    finally { saving.current = false; setBusy(false); }
+  }
   return <RecordWorkspace title={original ? "Edit Maintenance Plan" : "Add Maintenance Plan"} eyebrow="Maintenance" backLabel={backLabel} onBack={() => onBack()}>
     <form data-maintenance-editor onSubmit={(event) => { event.preventDefault(); save(); }}>
       {error ? <div className="mb-4" role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
@@ -100,6 +108,7 @@ function MaintenanceEditor({ plan, data, actions, backLabel, onBack, checklistEn
       </fieldset>
       <WorkspaceActionBar status={busy ? "Saving…" : dirty ? "Unsaved changes" : ""}><Button type="button" variant="outline" disabled={busy} onClick={() => onBack()}>Cancel</Button><Button type="submit" disabled={busy || !canSave}>{original ? "Save Plan" : "Create Plan"}</Button></WorkspaceActionBar>
     </form>
+    {original ? <details className="mb-20 mt-4 border-t pt-3 lg:mb-0"><summary className="cursor-pointer text-xs font-semibold text-status-danger">Delete maintenance plan</summary><p className="my-3 text-xs text-text-secondary">Stop this recurring plan and move it to the archive. Generated jobs are retained.</p><Button type="button" className="h-11" variant="destructive" size="sm" disabled={busy} onClick={remove}>Delete Plan</Button></details> : null}
     <MaintenanceDateChoice open={choice} from={original?.nextDueDate} to={draft.nextDueDate} frequencyChanged={changedFrequency} busy={busy} onChoose={save} onCancel={() => setChoice(false)} />
   </RecordWorkspace>;
 }
@@ -202,7 +211,6 @@ export default function MaintenancePlanPage() {
           </button></li>;
         })}</ol> : <p className="text-sm text-muted-foreground">No jobs generated. Recurring visits are already on the Calendar.</p>}
         <section className="mt-5 border-t pt-3"><h3 className="text-xs font-semibold">Recent Activity</h3>{activity.length ? <ol className="mt-3 grid gap-2 text-xs text-text-secondary">{activity.map(entry => <li key={entry.key}><p>{entry.text}</p><time className="text-muted-foreground">{formatDate(entry.date)}</time></li>)}</ol> : <p className="mt-2 text-xs text-muted-foreground">No activity yet.</p>}</section>
-        <details className="mt-4 border-t pt-3"><summary className="cursor-pointer text-xs font-semibold text-status-danger">Delete maintenance plan</summary><p className="my-3 text-xs text-text-secondary">Stop this recurring plan and move it to the archive. Generated jobs are retained.</p><Button variant="destructive" size="sm" onClick={async () => { if (await actions.handleDeleteMaintenancePlan(plan.id)) navigate("/maintenance"); }}>Delete Plan</Button></details>
       </section>
       <div className="maintenance-plan-history"><MaintenanceServiceHistory planId={plan.id} enabled={checklistEnabled} fetchWithAuth={session.fetchWithAuth} /></div>
       <div className="maintenance-plan-template"><PlanChecklist key={plan.id} plan={plan} enabled={checklistEnabled} actions={actions} /></div>

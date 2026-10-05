@@ -42,7 +42,10 @@ export default function MaintenanceServiceChecklist({ job, enabled, initialRepor
     if (pending.current) return;
     pending.current = true; setBusy(true); setError(""); setRemaining([]);
     const previous = report;
-    if (path.startsWith("/checklist/")) {
+    if (path === "/check-all") {
+      const optimistic = { ...report, items: report.items.map(item => item.result ? item : { ...item, result: "completed" }) };
+      setReport({ ...optimistic, counts: maintenanceReportCounts(optimistic) });
+    } else if (path.startsWith("/checklist/")) {
       const id = decodeURIComponent(path.slice("/checklist/".length));
       const optimistic = { ...report, items: report.items.map(item => item.id === id ? { ...item, result: body.result } : item),
         defects: body.result === "defect" ? report.defects : report.defects.filter(defect => defect.resultId !== id) };
@@ -96,6 +99,7 @@ export default function MaintenanceServiceChecklist({ job, enabled, initialRepor
             <td className="maintenance-na-action"><Button type="button" size="sm" variant="ghost" aria-label={`Mark N/A: ${item.text}`} aria-pressed={item.result === "na"} disabled={busy || editingDefect === item.id} onClick={() => mutate(`/checklist/${encodeURIComponent(item.id)}`, { result: item.result === "na" ? null : "na" }, "PATCH")}>{item.result === "na" ? "N/A · Clear" : "Mark N/A"}</Button></td>
           </tr>{editingDefect === item.id ? <tr className="maintenance-defect-editor-row"><td colSpan={5}><DefectEditor item={item} saved={saved} photos={job.photos || []} busy={busy} onDirty={dirtyCallback} onCancel={() => setEditingDefect(null)} onSave={async draft => { if (await mutate("/defects", { ...draft, resultId: item.id })) setEditingDefect(null); }} /></td></tr> : null}</Fragment>;
         })}</tbody></table>
+        <Button className="maintenance-check-all h-11 justify-self-end xl:h-8" type="button" variant="outline" size="sm" disabled={busy || Boolean(editingDefect) || !report.counts.unanswered} onClick={() => mutate("/check-all", {})}>Check All</Button>
         <label className="grid gap-1.5 text-sm font-medium">Service date<Input type="date" value={date} onChange={event => setDate(event.target.value)} disabled={busy} /></label>
         <label className="grid gap-1.5 text-sm font-medium">Service Notes<Textarea aria-label="Service Notes" rows={4} maxLength={20000} value={notes} onChange={event => setNotes(event.target.value)} disabled={busy} /></label>
         <Button className="h-11 justify-self-start" type="button" variant="outline" size="sm" disabled={busy} onClick={() => mutate("", { serviceNotes: notes, serviceDate: date }, "PATCH")}>Save service notes</Button>

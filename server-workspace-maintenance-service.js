@@ -154,6 +154,18 @@ export function updateMaintenanceServiceDefect(db, jobId, resultId, input, user)
   return updateMaintenanceServiceResult(db, jobId, resultId, { revision: input?.revision, result: "defect", defect: input }, user);
 }
 
+export function completeUnansweredMaintenanceChecks(db, jobId, input) {
+  return db.transaction(() => {
+    const report = draftForMutation(db, jobId, input?.revision);
+    // Guard the report revision inside the write transaction and update only
+    // unanswered results. Deliberate outcomes, notes and defects stay intact.
+    const updated = db.prepare(`UPDATE maintenance_service_checklist_results SET result='completed'
+      WHERE report_id=? AND result IS NULL`).run(report.id);
+    if (updated.changes) advance(db, report.id);
+    return updated.changes ? getMaintenanceServiceReport(db, jobId) : report;
+  }).immediate();
+}
+
 export function updateMaintenanceServiceNotes(db, jobId, input) {
   return db.transaction(() => {
     const report = draftForMutation(db, jobId, input?.revision);

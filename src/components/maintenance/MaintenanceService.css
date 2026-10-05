@@ -5,6 +5,9 @@
 .maintenance-checklist-table th:last-child, .maintenance-checklist-table td:last-child { padding-right: 0; }
 .maintenance-number-cell { color: var(--muted-foreground); font-size: 12px; }
 .maintenance-plan-checklist th:first-child, .maintenance-template-editor th:first-child { width: 32px; }
+.maintenance-plan-checklist th:first-child, .maintenance-plan-checklist td:first-child { border-right: 1px solid var(--border); padding-inline: 4px; }
+.maintenance-plan-checklist th:last-child, .maintenance-plan-checklist td:last-child { padding-inline: 6px; }
+.maintenance-plan-checklist tbody tr:nth-child(even), .maintenance-history-entry:nth-child(even) { background: var(--data-view-row-alt); }
 .maintenance-job-checklist th:first-child { width: 44px; }
 .maintenance-job-checklist th:nth-child(2) { width: 32px; }
 .maintenance-job-checklist th:nth-child(4) { width: 104px; }
@@ -20,20 +23,26 @@
 .maintenance-template-editor th:last-child { width: 138px; }
 .maintenance-template-actions > div { display: flex; justify-content: end; gap: 1px; }
 .maintenance-template-text input { min-width: 0; height: 44px; font-size: 13px; padding-inline: 7px; }
+.maintenance-check-all { margin-top: -8px; }
 .maintenance-service-report { overflow-wrap: anywhere; }
-.record-workspace:has(.maintenance-plan-workspace) { background: var(--data-view-surface); }
-.maintenance-plan-workspace { display: grid; grid-template-areas: "details" "jobs" "history" "checklist"; grid-template-columns: minmax(0,1fr); gap: 16px 0; min-width: 0; }
-.maintenance-plan-workspace > * { min-width: 0; overflow-wrap: anywhere; }
+.record-workspace:has(.maintenance-plan-workspace) { display: flex; flex-direction: column; background: var(--data-view-surface); }
+.record-workspace:has(.maintenance-plan-workspace) > .record-workspace-header { flex-shrink: 0; }
+.record-workspace:has(.maintenance-plan-workspace) > .record-workspace-body { display: flex; flex-direction: column; flex: 1; padding: 0; }
+.maintenance-plan-workspace { display: grid; flex: 1; grid-template-areas: "details" "jobs" "history" "checklist"; grid-template-columns: minmax(0,1fr); gap: 16px 0; min-width: 0; }
+.maintenance-plan-workspace > * { min-width: 0; padding: 12px; overflow-wrap: anywhere; }
 .maintenance-plan-details { grid-area: details; }
 .maintenance-plan-jobs { grid-area: jobs; border-top: 1px solid var(--border); padding-top: 12px; }
-.maintenance-plan-history { grid-area: history; }
-.maintenance-plan-template { grid-area: checklist; }
+.maintenance-plan-history { grid-area: history; padding-inline: 0; }
+.maintenance-plan-history .record-workspace-section > div:first-child, .maintenance-plan-history .record-workspace-section > p, .maintenance-plan-history [role="alert"] { padding-inline: 12px; }
+.maintenance-plan-template { grid-area: checklist; padding-inline: 0; }
+.maintenance-plan-template .maintenance-column-heading { padding-inline: 12px; }
+.maintenance-plan-template [data-plan-checklist-editor], .maintenance-plan-template [data-plan-checklist] > p, .maintenance-plan-template [role="alert"] { margin-inline: 12px; }
 .maintenance-column-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
 .maintenance-plan-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 12px; }
 .maintenance-plan-fields dt { font-size: 12px; color: var(--muted-foreground); }
 .maintenance-plan-fields dd { margin-top: 3px; }
 .maintenance-plan-fields > div:first-child, .maintenance-plan-fields > div:nth-child(2), .maintenance-plan-notes { grid-column: 1 / -1; }
-.maintenance-history-entry { padding-block: 8px; border-bottom: 1px solid var(--border); }
+.maintenance-history-entry { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .maintenance-history-entry:first-child { padding-top: 0; }
 .maintenance-history-entry:last-child { border-bottom: 0; }
 .maintenance-generated-job { display: grid; gap: 2px; width: 100%; min-height: 44px; padding: 7px 0; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px; overflow-wrap: anywhere; }
@@ -52,9 +61,7 @@
 }
 @media (min-width: 1280px) {
   .maintenance-plan-workspace { grid-template-areas: "details history checklist" "jobs history checklist"; grid-template-columns: minmax(0,3.5fr) minmax(0,3fr) minmax(0,3.5fr); grid-template-rows: auto 1fr; gap: 12px 0; }
-  .maintenance-plan-details, .maintenance-plan-jobs { padding-right: 12px; }
-  .maintenance-plan-history { padding-inline: 12px; border-inline: 1px solid var(--border); }
-  .maintenance-plan-template { padding-left: 12px; }
+  .maintenance-plan-history { padding-inline: 0; border-inline: 1px solid var(--border); }
   .maintenance-template-editor th:last-child { width: 104px; }
   .maintenance-template-text input { height: 32px; }
   .maintenance-completed-choice { min-height: 32px; }

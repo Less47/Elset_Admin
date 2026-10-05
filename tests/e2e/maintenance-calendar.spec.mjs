@@ -718,6 +718,7 @@ for (const [width, height] of [[1920, 1080], [1366, 768], [1024, 768], [390, 844
       const planBox = await plans.boundingBox(), dueBox = await queue.boundingBox();
       expect(body.y).toBeCloseTo(toolbar.y + toolbar.height, 0);
       if (width >= 768) {
+        await expect(plans.getByRole('table', { name: 'Maintenance plans', exact: true })).toHaveCSS('border-bottom-width', '1px');
         expect(planBox.width / body.width).toBeCloseTo(width >= 1280 ? .75 : .7, 2);
         expect(dueBox.x).toBeCloseTo(planBox.x + planBox.width, 0);
         expect(dueBox.y).toBeCloseTo(planBox.y, 0);

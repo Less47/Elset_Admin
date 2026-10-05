@@ -15,7 +15,7 @@ import { createMaintenancePlan, updateMaintenancePlan, generateMaintenanceJob, d
 import { createJob, changeJobStatus, deleteJob, emptyDeletedJobs, addJobPhoto, deleteJobPhoto } from "../server-workspace-jobs.js";
 import { createWorkspaceSqliteBackupBundle, materializeWorkspaceSqliteBackup } from "../server-workspace-backup.js";
 import { initializeMaintenanceService, getMaintenanceServiceReport, getMaintenanceServiceHistory, updateMaintenanceServiceResult,
-  updateMaintenanceServiceDefect, updateMaintenanceServiceNotes, completeMaintenanceService, persistMaintenanceServiceSend } from "../server-workspace-maintenance-service.js";
+  updateMaintenanceServiceDefect, updateMaintenanceServiceNotes, completeMaintenanceService, completeUnansweredMaintenanceChecks, persistMaintenanceServiceSend } from "../server-workspace-maintenance-service.js";
 import { createMaintenanceServiceRouter } from "../server-maintenance-service-routes.js";
 import { maintenanceChecklistItems, starterMaintenanceChecklist, DEFAULT_MAINTENANCE_CHECKLIST } from "../src/lib/maintenance-checklist.js";
 import { maintenanceServiceEmailDraft } from "../src/lib/maintenance-service-email.js";
@@ -194,6 +194,55 @@ test("a 12-item visit remains frozen after the template grows to 14; completed h
   assert.deepEqual(getMaintenanceServiceReport(f.db, first.id), original);
   assert.deepEqual(f.report(), completed);
   assert.equal(getMaintenanceServiceHistory(f.db, plan.id).length, 1);
+});
+test("Check All completes only unanswered items in one revision, preserving outcomes, notes, defects and snapshot", async t => {
+  const f = workspace(t); let report = f.report();
+  addJobPhoto(f.db, f.job.id, { id: "bulk-defect-photo", name: "Recorded wear.png", url: await defectPhoto() });
+  report = updateMaintenanceServiceResult(f.db, f.job.id, report.items[0].id, { revision: report.revision, result: "completed", notes: "Already inspected" }, actor);
+  report = updateMaintenanceServiceDefect(f.db, f.job.id, report.items[1].id, { revision: report.revision, severity: "advisory", description: "Keep this defect", recommendedAction: "Inspect next visit", photoRefs: ["bulk-defect-photo"] }, actor);
+  report = updateMaintenanceServiceResult(f.db, f.job.id, report.items[2].id, { revision: report.revision, result: "na", notes: "Does not apply" }, actor);
+  report = updateMaintenanceServiceResult(f.db, f.job.id, report.items[3].id, { revision: report.revision, result: null, notes: "Keep draft notes" }, actor);
+  const beforePlan = f.plan(), before = report;
+  const saved = completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: report.revision });
+  assert.equal(saved.revision, before.revision + 1);
+  assert.deepEqual(saved.counts, { total: 11, completed: 9, defects: 1, na: 1, unanswered: 0 });
+  assert.deepEqual(saved.items.slice(0, 3), before.items.slice(0, 3)); assert.deepEqual(saved.defects, before.defects);
+  assert.equal(saved.items[3].notes, "Keep draft notes"); assert.deepEqual(saved.snapshot, before.snapshot);
+  assert.equal(saved.status, "draft"); assert.equal(saved.completedAt, ""); assert.deepEqual(f.plan(), beforePlan);
+  const workspaceTimestamp = f.db.prepare("SELECT updated_at FROM workspace_info WHERE id=1").get().updated_at;
+  assert.deepEqual(completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: saved.revision }), saved);
+  assert.equal(f.db.prepare("SELECT updated_at FROM workspace_info WHERE id=1").get().updated_at, workspaceTimestamp);
+});
+for (const outcome of ["completed", "defect", "na"]) test(`stale Check All cannot overwrite a newer ${outcome} outcome`, t => {
+  const f = workspace(t), before = f.report();
+  const newer = updateMaintenanceServiceResult(f.db, f.job.id, before.items[0].id, { revision: before.revision, result: outcome,
+    ...(outcome === "defect" ? { defect: { severity: "urgent", description: "Concurrent defect" } } : {}) }, actor);
+  assert.throws(() => completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: before.revision }), error => error.code === "STALE_REPORT");
+  assert.deepEqual(f.report(), newer);
+  const saved = completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: newer.revision });
+  assert.equal(saved.items[0].result, outcome); assert.deepEqual(saved.defects, newer.defects);
+  assert.throws(() => completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: newer.revision }), error => error.code === "STALE_REPORT");
+  assert.deepEqual(f.report(), saved);
+});
+test("Check All rolls back all results if advancing the report revision fails", t => {
+  const f = workspace(t), before = f.report();
+  f.db.exec("CREATE TRIGGER fail_bulk_revision BEFORE UPDATE OF revision ON maintenance_service_reports BEGIN SELECT RAISE(ABORT,'fixture revision failure'); END");
+  assert.throws(() => completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: before.revision }), /fixture revision failure/);
+  assert.deepEqual(f.report(), before);
+  f.db.exec("DROP TRIGGER fail_bulk_revision");
+  assert.equal(completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: before.revision }).counts.unanswered, 0);
+});
+test("Check All rejects disabled add-ons, missing revisions and locked historical reports", async t => {
+  const f = workspace(t), before = f.report();
+  assert.throws(() => completeUnansweredMaintenanceChecks(f.db, f.job.id, {}), error => error.code === "STALE_REPORT");
+  updateWorkspaceAddons(f.db, { maintenanceChecklists: false });
+  assert.throws(() => completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: before.revision }), error => error.code === "ADDON_DISABLED");
+  assert.deepEqual(f.report(), before);
+  updateWorkspaceAddons(f.db, { maintenanceChecklists: true });
+  const answered = completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: before.revision });
+  const completed = await completeMaintenanceService(f.db, f.job.id, { revision: answered.revision }, actor);
+  assert.throws(() => completeUnansweredMaintenanceChecks(f.db, f.job.id, { revision: completed.revision }), error => error.code === "REPORT_COMPLETED");
+  assert.deepEqual(f.report(), completed);
 });
 test("defects require valid severity and description; photos belong to the job; atomic result/defect updates", async t => {
   const f = workspace(t); let report = answerAll(f.db, f.job.id);
@@ -398,8 +447,21 @@ test("disabled API rejects new creation, execution, completion and sends while h
   assert.equal((await f.request("", {})).status, 403);
   assert.equal((await f.request(`/checklist/${completed.items[0].id}`, { revision: completed.revision, result: "na" }, "admin", "PATCH")).status, 403);
   assert.equal((await f.request("/complete", { revision: completed.revision, signatureStatus: "declined" })).status, 403);
+  assert.equal((await f.request("/check-all", { revision: completed.revision })).status, 403);
   assert.equal((await f.request("/send", { email: maintenanceServiceEmailDraft(completed) })).status, 403);
   assert.equal((await f.request()).payload.report.status, "completed"); assert.equal((await f.request("/report.pdf")).status, 200);
+});
+test("Check All API is record-specific, role-gated, revision-guarded and unavailable after completion", async t => {
+  const f = await apiWorkspace(t); const before = f.report();
+  assert.equal((await f.request("/check-all", { revision: before.revision }, "customer")).status, 403);
+  assert.equal((await f.request("/check-all", { revision: before.revision, extra: "a".repeat(530000) }, "technician")).status, 413);
+  const result = await f.request("/check-all", { revision: before.revision }, "technician");
+  assert.equal(result.status, 200); assert.equal(result.payload.report.counts.completed, 11); assert.equal(result.payload.report.revision, before.revision + 1);
+  assert.equal(Object.hasOwn(result.payload, "state"), false); assert.equal(Object.hasOwn(result.payload, "delta"), false);
+  assert.equal((await f.request("/check-all", { revision: before.revision }, "office")).status, 409);
+  const completed = await completeMaintenanceService(f.db, f.job.id, { revision: result.payload.report.revision }, actor);
+  const locked = await f.request("/check-all", { revision: completed.revision });
+  assert.equal(locked.status, 409); assert.equal(locked.payload.code, "REPORT_COMPLETED"); assert.deepEqual(f.report(), completed);
 });
 test("report APIs preserve historical manager access after job deletion and restrict archived access for technicians", async t => {
   const f = await apiWorkspace(t); const completed = await finish(f.db, f.job.id);

@@ -11,7 +11,7 @@ import { getMaintenancePlanById } from "./server-workspace-state.js";
 import {
   MaintenanceServiceError, assertMaintenanceServiceAccess, getMaintenanceServiceReport, getMaintenanceServiceHistory,
   initializeMaintenanceService, updateMaintenanceServiceResult, updateMaintenanceServiceDefect, updateMaintenanceServiceNotes,
-  completeMaintenanceService, maintenanceServiceAvailable, persistMaintenanceServiceSend,
+  completeMaintenanceService, completeUnansweredMaintenanceChecks, maintenanceServiceAvailable, persistMaintenanceServiceSend,
 } from "./server-workspace-maintenance-service.js";
 
 export function createMaintenanceServiceRouter({ requireAuth, requireRole, env = process.env,
@@ -62,6 +62,10 @@ export function createMaintenanceServiceRouter({ requireAuth, requireRole, env =
   router.patch(`${base}/checklist/:resultId`, auth, roles(), parser, handle((db, req, res) => {
     assertMaintenanceServiceAccess(db, req.params.id, req.user);
     res.json({ ok: true, report: updateMaintenanceServiceResult(db, req.params.id, req.params.resultId, req.body, req.user) });
+  }));
+  router.post(`${base}/check-all`, auth, roles(), parser, handle((db, req, res) => {
+    assertMaintenanceServiceAccess(db, req.params.id, req.user);
+    res.json({ ok: true, report: completeUnansweredMaintenanceChecks(db, req.params.id, req.body) });
   }));
   router.post(`${base}/defects`, auth, roles(), parser, handle((db, req, res) => {
     assertMaintenanceServiceAccess(db, req.params.id, req.user);

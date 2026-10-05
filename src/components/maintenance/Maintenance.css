@@ -13,7 +13,7 @@
 .maintenance-responsive-controls .maintenance-summary { margin-top: 10px; padding-top: 8px; border-top: 1px solid color-mix(in oklab, var(--workspace-hero-text) 22%, transparent); }
 .maintenance-dashboard > .maintenance-dashboard-body { display: grid; grid-template-columns: minmax(0,1fr); gap: 0; min-width: 0; min-height: 0; padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); background: var(--card); color: var(--card-foreground); }
 .maintenance-plans-pane { min-width: 0; min-height: 0; }
-.maintenance-table { display: grid; gap: 1px; font-size: 11px; }
+.maintenance-table { display: grid; gap: 1px; font-size: 11px; border-bottom: 1px solid var(--data-view-grid-line); }
 .maintenance-table-heading { position: sticky; top: 0; z-index: 2; }
 .maintenance-table-rows { display: grid; gap: 1px; }
 .maintenance-table-columns { display: grid; grid-template-columns: 78px minmax(0,1fr) 86px 88px 54px; gap: 1px; }

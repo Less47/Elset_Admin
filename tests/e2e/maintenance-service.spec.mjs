@@ -83,6 +83,14 @@ async function capture(page, info, name, target) {
 
 for (const width of [390, 820, 1440]) test(`structured plan, technician defect/completion, history/report/email at ${width}px`, async ({ browser }, info) => {
   const admin = await login(browser, width), page = admin.page;
+  await page.goto(`${url}/maintenance`);
+  if (width >= 768) {
+    const table = page.getByRole("table", { name: "Maintenance plans", exact: true });
+    await expect(table).toHaveCSS("border-bottom-width", "1px");
+    const bounds = await table.evaluate(node => ({ table: node.getBoundingClientRect().width, lastRow: node.querySelector(".maintenance-table-rows > :last-child").getBoundingClientRect().width }));
+    expect(bounds.table).toBe(bounds.lastRow);
+  } else await expect(page.locator(".maintenance-mobile-plan").last()).toHaveCSS("border-bottom-width", "1px");
+  await capture(page, info, `polish-dashboard-${width}`);
   await page.goto(`${url}/maintenance/${current.plan.id}`);
   const checklist = page.locator("[data-plan-checklist]");
   await expect(checklist.locator(".maintenance-plan-checklist tbody tr")).toHaveCount(12);
@@ -90,6 +98,8 @@ for (const width of [390, 820, 1440]) test(`structured plan, technician defect/c
   await expect(checklist.getByRole("columnheader")).toHaveText(["No.", "Checklist item"]);
   await expect(checklist.getByText("Inspect overall system condition", { exact: true })).toBeVisible();
   await expect(checklist.locator("details,summary")).toHaveCount(0);
+  await expect(page.getByText("Delete maintenance plan", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Delete Plan", exact: true })).toHaveCount(0);
   await expect(page.getByText(/standard, locked|10 standard checks/)).toHaveCount(0);
   await capture(page, info, `plan-layout-${width}`);
   const columns = await page.locator("[data-plan-details], .maintenance-plan-history, .maintenance-plan-template, [data-plan-jobs]").evaluateAll(nodes => nodes.map(node => ({ key: node.className, x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y, w: node.getBoundingClientRect().width })));
@@ -191,6 +201,7 @@ for (const width of [390, 820, 1440]) test(`structured plan, technician defect/c
   expect(report().status).toBe("completed"); expect(report().signatureData).toBe(""); expect(report().counts.defects).toBe(1); expect(report().counts.na).toBe(1);
   await expect(jobPage.getByRole("combobox", { name: "Update job status", exact: true })).toContainText("Completed");
   await expect(jobPage.getByRole("button", { name: "Email Service Report", exact: true })).toHaveCount(0);
+  await expect(jobPage.getByRole("button", { name: "Check All", exact: true })).toHaveCount(0);
   await expect(jobPage.locator("[data-service-result]")).toHaveCount(0);
 
   await page.goto(`${url}/maintenance/${current.plan.id}`);
@@ -367,6 +378,79 @@ test("Job Checklist tab is conditional; older visits initialize once and failed 
   await tech.context.close();
 });
 
+for (const width of [390, 820, 1440]) test(`Check All uses one request and preserves Completed, Defect and N/A at ${width}px`, async ({ browser }, info) => {
+  dbRead(db => {
+    let saved = report();
+    saved = updateMaintenanceServiceResult(db, current.job.id, saved.items[0].id, { revision: saved.revision, result: "completed", notes: "Existing completed check" }, actor);
+    saved = updateMaintenanceServiceResult(db, current.job.id, saved.items[1].id, { revision: saved.revision, result: "defect", defect: { severity: "advisory", description: "Keep the existing defect", photoRefs: [`${current.plan.id}-photo`] } }, actor);
+    updateMaintenanceServiceResult(db, current.job.id, saved.items[2].id, { revision: saved.revision, result: "na", notes: "Does not apply" }, actor);
+  });
+  const before = report(), tech = await login(browser, width, "technician"), page = tech.page;
+  await page.goto(`${url}/jobs/${current.job.id}`); await page.getByRole("tab", { name: "Checklist", exact: true }).click();
+  const button = page.getByRole("button", { name: "Check All", exact: true });
+  await expect(button).toBeEnabled();
+  await expect(page.getByRole("status").filter({ hasText: "of 12 answered" })).toContainText("3 of 12 answered");
+  await capture(page, info, `check-all-before-${width}`, button);
+  let requests = 0, workspaceReloads = 0, release;
+  const gate = new Promise(resolve => { release = resolve; });
+  page.on("request", request => { if (request.method() === "GET" && /\/api\/app-state(?:\?|$)/.test(request.url())) workspaceReloads++; });
+  await page.route("**/maintenance-service/check-all", async route => { requests++; await gate; await route.continue(); });
+  await button.click();
+  await expect(page.getByRole("status").filter({ hasText: "of 12 answered" })).toContainText("12 of 12 answered");
+  expect(report().counts.unanswered).toBe(9); // optimistic progress precedes the held request
+  release();
+  await expect.poll(() => report().counts.unanswered).toBe(0);
+  await expect(button).toBeDisabled();
+  await expect(page.getByRole("status").filter({ hasText: "of 12 answered" })).toContainText("10 completed · 1 defect · 1 N/A · 0 remaining");
+  expect(requests).toBe(1); expect(workspaceReloads).toBe(0); expect(report().revision).toBe(before.revision + 1);
+  expect(report().items.slice(0, 3)).toEqual(before.items.slice(0, 3)); expect(report().defects).toEqual(before.defects);
+  await capture(page, info, `check-all-after-${width}`, button);
+  await page.getByRole("button", { name: "Complete Maintenance Service", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Maintenance Service Report", exact: true })).toBeVisible();
+  await expect(button).toHaveCount(0); await expect(page.getByLabel("Acknowledgement", { exact: true })).toHaveCount(0);
+  expect(report().counts.defects).toBe(1); expect(report().counts.na).toBe(1);
+  await tech.context.close();
+});
+
+test("stale Check All rolls back optimistic progress and preserves a concurrent defect", async ({ browser }) => {
+  const tech = await login(browser, 390, "technician"), page = tech.page;
+  await page.goto(`${url}/jobs/${current.job.id}`); await page.getByRole("tab", { name: "Checklist", exact: true }).click();
+  await page.route("**/maintenance-service/check-all", async route => {
+    dbRead(db => { const saved = report(); updateMaintenanceServiceResult(db, current.job.id, saved.items[0].id, { revision: saved.revision, result: "defect", defect: { severity: "urgent", description: "Concurrent safety defect" } }, actor); });
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Check All", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("has changed");
+  await expect(page.getByRole("status").filter({ hasText: "of 12 answered" })).toContainText("0 of 12 answered");
+  expect(report().counts).toEqual({ total: 12, completed: 0, defects: 1, na: 0, unanswered: 11 });
+  await page.unroute("**/maintenance-service/check-all");
+  await page.getByRole("button", { name: "Reload checklist", exact: true }).click();
+  await expect(page.locator("[data-service-result]").first()).toContainText("Concurrent safety defect");
+  await page.getByRole("button", { name: "Check All", exact: true }).click();
+  await expect.poll(() => report().counts.unanswered).toBe(0); expect(report().defects[0].description).toBe("Concurrent safety defect");
+  await tech.context.close();
+});
+
+test("Delete Maintenance Plan is exposed only in Edit Plan and retains confirmation and generated jobs", async ({ browser }, info) => {
+  const before = report(), admin = await login(browser, 390), page = admin.page;
+  await page.goto(`${url}/maintenance/${current.plan.id}`);
+  await expect(page.getByText("Delete maintenance plan", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit Plan", exact: true }).click();
+  await page.getByText("Delete maintenance plan", { exact: true }).click();
+  const button = page.getByRole("button", { name: "Delete Plan", exact: true });
+  await expect(button).toBeVisible(); await capture(page, info, "delete-plan-edit-390", button);
+  page.once("dialog", async dialog => { expect(dialog.type()).toBe("confirm"); expect(dialog.message()).toContain("will stay on the board"); await dialog.dismiss(); });
+  await button.click(); await expect(button).toBeEnabled();
+  expect(dbRead(db => getMaintenancePlanById(db, current.plan.id))).not.toBeNull(); expect(report()).toEqual(before);
+  await page.getByLabel("Plan notes", { exact: true }).fill("Unsaved notes before deleting");
+  page.once("dialog", dialog => dialog.accept()); await button.click();
+  await expect(page).toHaveURL(`${url}/maintenance`);
+  expect(dbRead(db => getMaintenancePlanById(db, current.plan.id))).toBeNull();
+  expect(dbRead(db => db.prepare("SELECT id FROM jobs WHERE id=?").get(current.job.id).id)).toBe(current.job.id);
+  expect(report()).toEqual(before);
+  await admin.context.close();
+});
+
 test("deleted job photos stay visible as unavailable while defects can still be edited", async ({ browser }) => {
   dbRead(db => {
     const initial = report();
@@ -436,6 +520,27 @@ for (const width of [390, 820, 1440, 1920]) test(`${width}px plan fills availabl
     return { width: node.getBoundingClientRect().width, available: body.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), columns: getComputedStyle(node).gridTemplateColumns.split(" ").length };
   });
   expect(layout.width).toBeCloseTo(layout.available, 0); expect(layout.columns).toBe(width >= 1280 ? 3 : 1);
+  const geometry = await page.locator("[data-maintenance-detail]").evaluate(node => {
+    const rect = element => { const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, width: box.width }; };
+    return { grid: rect(node), header: rect(document.querySelector(".record-workspace-header")), main: rect(document.querySelector(".record-workspace")),
+      details: rect(node.querySelector("[data-plan-details]")), jobs: rect(node.querySelector("[data-plan-jobs]")), history: rect(node.querySelector(".maintenance-plan-history")), template: rect(node.querySelector(".maintenance-plan-template")),
+      table: rect(node.querySelector(".maintenance-plan-checklist")), firstCell: rect(node.querySelector(".maintenance-plan-checklist th")), lastCell: rect(node.querySelector(".maintenance-plan-checklist th:last-child")) };
+  });
+  expect(geometry.jobs.x).toBe(geometry.details.x); expect(geometry.jobs.right).toBe(geometry.details.right);
+  expect(geometry.table.x).toBe(geometry.template.x); expect(geometry.table.right).toBe(geometry.template.right);
+  expect(geometry.firstCell.x).toBeCloseTo(geometry.table.x, 0); expect(geometry.lastCell.right).toBeCloseTo(geometry.table.right, 0);
+  if (width >= 1280) {
+    expect(geometry.history.y).toBe(geometry.grid.y); expect(geometry.history.bottom).toBe(geometry.grid.bottom);
+    expect(geometry.grid.y).toBe(geometry.header.bottom); expect(geometry.grid.bottom).toBe(geometry.main.bottom);
+    expect(geometry.grid.bottom).toBeGreaterThanOrEqual(900);
+    await expect(page.locator(".maintenance-plan-history")).toHaveCSS("border-left-width", "1px");
+    await expect(page.locator(".maintenance-plan-history")).toHaveCSS("border-right-width", "1px");
+  }
+  const table = page.getByRole("table", { name: "Plan checklist", exact: true });
+  for (const cell of await table.locator("th:first-child, td:first-child").all()) await expect(cell).toHaveCSS("border-right-width", "1px");
+  for (const cell of await table.locator("th, td").all()) await expect(cell).toHaveCSS("border-bottom-width", "1px");
+  expect(await table.locator("tbody tr").nth(0).evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await table.locator("tbody tr").nth(1).evaluate(node => getComputedStyle(node).backgroundColor));
+  expect(await page.locator(".maintenance-history-entry").nth(0).evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await page.locator(".maintenance-history-entry").nth(1).evaluate(node => getComputedStyle(node).backgroundColor));
   expect(await page.locator(".maintenance-history-entry").first().evaluate(node => getComputedStyle(node).borderBottomWidth)).toBe("1px");
   expect(await page.locator(".maintenance-history-entry").last().evaluate(node => getComputedStyle(node).borderBottomWidth)).toBe("0px");
   await expect(page.locator(".maintenance-plan-history")).not.toContainText(/acknowledgement|customer signed|customer unavailable|declined signature/i);
@@ -452,6 +557,9 @@ for (const width of [390, 820, 1440]) test(`all eight themes keep plan columns, 
     await page.goto(`${url}/maintenance/${current.plan.id}`);
     const checklist = page.locator("[data-plan-checklist]");
     await expect(checklist.locator(".maintenance-plan-checklist tbody tr")).toHaveCount(12);
+    const rows = checklist.locator(".maintenance-plan-checklist tbody tr");
+    expect(await rows.nth(0).evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await rows.nth(1).evaluate(node => getComputedStyle(node).backgroundColor));
+    await expect(rows.nth(0).locator("td").first()).toHaveCSS("border-right-width", "1px");
     surfaces.push(await page.locator(".record-workspace").evaluate(node => getComputedStyle(node).backgroundColor));
     await capture(page, info, `theme-${preset.id}-plan-${width}`);
     await checklist.getByRole("button", { name: "Edit Checklist", exact: true }).click();
