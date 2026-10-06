@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { customerPostalFields } from "@/lib/customer-profile";
+import { getCustomerRelatedContacts } from "@/lib/contact-model";
 import { siteAddressMetadata } from "@/lib/site-location";
 import { RecordWorkspace, WorkspaceMessage, WorkspaceSection } from "@/components/workspace/RecordWorkspace";
 import { buildCustomerSites, customerTypeOptions, normalizeCustomerRecord, siteTypeOptions } from "@/lib/app-support";
@@ -23,6 +24,7 @@ function buildDraft(customer) {
     ...customerPostalFields(normalized),
     contacts: normalized.contacts,
     contactAssignments: normalized.contactAssignments || [],
+    contactUpdates: [],
   };
 }
 
@@ -52,6 +54,17 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
   const markSaved = useUnsavedChanges(dirty, { busy: saving });
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const primarySite = editing ? buildCustomerSites(customer, []).find((site) => site.isPrimary) : null;
+  const relatedRecords = [...getCustomerRelatedContacts(customer), ...contacts, ...(draft.contacts || []), ...(draft.contactUpdates || [])];
+  const relatedContacts = editing ? getCustomerRelatedContacts({ ...customer, contactAssignments: draft.contactAssignments }, relatedRecords) : [];
+  const updateContact = (contact) => update("contactUpdates", [
+    ...draft.contactUpdates.filter((entry) => entry.id !== contact.id),
+    { id: contact.id, ...Object.fromEntries(["name", "position", "phone", "email", "notes"].map((key) => [key, contact[key] || ""])) },
+  ]);
+  const updateAssignments = (assignments) => setDraft((current) => {
+    const retainedIds = new Set([...getCustomerRelatedContacts(customer, relatedRecords).map((contact) => contact.id), ...assignments.map((assignment) => assignment.contactId)]);
+    return { ...current, contactAssignments: assignments,
+      ...(editing ? { contactUpdates: current.contactUpdates.filter((contact) => retainedIds.has(contact.id)) } : {}) };
+  });
 
   const submit = async (event) => {
     event?.preventDefault();
@@ -66,6 +79,7 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
         const normalized = normalizeCustomerRecord({ ...customer, ...draft });
         return { name: normalized.name, email: normalized.email, phone: normalized.phone, customerType: normalized.customerType,
           contactAssignments: draft.contactAssignments,
+          ...(draft.contactUpdates.length ? { contactUpdates: draft.contactUpdates } : {}),
           ...customerPostalFields(draft),
           ...(siteChanged ? { primarySite: {
             id: primarySite?.siteProfileId || "", expectedAddress: initial.address,
@@ -121,7 +135,9 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
         </div>
         <div className="min-w-0" data-customer-form-column="contacts">
         <WorkspaceSection title="Contacts" panel>
-          <ContactAssignmentsEditor value={draft.contactAssignments} contacts={contacts} preferredContacts={draft.contacts || []} onChange={(assignments) => update("contactAssignments", assignments)} />
+          <ContactAssignmentsEditor value={draft.contactAssignments} contacts={contacts} preferredContacts={draft.contacts || []}
+            relatedContacts={relatedContacts} onContactChange={editing ? updateContact : undefined}
+            onChange={updateAssignments} />
         </WorkspaceSection>
         </div>
       </fieldset>

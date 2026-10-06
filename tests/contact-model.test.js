@@ -183,6 +183,96 @@ test("contact edits update projections but preserve saved job snapshots byte-for
   assert.equal(next.onsiteContact.phone, "9999"); assert.equal(next.onsiteContact.position, "Operations Director"); assert.equal(next.requesterContact, null);
 });
 
+const assignmentContent = (assignments) => assignments.map(({ contactId, roles, isPrimary, isBilling }) => ({ contactId, roles, isPrimary, ...(isBilling === undefined ? {} : { isBilling }) }));
+
+test("Customer editor projection includes Site-only identities once and follows draft ownership without mutation", (t) => {
+  const db = seed(t); linkContact(db, "site", "s1", "p", { isPrimary: true, roles: ["Caretaker"] }, "a");
+  linkContact(db, "site", "s2", "p", { roles: ["Building Manager"] }, "a");
+  const customer = state(db).customers.find((entry) => entry.id === "a"), before = structuredClone(customer);
+  const related = getCustomerRelatedContacts({ ...customer, contactAssignments: [] });
+  assert.equal(related.length, 1); assert.equal(related[0].isDirect, false);
+  assert.deepEqual(related[0].sites.map(({ siteId, roles, isPrimary }) => ({ siteId, roles, isPrimary })), [
+    { siteId: "s1", roles: ["Caretaker"], isPrimary: true }, { siteId: "s2", roles: ["Building Manager"], isPrimary: false },
+  ]);
+  const assigned = getCustomerRelatedContacts({ ...customer, contactAssignments: [{ contactId: "p", isPrimary: true, isBilling: true, roles: ["Property Manager"] }] }, state(db).contacts);
+  assert.equal(assigned.length, 1); assert.equal(assigned[0].isDirect, true); assert.equal(assigned[0].isBilling, true);
+  assert.deepEqual(assigned[0].roles, ["Property Manager"]); assert.equal(assigned[0].sites.length, 2);
+  assert.deepEqual(customer, before);
+});
+
+test("Customer editor related contacts are empty only without direct or Site links and preserve matching-text IDs", (t) => {
+  const db = seed(t);
+  assert.deepEqual(getCustomerRelatedContacts(state(db).customers.find((entry) => entry.id === "a")), []);
+  createContact(db, { id: "duplicate", name: "Sam Example", phone: "0400", email: "sam@example.test" });
+  for (const id of ["p", "duplicate"]) linkContact(db, "site", "s1", id, { roles: ["Caretaker"] }, "a");
+  const contacts = getCustomerRelatedContacts(state(db).customers.find((entry) => entry.id === "a"));
+  assert.deepEqual(contacts.map((contact) => contact.id).sort(), ["duplicate", "p"]);
+  assert.ok(contacts.every((contact) => !contact.isDirect));
+  assert.equal(readContacts(db).length, 3);
+});
+
+test("saving unchanged direct assignments neither promotes Site-only contacts nor merges identities", (t) => {
+  const db = seed(t); linkContact(db, "site", "s1", "p", { isPrimary: true, roles: ["Caretaker"] }, "a");
+  const before = state(db), customer = before.customers.find((entry) => entry.id === "a");
+  const saved = updateCustomer(db, "a", { name: customer.name, contactAssignments: customer.contactAssignments });
+  assert.deepEqual(saved.contactAssignments, []); assert.equal(getCustomerRelatedContacts(saved)[0].isDirect, false);
+  assert.deepEqual(saved.sites.map((site) => assignmentContent(site.contactAssignments)), customer.sites.map((site) => assignmentContent(site.contactAssignments)));
+  assert.deepEqual(readContacts(db), before.contacts); assert.equal(readWorkspaceSchemaVersion(db), 18);
+});
+
+test("Customer save edits a Site-only shared identity without linking it or changing saved Job contact JSON", (t) => {
+  const db = seed(t); linkContact(db, "site", "s1", "p", { isPrimary: true, roles: ["Caretaker"] }, "a");
+  linkContact(db, "site", "s3", "p", { isPrimary: true }, "b"); linkContact(db, "customer", "b", "p", { isBilling: true });
+  const job = createJob(db, { customer: { id: "a" }, job: { title: "Site-only snapshot", jobAddress: "1 Test St" } });
+  const contactJson = () => db.prepare("SELECT requester_contact_json, onsite_contact_json, billing_contact_json, extra_json FROM jobs WHERE id=?").get(job.id);
+  const beforeJson = contactJson();
+  const before = state(db), customer = before.customers.find((entry) => entry.id === "a");
+  const details = { id: "p", name: "Sam Updated", position: "Director", phone: "9999", email: "updated@example.test", notes: "Shared notes" };
+  const saved = updateCustomer(db, "a", { contactAssignments: [], contactUpdates: [details] });
+  assert.deepEqual(saved.contactAssignments, []); assert.equal(saved.contactUpdates, undefined); assert.equal(saved.extra?.contactUpdates, undefined);
+  assert.equal(saved.email, customer.email); assert.equal(saved.phone, customer.phone);
+  assert.deepEqual(saved.sites.map((site) => assignmentContent(site.contactAssignments)), customer.sites.map((site) => assignmentContent(site.contactAssignments)));
+  const after = state(db); assert.equal(after.contacts.length, before.contacts.length);
+  for (const [key, value] of Object.entries(details)) assert.equal(after.contacts.find((contact) => contact.id === "p")[key], value);
+  assert.equal(after.customers.find((entry) => entry.id === "b").contacts[0].name, details.name);
+  assert.equal(after.customers.find((entry) => entry.id === "b").sites[0].contacts[0].phone, details.phone);
+  assert.deepEqual(after.contacts.find((contact) => contact.id === "q"), before.contacts.find((contact) => contact.id === "q"));
+  assert.deepEqual(contactJson(), beforeJson);
+  assert.equal(readWorkspaceSchemaVersion(db), 18);
+});
+
+test("explicit Customer assignment and later removal keep Site links and the normalized identity", (t) => {
+  const db = seed(t); linkContact(db, "site", "s1", "p", { isPrimary: true, roles: ["Caretaker"] }, "a");
+  const before = state(db).customers.find((entry) => entry.id === "a");
+  const assigned = updateCustomer(db, "a", { contactAssignments: [{ contactId: "p", roles: ["Property Manager"], isPrimary: true, isBilling: true }] });
+  assert.deepEqual(assignmentContent(assigned.contactAssignments), [{ contactId: "p", roles: ["Property Manager"], isPrimary: true, isBilling: true }]);
+  assert.equal(getCustomerRelatedContacts(assigned).length, 1);
+  const removed = updateCustomer(db, "a", { contactAssignments: [] });
+  assert.deepEqual(removed.contactAssignments, []); assert.equal(getCustomerRelatedContacts(removed)[0].isDirect, false);
+  assert.deepEqual(assignmentContent(removed.sites[0].contactAssignments), assignmentContent(before.sites[0].contactAssignments));
+  assert.equal(readContacts(db).length, 2);
+});
+
+test("contact detail batch and Customer assignments roll back together for malformed, missing or unrelated IDs", (t) => {
+  const db = seed(t); linkContact(db, "site", "s1", "p", {}, "a");
+  const before = state(db);
+  for (const contactUpdates of [null, {}, [null], [{ id: "missing", name: "Wrong" }], [{ id: "q", name: "Unrelated" }]]) {
+    assert.throws(() => updateCustomer(db, "a", { name: "Changed", contactUpdates })); assert.deepEqual(state(db), before);
+  }
+  assert.throws(() => updateCustomer(db, "a", { contactUpdates: [{ id: "p", name: "Temporary" }], contactAssignments: [{ contactId: "missing" }] }), /Contact not found/);
+  assert.deepEqual(state(db), before);
+});
+
+test("Customer contact updates can accompany an explicit existing assignment and a new identity in one save", (t) => {
+  const db = seed(t);
+  const saved = updateCustomer(db, "a", { contactUpdates: [{ id: "p", phone: "1234" }], contactAssignments: [
+    { contactId: "p", isBilling: true }, { contactId: "new", contact: { name: "New Person", notes: "Draft creation" }, isPrimary: true },
+  ] });
+  assert.equal(saved.contacts.find((contact) => contact.id === "p").phone, "1234");
+  assert.equal(saved.contacts.find((contact) => contact.id === "new").notes, "Draft creation");
+  assert.equal(readContacts(db).length, 3);
+});
+
 test("site edits and inline site creation keep existing assignments and never write legacy contacts", (t) => {
   const db = seed(t); linkContact(db, "site", "s1", "p", { isPrimary: true }, "a");
   updateCustomerSite(db, "a", "s2", { notes: "Updated" });
@@ -272,6 +362,13 @@ test("contact APIs enforce permissions, expose canonical state, validate site ow
   const assigned = await request("/api/customers/a/contacts/api", "PUT", { isBilling: true }); assert.equal(assigned.status, 200); assert.ok((await assigned.json()).delta.customers.upsert.find((entry) => entry.id === "a").contacts.some((entry) => entry.id === "api"));
   assert.equal((await request("/api/customers/a/sites/s3/contacts/api", "PUT", {})).status, 404);
   assert.equal((await request("/api/customers/a/sites/s1/contacts/api", "PUT", { isPrimary: true })).status, 200);
+  assert.equal((await request("/api/customers/b/contacts/api", "PUT", {})).status, 200);
+  assert.equal((await request("/api/customers/a", "PATCH", { contactUpdates: [{ id: "api", name: "Denied" }] }, "technician")).status, 403);
+  const sharedEdit = await request("/api/customers/a", "PATCH", { contactUpdates: [{ id: "api", name: "Office updated" }] }, "office");
+  assert.equal(sharedEdit.status, 200); const delta = (await sharedEdit.json()).delta;
+  assert.equal(delta.contacts.upsert.find((contact) => contact.id === "api").name, "Office updated");
+  assert.equal(delta.customers.upsert.find((customer) => customer.id === "b").contacts.find((contact) => contact.id === "api").name, "Office updated");
+  assert.equal((await request("/api/customers/b/contacts/api", "DELETE")).status, 200);
   assert.equal((await request("/api/contacts/api", "DELETE")).status, 409);
   assert.equal((await request("/api/contacts/api", "PATCH", { phone: "123" })).status, 200);
   assert.equal((await request("/api/customers/a/contacts/api", "DELETE")).status, 200);

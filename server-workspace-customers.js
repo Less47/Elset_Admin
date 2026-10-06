@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { importCustomerContactRelationships } from "./server-workspace-contacts.js";
+import { applyCustomerContactUpdates, importCustomerContactRelationships } from "./server-workspace-contacts.js";
 import { applyPrimarySiteUpdate, customerPostalFields } from "./src/lib/customer-profile.js";
 import {
   archiveMaintenancePlansForCustomer,
@@ -486,7 +486,8 @@ export function updateCustomer(db, customerIdInput, input) {
   return db.transaction(() => {
     ensureCustomerExists(db, customerId);
     const existingCustomer = getCustomerState(db, customerId);
-    const { primarySite, ...customerFields } = input;
+    const { primarySite, contactUpdates, ...customerFields } = input;
+    applyCustomerContactUpdates(db, customerId, contactUpdates, input.contactAssignments);
     const nextCustomer = primarySite === undefined ? existingCustomer : applyPrimarySiteUpdate(existingCustomer, primarySite);
     const customer = normalizeCustomerInput({ ...customerFields, id: customerId }, nextCustomer);
     if (!trimText(customer.name)) {

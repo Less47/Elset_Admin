@@ -102,6 +102,26 @@ export function updateContact(db, contactId, input) {
   assertRecord(input);
   return write(db, () => { requireContact(db, contactId); storeContact(db, { ...input, id: contactId, updatedAt: now() }); return readContacts(db, [contactId])[0]; });
 }
+
+// Called only inside the Customer save transaction. Identity edits are separate
+// from assignment drafts, so editing a Site-only person never creates a link.
+export function applyCustomerContactUpdates(db, customerId, updates, assignments = []) {
+  if (updates === undefined) return;
+  if (!Array.isArray(updates)) throw new WorkspaceContactError("Contact updates must be a list.");
+  const allowed = new Set(db.prepare(`SELECT contact_id FROM customer_contact_links WHERE customer_id=?
+    UNION SELECT links.contact_id FROM site_contact_links links JOIN sites ON sites.id=links.site_id WHERE sites.customer_id=?`)
+    .all(customerId, customerId).map((row) => row.contact_id));
+  for (const assignment of Array.isArray(assignments) ? assignments : []) allowed.add(assignment?.contactId);
+  for (const update of updates) {
+    assertRecord(update);
+    const id = text(update.id);
+    requireContact(db, id);
+    if (!allowed.has(id)) throw new WorkspaceContactError("Contact is not related to this customer.");
+    const details = Object.fromEntries(["name", "position", "phone", "email", "notes"].filter((key) => Object.hasOwn(update, key)).map((key) => [key, update[key]]));
+    storeContact(db, { ...details, id, updatedAt: now() });
+  }
+}
+
 export function deleteContact(db, contactId) {
   return write(db, () => {
     requireContact(db, contactId);
