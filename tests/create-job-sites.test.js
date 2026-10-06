@@ -49,7 +49,7 @@ test("saved sites and the primary address work with exact case/whitespace normal
     const job = createJob(db, jobInput(address));
     assert.equal(job.customerId, "a");
   }
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 17);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 18);
   assert.deepEqual(db.prepare("SELECT * FROM sqlite_schema ORDER BY name").all(), schema);
   assert.deepEqual(db.prepare("SELECT * FROM workspace_schema_migrations ORDER BY version").all(), migrations);
   assert.deepEqual(db.prepare("SELECT * FROM sites ORDER BY id").all(), sites);

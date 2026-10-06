@@ -1,3 +1,4 @@
+import { isWarrantyJob } from "../../lib/job-billing.js";
 import { calculateInvoiceTotal, calculateQuoteTotal, money } from "../../lib/quote-template.js";
 
 export const TOMORROW_VIEW = "__tomorrow__";
@@ -22,6 +23,7 @@ export const serviceBoardSortOptions = [
 const quickBooksUnsyncedIndicator = { id: "quickbooks-unsynced", label: "Not in QuickBooks", type: "quickbooks-warning" };
 
 export const serviceBoardIndicatorLegend = [
+  { id: "warranty", label: "Warranty", dotClassName: "bg-billing-warranty" },
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
@@ -113,9 +115,9 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
 }
 
 export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider }) {
-  const indicators = [];
+  const indicators = isWarrantyJob(job) ? [{ id: "warranty", label: "WARRANTY", type: "warranty" }] : [];
   const quoteSent = Boolean(job.quote?.sentHistory?.length);
-  const showInvoiceStatus = Boolean(job.invoice) || job.status === "Completed";
+  const showInvoiceStatus = !isWarrantyJob(job) && (Boolean(job.invoice) || job.status === "Completed");
 
   if (quoteSent) {
     indicators.push({ id: "quote", label: "Quoted", dotClassName: "bg-cyan-500" });
@@ -135,7 +137,7 @@ export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider 
 
   // Mapping ownership is independent of invoice issuance, payment and sync errors.
   // Xero-owned invoices cannot be sent to QuickBooks, even after a provider switch.
-  if (accountingProvider === "quickbooks" && job.invoice
+  if (accountingProvider === "quickbooks" && !isWarrantyJob(job) && job.invoice
     && !["quickbooks", "xero"].includes(job.invoice.paymentManagement)) {
     indicators.push(quickBooksUnsyncedIndicator);
   }

@@ -96,6 +96,8 @@ export default function JobHistoryManager({
             job.status,
             job.urgency,
             job.scheduledDate,
+            job.billingType,
+            job.warrantyReason,
           ]
             .join(" ")
             .toLowerCase()
@@ -117,7 +119,7 @@ export default function JobHistoryManager({
           : documentFilter === "not-invoiced"
             ? !job.hasInvoice
           : documentFilter === "completed-not-invoiced"
-            ? job.status === "Completed" && !job.hasInvoice
+            ? job.status === "Completed" && !job.hasInvoice && job.billingType !== "warranty"
             : job.invoiceStatus.id === "overdue";
 
       const createdAt = job.createdAtTimestamp;

@@ -70,10 +70,10 @@ function assertLease(db) {
   const column = db.pragma("table_info(integration_webhook_events)").find((row) => row.name === "lease_owner");
   assert.ok(column);
   assert.equal(column.type, "TEXT"); assert.equal(column.notnull, 1); assert.equal(column.dflt_value, "''");
-  assert.equal(db.pragma("user_version", { simple: true }), 17);
-  assert.equal(db.prepare("SELECT schema_version FROM workspace_info").get().schema_version, 17);
+  assert.equal(db.pragma("user_version", { simple: true }), 18);
+  assert.equal(db.prepare("SELECT schema_version FROM workspace_info").get().schema_version, 18);
   assert.deepEqual(db.prepare("SELECT version,name FROM workspace_schema_migrations WHERE version=12").all(), [{ version: 12, name: "accounting-webhook-event-leases" }]);
-  assert.deepEqual(assertWorkspaceSchema(db), { schemaVersion: 17 });
+  assert.deepEqual(assertWorkspaceSchema(db), { schemaVersion: 18 });
   assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
   assert.deepEqual(db.pragma("foreign_key_check"), []);
 }
@@ -91,7 +91,7 @@ for (const version of [10, 11]) for (const withLease of [false, true]) {
     db.exec("DROP TRIGGER fail_v12");
     const applied = [];
     migrateWorkspaceSchema(db, { onMigration: ({ toVersion }) => applied.push(toVersion) });
-    assert.deepEqual(applied, version === 10 ? [11, 12, 13, 14, 15, 16, 17] : [12, 13, 14, 15, 16, 17]);
+    assert.deepEqual(applied, version === 10 ? [11, 12, 13, 14, 15, 16, 17, 18] : [12, 13, 14, 15, 16, 17, 18]);
     assertLease(db); assertPreserved(db, before, { migrated: true });
     assert.deepEqual(db.prepare("SELECT lease_owner FROM integration_webhook_events WHERE id='processing'").get(), { lease_owner: withLease ? "existing-owner" : "" });
     if (!withLease) assert.equal(db.prepare("SELECT count(*) n FROM integration_webhook_events WHERE lease_owner=''").get().n, 4);
@@ -103,14 +103,14 @@ for (const version of [10, 11]) for (const withLease of [false, true]) {
   });
 }
 
-test("fresh database applies versions 1 through 16 exactly once, then reopening performs no migration", (t) => {
+test("fresh database applies versions 1 through 18 exactly once, then reopening performs no migration", (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "accounting-leases-fresh-"));
   const dbPath = path.join(directory, "workspace.db");
   const db = new Database(dbPath);
   t.after(() => { if (db.open) db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
   const applied = [];
   migrateWorkspaceSchema(db, { onMigration: ({ toVersion }) => applied.push(toVersion) });
-  assert.deepEqual(applied, Array.from({ length: 17 }, (_, index) => index + 1));
+  assert.deepEqual(applied, Array.from({ length: 18 }, (_, index) => index + 1));
   assertLease(db);
   const before = snapshot(db);
   db.close();

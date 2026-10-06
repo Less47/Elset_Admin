@@ -53,6 +53,9 @@
     --color-paper: #FFFFFF;
     --color-media-stage: #080D16;
     --color-status-info: var(--status-info);
+    --color-billing-warranty: var(--billing-warranty);
+    --color-billing-warranty-surface: var(--billing-warranty-surface);
+    --color-billing-warranty-border: var(--billing-warranty-border);
     --color-status-info-surface: var(--status-info-surface);
     --color-status-info-border: var(--status-info-border);
     --color-status-info-hover: var(--status-info-hover);
@@ -359,6 +362,9 @@
     --surface-selected: var(--dialog-muted-surface);
     --accent-foreground: var(--dialog-foreground);
     --status-info: var(--dialog-status-info);
+    --billing-warranty: var(--dialog-billing-warranty);
+    --billing-warranty-surface: var(--dialog-billing-warranty-surface);
+    --billing-warranty-border: var(--dialog-billing-warranty-border);
     --status-info-surface: var(--dialog-status-info-surface);
     --status-success: var(--dialog-status-success);
     --status-success-surface: var(--dialog-status-success-surface);
@@ -866,4 +872,11 @@
       opacity: 1 !important;
     }
   }
+}
+.warranty-job-card {
+  background-color: var(--billing-warranty-surface);
+  border-color: var(--billing-warranty-border);
+  --foreground: var(--billing-warranty);
+  --text-secondary: var(--billing-warranty);
+  --muted-foreground: var(--billing-warranty);
 }

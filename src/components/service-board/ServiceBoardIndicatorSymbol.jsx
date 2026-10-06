@@ -1,4 +1,7 @@
+import { warrantyBadgeClassName } from "@/lib/job-billing";
+
 export default function ServiceBoardIndicatorSymbol({ indicator, showLabel = false, dotSizeClassName = "h-2 w-2" }) {
+  if (indicator.type === "warranty") return <span data-service-board-indicator="warranty" className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold leading-4 tracking-wide ${warrantyBadgeClassName}`}>WARRANTY</span>;
   if (indicator.type !== "quickbooks-warning") {
     return <span className={`${dotSizeClassName} shrink-0 rounded-full ${indicator.dotClassName}`} aria-hidden="true" />;
   }

@@ -1,3 +1,4 @@
+import JobBillingFilter from "./JobBillingFilter";
 import { useState } from "react";
 import { Check, SlidersHorizontal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,8 @@ function SheetHeader({ children, description }) {
 }
 
 export function MobileBoardFilters({
+  billingTypeFilter,
+  onBillingTypeChange,
   accountingProvider,
   activeFilterCount,
   onClearFilters,
@@ -94,6 +97,7 @@ export function MobileBoardFilters({
               </Button>
             </div>
 
+            <JobBillingFilter value={billingTypeFilter} onChange={onBillingTypeChange} />
             <label
               htmlFor="mobile-high-urgency-filter"
               className="flex min-h-14 cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-card/70 px-3 py-2.5"

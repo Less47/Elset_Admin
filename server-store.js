@@ -1,6 +1,7 @@
 // Pure compatibility normalization for SQLite state and explicit offline imports.
 // This module performs no filesystem persistence or authentication.
 import { siteAddressMetadata } from "./src/lib/site-location.js";
+import { normalizeBillingType, normalizeWarrantyReason } from "./src/lib/job-billing.js";
 import { customerPostalFields } from "./src/lib/customer-profile.js";
 import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { normalizeDeletedInvoices } from "./src/lib/invoice-deletion.js";
@@ -739,6 +740,8 @@ function normalizeJobRecord(job) {
     scheduledDate: toDateInputValue(job.scheduledDate),
     ...(typeof job.scheduledTime === "string" && job.scheduledTime.trim() ? { scheduledTime: job.scheduledTime } : {}),
     assignedTechnicianId: job.assignedTechnicianId || "",
+    billingType: normalizeBillingType(job.billingType),
+    warrantyReason: normalizeWarrantyReason(job.warrantyReason),
     siteId: typeof job.siteId === "string" ? job.siteId : "",
     assignedTechnicianName: job.assignedTechnicianName || "",
     assignedTechnicianAvatarUrl: job.assignedTechnicianAvatarUrl || "",

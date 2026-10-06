@@ -1,3 +1,4 @@
+import { isWarrantyJob, normalizeBillingType, normalizeWarrantyReason, warrantyBadgeClassName } from "./job-billing.js";
 import { getCustomerDirectContacts, getCustomerBillingContacts, getCustomerAccountContact, getCustomerPrimaryContact, getSitePrimaryContact, getSiteContacts, isLegacyAccountContact } from "./contact-model.js";
 import { normalizeDeletedInvoices } from "./invoice-deletion.js";
 import { customerPostalFields } from "./customer-profile.js";
@@ -904,6 +905,7 @@ export function normalizeDocument(type, doc) {
 }
 
 export function getInvoiceStatus(job) {
+  if (isWarrantyJob(job) && !job.invoice) return { id: "warranty", label: "Warranty · non-billable", className: warrantyBadgeClassName };
   const invoice = normalizeDocument("invoice", job?.invoice);
   const paymentSummary = getInvoicePaymentSummary(invoice);
   return invoiceStatusFromAmounts({ exists: Boolean(invoice), total: paymentSummary.total, balance: paymentSummary.balanceAmount,
@@ -930,6 +932,8 @@ export function normalizeJobRecord(job) {
 
   return {
     ...job,
+    billingType: normalizeBillingType(job?.billingType),
+    warrantyReason: normalizeWarrantyReason(job?.warrantyReason),
     jobNumber: Number.isInteger(Number(job?.jobNumber)) && Number(job.jobNumber) > 0 ? Number(job.jobNumber) : null,
     scheduledDate: toDateInputValue(job?.scheduledDate),
     assignedTechnicianId: typeof job.assignedTechnicianId === "string" ? job.assignedTechnicianId : "",

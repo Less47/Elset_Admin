@@ -11,6 +11,7 @@ import InvoiceManager from "@/components/invoices/InvoiceManager";
 import JobHistoryManager from "@/components/jobs/JobHistoryManager";
 import MaintenanceManager from "@/components/maintenance/MaintenanceManager";
 import RecycleBinPanel from "@/components/recycle-bin/RecycleBinPanel";
+import JobBillingFilter from "@/components/service-board/JobBillingFilter";
 import MobileServiceBoard from "@/components/service-board/MobileServiceBoard";
 import JobNoteEditor from "@/components/service-board/JobNoteEditor";
 import { useJobNoteEditor } from "@/components/service-board/useJobNoteEditor";
@@ -70,6 +71,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     setShowHighUrgencyOnly,
     setShowServiceBoardTagLabels,
     showHighUrgencyOnly,
+    billingTypeFilter,
+    setBillingTypeFilter,
     showServiceBoardTagLabels,
   } = chrome;
   const {
@@ -161,7 +164,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           />
 
           <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
-            <FilterPopover activeCount={showHighUrgencyOnly ? 1 : 0} onReset={() => setShowHighUrgencyOnly(false)}><label className="flex min-h-11 items-center gap-3 text-sm">
+            <FilterPopover activeCount={Number(showHighUrgencyOnly) + Number(billingTypeFilter !== "all")} onReset={() => { setShowHighUrgencyOnly(false); setBillingTypeFilter("all"); }}>
+              <JobBillingFilter value={billingTypeFilter} onChange={setBillingTypeFilter} />
+              <label className="flex min-h-11 items-center gap-3 text-sm">
               <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
               <span className="whitespace-nowrap text-sm">High urgency only</span>
             </label></FilterPopover>
@@ -334,6 +339,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                     tomorrowPlanningDate={derived.tomorrowPlanningDate}
                     officeSearch={officeSearch}
                     showHighUrgencyOnly={showHighUrgencyOnly}
+                    billingTypeFilter={billingTypeFilter}
                     onColumnSortModeChange={(status, sortMode) =>
                       setServiceBoardColumnSorts((prev) =>
                         prev[status] === sortMode
@@ -360,6 +366,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
               </>
             ) : (
               <MobileServiceBoard
+                billingTypeFilter={billingTypeFilter}
+                onBillingTypeChange={setBillingTypeFilter}
                 accountingProvider={accountingProvider}
                 noteStatus={noteStatus}
                 noteEditMode={jobNotes.active}

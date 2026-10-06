@@ -23,6 +23,8 @@ import {
 
 export default function MobileServiceBoard({
   accountingProvider,
+  billingTypeFilter = "all",
+  onBillingTypeChange,
   noteStatus,
   noteEditMode = false,
   onToggleNoteEditMode,
@@ -53,7 +55,7 @@ export default function MobileServiceBoard({
   const [moveJob, setMoveJob] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const filterTriggerRef = useRef(null);
-  const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent");
+  const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent", billingTypeFilter);
 
   const counts = useMemo(
     () => Object.fromEntries(statuses.map((status) => [status, jobs.filter((job) => job.status === status).length])),
@@ -71,7 +73,7 @@ export default function MobileServiceBoard({
   [isTomorrowView, tomorrowJobs, jobs, selectedView, sortMode]);
   const selectedLabel = isTomorrowView ? "Tomorrow" : selectedView;
   const visibleJobs = selectedView === "Completed" ? selectedJobs.slice(0, visibleLimit) : selectedJobs;
-  const activeFilterCount = showHighUrgencyOnly ? 1 : 0;
+  const activeFilterCount = Number(showHighUrgencyOnly) + Number(billingTypeFilter !== "all");
 
   const openJob = useStableCallback(onOpenJob);
   const editNote = useStableCallback(onEditNote);
@@ -244,7 +246,9 @@ export default function MobileServiceBoard({
       <MobileBoardFilters
         accountingProvider={accountingProvider}
         activeFilterCount={activeFilterCount}
-        onClearFilters={() => onUrgencyChange(false)}
+        billingTypeFilter={billingTypeFilter}
+        onBillingTypeChange={onBillingTypeChange}
+        onClearFilters={() => { onUrgencyChange(false); onBillingTypeChange("all"); }}
         onOpenChange={setFiltersOpen}
         onShowTagLabelsChange={onShowTagLabelsChange}
         onUrgencyChange={onUrgencyChange}

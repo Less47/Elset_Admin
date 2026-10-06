@@ -320,6 +320,8 @@ export function readWorkspaceRecords(db, selection) {
       scheduledDate: row.scheduled_date,
       assignedTechnicianId: row.assigned_technician_id || "",
       siteId: row.site_id || "",
+      billingType: row.billing_type || "billable",
+      warrantyReason: row.warranty_reason || "",
       assignedTechnicianName: row.assigned_technician_name,
       assignedTechnicianAvatarUrl: avatarIds.has(row.assigned_technician_id) ? `/api/media/${encodeURIComponent(avatarIds.get(row.assigned_technician_id))}/thumbnail` : "",
       customerId: row.customer_id,

@@ -1,3 +1,4 @@
+import { removeBillingSchemaForLegacyFixture } from "./helpers/workspace-billing-schema.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -264,7 +265,7 @@ test("SQLite backup/restore includes media metadata, originals, thumbnails and e
   const f = await setup(t); await f.upload("staff"); await f.upload("site");
   const before = f.db.prepare("SELECT * FROM workspace_media ORDER BY id").all();
   const bundle = await createWorkspaceSqliteBackupBundle({ env: f.env });
-  assert.equal(bundle.metadata.workspace.schemaVersion, 17); assert.equal(bundle.metadata.workspace.summary.counts.workspaceMedia, 2);
+  assert.equal(bundle.metadata.workspace.schemaVersion, 18); assert.equal(bundle.metadata.workspace.summary.counts.workspaceMedia, 2);
   f.db.prepare("DELETE FROM workspace_media").run();
   f.db.close();
   await restoreWorkspaceSqliteBackupPayload(bundle, { env: f.env });
@@ -274,6 +275,7 @@ test("SQLite backup/restore includes media metadata, originals, thumbnails and e
 });
 test("schema 16 -> 17 is transactional, additive, idempotent and never infers old Job sites", async t => {
   const f = await setup(t);
+  removeBillingSchemaForLegacyFixture(f.db);
   f.db.exec("DROP TRIGGER jobs_site_owner_insert; DROP TRIGGER jobs_site_owner_update; DROP INDEX idx_jobs_explicit_site; ALTER TABLE jobs DROP COLUMN site_id; DROP TABLE workspace_media; DELETE FROM workspace_schema_migrations WHERE version=17; UPDATE workspace_info SET schema_version=16; PRAGMA user_version=16;");
   const photos = f.db.prepare("SELECT * FROM job_attachments").all();
   f.db.exec("CREATE TRIGGER fail_v17 BEFORE INSERT ON workspace_schema_migrations WHEN NEW.version=17 BEGIN SELECT RAISE(ABORT,'media migration failed'); END");
@@ -281,7 +283,7 @@ test("schema 16 -> 17 is transactional, additive, idempotent and never infers ol
   assert.equal(f.db.pragma("user_version", { simple: true }), 16);
   assert.equal(f.db.prepare("SELECT count(*) n FROM sqlite_schema WHERE name='workspace_media'").get().n, 0);
   f.db.exec("DROP TRIGGER fail_v17"); migrateWorkspaceSchema(f.db); migrateWorkspaceSchema(f.db);
-  assert.equal(WORKSPACE_SCHEMA_VERSION, 17); assert.equal(f.db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=17").get().n, 1);
+  assert.equal(WORKSPACE_SCHEMA_VERSION, 18); assert.equal(f.db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=17").get().n, 1);
   assert.deepEqual(f.db.prepare("SELECT * FROM job_attachments").all(), photos);
   assert.equal(f.db.prepare("SELECT count(*) n FROM jobs WHERE site_id IS NOT NULL").get().n, 0);
   assert.deepEqual(f.db.pragma("foreign_key_check"), []);

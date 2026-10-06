@@ -2,6 +2,7 @@ import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEdit
 import { getJobContactGroups, getSitePrimaryContact } from "@/lib/contact-model";
 import { buildCreateJobSiteOptions } from "@/lib/create-job-sites";
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
+import JobBillingFields from "./JobBillingFields";
 import StaffIdentity from "@/components/shared/StaffIdentity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, MapPin, Plus, Search, UserRound } from "lucide-react";
@@ -82,6 +83,8 @@ export default function CreateJobPage({
   const [changingSite, setChangingSite] = useState(false);
   const [siteDraft, setSiteDraft] = useState(createEmptySiteDraft);
   const [job, setJob] = useState({
+    billingType: "billable",
+    warrantyReason: "",
     title: "",
     description: "",
     urgency: "Medium",
@@ -633,6 +636,10 @@ export default function CreateJobPage({
               />
               <RequiredMessage id="job-description-error" show={touched.description && !hasDescription} />
             </div>
+            <JobBillingFields billingType={job.billingType} warrantyReason={job.warrantyReason} onChange={updates => {
+              markDirty();
+              setJob(current => ({ ...current, ...updates }));
+            }} />
             <div className="grid gap-1.5 sm:max-w-md">
               <Label htmlFor="job-client-reference">Client reference / PO number</Label>
               <Input id="job-client-reference" className="h-11" value={job.ocNumber} onChange={(event) => {

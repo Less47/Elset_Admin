@@ -4,12 +4,14 @@ import { lineTotalCentsFromScaled, gstCentsFromSubtotal } from "./server-workspa
 import { buildDocumentReference, GST_RATE } from "./src/lib/quote-template.js";
 import { invoiceDate, isQualifyingActualInvoice } from "./src/lib/invoice-account.js";
 import { AccountingError } from "./server-accounting-errors.js";
+import { assertJobInvoiceAllowed } from "./server-job-billing.js";
 
 export const workspaceAccountingModel = Object.freeze({ currency: "AUD", taxTreatments: [{ key: "taxable", label: "Taxable sales (10% GST)", rate: GST_RATE * 100 }] });
 
 export function readAccountingInvoice(db, jobId) {
   return db.transaction(() => {
     const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId);
+    assertJobInvoiceAllowed(db, jobId);
     const invoice = db.prepare("SELECT * FROM invoices WHERE job_id = ? AND type = 'invoice'").get(jobId);
     if (!job || !invoice) throw new AccountingError("INVOICE_NOT_FOUND", "A saved invoice and accessible job are required.", 404);
     const customer = db.prepare("SELECT * FROM customers WHERE id = ?").get(job.customer_id);

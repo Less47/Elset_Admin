@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { assertJobInvoiceAllowed } from "./server-job-billing.js";
 import {
   decimalToScaledInteger,
   gstCentsFromSubtotal,
@@ -546,6 +547,7 @@ function writeInvoiceTree(
   { existingRow = null, includePayments = false, includeSentHistory = false } = {}
 ) {
   assertPlainObject(input, "Invoice");
+  assertJobInvoiceAllowed(db, jobId);
   const invoiceId = existingRow?.id || normalizeOptionalId(input.id, "Invoice ID") || `${jobId}:invoice`;
   ensureDocumentIdAvailable(db, "invoices", invoiceId, jobId, "Invoice");
   const now = nowIso();

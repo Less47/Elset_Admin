@@ -1,3 +1,4 @@
+import { isWarrantyJob, WARRANTY_INVOICE_MESSAGE } from "@/lib/job-billing";
 import { useEffect } from "react";
 import { useLocation, useMatches, useNavigate, useOutletContext, useParams } from "react-router";
 import CreateJobPage from "./CreateJobPage";
@@ -96,7 +97,7 @@ export function JobDetailsRoute() {
             } : null}
             onSendQuoteToInvoice={session.canManageBusiness ? () => {
               const job = workspaceViewModel.selectedFreshJob;
-              if (!job?.quote || job.invoice) return;
+              if (!job?.quote || job.invoice || isWarrantyJob(job)) return;
               navigate(`/jobs/${encodeURIComponent(job.id)}/invoice`, { state: {
                 ...recordLinkState(location, match, data.jobs),
                 quoteInvoiceDraft: { jobId: job.id, document: buildInvoiceDraftFromQuote(job.quote, buildDefaultDoc(job, "invoice")) },
@@ -136,6 +137,9 @@ export function DocumentRoute() {
   }, [location, navigate]);
   const backLabel = location.state?.returnTo?.label || `Job #${routeSelectedJob?.jobNumber || "Details"}`;
   const onBack = () => navigate(location.state?.returnTo ? -1 : `/jobs/${encodeURIComponent(jobId)}`, { replace: !location.state?.returnTo });
+  if (session.canManageBusiness && documentType === "invoice" && isWarrantyJob(routeSelectedJob)) {
+    return <RecordWorkspace title="Invoice" backLabel={backLabel} onBack={onBack}><WorkspaceMessage>{WARRANTY_INVOICE_MESSAGE}</WorkspaceMessage></RecordWorkspace>;
+  }
   return session.canManageBusiness && routeSelectedJob
           ? <DocumentEditor
               addons={workspaceAddons.addons}

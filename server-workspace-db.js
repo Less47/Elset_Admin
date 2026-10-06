@@ -10,12 +10,13 @@ import { accountingPaymentOutboxSchemaSql } from "./server-accounting-payment-ou
 import { contactSchemaSql, migrateLegacyContacts } from "./server-contact-schema.js";
 import { maintenanceServiceSchemaSql } from "./server-maintenance-service-schema.js";
 import { workspaceMediaSchemaSql } from "./server-workspace-media-schema.js";
+import { workspaceBillingSchemaSql } from "./server-workspace-billing-schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const WORKSPACE_DB_FILENAME = "elset-workspace.db";
-export const WORKSPACE_SCHEMA_VERSION = 17;
+export const WORKSPACE_SCHEMA_VERSION = 18;
 
 const migrations = [
   {
@@ -572,6 +573,7 @@ const migrations = [
   { version: 15, name: "contact-relationship-model", sql: contactSchemaSql, after: migrateLegacyContacts },
   { version: 16, name: "maintenance-checklists-service-reports", sql: maintenanceServiceSchemaSql },
   { version: 17, name: "staff-site-media-explicit-job-site", sql: workspaceMediaSchemaSql },
+  { version: 18, name: "job-billing-classification", sql: workspaceBillingSchemaSql },
 ];
 
 export function getWorkspaceDataDir(env = globalThis.process?.env || {}) {
@@ -615,6 +617,12 @@ export function readWorkspaceSchemaVersion(db, { allowFresh = false } = {}) {
 }
 
 export function assertWorkspaceSchemaObjects(db, version) {
+  if (version >= 18) {
+    db.prepare("SELECT billing_type,warranty_reason FROM jobs LIMIT 0").all();
+    for (const name of ["jobs_warranty_invoice_guard", "jobs_warranty_mapping_insert_guard", "invoices_billable_job_insert", "invoices_billable_job_update"]) {
+      if (!db.prepare("SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name=?").get(name)) throw new Error(`Missing billing guard: ${name}`);
+    }
+  }
   if (version >= 17) {
     db.prepare("SELECT id,owner_type,owner_id,name,mime_type,size_bytes,image,thumbnail,caption,uploaded_by,created_at FROM workspace_media LIMIT 0").all();
     db.prepare("SELECT site_id FROM jobs LIMIT 0").all();

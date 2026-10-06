@@ -38,10 +38,15 @@ import { jobNavigationDestination } from "@/lib/site-navigation";
 import { calculateInvoiceTotal, calculateQuoteTotal, money } from "@/lib/quote-template";
 import { isAddonEnabled } from "@/lib/addons";
 
+import JobBillingFields from "./JobBillingFields";
+import { isWarrantyJob, warrantyBadgeClassName, WARRANTY_INVOICE_MESSAGE, WARRANTY_EXISTING_INVOICE_MESSAGE } from "@/lib/job-billing";
+
 const UNASSIGNED_VALUE = "unassigned";
 
 function buildOverviewDraft(job) {
   return {
+    billingType: job?.billingType || "billable",
+    warrantyReason: job?.warrantyReason || "",
     title: job?.title || "",
     description: job?.description || "",
     jobAddress: job?.jobAddress || "",
@@ -216,6 +221,10 @@ export default function JobDetailsPage({
 
   const saveOverview = async () => {
     if (!canSaveOverview || isSavingOverview) return;
+    if (overviewDraft.billingType === "warranty" && job.invoice) {
+      setPageError(WARRANTY_EXISTING_INVOICE_MESSAGE);
+      return;
+    }
     setIsSavingOverview(true);
     setPageError("");
     const { clientReference, ...overviewUpdates } = overviewDraft;
@@ -294,6 +303,8 @@ export default function JobDetailsPage({
               <InfoItem label="Scheduled">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</InfoItem>
               <InfoItem label="Technician"><StaffIdentity staff={orderedStaff.find(entry => entry.id === job.assignedTechnicianId) || { avatarUrl: job.assignedTechnicianAvatarUrl }} name={job.assignedTechnicianName || "Unassigned"} /></InfoItem>
               <InfoItem label="Urgency"><Badge className={urgencyClassName(job.urgency)}>{job.urgency || "Low"}</Badge></InfoItem>
+              <InfoItem label="Billing Type">{isWarrantyJob(job) ? <Badge className={warrantyBadgeClassName}>Warranty</Badge> : "Billable"}</InfoItem>
+              {isWarrantyJob(job) && job.warrantyReason ? <InfoItem label="Warranty Reason" className="[overflow-wrap:anywhere]">{job.warrantyReason}</InfoItem> : null}
             </dl>
             {canEditJob ? (
               <Button type="button" variant="outline" className="mt-4 h-11 w-full rounded-lg" onClick={() => {
@@ -342,6 +353,7 @@ export default function JobDetailsPage({
                           <Textarea id="edit-job-description" rows={6} value={overviewDraft.description} onChange={(event) => setOverviewDraft((current) => ({ ...current, description: event.target.value }))} aria-invalid={!overviewDraft.description.trim()} />
                           {!overviewDraft.description.trim() ? <p className="text-sm text-status-danger">This field is required.</p> : null}
                         </div>
+                        <JobBillingFields billingType={overviewDraft.billingType} warrantyReason={overviewDraft.warrantyReason} onChange={updates => setOverviewDraft(current => ({ ...current, ...updates }))} />
                         <div className="grid gap-2">
                           <Label htmlFor="edit-job-address">Site address</Label>
                           <GoogleAddressAutocompleteInput id="edit-job-address" className="h-11" value={{ address: overviewDraft.jobAddress }} onSelectionPending={setAddressPending} onChange={(value) => setOverviewDraft((current) => ({ ...current, jobAddress: value.address, siteId: "" }))} placeholder="Search the job site address" />
@@ -495,7 +507,7 @@ export default function JobDetailsPage({
                           </div>
                           <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-4">
                             {onOpenDocument ? <Button type="button" className="h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("quote")}>Open Quote Editor</Button> : null}
-                            {job.quote && !job.invoice && onSendQuoteToInvoice ? <Button type="button" className="ml-auto h-11 rounded-lg hover:opacity-90" onClick={onSendQuoteToInvoice}>Send to Invoice <ArrowRight className="h-4 w-4" aria-hidden="true" /></Button> : null}
+                            {job.quote && !job.invoice && !isWarrantyJob(job) && onSendQuoteToInvoice ? <Button type="button" className="ml-auto h-11 rounded-lg hover:opacity-90" onClick={onSendQuoteToInvoice}>Send to Invoice <ArrowRight className="h-4 w-4" aria-hidden="true" /></Button> : null}
                           </div>
                         </article>
 
@@ -504,7 +516,7 @@ export default function JobDetailsPage({
                             <div>
                               <FileText className="h-5 w-5 text-status-success" />
                               <h3 className="mt-3 font-semibold text-foreground">Invoice</h3>
-                              <p className="mt-1 text-sm text-text-secondary">{job.invoice ? `Saved · ${money(calculateInvoiceTotal(job.invoice.items))}` : "No invoice saved yet"}</p>
+                              <p className="mt-1 text-sm text-text-secondary">{job.invoice ? `Saved · ${money(calculateInvoiceTotal(job.invoice.items))}` : isWarrantyJob(job) ? WARRANTY_INVOICE_MESSAGE : "No invoice saved yet"}</p>
                               {job.invoice ? (
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   <Badge className={invoiceStatus.className}>{invoiceStatus.label}</Badge>
@@ -515,7 +527,7 @@ export default function JobDetailsPage({
                             </div>
                             {job.invoice?.sentHistory?.length && onOpenSentDocument ? <Button type="button" variant="outline" className="h-11 rounded-lg bg-card" onClick={() => onOpenSentDocument("invoice")}>Open sent</Button> : null}
                           </div>
-                          {onOpenDocument ? <Button type="button" className="mt-4 h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("invoice")}>Open Invoice Editor</Button> : null}
+                          {onOpenDocument && !isWarrantyJob(job) ? <Button type="button" className="mt-4 h-11 rounded-lg hover:opacity-90" onClick={() => onOpenDocument("invoice")}>Open Invoice Editor</Button> : null}
                         </article>
                       </div>
                     </WorkspaceSection>

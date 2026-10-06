@@ -1,3 +1,4 @@
+import { normalizeBillingType, normalizeWarrantyReason } from "./src/lib/job-billing.js";
 import {
   insertOrReplaceCustomer,
   normalizeCustomerInput,
@@ -457,6 +458,13 @@ function applyJobPlans(db, plan, state, summary) {
       return;
     }
 
+    const billingType = normalizeBillingType(existingJob?.billingType ?? jobPlan.record.billingType);
+    const warrantyReason = normalizeWarrantyReason(existingJob?.warrantyReason ?? jobPlan.record.warrantyReason);
+    if (billingType === "warranty" && jobPlan.record.invoice) {
+      summary.jobs.conflicted += 1;
+      summary.warnings.push(`Job ${jobPlan.generatedJobId || jobId} is Warranty and cannot receive a ServiceM8 invoice. Change Billing Type to Billable before importing its invoice.`);
+      return;
+    }
     const classification = classifyIncomingChange(existingJob, jobPlan.record);
     if (classification === "skip") {
       summary.jobs.skipped += 1;
@@ -484,6 +492,8 @@ function applyJobPlans(db, plan, state, summary) {
     const existingDocuments = getExistingDocumentSnapshot(db, jobId);
     const job = {
       ...jobPlan.record,
+      billingType,
+      warrantyReason,
       id: jobId,
       jobNumber: resolveJobNumber(db, jobPlan.record),
       title: trimText(jobPlan.record.title) || "Imported ServiceM8 job",

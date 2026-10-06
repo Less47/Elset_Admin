@@ -717,6 +717,8 @@ export function generateMaintenanceJob(db, planIdInput, input = {}) {
       customer: { id: customer.id },
       job: {
         id: normalizeOptionalId(input.jobId, "Job ID") || crypto.randomUUID(),
+        billingType: input.billingType,
+        warrantyReason: input.warrantyReason,
         title: plan.planName,
         description: buildMaintenanceJobDescription(plan),
         urgency: "Medium",

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assertJobInvoiceAllowed } from "./server-job-billing.js";
 import { AccountingStore } from "./server-accounting-store.js";
 import { AccountingError, customerAccountingMessage, safeAccountingError } from "./server-accounting-errors.js";
 import { accountingKey, decryptCredential, digest, encryptCredential } from "./server-accounting-crypto.js";
@@ -269,6 +270,7 @@ export class AccountingService {
       error: customerAccountingMessage(latest?.safe_error_message || (latest?.status === "SYNCING" && !locked ? "The previous request was interrupted. Retry to reconcile its result." : "")) };
   }
   syncInvoice(jobId) {
+    assertJobInvoiceAllowed(this.db, jobId);
     return this.work(() => this.syncInvoiceUnlocked(jobId));
   }
   async syncInvoiceUnlocked(jobId) {

@@ -46,7 +46,7 @@ test("committed schema 10 migrates once through 11, 12 and 13 to 14, preserving 
   assert.throws(() => db.prepare("INSERT INTO payments(id,invoice_id,created_at,source) VALUES('bad','i','fixture','unknown')").run(), /CHECK/);
   assert.deepEqual(db.pragma("foreign_key_check"), []); assert.equal(db.pragma("integrity_check", { simple: true }), "ok");
   db.close(); db = openWorkspaceDb({ dbPath });
-  assert.equal(db.pragma("user_version", { simple: true }), 17); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
+  assert.equal(db.pragma("user_version", { simple: true }), 18); assert.equal(db.prepare("SELECT count(*) n FROM workspace_schema_migrations WHERE version=11").get().n, 1);
   assert.equal(db.prepare("SELECT encrypted_access_token FROM workspace_integrations").get().encrypted_access_token, "existing-ciphertext");
 });
 
@@ -63,7 +63,7 @@ test("schema 13 to 14 preserves accounting rows and rolls back the entire outbox
   assert.ok(!db.prepare("SELECT 1 FROM sqlite_schema WHERE name='integration_payment_outbox'").get());
   db.exec("DROP TRIGGER fail_v14"); const versions = [];
   migrateWorkspaceSchema(db, { onMigration: ({ toVersion }) => versions.push(toVersion) });
-  assert.deepEqual(versions, [14, 15, 16, 17]); assert.deepEqual(db.prepare("SELECT * FROM integration_operations").all(), before.map(row => ({ ...row, request_json: '' })));
+  assert.deepEqual(versions, [14, 15, 16, 17, 18]); assert.deepEqual(db.prepare("SELECT * FROM integration_operations").all(), before.map(row => ({ ...row, request_json: '' })));
   migrateWorkspaceSchema(db, { onMigration() { assert.fail('Already migrated'); } });
   assert.deepEqual(db.pragma('foreign_key_check'), []); assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
 });

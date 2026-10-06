@@ -33,6 +33,7 @@ export default function App() {
     : match.handle?.section || location.state?.section || "service-board";
   const [activeSettingsTab, setActiveSettingsTab] = useState(() => location.pathname === "/settings" && ["xero", "quickbooks"].includes(searchParams.get("accounting")) ? "addons" : "preferences");
   const [officeSearch, setOfficeSearch] = useState("");
+  const [billingTypeFilter, setBillingTypeFilter] = useState("all");
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
   const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);
   const [serviceBoardTomorrowPanelOpen, setServiceBoardTomorrowPanelOpen] = useState(false);
@@ -49,6 +50,7 @@ export default function App() {
     setActiveTemplateType("quote");
     setActiveSettingsTab("preferences");
     setOfficeSearch("");
+    setBillingTypeFilter("all");
     setShowHighUrgencyOnly(false);
     setServiceBoardFullScreen(false);
     setServiceBoardTomorrowPanelOpen(false);
@@ -114,6 +116,7 @@ export default function App() {
     selectedJob: routeSelectedJob,
     serviceBoardFullScreen,
     showHighUrgencyOnly,
+    billingTypeFilter,
   });
   const workspaceActions = useWorkspaceActions({
     applyServerWorkspaceState: session.applyServerWorkspaceState,
@@ -176,6 +179,8 @@ export default function App() {
           setShowHighUrgencyOnly,
           setShowServiceBoardTagLabels,
           showHighUrgencyOnly,
+          billingTypeFilter,
+          setBillingTypeFilter,
           showServiceBoardTagLabels,
         }}
         data={data}

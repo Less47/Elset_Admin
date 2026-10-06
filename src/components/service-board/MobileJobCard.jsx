@@ -1,3 +1,4 @@
+import { isWarrantyJob } from "@/lib/job-billing";
 import { memo } from "react";
 import { ArrowUpRight, CalendarPlus, ChevronRight, MoveRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ function MobileIndicatorList({ indicators, showLabels }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Job indicators">
       {indicators.map((indicator) => (
-        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : <span
+        ["quickbooks-warning", "warranty"].includes(indicator.type) ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : <span
           key={indicator.id}
           className={showLabels
             ? "inline-flex items-center gap-1.5 rounded-full bg-card/80 px-2 py-1 text-[10px] font-semibold text-text-secondary"
@@ -84,7 +85,7 @@ const MobileJobCard = memo(function MobileJobCard({
 
   return (
     <article
-      className={`mobile-job-card relative w-full min-w-0 max-w-full rounded-2xl border shadow-sm ${statusTheme.card}`}
+      className={`mobile-job-card relative w-full min-w-0 max-w-full rounded-2xl border shadow-sm ${isWarrantyJob(job) ? "warranty-job-card" : statusTheme.card}`}
       data-mobile-job-id={job.id}
       data-note-edit-mode={noteEditMode || undefined}
     >

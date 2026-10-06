@@ -1,3 +1,4 @@
+import { isWarrantyJob } from "./job-billing.js";
 import { createBlankDocumentLine } from "./price-list.js";
 
 // Supply buildDefaultDoc(job, "invoice") so the normal document workflow owns
@@ -13,7 +14,7 @@ export function buildInvoiceDraftFromQuote(quote, defaultInvoice) {
 
 export function invoiceConversionDraft(job, type, state) {
   const transfer = state?.quoteInvoiceDraft;
-  if (type !== "invoice" || !job?.quote || job.invoice || transfer?.jobId !== job.id
+  if (type !== "invoice" || isWarrantyJob(job) || !job?.quote || job.invoice || transfer?.jobId !== job.id
     || transfer.document?.type !== "invoice" || !Array.isArray(transfer.document.items)) return null;
   return transfer.document;
 }

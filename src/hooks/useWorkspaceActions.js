@@ -1,3 +1,4 @@
+import { isWarrantyJob, WARRANTY_INVOICE_MESSAGE } from "@/lib/job-billing";
 import { applyWorkspaceDelta } from "./workspace-delta";
 import { WORKSPACE_BRANDING_ASSETS } from "@/lib/workspace-logo";
 import { useLocation, useMatches, useNavigate } from "react-router";
@@ -683,6 +684,7 @@ export function useWorkspaceActions({
 
     const job = data.jobs.find((entry) => entry.id === jobId);
     if (!job) return false;
+    if (type === "invoice" && isWarrantyJob(job)) { window.alert(WARRANTY_INVOICE_MESSAGE); return false; }
 
     const documentType = type === "invoice" ? "invoice" : "quote";
     const normalizedDocument = normalizeDocument(documentType, doc);
@@ -1113,6 +1115,7 @@ export function useWorkspaceActions({
   function handleOpenDoc(job, type) {
     if (!canManageBusiness) return;
     if (!job?.id || !["quote", "invoice"].includes(type)) return false;
+    if (type === "invoice" && isWarrantyJob(job)) { window.alert(WARRANTY_INVOICE_MESSAGE); return false; }
     return navigate(`/jobs/${encodeURIComponent(job.id)}/${type}`, { state: match.handle?.documentType ? location.state : linkState });
   }
 

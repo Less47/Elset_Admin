@@ -270,7 +270,7 @@ test("genuine V1 schema 9 through 10 to latest preserves all records, rolls back
   db.exec("CREATE TABLE integration_external_payments(collision TEXT)"); assert.throws(() => migrateWorkspaceSchema(db), /9 -> 10 failed/);
   assert.equal(db.pragma("user_version", { simple: true }), 9); assert.ok(!db.pragma("table_info(payments)").some((column) => column.name === "source"));
   db.exec("DROP TABLE integration_external_payments"); migrateWorkspaceSchema(db);
-  for (const table of tables) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), table === "payments" ? before[table].map((row) => ({ ...row, source: "manual" })) : table === "jobs" ? before[table].map(row => ({ ...row, site_id: null })) : before[table]);
+  for (const table of tables) assert.deepEqual(db.prepare(`SELECT * FROM ${table}`).all(), table === "payments" ? before[table].map((row) => ({ ...row, source: "manual" })) : table === "jobs" ? before[table].map(row => ({ ...row, site_id: null, billing_type: "billable", warranty_reason: "" })) : before[table]);
   migrateWorkspaceSchema(db); assert.equal(db.prepare("SELECT COUNT(*) n FROM workspace_schema_migrations WHERE version=10").get().n, 1);
-  assert.equal(db.pragma("user_version", { simple: true }), 17);
+  assert.equal(db.pragma("user_version", { simple: true }), 18);
 });

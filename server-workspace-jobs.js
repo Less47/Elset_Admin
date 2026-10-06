@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { normalizeBillingType, normalizeWarrantyReason } from "./src/lib/job-billing.js";
+import { assertJobCanBecomeWarranty } from "./server-job-billing.js";
 import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { normalizeCustomerInput as normalizeCustomerRecord, normalizeSiteRecord, insertOrReplaceCustomer } from "./server-workspace-customers.js";
 import { getCustomerBillingContacts, getCustomerAccountContact, getCustomerPrimaryContact, getCustomerDirectContacts, getSitePrimaryContact } from "./src/lib/contact-model.js";
@@ -142,6 +144,8 @@ const jobKnownKeys = new Set([
 ]);
 const noteKnownKeys = new Set(["id", "author", "text", "createdAt"]);
 jobKnownKeys.add("siteId");
+jobKnownKeys.add("billingType");
+jobKnownKeys.add("warrantyReason");
 const attachmentKnownKeys = new Set(["id", "name", "url", "path", "mimeType", "mime_type", "sizeBytes", "size_bytes", "createdAt", "kind"]);
 
 function explicitSiteId(db, siteId, customerId) {
@@ -327,6 +331,8 @@ function normalizeJobBase(input, customer, {
     jobNumber: Number.isInteger(Number(jobNumber ?? existingJob?.jobNumber)) ? Number(jobNumber ?? existingJob?.jobNumber) : null,
     title: trimText(input.title ?? existingJob?.title) || "Untitled job",
     description: trimText(input.description ?? existingJob?.description),
+    billingType: normalizeBillingType(input.billingType === undefined ? existingJob?.billingType : input.billingType),
+    warrantyReason: normalizeWarrantyReason(input.warrantyReason === undefined ? existingJob?.warrantyReason : input.warrantyReason),
     urgency: normalizeOption(input.urgency ?? existingJob?.urgency, urgencyValues, "Medium"),
     status: normalizeOption(status || input.status || existingJob?.status, statusValues, "To Do"),
     scheduledDate: normalizeDateInput(input.scheduledDate ?? existingJob?.scheduledDate),
@@ -407,8 +413,8 @@ function insertJobCore(db, job) {
       assigned_technician_name, customer_id, customer_name, customer_email, customer_phone, job_address,
       oc_number, requester_contact_json, onsite_contact_json, billing_contact_json, maintenance_plan_id,
       maintenance_plan_name, maintenance_due_date, service_board_tomorrow_date, service_board_tomorrow_order,
-      created_at, updated_at, external_refs_json, extra_json, service_board_note, site_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, updated_at, external_refs_json, extra_json, service_board_note, site_id, billing_type, warranty_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.id,
     job.jobNumber,
@@ -440,7 +446,9 @@ function insertJobCore(db, job) {
     objectJson(job.externalRefs),
     objectJson(job.extra),
     normalizeServiceBoardNote(job.serviceBoardNote),
-    nullableText(explicitSiteId(db, job.siteId, job.customerId))
+    nullableText(explicitSiteId(db, job.siteId, job.customerId)),
+    normalizeBillingType(job.billingType),
+    normalizeWarrantyReason(job.warrantyReason)
   );
 }
 
@@ -482,6 +490,8 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
   const allowedFields = {
     title: "title",
     description: "description",
+    billingType: "billing_type",
+    warrantyReason: "warranty_reason",
     urgency: "urgency",
     status: "status",
     scheduledDate: "scheduled_date",
@@ -550,6 +560,8 @@ function normalizeDeletedJobPayload(payload) {
     jobNumber: Number.isInteger(Number(payload.jobNumber)) && Number(payload.jobNumber) > 0 ? Number(payload.jobNumber) : null,
     title: trimText(payload.title) || "Untitled job",
     description: trimText(payload.description),
+    billingType: normalizeBillingType(payload.billingType),
+    warrantyReason: normalizeWarrantyReason(payload.warrantyReason),
     urgency: normalizeOption(payload.urgency, urgencyValues, "Medium"),
     status: normalizeOption(payload.status, statusValues, "To Do"),
     scheduledDate: normalizeDateInput(payload.scheduledDate),
@@ -670,6 +682,11 @@ export function updateJobDetails(db, jobIdInput, input) {
     if (!getCustomerState(db, existingJob.customerId)) throw new WorkspaceJobError("Customer not found.", 404);
 
     const updates = { ...input };
+    if (Object.hasOwn(updates, "billingType")) {
+      updates.billingType = normalizeBillingType(updates.billingType);
+      if (updates.billingType === "warranty") assertJobCanBecomeWarranty(db, jobId);
+    }
+    if (Object.hasOwn(updates, "warrantyReason")) updates.warrantyReason = normalizeWarrantyReason(updates.warrantyReason);
     if (Object.prototype.hasOwnProperty.call(updates, "siteId")) {
       updates.siteId = explicitSiteId(db, updates.siteId, existingJob.customerId);
     } else if (Object.prototype.hasOwnProperty.call(updates, "jobAddress") && normalizeSiteAddress(updates.jobAddress) !== existingJob.jobAddress) {

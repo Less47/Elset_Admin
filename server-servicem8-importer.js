@@ -855,6 +855,8 @@ function buildJobDraft({
     || payments.some((payment) => parseMoney(payment.amount, 0) > 0);
 
   return {
+    billingType: existingJob?.billingType || "billable",
+    warrantyReason: existingJob?.warrantyReason || "",
     id: existingJob?.id || (jobUuid ? `servicem8-job-${jobUuid}` : crypto.randomUUID()),
     jobNumber: allocateJobNumber(existingJob, job?.generated_job_id),
     title: buildJobTitle(job),

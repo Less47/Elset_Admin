@@ -1,3 +1,4 @@
+import { isWarrantyJob } from "@/lib/job-billing";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStableCallback } from "@/hooks/useStableCallback";
 import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
@@ -132,7 +133,7 @@ const TomorrowJobCard = memo(function TomorrowJobCard({ job, formatDate, onOpenJ
 
   return (
     <div
-      className={`relative rounded-2xl border p-4 shadow-sm ${statusTheme.card}`}
+      className={`relative rounded-2xl border p-4 shadow-sm ${isWarrantyJob(job) ? "warranty-job-card" : statusTheme.card}`}
       data-note-edit-mode={noteEditMode || undefined}
       data-tomorrow-job-id={job.id}
       tabIndex={noteEditMode ? 0 : undefined}
@@ -152,6 +153,7 @@ const TomorrowJobCard = memo(function TomorrowJobCard({ job, formatDate, onOpenJ
           <p className="mt-1 text-sm text-text-secondary">{job.title}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
+          {isWarrantyJob(job) ? <ServiceBoardIndicatorSymbol indicator={{ id: "warranty", type: "warranty", label: "WARRANTY" }} /> : null}
           <Badge className={statusTheme.badge}>{job.status}</Badge>
           {job.status !== "Completed" ? <Badge className={urgencyTone[job.urgency] || urgencyTone.Low}>{job.urgency}</Badge> : null}
         </div>
@@ -318,7 +320,7 @@ function JobCardIndicators({ indicators, showLabels, className = "mt-2" }) {
   return (
     <div data-job-card-indicators data-indicator-presentation={showLabels ? "expanded" : "compact"} className={`flex min-w-0 max-w-full flex-wrap items-center gap-1.5 ${className}`}>
       {indicators.map((indicator) =>
-        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : showLabels ? (
+        ["quickbooks-warning", "warranty"].includes(indicator.type) ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : showLabels ? (
           <div
             key={indicator.id}
             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary"
@@ -379,7 +381,7 @@ const JobCard = memo(function JobCard({
     observer.observe(price);
     return () => observer.disconnect();
   }, [isGridView, isCompactView, jobValueMeta?.amount]);
-  const cardClassName = `box-border w-full min-w-0 max-w-full ${isGridView ? "h-full overflow-visible rounded-2xl py-0" : isCompactView ? "rounded-xl py-2" : "rounded-2xl py-0"} select-none shadow-sm transition hover:shadow-md ${statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
+  const cardClassName = `box-border w-full min-w-0 max-w-full ${isGridView ? "h-full overflow-visible rounded-2xl py-0" : isCompactView ? "rounded-xl py-2" : "rounded-2xl py-0"} select-none shadow-sm transition hover:shadow-md ${isWarrantyJob(job) ? "warranty-job-card" : statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
   const cardContentClassName = isGridView ? "flex h-full flex-col p-2 pb-3" : isCompactView ? "px-2.5 py-0" : "p-2.5";
   // Keep enough room for the full price, the gap, and a visible note ellipsis.
   const headerMetaMinWidth = job.serviceBoardNote && jobValueMeta
@@ -650,8 +652,9 @@ export function OfficeBoard({
   tomorrowPlanningDate = "",
   officeSearch = "",
   showHighUrgencyOnly = false,
+  billingTypeFilter = "all",
 }) {
-  const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent");
+  const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent", billingTypeFilter);
   const [touchDrag, setTouchDrag] = useState(null);
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
   const touchDragSessionRef = useRef(null);

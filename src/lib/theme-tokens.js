@@ -120,15 +120,17 @@ export function buildSemanticTheme(settings) {
     warning: ['#F5E8C5', '#684407', '#574427', '#F9D88A', '#AD8847'],
     danger: ['#F7DFE5', '#8A2440', '#572C3C', '#FFBACB', '#B66D83'],
     maintenance: ['#DDEFE9', '#245B50', '#224D47', '#99DFCF', '#509D8D'],
+    warranty: ['#D0EAE5', '#184B42', '#173E39', '#A5E5D8', '#548F83'],
     special: ['#EBDFF5', '#5A3577', '#45345D', '#DFC0FA', '#9877B5'],
   };
   for (const [prefix, isDark, base, backgrounds] of [['', dark, surface, surfaces], ['dialog-', popupText === '#FFFFFF', popup, [popup, vars['--dialog-muted-surface']]]]) {
     for (const [name, [lightBg, lightText, darkBg, darkText, edge]] of Object.entries(statuses)) {
       const bg = isDark ? mixColor(base, darkBg, 0.65) : lightBg;
-      vars[`--${prefix}status-${name}-surface`] = bg;
-      vars[`--${prefix}status-${name}`] = readable(isDark ? darkText : lightText, [bg, ...backgrounds]);
-      vars[`--${prefix}status-${name}-border`] = edge;
-      vars[`--${prefix}status-${name}-hover`] = mixColor(bg, isDark ? darkText : lightText, 0.10);
+      const token = name === 'warranty' ? 'billing-warranty' : `status-${name}`;
+      vars[`--${prefix}${token}-surface`] = bg;
+      vars[`--${prefix}${token}`] = readable(isDark ? darkText : lightText, [bg, ...backgrounds]);
+      vars[`--${prefix}${token}-border`] = edge;
+      vars[`--${prefix}${token}-hover`] = mixColor(bg, isDark ? darkText : lightText, 0.10);
     }
   }
   vars['--destructive'] = vars['--status-danger'];
