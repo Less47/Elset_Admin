@@ -185,9 +185,9 @@ test("ServiceM8 retains local Warranty/reason and costs, skips incoming invoice 
   assert.deepEqual(snapshot(f.db).jobs, before.jobs); assert.deepEqual(snapshot(f.db).invoices, before.invoices);
 });
 
-test("board Warranty indicator coexists with quote/maintenance, suppresses invoice attention and QuickBooks", () => {
+test("board Warranty cards retain quote/maintenance without a Warranty badge or invoice/QuickBooks warnings", () => {
   const job = { billingType: "warranty", status: "Completed", quote: { sentHistory: [{}] }, maintenancePlanName: "Annual service" };
-  assert.deepEqual(buildJobCardIndicators({ job, invoiceStatus: { id: "not-invoiced" }, accountingProvider: "quickbooks" }).map(item => item.id), ["warranty", "quote", "maintenance"]);
+  assert.deepEqual(buildJobCardIndicators({ job, invoiceStatus: { id: "not-invoiced" }, accountingProvider: "quickbooks" }).map(item => item.id), ["quote", "maintenance"]);
   const billable = { ...job, billingType: "billable", invoice: {} };
   assert.ok(buildJobCardIndicators({ job: billable, invoiceStatus: { id: "draft" }, accountingProvider: "quickbooks" }).some(item => item.id === "quickbooks-unsynced"));
   assert.ok(getServiceBoardIndicatorLegend("quickbooks").some(item => item.id === "warranty"));

@@ -25,7 +25,7 @@ function MobileIndicatorList({ indicators, showLabels }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5" aria-label="Job indicators">
       {indicators.map((indicator) => (
-        ["quickbooks-warning", "warranty"].includes(indicator.type) ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : <span
+        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : <span
           key={indicator.id}
           className={showLabels
             ? "inline-flex items-center gap-1.5 rounded-full bg-card/80 px-2 py-1 text-[10px] font-semibold text-text-secondary"

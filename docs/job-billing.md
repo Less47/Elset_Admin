@@ -36,7 +36,7 @@ create/edit permissions apply; Technician field permissions remain unchanged.
 
 Job Details shows classification and reason in its existing information panel.
 Warranty Service Board cards use a semantic teal surface/border and readable text,
-with an explicit WARRANTY badge that remains visible when indicator labels are off.
+without a Warranty pill or badge. Classification remains visible in Job Details and Job History.
 List, Compact, Grid, Mobile and Tomorrow keep their existing layout and interaction
 handlers. Existing urgency, quote, maintenance, QuickBooks, price and note indicators
 retain their positions and label rules.

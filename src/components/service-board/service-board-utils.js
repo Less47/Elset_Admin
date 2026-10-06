@@ -115,7 +115,7 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
 }
 
 export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider }) {
-  const indicators = isWarrantyJob(job) ? [{ id: "warranty", label: "WARRANTY", type: "warranty" }] : [];
+  const indicators = [];
   const quoteSent = Boolean(job.quote?.sentHistory?.length);
   const showInvoiceStatus = !isWarrantyJob(job) && (Boolean(job.invoice) || job.status === "Completed");
 

@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createServer } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import express from "express";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,9 +17,10 @@ import { updateWorkspaceAddons } from "../../server-workspace-addons.js";
 import { createAddonRouter } from "../../server-addon-routes.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
 import { contrastRatio } from "../../src/lib/theme-tokens.js";
+import { getBuildMetadata } from "../../scripts/build-metadata.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
-const screenshots = path.join(root, "test-results/warranty-visual");
+const screenshots = path.join(root, "test-results/warranty-badge-removal");
 const fixture = JSON.parse(fs.readFileSync(path.join(root, "fixtures/demo-workspace.json"), "utf8"));
 let vite, api, baseUrl, apiUrl, directory, db, customer, preferences = {}, testRole = "admin";
 const env = {}, user = { id: "warranty-browser-test", name: "Billing Tester", role: "admin" };
@@ -44,7 +47,12 @@ test.beforeAll(async () => {
   apiUrl = `http://127.0.0.1:${api.address().port}`;
   const socket = net.createServer(); await new Promise(resolve => socket.listen(0, "127.0.0.1", resolve));
   const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
-  vite = await createServer({ root, cacheDir: "node_modules/.vite-billing-tests", server: { host: "127.0.0.1", port, strictPort: true }, logLevel: "error" });
+  vite = await createServer({
+    root, configFile: false, envFile: false, plugins: [react(), tailwindcss()],
+    resolve: { alias: { "@": path.join(root, "src") } },
+    define: { __ELSET_BUILD__: JSON.stringify(getBuildMetadata({ env: {} })) },
+    cacheDir: "node_modules/.vite-billing-tests", server: { host: "127.0.0.1", port, strictPort: true }, logLevel: "error",
+  });
   await vite.listen(); baseUrl = vite.resolvedUrls.local[0].replace(/\/$/, "");
 });
 test.afterAll(async () => {
@@ -84,7 +92,13 @@ for (const width of [390, 820, 1440]) test(`Warranty board, indicators, modes, l
   for (const mode of modes) {
     if (mode !== "Mobile") await page.getByRole("button", { name: `To Do ${mode} view`, exact: true }).click();
     await expect(card(page).locator(".warranty-job-card").or(card(page).filter({ has: page.locator(":scope.warranty-job-card") })).first()).toBeVisible();
-    await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toHaveText("WARRANTY");
+    await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
+    await expect(card(page).getByText("WARRANTY", { exact: true })).toHaveCount(0);
+    if (mode === "Grid") await expect(card(page).getByText("High", { exact: true })).toHaveCount(0);
+    else await expect(card(page).getByText("High", { exact: true })).toBeVisible();
+    await expect(card(page).getByTitle("Quoted", { exact: true })).toBeVisible();
+    await expect(card(page).getByTitle("Maintenance", { exact: true })).toBeVisible();
+    await expect(card(page).getByLabel("Job note: Waiting on parts", { exact: true })).toBeVisible();
     await expect(card(page).locator('[data-service-board-indicator="quickbooks-unsynced"]')).toHaveCount(0);
     await expect(page.locator('[data-service-board-job-id="billable"], [data-mobile-job-id="billable"]').locator('[data-service-board-indicator="quickbooks-unsynced"]')).toBeVisible();
     if (mode === "Grid") {
@@ -121,8 +135,22 @@ for (const width of [390, 820, 1440]) test(`Warranty board, indicators, modes, l
     } finally { await transfer.dispose(); }
   }
   await expect.poll(() => db.prepare("SELECT status FROM jobs WHERE id='warranty'").get().status).toBe("In Progress");
-  await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toBeVisible();
+  await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
+  await expect(card(page).locator(".warranty-job-card").or(card(page).filter({ has: page.locator(":scope.warranty-job-card") })).first()).toBeVisible();
   expect(db.prepare("SELECT billing_type,warranty_reason FROM jobs WHERE id='warranty'").get()).toEqual({ billing_type: "warranty", warranty_reason: "Installation warranty" });
+  await card(page).getByRole("button", { name: "Add Job #1543 to tomorrow", exact: true }).click();
+  await expect.poll(() => db.prepare("SELECT service_board_tomorrow_date FROM jobs WHERE id='warranty'").get().service_board_tomorrow_date).not.toBe("");
+  if (width < 768) await page.getByRole("button", { name: "Tomorrow, 1 planned job", exact: true }).click();
+  else await page.locator("[data-desktop-tomorrow-tab]").click();
+  const tomorrowCard = page.locator(width < 768 ? '[data-mobile-board-view="Tomorrow"] [data-mobile-job-id="warranty"]' : '[data-tomorrow-job-id="warranty"]');
+  await expect(tomorrowCard).toBeVisible();
+  await expect(tomorrowCard).toHaveClass(/warranty-job-card/);
+  await expect(tomorrowCard.locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
+  await expect(tomorrowCard.getByText("WARRANTY", { exact: true })).toHaveCount(0);
+  await expect(tomorrowCard.getByText("High", { exact: true })).toBeVisible();
+  await expect(tomorrowCard.getByText("In Progress", { exact: true })).toBeVisible();
+  await expect(tomorrowCard.getByLabel("Job note: Waiting on parts", { exact: true })).toBeVisible();
+  await noOverflow(page); await shot(page, "board-tomorrow", width);
 });
 
 for (const width of [390, 820, 1440]) test(`Create, edit, Warranty documents, costing and history at ${width}px`, async ({ page }) => {
@@ -198,6 +226,11 @@ for (const theme of themePresets) test(`Warranty card contrast and stable indica
     return [hex(style.backgroundColor), hex(text.color)];
   });
   expect(contrastRatio(...colors)).toBeGreaterThanOrEqual(4.5);
-  await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toBeVisible();
+  await expect(card(page).locator(".warranty-job-card").or(card(page).filter({ has: page.locator(":scope.warranty-job-card") })).first()).toBeVisible();
+  await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
+  await expect(card(page).getByText("WARRANTY", { exact: true })).toHaveCount(0);
+  await expect(card(page).getByText("High", { exact: true })).toBeVisible();
+  await expect(card(page).getByTitle("Quoted", { exact: true })).toBeVisible();
+  await expect(card(page).getByTitle("Maintenance", { exact: true })).toBeVisible();
   await shot(page, `theme-${theme.id}`, 1440);
 });

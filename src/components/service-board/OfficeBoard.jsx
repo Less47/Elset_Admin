@@ -153,7 +153,6 @@ const TomorrowJobCard = memo(function TomorrowJobCard({ job, formatDate, onOpenJ
           <p className="mt-1 text-sm text-text-secondary">{job.title}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          {isWarrantyJob(job) ? <ServiceBoardIndicatorSymbol indicator={{ id: "warranty", type: "warranty", label: "WARRANTY" }} /> : null}
           <Badge className={statusTheme.badge}>{job.status}</Badge>
           {job.status !== "Completed" ? <Badge className={urgencyTone[job.urgency] || urgencyTone.Low}>{job.urgency}</Badge> : null}
         </div>
@@ -320,7 +319,7 @@ function JobCardIndicators({ indicators, showLabels, className = "mt-2" }) {
   return (
     <div data-job-card-indicators data-indicator-presentation={showLabels ? "expanded" : "compact"} className={`flex min-w-0 max-w-full flex-wrap items-center gap-1.5 ${className}`}>
       {indicators.map((indicator) =>
-        ["quickbooks-warning", "warranty"].includes(indicator.type) ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : showLabels ? (
+        indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : showLabels ? (
           <div
             key={indicator.id}
             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary"
