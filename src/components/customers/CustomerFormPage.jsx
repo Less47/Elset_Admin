@@ -25,6 +25,7 @@ function buildDraft(customer) {
     contacts: normalized.contacts,
     contactAssignments: normalized.contactAssignments || [],
     contactUpdates: [],
+    siteContactRemovals: [],
   };
 }
 
@@ -55,11 +56,20 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const primarySite = editing ? buildCustomerSites(customer, []).find((site) => site.isPrimary) : null;
   const relatedRecords = [...getCustomerRelatedContacts(customer), ...contacts, ...(draft.contacts || []), ...(draft.contactUpdates || [])];
-  const relatedContacts = editing ? getCustomerRelatedContacts({ ...customer, contactAssignments: draft.contactAssignments }, relatedRecords) : [];
-  const updateContact = (contact) => update("contactUpdates", [
-    ...draft.contactUpdates.filter((entry) => entry.id !== contact.id),
-    { id: contact.id, ...Object.fromEntries(["name", "position", "phone", "email", "notes"].map((key) => [key, contact[key] || ""])) },
-  ]);
+  const relatedCustomer = editing ? { ...customer, contactAssignments: draft.contactAssignments,
+    sites: (customer.sites || []).map((site) => ({ ...site, contactAssignments: (site.contactAssignments || []).filter((assignment) =>
+      !draft.siteContactRemovals.some((removal) => removal.siteId === site.id && removal.contactId === assignment.contactId)) })) } : null;
+  const relatedContacts = editing ? getCustomerRelatedContacts(relatedCustomer, relatedRecords) : [];
+  const updateContact = (contact) => {
+    const keys = ["name", "position", "phone", "email", "notes"];
+    const original = [...getCustomerRelatedContacts(customer), ...contacts, ...(draft.contacts || [])].findLast((entry) => entry.id === contact.id);
+    const unchanged = original && keys.every((key) => (contact[key] || "") === (original[key] || ""));
+    update("contactUpdates", [...draft.contactUpdates.filter((entry) => entry.id !== contact.id),
+      ...(unchanged ? [] : [{ id: contact.id, ...Object.fromEntries(keys.map((key) => [key, contact[key] || ""])) }])]);
+  };
+  const removeSiteContact = (contactId, site) => setDraft((current) => ({ ...current,
+    siteContactRemovals: [...current.siteContactRemovals, { siteId: site.siteId, contactId, name: site.name,
+      contactName: relatedRecords.findLast((contact) => contact.id === contactId)?.name || relatedRecords.findLast((contact) => contact.id === contactId)?.phone || "Unnamed contact" }] }));
   const updateAssignments = (assignments) => setDraft((current) => {
     const retainedIds = new Set([...getCustomerRelatedContacts(customer, relatedRecords).map((contact) => contact.id), ...assignments.map((assignment) => assignment.contactId)]);
     return { ...current, contactAssignments: assignments,
@@ -80,6 +90,7 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
         return { name: normalized.name, email: normalized.email, phone: normalized.phone, customerType: normalized.customerType,
           contactAssignments: draft.contactAssignments,
           ...(draft.contactUpdates.length ? { contactUpdates: draft.contactUpdates } : {}),
+          ...(draft.siteContactRemovals.length ? { siteContactRemovals: draft.siteContactRemovals.map(({ siteId, contactId }) => ({ siteId, contactId })) } : {}),
           ...customerPostalFields(draft),
           ...(siteChanged ? { primarySite: {
             id: primarySite?.siteProfileId || "", expectedAddress: initial.address,
@@ -135,9 +146,17 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
         </div>
         <div className="min-w-0" data-customer-form-column="contacts">
         <WorkspaceSection title="Contacts" panel>
-          <ContactAssignmentsEditor value={draft.contactAssignments} contacts={contacts} preferredContacts={draft.contacts || []}
+          <ContactAssignmentsEditor value={draft.contactAssignments} contacts={contacts} preferredContacts={[...(draft.contacts || []), ...(draft.contactUpdates || [])]}
             relatedContacts={relatedContacts} onContactChange={editing ? updateContact : undefined}
+            onRemoveSiteContact={editing ? removeSiteContact : undefined}
             onChange={updateAssignments} />
+          {editing && draft.siteContactRemovals.length ? <div className="mt-3 grid min-w-0 gap-1 border-t pt-2" role="status">
+            <p className="text-xs text-text-secondary">Site assignments removed from this draft. Save Customer to apply; contacts will not be deleted.</p>
+            {draft.siteContactRemovals.map((removal) => <div key={`${removal.siteId}-${removal.contactId}`} className="flex min-w-0 items-center justify-between gap-2 text-xs">
+              <span className="min-w-0 [overflow-wrap:anywhere]">{removal.contactName} · {removal.name}</span>
+              <Button type="button" variant="ghost" aria-label={`Undo removal from ${removal.name}`} onClick={() => update("siteContactRemovals", draft.siteContactRemovals.filter((entry) => entry !== removal))}>Undo</Button>
+            </div>)}
+          </div> : null}
         </WorkspaceSection>
         </div>
       </fieldset>

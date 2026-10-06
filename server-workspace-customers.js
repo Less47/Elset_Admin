@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { applyCustomerContactUpdates, importCustomerContactRelationships } from "./server-workspace-contacts.js";
+import { applyCustomerContactUpdates, applyCustomerSiteContactRemovals, importCustomerContactRelationships } from "./server-workspace-contacts.js";
 import { applyPrimarySiteUpdate, customerPostalFields } from "./src/lib/customer-profile.js";
 import {
   archiveMaintenancePlansForCustomer,
@@ -485,15 +485,16 @@ export function updateCustomer(db, customerIdInput, input) {
 
   return db.transaction(() => {
     ensureCustomerExists(db, customerId);
-    const existingCustomer = getCustomerState(db, customerId);
-    const { primarySite, contactUpdates, ...customerFields } = input;
+    const { primarySite, contactUpdates, siteContactRemovals, ...customerFields } = input;
     applyCustomerContactUpdates(db, customerId, contactUpdates, input.contactAssignments);
+    const existingCustomer = getCustomerState(db, customerId);
     const nextCustomer = primarySite === undefined ? existingCustomer : applyPrimarySiteUpdate(existingCustomer, primarySite);
     const customer = normalizeCustomerInput({ ...customerFields, id: customerId }, nextCustomer);
     if (!trimText(customer.name)) {
       throw new WorkspaceCustomerError("Customer name is required.");
     }
     insertOrReplaceCustomer(db, customer);
+    applyCustomerSiteContactRemovals(db, customerId, siteContactRemovals);
     syncJobCustomerSnapshots(db, customer, customer.updatedAt);
     if (primarySite !== undefined) syncAddressReferences(db, customerId, existingCustomer.address, customer.address, customer.updatedAt);
     touchWorkspaceInfo(db, customer.updatedAt);

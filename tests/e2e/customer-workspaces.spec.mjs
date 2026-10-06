@@ -10,6 +10,7 @@ import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import { updateCustomer } from "../../server-workspace-customers.js";
 import { createJob } from "../../server-workspace-jobs.js";
+import { storeContact } from "../../server-workspace-contacts.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1019,6 +1020,93 @@ for (const width of [390, 820, 1440]) test(`Customer editor shows Site-only iden
   saved = readWorkspaceState(); const removed = saved.customers.find((entry) => entry.id === id);
   expect(removed.contactAssignments).toEqual([]); expect(siteContactLinks(removed)).toEqual(siteContactLinks(customer)); expect(removed.email).toBe(customer.email); expect(removed.phone).toBe(customer.phone);
   expect(saved.contacts).toHaveLength(before.contacts.length); expect(identities.every(contact => saved.contacts.some(entry => entry.id === contact.id))).toBe(true); expect(jobJson()).toBe(snapshot);
+  await page.goto(`${baseUrl}/customers/${id}/edit`);
+  const northMembership = row(person).locator(`[data-site-id="${id}-north"]`), southMembership = row(person).locator(`[data-site-id="${id}-south"]`);
+  await northMembership.getByRole("button", { name: /^Remove from / }).click();
+  await expect(northMembership).toHaveCount(0); await expect(southMembership).toBeVisible(); await expect(row(person)).toContainText("Site-only contact");
+  await page.getByRole("button", { name: "Save Customer", exact: true }).click(); await expect(page.locator(".record-workspace h1")).toHaveText(customer.name);
+  const unlinked = readWorkspaceState().customers.find((entry) => entry.id === id);
+  expect(unlinked.contactAssignments).toEqual([]); expect(unlinked.sites.find(site => site.id === `${id}-north`).contactAssignments.map(link => link.contactId)).toEqual([phone1]);
+  expect(unlinked.sites.find(site => site.id === `${id}-north`).contactAssignments.every(link => !link.isPrimary)).toBe(true);
+  expect(unlinked.sites.find(site => site.id === `${id}-south`).contactAssignments.some(link => link.contactId === person)).toBe(true); expect(jobJson()).toBe(snapshot);
+});
+
+for (const width of [390, 820, 1440]) test(`Customer editor removes independent Site assignments safely at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 1000 }); await login(page, { pathname: "/customers" });
+  const id = `unlink-editor-${width}`, person = `${id}-person`, duplicate = `${id}-duplicate`, blank = `${id}-blank`;
+  const north = `${id}-north`, south = `${id}-south`, name = `Assignment removal ${width}`;
+  for (const contactId of [person, duplicate]) await apiJson(page, "POST", "/api/contacts", { id: contactId, name: "Matching Person", phone: "0400 111 222", email: "matching@example.test" });
+  const dbPath = path.join(tempDataDir, "elset-workspace.db"), seedDb = openWorkspaceDb({ dbPath });
+  try { storeContact(seedDb, { id: blank }, { allowBlank: true }); } finally { seedDb.close(); }
+  await apiJson(page, "POST", "/api/customers", { id, name, email: "account@example.test", contactAssignments: [{ contactId: person, isPrimary: true, isBilling: true, roles: ["Property Manager"] }], sites: [
+    { id: north, label: `Main site ${"LongSiteNameWithoutSpaces".repeat(8)}`, address: "10 Removal St", contactAssignments: [{ contactId: person, isPrimary: true, roles: ["Caretaker"] }, { contactId: duplicate }, { contactId: blank }] },
+    { id: south, label: "South entrance", address: "20 Removal St", contactAssignments: [{ contactId: person, isPrimary: true, roles: ["Building Manager"] }] },
+  ] });
+  const job = (await apiJson(page, "POST", "/api/jobs", { customer: { id }, job: { title: name, jobAddress: "10 Removal St", requesterContact: { id: person, name: "Historical Matching Person" } } })).result;
+  const snapshots = () => { const db = openWorkspaceDb({ dbPath, readonly: true, migrate: false }); try { return db.prepare("SELECT requester_contact_json, onsite_contact_json, billing_contact_json, extra_json FROM jobs WHERE id=?").get(job.id); } finally { db.close(); } };
+  const before = readWorkspaceState(), beforeCustomer = before.customers.find(customer => customer.id === id), beforeJson = snapshots(), writes = [];
+  page.on("request", request => { if (request.method() === "PATCH" && new URL(request.url()).pathname === `/api/customers/${id}`) writes.push(request.postDataJSON().customer); });
+  const editor = page.locator('[aria-label="Customer contact management"]'), row = contactId => editor.locator(`[data-contact-id="${contactId}"]`);
+  const siteRow = (contactId, siteId) => row(contactId).locator(`[data-site-id="${siteId}"]`);
+  const open = async () => { await page.goto(`${baseUrl}/customers/${id}/edit`); await expect(row(person)).toBeVisible(); };
+  const save = async () => { await page.getByRole("button", { name: "Save Customer", exact: true }).click(); await expect(page.locator(".record-workspace h1")).toHaveText(name); };
+  const savedCustomer = () => readWorkspaceState().customers.find(customer => customer.id === id);
+  await open(); await expect(editor.locator("section[data-contact-id]")).toHaveCount(3);
+  await expect(row(person)).toContainText("Customer contact"); await expect(row(blank)).toContainText("Site-only contact");
+  await expect(row(person).getByRole("button", { name: /^Remove from / })).toHaveCount(3);
+  await row(blank).getByRole("button", { name: "Edit details", exact: true }).click();
+  await row(blank).getByLabel("Name", { exact: true }).fill("Temporary blank identity edit");
+  await row(blank).getByLabel("Name", { exact: true }).fill("");
+  await row(person).getByRole("button", { name: "Edit details", exact: true }).click();
+  await row(person).getByLabel("Phone", { exact: true }).fill(`Pending phone ${width}`);
+  await page.getByLabel("Account phone", { exact: true }).fill(`Pending account ${width}`);
+  await siteRow(person, north).getByRole("button", { name: /^Remove from / }).click();
+  await expect(siteRow(person, north)).toHaveCount(0); await expect(siteRow(person, south)).toBeVisible();
+  await expect(page.getByText("Site assignments removed from this draft. Save Customer to apply; contacts will not be deleted.")).toBeVisible();
+  await page.getByRole("button", { name: /^Undo removal from Main site/ }).click();
+  await expect(siteRow(person, north)).toBeVisible();
+  await siteRow(person, north).getByRole("button", { name: /^Remove from / }).click();
+  await expect(row(person).getByLabel("Phone", { exact: true })).toHaveValue(`Pending phone ${width}`);
+  await expect(page.getByLabel("Account phone", { exact: true })).toHaveValue(`Pending account ${width}`);
+  expect(siteContactLinks(savedCustomer())).toEqual(siteContactLinks(beforeCustomer));
+  await noModalOrOverflow(page);
+  await page.screenshot({ path: info.outputPath(`site-removal-${width}.png`), fullPage: true });
+  const failingSave = route => route.request().method() === "PATCH" ? route.fulfill({ status: 409, json: { error: "Synthetic assignment save conflict" } }) : route.continue();
+  await page.route(`**/api/customers/${id}`, failingSave); page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("button", { name: "Save Customer", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("could not be saved");
+  await expect(siteRow(person, north)).toHaveCount(0); await expect(siteRow(person, south)).toBeVisible();
+  await expect(page.getByLabel("Account phone", { exact: true })).toHaveValue(`Pending account ${width}`);
+  expect(siteContactLinks(savedCustomer())).toEqual(siteContactLinks(beforeCustomer));
+  await page.unroute(`**/api/customers/${id}`, failingSave); await save();
+  expect(writes.at(-1).contactAssignments.map(link => link.contactId)).toEqual([person]);
+  expect(writes.at(-1).contactUpdates).toEqual([{ id: person, name: "Matching Person", position: "", phone: `Pending phone ${width}`, email: "matching@example.test", notes: "" }]);
+  expect(writes.at(-1).siteContactRemovals).toEqual([{ siteId: north, contactId: person }]); expect(writes.at(-1)).not.toHaveProperty("sites");
+  let customer = savedCustomer(); expect(customer.phone).toBe(`Pending account ${width}`);
+  expect(customer.contactAssignments[0].contactId).toBe(person);
+  expect(customer.sites.find(site => site.id === north).contactAssignments.map(link => link.contactId).sort()).toEqual([blank, duplicate].sort());
+  expect(customer.sites.find(site => site.id === north).contactAssignments.every(link => !link.isPrimary)).toBe(true);
+  expect(customer.sites.find(site => site.id === south).contactAssignments[0].contactId).toBe(person);
+  await open(); await row(person).getByRole("button", { name: "Remove from customer", exact: true }).click();
+  await expect(row(person)).toContainText("Site-only contact"); await expect(siteRow(person, south)).toBeVisible(); await save();
+  customer = savedCustomer(); expect(customer.contactAssignments).toEqual([]); expect(customer.sites.find(site => site.id === south).contactAssignments[0].contactId).toBe(person);
+  await open(); await row(person).getByRole("button", { name: "Edit details", exact: true }).click();
+  await row(person).getByLabel("Phone", { exact: true }).fill(`Final saved phone ${width}`);
+  await siteRow(person, south).getByRole("button", { name: /^Remove from / }).click(); await expect(row(person)).toHaveCount(0);
+  await siteRow(blank, north).getByRole("button", { name: /^Remove from / }).click(); await expect(row(blank)).toHaveCount(0);
+  await save(); customer = savedCustomer();
+  expect(customer.contactAssignments).toEqual([]); expect(customer.sites.find(site => site.id === south).contactAssignments).toEqual([]);
+  expect(customer.sites.find(site => site.id === north).contactAssignments.map(link => link.contactId)).toEqual([duplicate]);
+  const after = readWorkspaceState();
+  expect(after.contacts.find(contact => contact.id === person).phone).toBe(`Final saved phone ${width}`);
+  expect(after.contacts.find(contact => contact.id === blank)).toEqual(before.contacts.find(contact => contact.id === blank));
+  expect(after.contacts.find(contact => contact.id === duplicate)).toEqual(before.contacts.find(contact => contact.id === duplicate));
+  expect(after.contacts.length).toBe(before.contacts.length); expect(snapshots()).toEqual(beforeJson);
+  await page.goto(`${baseUrl}/customers/${id}/edit`); await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+  await editor.getByRole("combobox", { name: "Search contacts", exact: true }).fill(`Final saved phone ${width}`);
+  await editor.getByRole("option", { name: /Matching Person/ }).click(); await save();
+  expect(savedCustomer().contactAssignments[0].contactId).toBe(person);
+  expect(readWorkspaceState().contacts.length).toBe(before.contacts.length); expect(snapshots()).toEqual(beforeJson);
 });
 
 test("empty Customer editor and direct-only contact drafts retain existing identity/save behaviour", async ({ page }) => {

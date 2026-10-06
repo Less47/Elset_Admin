@@ -56,10 +56,13 @@ function ExistingContactPicker({ contacts, onSelect }) {
   </div>;
 }
 
-function AssignedContactSites({ sites = [], showHeading = false }) {
+function AssignedContactSites({ sites = [], showHeading = false, onRemove }) {
   return sites.length ? <div className="mt-1.5 min-w-0" aria-label="Assigned sites">
-    {showHeading ? <p className="mb-1 text-xs text-text-secondary">Assigned sites (edit on the Site profile)</p> : null}
-    <div className="flex min-w-0 flex-wrap gap-1">{sites.map((site) => <Badge key={site.siteId} variant="secondary" className="h-auto max-w-full whitespace-normal [overflow-wrap:anywhere]">{site.name}{site.isPrimary ? " · Primary" : ""}{site.roles.length ? ` · ${site.roles.join(", ")}` : ""}</Badge>)}</div>
+    {showHeading ? <p className="mb-1 text-xs text-text-secondary">{onRemove ? "Assigned sites" : "Assigned sites (edit on the Site profile)"}</p> : null}
+    <div className={onRemove ? "grid min-w-0 divide-y" : "flex min-w-0 flex-wrap gap-1"}>{sites.map((site) => <div key={site.siteId} data-site-id={site.siteId} className={onRemove ? "flex min-w-0 items-center justify-between gap-2 py-1" : "contents"}>
+      <Badge variant="secondary" className={`${onRemove ? "min-w-0 shrink " : ""}h-auto max-w-full whitespace-normal [overflow-wrap:anywhere]`}>{site.name}{site.isPrimary ? " · Primary" : ""}{site.roles.length ? ` · ${site.roles.join(", ")}` : ""}</Badge>
+      {onRemove ? <Button type="button" variant="outline" className="shrink-0" aria-label={`Remove from ${site.name}`} onClick={() => onRemove(site)}>Remove</Button> : null}
+    </div>)}</div>
   </div> : null;
 }
 
@@ -82,7 +85,7 @@ export function ContactList({ contacts, customer = false }) {
 // Draft changes are submitted with the owner record in one transaction. Only edited
 // identities include `contact` or use onContactChange; related Site rows are display
 // context and never enter the direct-assignment value without an explicit add.
-export default function ContactAssignmentsEditor({ value = [], onChange, contacts = [], preferredContacts = [], relatedContacts = [], onContactChange, kind = "customer" }) {
+export default function ContactAssignmentsEditor({ value = [], onChange, contacts = [], preferredContacts = [], relatedContacts = [], onContactChange, onRemoveSiteContact, kind = "customer" }) {
   const id = useId();
   const [adding, setAdding] = useState(false);
   const [expanded, setExpanded] = useState("");
@@ -104,6 +107,7 @@ export default function ContactAssignmentsEditor({ value = [], onChange, contact
   };
   return <div className="@container grid min-w-0 gap-3 [&_button]:scroll-mb-28 [&_button]:scroll-mt-24" aria-label={`${kind === "customer" ? "Customer" : "Site"} contact management`}>
     <p className="text-xs text-text-secondary">{kind === "customer" ? "Remove from customer keeps this person available at their assigned sites. Account email and phone remain the billing fallback." : "Remove from site keeps this person available to other customers and sites."}</p>
+    {onRemoveSiteContact ? <p className="text-xs text-text-secondary">Site removals are applied when you Save Customer. Only the selected assignment is removed; the contact remains available elsewhere.</p> : null}
     <div className="min-w-0 divide-y">{!rows.length ? <p className="py-3 text-sm text-text-secondary">No contacts assigned.</p> : null}{rows.map(({ contactId, assignment }) => {
       const contact = assignment?.contact || byId.get(contactId) || { id: contactId };
       const open = expanded === contactId;
@@ -121,7 +125,7 @@ export default function ContactAssignmentsEditor({ value = [], onChange, contact
           {assignment?.isPrimary ? <Badge>Primary</Badge> : null}{assignment?.isBilling ? <Badge>Billing</Badge> : null}
           {contactRoles(assignment?.roles).map((role) => <Badge key={role} variant="outline" className="h-auto max-w-full whitespace-normal [overflow-wrap:anywhere]">{role}</Badge>)}
         </div> : null}
-        <AssignedContactSites sites={relatedById.get(contactId)?.sites} showHeading />
+        <AssignedContactSites sites={relatedById.get(contactId)?.sites} showHeading onRemove={onRemoveSiteContact ? (site) => onRemoveSiteContact(contactId, site) : undefined} />
         {open ? <div className="mt-3 grid min-w-0 gap-3 @sm:grid-cols-2">
           <p className="text-xs text-text-secondary @sm:col-span-2">Changes to this person's details appear everywhere they are assigned. Saved job contacts stay unchanged.</p>
           {[["name", "Name"], ["position", "Position"], ["phone", "Phone"], ["email", "Email"]].map(([key, label]) => <FormField key={key} label={label} htmlFor={`${fieldPrefix}-${key}`}><Input id={`${fieldPrefix}-${key}`} autoFocus={key === "name"} value={contact[key] || ""} onChange={(event) => editContact({ ...contact, [key]: event.target.value })} /></FormField>)}

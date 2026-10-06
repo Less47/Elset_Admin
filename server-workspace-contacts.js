@@ -141,6 +141,20 @@ export function unlinkContact(db, type, ownerId, contactId, customerId) {
   });
 }
 
+// Reuse the relationship operation inside the Customer save transaction. Validate
+// every stable owner/identity ID; never infer ownership from display addresses.
+export function applyCustomerSiteContactRemovals(db, customerId, removals) {
+  if (removals === undefined) return;
+  if (!Array.isArray(removals)) throw new WorkspaceContactError("Site contact removals must be a list.");
+  for (const removal of removals) {
+    assertRecord(removal);
+    const siteId = text(removal.siteId), contactId = text(removal.contactId);
+    if (!siteId || !contactId) throw new WorkspaceContactError("Site and Contact IDs are required for removal.");
+    requireContact(db, contactId);
+    unlinkContact(db, "site", siteId, contactId, customerId);
+  }
+}
+
 // This boundary alone translates pre-15 records. Identity is ONLY the stable ID;
 // names, phone numbers and email addresses never merge people.
 export function importCustomerContactRelationships(db, customer, { preserveExisting = true, replace = true } = {}) {
