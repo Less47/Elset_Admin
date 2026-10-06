@@ -31,6 +31,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { calculateInvoiceTotal, money } from "@/lib/quote-template";
 import { statuses } from "@/lib/job-status";
 import { isInvoicedRow, matchesInvoiceJobStatus } from "@/lib/invoice-filters";
+import "./InvoiceManager.css";
+
+function InvoiceAction({ label, job, disabled, onClick }) {
+  return (
+    <button
+      type="button"
+      className="invoice-cell-action"
+      aria-label={label === "Profile" ? `Open Customer Profile for Job #${job.jobNumber}` : `Open Job #${job.jobNumber}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
 
 const invoiceTimeRangeOptions = [
   { value: "all-time", label: "All time" },
@@ -49,10 +64,12 @@ const invoiceSortOptions = [
 export default function InvoiceManager({
   notice,
   jobs,
+  customers = [],
   customerId = "",
   customerName,
   onClearCustomer,
   onOpenJob,
+  onOpenCustomerProfile,
   onOpenInvoice,
   onOpenSentInvoice,
   onUpdateInvoicePayment,
@@ -72,6 +89,15 @@ export default function InvoiceManager({
   const filterTriggerRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
   const mobileRecordLayout = useMobileRecordLayout();
+  const customerIds = useMemo(() => new Set(customers.filter((customer) => typeof customer?.id === "string" && customer.id.trim()).map((customer) => customer.id)), [customers]);
+
+  function renderProfileAction(job) {
+    return <InvoiceAction label="Profile" job={job} disabled={!onOpenCustomerProfile || !customerIds.has(job.customerId)} onClick={() => onOpenCustomerProfile(job.customerId)} />;
+  }
+
+  function renderJobAction(job) {
+    return <InvoiceAction label="Job" job={job} disabled={!onOpenJob || typeof job.id !== "string" || !job.id.trim()} onClick={() => onOpenJob(job)} />;
+  }
 
   const invoiceRows = useMemo(() => {
     return jobs
@@ -341,9 +367,10 @@ export default function InvoiceManager({
                     </MobileRecordStats>
 
                     <MobileRecordActions>
-                      <Button variant="outline" aria-label={`Open Job #${row.job.jobNumber}`} onClick={() => onOpenJob(row.job)}>
-                        Job
-                      </Button>
+                      <div className="invoice-mobile-actions">
+                        {renderProfileAction(row.job)}
+                        {renderJobAction(row.job)}
+                      </div>
                       {row.invoice?.sentHistory?.length && onOpenSentInvoice ? (
                         <Button variant="outline" aria-label={`Open sent invoice for Job #${row.job.jobNumber}`} onClick={() => onOpenSentInvoice(row.job)}>
                           Open Invoice
@@ -371,84 +398,89 @@ export default function InvoiceManager({
           ) : (
             <>
             <div className="overflow-x-auto text-xs 2xl:hidden">
-              <div className="data-grid grid min-w-[560px] gap-px bg-surface-selected md:min-w-0">
-                <div className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_128px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
-                  <span>Job</span>
-                  <span>Invoice</span>
-                  <span>Payment</span>
-                  <span className="text-right">Actions</span>
-                </div>
+              <table aria-label="Invoices" className="data-grid grid w-full min-w-[560px] gap-px bg-surface-selected md:min-w-0">
+                <thead>
+                <tr className="data-grid-header grid grid-cols-[minmax(0,1.25fr)_112px_128px_72px_56px] gap-px bg-surface-selected font-semibold uppercase tracking-[0.12em] text-muted-foreground [&>*]:bg-surface-raised">
+                  <th scope="col" className="text-left">Job</th>
+                  <th scope="col" className="text-left">Invoice</th>
+                  <th scope="col" className="text-left">Payment</th>
+                  <th scope="col" className="invoice-action-heading">Profile</th>
+                  <th scope="col" className="invoice-action-heading">Job</th>
+                </tr>
+                </thead>
+                <tbody className="grid gap-px">
 
                 {filteredRows.map((row) => (
-                  <div
+                  <tr
                     key={row.job.id}
                     {...recordRowOpenProps(`Open invoice editor for Job #${row.job.jobNumber}`, () => onOpenInvoice(row.job))}
-                    className="data-grid-row grid cursor-pointer grid-cols-[minmax(0,1.25fr)_112px_128px_128px] gap-px bg-surface-selected transition [&>*]:bg-card"
+                    role="row"
+                    className="data-grid-row grid cursor-pointer grid-cols-[minmax(0,1.25fr)_112px_128px_72px_56px] gap-px bg-surface-selected transition [&>*]:bg-card"
                   >
-                    <div className="min-w-0">
+                    <td className="min-w-0">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Job #{row.job.jobNumber}</p>
                       <p className="truncate font-semibold text-foreground">{row.job.customerName}</p>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.job.title}</p>
                       {row.job.ocNumber ? <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Client ref {row.job.ocNumber}</p> : null}
-                    </div>
+                    </td>
 
-                    <div className="min-w-0 text-text-secondary">
+                    <td className="min-w-0 text-text-secondary">
                       <Badge className={`${row.invoiceStatus.className} px-1.5 py-0 text-[10px]`}>{row.invoiceStatus.label}</Badge>
                       <p className="mt-1 truncate text-[11px]">Issued {row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.invoice ? money(row.total) : money(0)}</p>
-                    </div>
+                    </td>
 
-                    <div className="min-w-0 text-text-secondary">
+                    <td className="min-w-0 text-text-secondary">
                       <p className="truncate font-medium text-foreground">Bal {row.invoice ? money(row.paymentSummary.balanceAmount) : money(0)}</p>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Paid {row.invoice ? money(row.paymentSummary.paidAmount) : money(0)}</p>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.paymentSummary.paymentCount} payments</p>
-                    </div>
+                    </td>
 
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenJob(row.job)}>
-                        Job
-                      </Button>
-                      {!row.invoice ? <Button variant="outline" size="sm" className="h-7 rounded-md border-border px-2 text-[11px]" onClick={() => onOpenInvoice(row.job)}>
-                        Create
-                      </Button> : null}
-                    </div>
-                  </div>
+                    <td className="invoice-action-cell">{renderProfileAction(row.job)}</td>
+                    <td className="invoice-action-cell">{renderJobAction(row.job)}</td>
+                  </tr>
                 ))}
-              </div>
+                </tbody>
+              </table>
             </div>
             <div className="hidden overflow-x-auto 2xl:block">
             <div className="min-w-[1460px]">
-              <div className="data-grid grid gap-px bg-surface-selected">
-                <div className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_180px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
-                  <span>Job</span>
-                  <span>Customer</span>
-                  <span>Work</span>
-                  <span>Issued</span>
-                  <span>Due</span>
-                  <span className="text-right">Total</span>
-                  <span>Status</span>
-                  <span>Payment</span>
-                  <span className="text-right">Actions</span>
-                </div>
+              <table aria-label="Invoices" className="data-grid grid w-full gap-px bg-surface-selected">
+                <thead>
+                <tr className="data-grid-header grid grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_72px_56px] gap-px bg-surface-selected text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground [&>*]:bg-surface-raised">
+                  <th scope="col" className="text-left">Job</th>
+                  <th scope="col" className="text-left">Customer</th>
+                  <th scope="col" className="text-left">Work</th>
+                  <th scope="col" className="text-left">Issued</th>
+                  <th scope="col" className="text-left">Due</th>
+                  <th scope="col" className="text-right">Total</th>
+                  <th scope="col" className="text-left">Status</th>
+                  <th scope="col" className="text-left">Payment</th>
+                  <th scope="col" className="invoice-action-heading">Profile</th>
+                  <th scope="col" className="invoice-action-heading">Job</th>
+                </tr>
+                </thead>
+                <tbody className="grid gap-px">
 
                 {filteredRows.map((row) => (
-                  <div
+                  <tr
                     key={row.job.id}
                     {...recordRowOpenProps(`Open invoice editor for Job #${row.job.jobNumber}`, () => onOpenInvoice(row.job))}
-                    className="data-grid-row grid cursor-pointer grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_180px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
+                    role="row"
+                    className="data-grid-row grid cursor-pointer grid-cols-[110px_1.35fr_1.35fr_130px_130px_130px_130px_230px_72px_56px] gap-px bg-surface-selected text-sm transition [&>*]:bg-card"
                   >
-                    <p className="font-semibold text-foreground">#{row.job.jobNumber}</p>
-                    <div className="min-w-0">
+                    <td className="font-semibold text-foreground">#{row.job.jobNumber}</td>
+                    <td className="min-w-0">
                       <p className="truncate font-semibold text-foreground">{row.job.customerName}</p>
                       <p className="mt-1 truncate text-xs text-muted-foreground">{row.job.customerEmail || "No email saved"}</p>
-                    </div>
-                    <div className="min-w-0">
+                    </td>
+                    <td className="min-w-0">
                       <p className="truncate text-foreground">{row.job.title}</p>
                       <p className="mt-1 truncate text-xs text-muted-foreground">{row.job.jobAddress || "No address"}</p>
                       {row.job.ocNumber ? <p className="mt-1 truncate text-xs text-muted-foreground">Client ref {row.job.ocNumber}</p> : null}
-                    </div>
-                    <p className="text-text-secondary">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</p>
-                    <div>
+                    </td>
+                    <td className="text-text-secondary">{row.invoice ? formatDate(row.invoice.issueDate) : "Not set"}</td>
+                    <td>
                       {row.invoice ? (
                         <Input
                           type="date"
@@ -459,12 +491,12 @@ export default function InvoiceManager({
                       ) : (
                         <span className="text-muted-foreground">Not set</span>
                       )}
-                    </div>
-                    <p className="text-right font-semibold text-foreground">{row.invoice ? money(row.total) : money(0)}</p>
-                    <div>
+                    </td>
+                    <td className="text-right font-semibold text-foreground">{row.invoice ? money(row.total) : money(0)}</td>
+                    <td>
                       <Badge className={row.invoiceStatus.className}>{row.invoiceStatus.label}</Badge>
-                    </div>
-                    <div>
+                    </td>
+                    <td>
                       {row.invoice ? (
                         <div className="space-y-1">
                           <p className="font-medium text-foreground">
@@ -483,18 +515,13 @@ export default function InvoiceManager({
                     ) : (
                       <span className="text-muted-foreground">No invoice</span>
                     )}
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenJob(row.job)}>
-                      Job
-                    </Button>
-                    {!row.invoice ? <Button variant="outline" size="sm" className="rounded-md border-border" onClick={() => onOpenInvoice(row.job)}>
-                      Create Invoice
-                    </Button> : null}
-                  </div>
-                </div>
+                  </td>
+                  <td className="invoice-action-cell">{renderProfileAction(row.job)}</td>
+                  <td className="invoice-action-cell">{renderJobAction(row.job)}</td>
+                </tr>
                 ))}
-              </div>
+                </tbody>
+              </table>
             </div>
             </div>
             </>

@@ -471,8 +471,10 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             customerId={chrome.invoiceCustomerId}
             customerName={data.customers.find((customer) => customer.id === chrome.invoiceCustomerId)?.name}
             onClearCustomer={chrome.clearInvoiceCustomer}
+            customers={data.customers}
             jobs={data.jobs.filter((job) => job.invoice || !(data.deletedInvoices || []).some((record) => record.jobId === job.id))}
             onOpenJob={handleOpenJob}
+            onOpenCustomerProfile={handleOpenCustomerProfile}
             onOpenInvoice={(job) => handleOpenDoc(job, "invoice")}
             onOpenSentInvoice={(job) => handleOpenSentDocumentCopy(job, "invoice")}
             onUpdateInvoicePayment={handleUpdateInvoicePayment}

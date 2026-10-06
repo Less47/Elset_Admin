@@ -24,6 +24,9 @@ let serverOutput = "";
 function workspaceFixture() {
   const fixture = JSON.parse(fs.readFileSync(path.join(repoRoot, "fixtures/demo-workspace.json"), "utf8"));
   const original = fixture.jobs[0];
+  const owner = fixture.customers.find((customer) => customer.id === original.customerId);
+  // Same display name/address: action ownership must come only from the persisted ID.
+  fixture.customers.push({ ...owner, id: "invoice-other-owner", sites: [] });
   const today = new Date().toISOString().slice(0, 10);
   const cases = [
     ["Completed", "Alpha completed service", "unpaid", 200],
@@ -36,6 +39,7 @@ function workspaceFixture() {
   ];
   fixture.jobs = cases.map(([status, title, invoiceStatus, rate], index) => ({
     ...original, id: `invoice-filter-${index + 1}`, jobNumber: 2001 + index,
+    customerId: index === 1 ? "invoice-other-owner" : original.customerId,
     status, title, quote: null, notes: [], photos: [], createdAt: `${today}T00:00:00.000Z`,
     invoice: invoiceStatus === "not-invoiced" ? null : {
       type: "invoice", issueDate: index === 6 ? "2000-01-01" : today, dueDate: `2099-01-0${index + 1}`,
@@ -73,11 +77,13 @@ test.beforeAll(async ({ browser }) => {
     const { auth, ensureAuthReady } = await import(${JSON.stringify(pathToFileURL(path.join(repoRoot, "server-auth.js")).href)});
     await ensureAuthReady();
     const context = await auth.$context;
+    for (const role of ["admin", "technician"]) {
     const user = await context.internalAdapter.createUser({
-      email: "invoice.filter@auth.elset.local", emailVerified: true, name: "Invoice Filter Test", role: "admin",
-      username: "invoicefilter", displayUsername: "Invoice Filter Test", workspaceRole: "admin", staffId: "",
+      email: role + ".invoice.filter@auth.elset.local", emailVerified: true, name: "Invoice Filter Test", role,
+      username: role === "admin" ? "invoicefilter" : "invoicetech", displayUsername: "Invoice Filter Test", workspaceRole: role, staffId: "",
     });
     await context.internalAdapter.linkAccount({ userId: user.id, accountId: user.id, providerId: "credential", password: await context.password.hash(${JSON.stringify(password)}) });
+    }
   `], { cwd: repoRoot, env, encoding: "utf8" });
   if (seed.status !== 0) throw new Error(`Test login setup failed: ${seed.stdout}\n${seed.stderr}`);
   server = spawn(process.execPath, ["server.js"], { cwd: repoRoot, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -111,9 +117,15 @@ test.afterAll(async () => {
   if (target.startsWith(path.join(os.tmpdir(), "elset-invoice-filter-"))) fs.rmSync(target, { recursive: true, force: true });
 });
 
-async function openInvoices(browser, viewport = viewports[1], preset) {
+async function openInvoices(browser, viewport = viewports[1], preset, statePatch) {
   const context = await browser.newContext({ storageState, viewport, hasTouch: viewport.width < 1280, isMobile: viewport.width < 768, locale: "en-AU", reducedMotion: "reduce" });
   const page = await context.newPage();
+  if (statePatch) await page.route("**/api/app-state", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    statePatch(body.state);
+    await route.fulfill({ response, json: body });
+  });
   if (preset) {
     // Supply a personal theme response in this test context without writing shared settings.
     await page.route("**/api/user-preferences", async (route) => {
@@ -161,6 +173,134 @@ async function capture(page, info, name) {
   const body = await page.screenshot({ path: path.join(screenshots, `${name}.png`) });
   await info.attach(name, { body, contentType: "image/png" });
 }
+
+for (const viewport of [viewports[0], viewports[1], viewports[4], viewports[5]]) {
+  test(`Profile and Job actions preserve ownership, fill cells and support keyboard at ${viewport.width}px`, async ({ browser }, info) => {
+    const before = readWorkspace();
+    const ownerId = before.jobs.find((job) => job.jobNumber === 2001).customerId;
+    const { context, page, requests } = await openInvoices(browser, viewport);
+    const row = (number) => rows(page).filter({ hasText: `#${number}` });
+    try {
+      const profile = row(2001).getByRole("button", { name: "Open Customer Profile for Job #2001", exact: true });
+      const job = row(2001).getByRole("button", { name: "Open Job #2001", exact: true });
+      await expect(profile).toHaveText("Profile");
+      await expect(job).toHaveText("Job");
+      if (viewport.width >= 768) {
+        const table = page.getByRole("table", { name: "Invoices", exact: true }).filter({ visible: true });
+        await expect(table.getByRole("columnheader").nth(-2)).toHaveText("Profile");
+        await expect(table.getByRole("columnheader").last()).toHaveText("Job");
+        await expect(table.getByRole("columnheader", { name: "Actions", exact: true })).toHaveCount(0);
+        expect(await profile.evaluate((element) => element.closest("td") === element.parentElement)).toBe(true);
+        expect(await job.evaluate((element) => element.closest("td") === element.parentElement)).toBe(true);
+        for (const control of [profile, job]) {
+          const geometry = await control.evaluate((element) => {
+            const cell = element.parentElement;
+            const buttonRect = element.getBoundingClientRect(), cellRect = cell.getBoundingClientRect();
+            const style = getComputedStyle(element), cellStyle = getComputedStyle(cell);
+            return { edges: ["top", "right", "bottom", "left"].map((edge) => Math.abs(buttonRect[edge] - cellRect[edge])),
+              padding: cellStyle.padding, radius: style.borderRadius, width: cellRect.width, height: cellRect.height, cursor: style.cursor };
+          });
+          expect(Math.max(...geometry.edges)).toBeLessThanOrEqual(1);
+          expect(geometry.padding).toBe("0px");
+          expect(geometry.radius).toBe("0px");
+          expect(geometry.width).toBeLessThanOrEqual(72);
+          expect(geometry.height).toBeGreaterThanOrEqual(44);
+          expect(geometry.cursor).toBe("pointer");
+        }
+        const profileRect = await profile.boundingBox(), jobRect = await job.boundingBox();
+        expect(jobRect.x - profileRect.x - profileRect.width).toBeCloseTo(1, 0);
+      } else {
+        for (const control of [profile, job]) expect((await control.boundingBox()).height).toBeGreaterThanOrEqual(44);
+        await expect(page.getByRole("table", { name: "Invoices", exact: true })).toHaveCount(0);
+      }
+      await noOverflow(page);
+      await capture(page, info, `invoice-actions-${viewport.width}`);
+      // Edge click proves that the former surrounding whitespace is interactive.
+      await profile.click({ position: { x: 2, y: 2 } });
+      await expect(page).toHaveURL(`${baseUrl}/customers/${ownerId}`);
+      await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
+      await expect(page).toHaveURL(`${baseUrl}/invoices`);
+      const otherProfile = row(2002).getByRole("button", { name: "Open Customer Profile for Job #2002", exact: true });
+      await page.keyboard.press("Tab");
+      await otherProfile.focus();
+      await expect(otherProfile).toBeFocused();
+      expect(await otherProfile.evaluate((element) => ({ outline: getComputedStyle(element).outlineStyle, offset: getComputedStyle(element).outlineOffset }))).toEqual({ outline: "solid", offset: "-2px" });
+      await otherProfile.press("Enter");
+      await expect(page).toHaveURL(`${baseUrl}/customers/invoice-other-owner`);
+      await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
+      await job.focus();
+      await expect(job).toBeFocused();
+      await job.press("Space");
+      await expect(page).toHaveURL(`${baseUrl}/jobs/invoice-filter-1`);
+      await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
+      await row(2002).getByRole("button", { name: "Open Job #2002", exact: true }).click({ position: { x: 2, y: 2 } });
+      await expect(page).toHaveURL(`${baseUrl}/jobs/invoice-filter-2`);
+      expect(requests.filter((request) => !["GET", "HEAD"].includes(request.method))).toEqual([]);
+      expect(readWorkspace()).toEqual(before);
+    } finally { await context.close(); }
+  });
+}
+
+for (const viewport of [viewports[0], viewports[1], viewports[5]]) {
+  test(`missing Customer and Job references keep disabled actions and layout at ${viewport.width}px`, async ({ browser }) => {
+    const before = readWorkspace();
+    const { context, page } = await openInvoices(browser, viewport, undefined, (state) => {
+      state.jobs.find((job) => job.jobNumber === 2001).customerId = "missing-customer";
+      state.jobs.find((job) => job.jobNumber === 2002).customerId = "";
+      state.jobs.find((job) => job.jobNumber === 2003).id = "";
+    });
+    try {
+      for (const number of [2001, 2002]) {
+        const action = rows(page).filter({ hasText: `#${number}` }).getByRole("button", { name: `Open Customer Profile for Job #${number}`, exact: true });
+        await expect(action).toBeDisabled();
+        await action.evaluate((element) => element.click());
+        await expect(page).toHaveURL(`${baseUrl}/invoices`);
+      }
+      const jobAction = rows(page).filter({ hasText: "#2003" }).getByRole("button", { name: "Open Job #2003", exact: true });
+      await expect(jobAction).toBeDisabled();
+      await jobAction.evaluate((element) => element.click());
+      await expect(page).toHaveURL(`${baseUrl}/invoices`);
+      await expect(rows(page).filter({ hasText: "#2003" }).getByRole("button", { name: "Open Customer Profile for Job #2003", exact: true })).toBeEnabled();
+      await expect(rows(page).filter({ hasText: "#2001" }).getByRole("button", { name: "Open Job #2001", exact: true })).toBeEnabled();
+      await noOverflow(page);
+      expect(readWorkspace()).toEqual(before);
+    } finally { await context.close(); }
+  });
+}
+
+test("invoice row editor interactions still ignore nested Profile, Job and date controls", async ({ browser }) => {
+  const { context, page } = await openInvoices(browser, viewports[0]);
+  try {
+    const row = rows(page).filter({ hasText: "#2001" });
+    const date = row.locator('input[type="date"]');
+    await date.focus();
+    await date.press("Enter");
+    await expect(page).toHaveURL(`${baseUrl}/invoices`);
+    await row.focus();
+    await row.press("Enter");
+    await expect(page).toHaveURL(`${baseUrl}/jobs/invoice-filter-1/invoice`);
+    await page.getByRole("button", { name: "Back to Invoices", exact: true }).click();
+    await row.locator("td").first().dblclick();
+    await expect(page).toHaveURL(`${baseUrl}/jobs/invoice-filter-1/invoice`);
+  } finally { await context.close(); }
+});
+
+test("technicians retain existing restrictions on Invoices and Customer Profiles", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(baseUrl);
+    await page.getByPlaceholder("Enter your username").fill("invoicetech");
+    await page.getByPlaceholder("Enter your password").fill(password);
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Application" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Application" }).getByRole("button", { name: "Invoices", exact: true })).toHaveCount(0);
+    await page.goto(`${baseUrl}/invoices`);
+    await expect(page.locator(".invoice-cell-action")).toHaveCount(0);
+    await page.goto(`${baseUrl}/customers/invoice-other-owner`);
+    await expect(page.getByText("You do not have permission to view customer records.", { exact: true })).toBeVisible();
+  } finally { await context.close(); }
+});
 
 test("Job Status composes with invoice status, search, dates and existing sorts without requests or record changes", async ({ browser }) => {
   const before = readWorkspace();
