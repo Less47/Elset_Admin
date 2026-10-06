@@ -233,9 +233,20 @@ test("account remains compact and legible across all themes on desktop, tablet a
         if (viewport.width >= 1024) {
           const sites = await page.locator('[data-customer-section="sites"]').boundingBox();
           const jobs = await page.locator('[data-customer-section="jobs"]').boundingBox();
-          expect(box.y + box.height).toBeLessThan(sites.y);
+          expect(box.y + box.height).toBeCloseTo(sites.y, 0);
           expect(box.y).toBeLessThan(300);
-          expect(box.y + box.height).toBeLessThan(jobs.y);
+          expect(box.x + box.width).toBeLessThanOrEqual(jobs.x);
+          expect(box.y).toBeCloseTo(jobs.y, 0);
+          const scrollbar = await page.locator('[data-customer-section="jobs"]').evaluate((element) => {
+            const swatch = document.createElement("span");
+            swatch.style.cssText = "position:absolute;visibility:hidden;color:var(--muted-foreground);background-color:var(--card)";
+            element.append(swatch);
+            const style = getComputedStyle(swatch);
+            const colors = { actual: getComputedStyle(element).scrollbarColor, expected: `${style.color} ${style.backgroundColor}` };
+            swatch.remove();
+            return colors;
+          });
+          expect(scrollbar.actual).toBe(scrollbar.expected);
         } else {
           await expect(page.getByRole("tab", { name: "Account", exact: true })).toHaveAttribute("aria-selected", "true");
           await page.reload();

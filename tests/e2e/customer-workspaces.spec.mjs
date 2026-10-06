@@ -22,6 +22,7 @@ const unrelatedCustomerName = "Arcadia Example Apartments";
 const fixtureCustomerId = "demo-customer-arcadia";
 const denseCustomerId = "customer-layout-many";
 const emptyCustomerId = "customer-layout-empty";
+const historyCustomerId = "customer-layout-history";
 
 let tempDataDir = "";
 let baseUrl = "";
@@ -40,6 +41,13 @@ function readFixture() {
     customerType: "business", address: sites[0].address, sites, createdAt: "2026-01-01T00:00:00.000Z",
   };
   fixture.customers.push(customer, { id: emptyCustomerId, name: "Empty sections customer", sites: [], contacts: [], createdAt: customer.createdAt });
+  fixture.customers.push({ ...customer, id: historyCustomerId, name: "History workspace customer", address: "1 History Street",
+    sites: [1, 2].map((number) => ({ ...sites[number - 1], id: `history-site-${number}`, label: `History site ${number}`, address: `${number} History Street`, accessNotes: "Call the caretaker", ocNumber: `PS-HISTORY-${number}` })) });
+  fixture.jobs.push(...Array.from({ length: 50 }, (_, index) => ({
+    ...fixture.jobs[0], id: `history-job-${index}`, jobNumber: 9000 + index, customerId: historyCustomerId, customerName: "History workspace customer",
+    jobAddress: `${1 + index % 2} History Street`, title: `Historical service ${index + 1}`, status: index % 3 ? "Completed" : "To Do",
+    updatedAt: new Date(Date.UTC(2026, 9, 6, 12, 0, index)).toISOString(), notes: [], photos: [], quote: null, invoice: null,
+  })));
   fixture.jobs.push(...Array.from({ length: 16 }, (_, index) => ({
     ...fixture.jobs[0], id: `layout-job-${index}`, jobNumber: 5000 + index, customerId: denseCustomerId, customerName: customer.name,
     customerEmail: customer.email, customerPhone: customer.phone, jobAddress: sites[index % sites.length].address,
@@ -103,6 +111,10 @@ async function seedWorkspaceDatabase() {
       id: `layout-contact-${index}`, name: `Contact ${index + 1} ${"LongContactName".repeat(6)}`, role: "Site manager",
       phone: "0400 123 456", email: `${"longemail".repeat(16)}${index}@layout.example.test`,
     })) });
+    updateCustomer(db, historyCustomerId, { contacts: [
+      { id: "history-primary", name: "History caretaker", role: "Caretaker", phone: "0400 123 456", isPrimary: true },
+      { id: "history-billing", name: "History accounts", role: "Accounts", email: "history@example.test", isBilling: true },
+    ] });
   } finally {
     db.close();
   }
@@ -415,70 +427,149 @@ test("short secondary pages do not scroll and their header remains edge to edge 
 });
 const screenshots = path.join(repoRoot, "test-results/customer-section-consistency/screenshots");
 
+for (const [width, height] of [[390, 844], [820, 1180], [1440, 900]]) {
+  test(`Customer workspace keeps continuous sections and independent Job History at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height });
+    await login(page, { pathname: `/customers/${historyCustomerId}` });
+    const before = readWorkspaceState();
+    const writes = [];
+    page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/") && !["GET", "HEAD"].includes(request.method())) writes.push(request.url()); });
+    await expect(page.locator('[data-account-balance]')).toHaveText("$0.00");
+    await expect(page.locator('[data-customer-section="jobs"] [data-mobile-record-card]')).toHaveCount(50);
+    await expect(page.locator('[data-customer-section="contacts"]')).toContainText("History caretaker");
+    await expect(page.locator('[data-customer-section="contacts"]')).toContainText("History accounts");
+    for (const selector of ['[data-customer-section="contacts"] [data-contact-id]', '[data-customer-section="sites"] [data-mobile-record-card]', '[data-customer-section="jobs"] [data-mobile-record-card]']) {
+      const styles = await page.locator(selector).evaluateAll((elements) => elements.map((element) => ({ border: getComputedStyle(element).borderTopWidth, radius: getComputedStyle(element).borderRadius })));
+      expect(styles.length).toBeGreaterThan(1);
+      expect(styles.slice(1).every((style) => style.border === "1px" && style.radius === "0px")).toBe(true);
+    }
+    const jobs = page.locator('[data-customer-section="jobs"]');
+    if (width >= 1024) {
+      await checkCustomerGrid(page);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(1);
+      const region = page.getByRole("region", { name: "Customer job history", exact: true });
+      const heading = region.locator("header");
+      const headingBefore = await heading.boundingBox();
+      const stationaryBefore = await page.locator('[data-customer-column="left"], [data-customer-column="middle"]').evaluateAll((elements) => elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y, height: element.getBoundingClientRect().height })));
+      expect(await region.evaluate((element) => ({ overflow: getComputedStyle(element).overflowY, minHeight: getComputedStyle(element).minHeight, scrollbar: getComputedStyle(element).scrollbarWidth, overflows: element.scrollHeight > element.clientHeight }))).toEqual({ overflow: "auto", minHeight: "0px", scrollbar: "auto", overflows: true });
+      await region.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+      expect(await page.evaluate(() => scrollY)).toBe(0);
+      expect(await page.locator('[data-customer-column="left"], [data-customer-column="middle"]').evaluateAll((elements) => elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y, height: element.getBoundingClientRect().height })))).toEqual(stationaryBefore);
+      expect((await heading.boundingBox()).y).toBeCloseTo(headingBefore.y, 0);
+      await expect(region.getByRole("button", { name: "Open Job #9000", exact: true })).toBeInViewport();
+      await region.evaluate((element) => { element.scrollTop = 0; });
+      await region.focus();
+      await region.press("PageDown");
+      await expect.poll(() => region.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await region.evaluate((element) => { element.scrollTop = 0; });
+      await captureWorkspace(page, info, `continuous-overview-${width}`);
+    } else {
+      expect(await page.locator('[data-customer-section]').evaluateAll((elements) => elements.map((element) => element.dataset.customerSection))).toEqual(["details", "contacts", "account", "sites", "jobs"]);
+      expect(await page.locator('.customer-workspace-grid').evaluate((element) => getComputedStyle(element).display)).toBe("block");
+      expect(await jobs.evaluate((element) => ({ overflow: getComputedStyle(element).overflowY, constrained: element.scrollHeight > element.clientHeight + 1 }))).toEqual({ overflow: "visible", constrained: false });
+      await jobs.getByRole("button", { name: "Open Job #9000", exact: true }).scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+      await page.evaluate(() => scrollTo(0, 0));
+      await captureWorkspace(page, info, `continuous-overview-${width}`);
+      await page.getByRole("tab", { name: /^Job History/ }).click();
+      await expect(jobs.locator('[data-mobile-record-card]')).toHaveCount(50);
+      await page.getByRole("tab", { name: "Overview", exact: true }).click();
+    }
+    await noModalOrOverflow(page);
+    await page.getByRole("tab", { name: /^Maintenance/ }).click();
+    await expect(page.getByText("No maintenance contracts recorded.", { exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "Overview", exact: true }).click();
+    await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
+    await expect(page).toHaveURL(`${baseUrl}/customers/${historyCustomerId}/edit`);
+    await page.goBack();
+    await page.getByRole("button", { name: "Add Site", exact: true }).click();
+    await expect(page).toHaveURL(`${baseUrl}/customers/${historyCustomerId}/sites/new`);
+    await page.goBack();
+    await page.getByRole("button", { name: "Open Site Profile", exact: true }).first().click();
+    await expect(page).toHaveURL(`${baseUrl}/customers/${historyCustomerId}/sites/history-site-1`);
+    await page.goBack();
+    const openJob = page.getByRole("button", { name: "Open Job #9049", exact: true });
+    await openJob.focus();
+    await openJob.press("Enter");
+    await expect(page).toHaveURL(`${baseUrl}/jobs/history-job-49`);
+    expect(writes).toEqual([]);
+    expect(readWorkspaceState()).toEqual(before);
+  });
+}
+
 async function showCustomerSection(page, label) {
   if (page.viewportSize().width < 1024) await page.getByRole("tab", { name: new RegExp("^" + label) }).click();
-  else await expect(page.getByRole("tab")).toHaveCount(0);
+  else await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
   const section = { Overview: "details", Sites: "sites", Contacts: "contacts", "Job History": "jobs" }[label];
   await expect(page.locator(`[data-customer-section="${section}"]`)).toBeVisible();
 }
 
 async function checkCustomerGrid(page) {
   await expect(page.locator(".customer-workspace-grid")).toBeVisible();
-  await expect(page.getByRole("tab", { includeHidden: true })).toHaveCount(0);
-  await expect(page.getByRole("tabpanel", { includeHidden: true })).toHaveCount(0);
-  await expect(page.locator('[data-customer-section]')).toHaveCount(6);
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await expect(page.getByRole("tabpanel")).toHaveCount(1);
+  await expect(page.locator('[data-customer-section]')).toHaveCount(5);
   const boxes = {};
   await expect(page.locator('[data-account-balance]')).toBeVisible();
-  for (const name of ["details", "sites", "contacts", "account", "maintenance", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
+  for (const name of ["details", "sites", "contacts", "account", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
   expect(boxes.details.x).toBeCloseTo(boxes.contacts.x, 0);
-  expect(boxes.sites.x).toBeCloseTo(boxes.jobs.x, 0);
+  expect(boxes.sites.x).toBeCloseTo(boxes.account.x, 0);
   expect(boxes.details.y).toBeCloseTo(boxes.account.y, 0);
-  expect(boxes.contacts.y - boxes.details.y - boxes.details.height).toBeCloseTo(12, 0);
-  expect(boxes.sites.y - boxes.account.y - boxes.account.height).toBeCloseTo(12, 0);
-  expect(boxes.maintenance.y - boxes.sites.y - boxes.sites.height).toBeCloseTo(12, 0);
-  expect(boxes.jobs.y - boxes.maintenance.y - boxes.maintenance.height).toBeCloseTo(12, 0);
-  expect(boxes.sites.x - boxes.details.x - boxes.details.width).toBeCloseTo(12, 0);
-  expect(boxes.details.width / boxes.sites.width).toBeCloseTo(2 / 3, 2);
+  expect(boxes.contacts.y - boxes.details.y - boxes.details.height).toBeCloseTo(0, 0);
+  expect(boxes.sites.y - boxes.account.y - boxes.account.height).toBeCloseTo(0, 0);
+  expect(boxes.jobs.y).toBeCloseTo(boxes.details.y, 0);
+  expect(boxes.account.x - boxes.details.x - boxes.details.width).toBeCloseTo(1, 0);
+  expect(boxes.jobs.x - boxes.account.x - boxes.account.width).toBeCloseTo(1, 0);
+  const columns = await page.locator('[data-customer-column]').evaluateAll((elements) => elements.map((element) => {
+    const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+    return { width: rect.width, height: rect.height, border: style.borderLeftWidth };
+  }));
+  expect(columns[0].width / columns[1].width).toBeCloseTo(30 / 35, 2);
+  expect(columns[1].width / columns[2].width).toBeCloseTo(1, 2);
+  expect(columns.map((column) => column.border)).toEqual(["0px", "1px", "1px"]);
+  expect(columns[0].height).toBeCloseTo(columns[2].height, 0);
+  expect(await page.locator('[data-customer-section="contacts"]').evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
+  expect(await page.locator('[data-customer-section="sites"]').evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
   await expect(page.locator('[data-customer-section="details"]').getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Destructive customer actions" }).getByRole("button", { name: "Delete Customer", exact: true })).toBeVisible();
   const header = await page.locator('.record-workspace-header').boundingBox();
   const grid = await page.locator('.customer-workspace-grid').boundingBox();
   expect(header.y).toBe(0);
-  expect(grid.x).toBeGreaterThan(header.x);
-  expect(grid.x + grid.width).toBeLessThan(header.x + header.width);
+  expect(grid.x).toBeCloseTo(header.x, 0);
+  expect(grid.x + grid.width).toBeCloseTo(header.x + header.width, 0);
   expect(header.x + header.width).toBeCloseTo(page.viewportSize().width, 0);
   const danger = await page.locator('[data-customer-danger-zone]').boundingBox();
-  expect(danger.y - grid.y - grid.height).toBeCloseTo(12, 0);
-  await expect(page.locator('.customer-section-panel')).toHaveCount(6);
-  const styles = await page.locator('.customer-section-panel').evaluateAll((panels) => panels.map((panel) => {
+  expect(danger.y - grid.y - grid.height).toBeCloseTo(0, 0);
+  await expect(page.locator('.customer-section-panel, [data-customer-workspace] .record-major-panel')).toHaveCount(0);
+  expect(await page.locator('.customer-workspace-grid').evaluate((element) => getComputedStyle(element).gap)).toBe("normal");
+  const styles = await page.locator('.customer-section').evaluateAll((panels) => panels.map((panel) => {
     const style = getComputedStyle(panel);
     const header = panel.querySelector('.customer-section-header');
     return {
-      background: style.backgroundColor, border: style.border, radius: style.borderRadius,
+      background: style.backgroundColor, border: style.borderLeftWidth, radius: style.borderRadius,
       headerPadding: getComputedStyle(header).padding, headerHeight: header.getBoundingClientRect().height,
       bodyPadding: getComputedStyle(panel.querySelector('.customer-section-body')).padding,
       titleInsideHeader: header.contains(panel.querySelector('h2')),
     };
   }));
   for (const style of styles) { expect(style.border).toBe(styles[0].border); expect(style.background).toBe(styles[0].background); expect(style.titleInsideHeader).toBe(true); }
-  expect(styles[0].border).toMatch(/^1px solid/);
-  expect(styles[0].radius).toBe("8px");
-  expect(styles[0].headerHeight).toBe(44);
+  expect(styles[0].border).toBe("0px");
+  expect(styles[0].radius).toBe("0px");
+  expect(styles[0].headerHeight).toBeGreaterThanOrEqual(44);
   expect(styles[0].titleInsideHeader).toBe(true);
   expect(styles[0].bodyPadding).toBe("10px 12px");
   await expect(page.locator('[data-customer-section="sites"] .customer-section-header').getByRole("button", { name: "Add Site", exact: true })).toBeVisible();
-  await expect(page.locator('.customer-section-header .customer-section-count')).toHaveCount(3);
+  await expect(page.locator('.customer-section-header .customer-section-count')).toHaveCount(2);
   await expect(page.locator('[data-customer-section="jobs"] [data-customer-job-stats]')).toContainText('total jobs');
   await expect(page.locator('[data-customer-section="details"]')).not.toContainText('total jobs');
-  const recordStyles = await page.locator('.customer-section-panel [data-mobile-record-card]').evaluateAll((records) => records.map((record) => {
+  const recordStyles = await page.locator('.customer-section [data-mobile-record-card]').evaluateAll((records) => records.map((record) => {
     const style = getComputedStyle(record);
     return { border: style.borderLeftWidth, radius: style.borderRadius, background: style.backgroundColor, shadow: style.boxShadow };
   }));
   for (const style of recordStyles) expect(style).toEqual({ border: "0px", radius: "0px", background: "rgba(0, 0, 0, 0)", shadow: "none" });
   await expect(page.locator('.record-workspace-header').getByRole("button", { name: "Edit Customer", exact: true })).toBeVisible();
-  const scrollers = await page.locator('[data-customer-workspace] *').evaluateAll((elements) => elements.filter((element) =>
-    /auto|scroll/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight + 1).length);
-  expect(scrollers).toBe(0);
+  expect(await page.locator('[data-customer-section="jobs"]').evaluate((element) => getComputedStyle(element).overflowY)).toBe("auto");
+  expect(await page.locator('[data-customer-section="jobs"] > header').evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
   await noModalOrOverflow(page);
   return boxes;
 }
@@ -704,7 +795,7 @@ for (const width of [1440, 390]) {
       const saved = readWorkspaceState().customers.find((customer) => customer.id === id);
       expect(saved).toMatchObject({ address: newAddress, postalAddressSameAsPrimary: false, postalAddress: "PO Box 42, Example VIC 3000" });
       expect(saved.sites.find((site) => site.id === siteId)).toMatchObject({ address: newAddress, ocNumber: "PS-UPDATED", assets: [{ id: `${id}-gate`, name: "Existing gate" }] });
-      if (width < 1024) await page.getByRole("tab", { name: /^Maintenance/ }).click();
+      await page.getByRole("tab", { name: /^Maintenance/ }).click();
       await expect(page.locator("[data-profile-maintenance]")).toHaveCount(3);
       await expect(page.locator(`[data-profile-maintenance="${id}-inactive"]`)).toContainText("Inactive");
       await noModalOrOverflow(page);
@@ -906,8 +997,8 @@ test("Customer layout handles empty sections, long text and many uncapped record
       await page.evaluate(() => document.fonts.ready);
       if (width >= 1024) {
         const boxes = await checkCustomerGrid(page);
-        if (kind === "many") expect(boxes.contacts.y).toBeLessThan(boxes.jobs.y);
-        else for (const name of ["sites", "contacts", "jobs"]) expect(boxes[name].height).toBeLessThan(150);
+        if (kind === "many") expect(boxes.contacts.y).toBeGreaterThan(boxes.jobs.y);
+        else for (const name of ["sites", "contacts"]) expect(boxes[name].height).toBeLessThan(150);
       }
       await captureWorkspace(page, info, `${kind}-${width}x${height}`);
       for (const [label, section, records] of [["Sites", "sites", 8], ["Contacts", "contacts", 12], ["Job History", "jobs", 16]]) {

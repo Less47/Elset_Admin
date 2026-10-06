@@ -46,12 +46,33 @@
   .customer-account-invoice:hover { background: var(--data-view-surface); }
   .customer-account-invoice:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
-  .customer-section-panel {
-    min-width: 0;
-    overflow: hidden;
-    border: 1px solid var(--data-view-border);
-    border-radius: 8px;
+  .record-workspace:has([data-customer-workspace]) > .record-workspace-body {
+    max-width: none;
+    padding: 0 !important;
+  }
+
+  [data-customer-workspace] {
+    --customer-profile-height: max(0px, calc(100dvh - var(--customer-profile-chrome-height, 0px)));
     background: var(--card);
+  }
+
+  [data-customer-workspace] .record-tab-strip {
+    border-bottom: 1px solid var(--data-view-border);
+  }
+
+  .customer-workspace-grid,
+  .customer-workspace-column {
+    min-width: 0;
+  }
+
+  .customer-section {
+    min-width: 0;
+    border-radius: 0;
+  }
+
+  .customer-workspace-column + .customer-workspace-column,
+  .customer-workspace-column > .customer-section + .customer-section {
+    border-top: 1px solid var(--data-view-border);
   }
 
   .customer-section-header {
@@ -60,7 +81,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 6px 12px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--data-view-border);
   }
 
@@ -71,9 +92,6 @@
     justify-content: center;
     flex-shrink: 0;
     padding: 1px 5px;
-    border: 1px solid var(--data-view-border);
-    border-radius: 4px;
-    background: var(--data-view-surface);
     color: var(--muted-foreground);
     font-size: 12px;
     line-height: 16px;
@@ -81,37 +99,122 @@
 
   .customer-section-body {
     min-width: 0;
-    padding: 12px;
     overflow-wrap: anywhere;
   }
 
   [data-customer-section="details"] .customer-section-body,
-  [data-customer-section="contacts"] .customer-section-body { padding: 10px 12px; }
+  [data-customer-section="maintenance"] .customer-section-body { padding: 10px 12px; }
+
+  .customer-section-description,
+  .customer-section-body > p { padding: 8px 12px; }
+
+  [data-customer-section="contacts"] [data-contact-id] {
+    padding: 8px 12px;
+    border: 0 !important;
+  }
+
+  [data-customer-section="contacts"] [data-contact-id] + [data-contact-id] {
+    border-top: 1px solid var(--data-view-border) !important;
+  }
+
+  [data-customer-section="contacts"] [aria-label="Customer contacts"] > p { padding: 8px 12px; }
 
   [data-customer-section="contacts"] [data-slot="badge"] { font-size: 10px; padding: 1px 5px; }
 
-  .customer-section-panel [data-mobile-record-list] {
-    gap: 0;
+  .customer-section [data-mobile-record-list] {
+    gap: 0 !important;
   }
 
-  /* Existing record content becomes separated rows inside the desktop panel. */
-  .customer-section-panel .data-record-card {
-    padding: 10px 0 !important;
+  .customer-section .data-record-card {
+    padding: 8px 12px !important;
     border: 0 !important;
     border-radius: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
   }
 
-  .customer-section-panel .data-record-card + .data-record-card {
+  .customer-section .data-record-card + .data-record-card {
     border-top: 1px solid var(--data-view-border) !important;
   }
 
-  .customer-section-panel .data-record-card:first-child {
+  [data-customer-workspace] .customer-record-actions {
+    margin-top: 6px !important;
     padding-top: 0 !important;
+    border-top: 0 !important;
   }
 
-  .customer-section-panel .data-record-card:last-child {
-    padding-bottom: 0 !important;
+  [data-customer-workspace] .customer-account-summary {
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent !important;
+  }
+
+  [data-customer-workspace] .customer-account-totals { gap: 8px 12px; }
+
+  [data-customer-workspace] [aria-label="Open invoices"] {
+    margin-top: 0 !important;
+    border-top: 1px solid var(--data-view-border);
+  }
+
+  [data-customer-workspace] .customer-account-invoice {
+    padding: 8px 12px;
+    border-radius: 0;
+  }
+
+  [data-customer-workspace] [data-customer-account] > div:last-child:not(.customer-account-summary) {
+    margin-top: 0 !important;
+    padding: 8px 12px;
+  }
+
+  .customer-danger-zone {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--data-view-border);
+  }
+
+  @media (min-width: 64rem) {
+    .customer-workspace-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 30fr) minmax(0, 35fr) minmax(0, 35fr);
+      min-height: var(--customer-profile-height);
+      align-items: stretch;
+    }
+
+    .customer-workspace-column + .customer-workspace-column {
+      border-top: 0;
+      border-left: 1px solid var(--data-view-border);
+    }
+
+    [data-customer-section="jobs"] {
+      height: var(--customer-profile-height);
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      scrollbar-color: var(--muted-foreground) var(--card);
+    }
+
+    [data-customer-section="jobs"] > .customer-section-header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--card);
+    }
+
+    [data-customer-section="jobs"]:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: -2px;
+    }
+
+    [data-customer-workspace] .customer-record-actions > button {
+      min-height: 32px !important;
+      height: 32px !important;
+      font-size: 12px;
+    }
   }
 }
