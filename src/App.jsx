@@ -36,7 +36,6 @@ export default function App() {
   const [billingTypeFilter, setBillingTypeFilter] = useState("all");
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
   const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);
-  const [serviceBoardTomorrowPanelOpen, setServiceBoardTomorrowPanelOpen] = useState(false);
   const resetWorkspaceChromeRef = useRef(() => {});
 
   const session = useAppSession({
@@ -53,7 +52,6 @@ export default function App() {
     setBillingTypeFilter("all");
     setShowHighUrgencyOnly(false);
     setServiceBoardFullScreen(false);
-    setServiceBoardTomorrowPanelOpen(false);
     navigate("/", { replace: true });
   }, [navigate]);
 
@@ -69,7 +67,6 @@ export default function App() {
     if (activeSection !== "invoices") setInvoiceNotice("");
     if (activeSection !== "service-board") {
       setServiceBoardFullScreen(false);
-      setServiceBoardTomorrowPanelOpen(false);
     }
   }, [activeSection]);
   const effectiveActiveSection = session.isTechnician && activeSection !== "settings" ? "service-board" : activeSection;
@@ -165,7 +162,6 @@ export default function App() {
           serviceBoardColumnSorts,
           serviceBoardColumnViews,
           serviceBoardFullScreen,
-          serviceBoardTomorrowPanelOpen,
           setActiveSection: handleActiveSectionChange,
           setActiveSettingsTab: (tab) => requestAction(() => setActiveSettingsTab(tab)),
           setActiveTemplateType,
@@ -175,7 +171,6 @@ export default function App() {
           setServiceBoardColumnSorts,
           setServiceBoardColumnViews,
           setServiceBoardFullScreen,
-          setServiceBoardTomorrowPanelOpen,
           setShowHighUrgencyOnly,
           setShowServiceBoardTagLabels,
           showHighUrgencyOnly,

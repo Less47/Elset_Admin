@@ -15,8 +15,7 @@ import JobBillingFilter from "@/components/service-board/JobBillingFilter";
 import MobileServiceBoard from "@/components/service-board/MobileServiceBoard";
 import JobNoteEditor from "@/components/service-board/JobNoteEditor";
 import { useJobNoteEditor } from "@/components/service-board/useJobNoteEditor";
-import { OfficeBoard, ServiceBoardTagLegend, ServiceBoardTomorrowPanel } from "@/components/service-board/OfficeBoard";
-import { TOMORROW_VIEW } from "@/components/service-board/service-board-utils";
+import { OfficeBoard, ServiceBoardTagLegend } from "@/components/service-board/OfficeBoard";
 import SettingsManager from "@/components/settings/SettingsManager";
 import StaffManager from "@/components/staff/StaffManager";
 import SiteManager from "@/components/sites/SiteManager";
@@ -57,7 +56,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     officeSearch,
     serviceBoardColumnSorts,
     serviceBoardColumnViews,
-    serviceBoardTomorrowPanelOpen,
     setActiveSection,
     setActiveSettingsTab,
     setActiveTemplateType,
@@ -67,7 +65,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     setServiceBoardColumnSorts,
     setServiceBoardColumnViews,
     setServiceBoardFullScreen,
-    setServiceBoardTomorrowPanelOpen,
     setShowHighUrgencyOnly,
     setShowServiceBoardTagLabels,
     showHighUrgencyOnly,
@@ -94,11 +91,8 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleOpenCustomerProfile,
     handleOpenDoc,
     handleOpenJob,
-    handlePlanJobForTomorrow,
     handleOpenSentDocumentCopy,
     handleOpenSiteProfile,
-    handleRemoveAllJobsFromTomorrow,
-    handleRemoveJobFromTomorrow,
     handleRestoreDeletedCustomer,
     handleRestoreDeletedJob,
     handleSaveStaffLoginAccount,
@@ -228,12 +222,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           onLogout={handleLogout}
           onNavigate={handleMobileNavigate}
           onNewJob={() => openCreateJob()}
-          onOpenTomorrow={() => isThreeColumnBoard ? setServiceBoardTomorrowPanelOpen((open) => !open) : setMobileServiceBoardView(TOMORROW_VIEW)}
           roleLabel={roleMenuLabel}
           workspaceLogoUrl={themeSettings.workspaceLogoUrl}
           themePalette={themePalette}
-          tomorrowCount={derived.tomorrowJobs.length}
-          tomorrowSelected={isThreeColumnBoard ? serviceBoardTomorrowPanelOpen : mobileServiceBoardView === TOMORROW_VIEW}
         />
       ) : null}
 
@@ -303,19 +294,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             /> : null}
             {isThreeColumnBoard ? (
               <>
-                <ServiceBoardTomorrowPanel
-                  noteEditMode={jobNotes.active}
-                  onEditNote={jobNotes.open}
-                  jobs={derived.tomorrowJobs}
-                  open={serviceBoardTomorrowPanelOpen}
-                  tomorrowDate={derived.tomorrowPlanningDate}
-                  onOpenChange={setServiceBoardTomorrowPanelOpen}
-                  onOpenJob={handleOpenJob}
-                  onRemoveAllJobs={handleRemoveAllJobsFromTomorrow}
-                  onRemoveJob={handleRemoveJobFromTomorrow}
-                  formatDate={formatDate}
-                />
-
                 <PageWorkspace data-desktop-service-board-layout>
                   <PageTopBar data-service-board-toolbar innerClassName="p-panel">
                     {renderServiceBoardControls("hero")}
@@ -332,11 +310,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                     allowDragging
                     columnSortModes={serviceBoardColumnSorts}
                     columnViewModes={serviceBoardColumnViews}
-                    onPlanJobForTomorrow={handlePlanJobForTomorrow}
                     showTagLabels={showServiceBoardTagLabels}
                     getInvoiceStatus={getInvoiceStatus}
                     formatDate={formatDate}
-                    tomorrowPlanningDate={derived.tomorrowPlanningDate}
                     officeSearch={officeSearch}
                     showHighUrgencyOnly={showHighUrgencyOnly}
                     billingTypeFilter={billingTypeFilter}
@@ -373,7 +349,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                 noteEditMode={jobNotes.active}
                 onToggleNoteEditMode={jobNotes.toggle}
                 onEditNote={jobNotes.open}
-                canManageTomorrow={canManageBusiness}
                 columnSortModes={serviceBoardColumnSorts}
                 formatDate={formatDate}
                 getInvoiceStatus={getInvoiceStatus}
@@ -385,9 +360,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                   )
                 }
                 onOpenJob={handleOpenJob}
-                onPlanJobForTomorrow={handlePlanJobForTomorrow}
-                onRemoveAllJobsFromTomorrow={handleRemoveAllJobsFromTomorrow}
-                onRemoveJobFromTomorrow={handleRemoveJobFromTomorrow}
                 onSearchChange={setOfficeSearch}
                 onSelectedViewChange={setMobileServiceBoardView}
                 onShowTagLabelsChange={setShowServiceBoardTagLabels}
@@ -396,8 +368,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
                 showHighUrgencyOnly={showHighUrgencyOnly}
                 showTagLabels={showServiceBoardTagLabels}
                 selectedView={mobileServiceBoardView}
-                tomorrowJobs={derived.tomorrowJobs}
-                tomorrowPlanningDate={derived.tomorrowPlanningDate}
               />
             )}
           </div>

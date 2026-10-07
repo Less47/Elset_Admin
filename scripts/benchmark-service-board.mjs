@@ -33,14 +33,14 @@ for (const file of files) {
 }
 const edit = (file, fn) => { const target = path.join(appRoot, file); fs.writeFileSync(target, fn(fs.readFileSync(target, "utf8"))); };
 const frontFunctions = {
-  "src/components/service-board/OfficeBoard.jsx": ["OfficeBoard", "JobCard", "JobCardIndicators", "ServiceBoardSortSelect", "ServiceBoardViewToggle", "ServiceBoardTagLegend", "TomorrowJobCard", "ServiceBoardColumn"],
+  "src/components/service-board/OfficeBoard.jsx": ["OfficeBoard", "JobCard", "JobCardIndicators", "ServiceBoardSortSelect", "ServiceBoardViewToggle", "ServiceBoardTagLegend", "ServiceBoardColumn"],
   "src/components/service-board/MobileJobCard.jsx": ["MobileJobCard"],
   "src/components/service-board/MobileServiceBoard.jsx": ["MobileServiceBoard"],
   "src/components/service-board/service-board-utils.js": ["sortJobsForColumn", "getJobValueMeta", "buildJobCardIndicators"],
   "src/components/app/WorkspaceShell.jsx": ["WorkspaceShell"],
 };
 for (const [file, names] of Object.entries(frontFunctions)) edit(file, (source) => {
-  for (const name of names) source = source.replace(new RegExp(`function ${name}\\(([\\s\\S]*?)\\)\\s*\\{`), (match) => `${match}\nglobalThis.__boardPerf?.count(${JSON.stringify(name)}${["JobCard", "MobileJobCard", "TomorrowJobCard"].includes(name) ? ", job.id" : ""});\n`);
+  for (const name of names) source = source.replace(new RegExp(`function ${name}\\(([\\s\\S]*?)\\)\\s*\\{`), (match) => `${match}\nglobalThis.__boardPerf?.count(${JSON.stringify(name)}${["JobCard", "MobileJobCard"].includes(name) ? ", job.id" : ""});\n`);
   return source;
 });
 for (const [file, name] of [["server-workspace-state.js", "loadWorkspaceStateFromDb"], ["server-workspace-jobs.js", "changeJobStatus"], ["server-workspace-db.js", "openWorkspaceDb"]]) edit(file, (source) => {
@@ -66,7 +66,7 @@ function jobsForSize(size) {
     createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), updatedAt: "2026-09-15T00:00:00.000Z",
     maintenancePlanId: "", maintenancePlanName: i % 5 === 0 ? "Annual service" : "", notes: [], photos: [], invoice: null,
     quote: i % 2 === 0 ? { ...original.quote, id: `quote-${i}`, items: original.quote.items.map((item, n) => ({ ...item, id: `item-${i}-${n}` })), sentHistory: [] } : null,
-    serviceBoardTomorrowDate: "", serviceBoardTomorrowOrder: null, serviceBoardNote: i % 3 === 0 ? "Waiting on parts" : null,
+    serviceBoardNote: i % 3 === 0 ? "Waiting on parts" : null,
   }));
 }
 const seed = openWorkspaceDb({ dbPath });

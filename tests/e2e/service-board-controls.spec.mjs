@@ -62,7 +62,7 @@ test("status moves before the response and its acknowledgement preserves a concu
   } finally { release(); await context.close(); }
 });
 
-for (const width of [1440, 820, 390]) test(`failed status saves restore the card and Tomorrow plan at ${width}px`, async ({ browser }) => {
+for (const width of [1440, 820, 390]) test(`failed status saves restore the card and preserve scheduling at ${width}px`, async ({ browser }) => {
   const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
   db.prepare("UPDATE jobs SET created_at='2099-01-01T00:00:00.000Z' WHERE id='todo-30'").run(); db.close();
   const { context, page } = await openBoard(browser, { width, height: 1180 });
@@ -87,8 +87,8 @@ for (const width of [1440, 820, 390]) test(`failed status saves restore the card
     release();
     const target = page.locator(width < 768 ? '[data-mobile-job-id="todo-30"]' : '[data-service-board-status="To Do"] [data-service-board-job-id="todo-30"]');
     await expect(target).toBeVisible();
-    if (width < 768) await expect(target.getByText("Tomorrow", { exact: true })).toBeVisible();
-    else await expect(target.getByLabel("Planned for tomorrow", { exact: true })).toBeVisible();
+    await expect(target.getByLabel("Planned for tomorrow", { exact: true })).toHaveCount(0);
+    expect(readWorkspace().jobs.find((job) => job.id === "todo-30").scheduledDate).toBe(before.scheduledDate);
     await expect.poll(() => dialogs).toEqual(["Status save unavailable"]);
     expect(readWorkspace().jobs.find((job) => job.id === "todo-30")).toEqual(before);
   } finally { release(); await context.close(); }
@@ -102,6 +102,74 @@ const layoutCases = [
   { id: "todo-26", note: "W".repeat(25), rate: 422.5, indicator: true },
   { id: "todo-25", note: "W".repeat(25), rate: 11223.34, indicator: false },
 ];
+
+for (const width of [390, 820, 1440]) test(`retired planning UI is absent and tomorrow scheduled sorting remains usable at ${width}px`, async ({ browser }, info) => {
+  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
+  const dateKey = (offset) => new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + offset * 86400000));
+  const tomorrow = dateKey(1);
+  const rawJobs = () => db.prepare("SELECT * FROM jobs ORDER BY id").all();
+  try {
+    db.prepare("UPDATE jobs SET scheduled_date = '' WHERE status = 'To Do'").run();
+    for (const [id, date] of [["todo-28", dateKey(0)], ["todo-30", tomorrow], ["todo-29", dateKey(2)]]) {
+      db.prepare("UPDATE jobs SET scheduled_date = ?, service_board_tomorrow_date = ?, service_board_tomorrow_order = 1 WHERE id = ?").run(date, tomorrow, id);
+    }
+    const before = readWorkspace(), rawBefore = rawJobs();
+    const { context, page, writes } = await openBoard(browser, { width, height: width === 390 ? 844 : 1180 });
+    try {
+      const absent = async () => {
+        await expect(page.locator("[data-desktop-tomorrow-tab], [data-tomorrow-job-id], .service-board-tomorrow-action, [data-mobile-board-view='Tomorrow']")).toHaveCount(0);
+        await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
+        await expect(page.getByRole("tab", { name: /tomorrow/i })).toHaveCount(0);
+        await expect(page.getByLabel("Planned for tomorrow", { exact: true })).toHaveCount(0);
+        await expect(page.locator("[data-service-board-job-id], [data-mobile-job-id]").getByText("T", { exact: true })).toHaveCount(0);
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+      };
+      await absent();
+      if (width < 768) {
+        const tabs = page.getByRole("tablist", { name: "Board status" });
+        await expect(tabs.getByRole("tab")).toHaveCount(3);
+        await tabs.getByRole("tab", { name: /^To Do / }).focus();
+        await page.keyboard.press("Enter");
+        await page.keyboard.press("ArrowRight");
+        await expect(tabs.getByRole("tab", { name: /^In Progress / })).toHaveAttribute("aria-selected", "true");
+        await page.keyboard.press("Home");
+        await expect(tabs.getByRole("tab", { name: /^To Do / })).toHaveAttribute("aria-selected", "true");
+      } else {
+        const geometry = await page.locator("[data-service-board-status]").evaluateAll((columns) => {
+          const boxes = columns.map((column) => column.getBoundingClientRect()), parent = columns[0].parentElement.getBoundingClientRect();
+          return { left: boxes[0].left - parent.left, right: parent.right - boxes.at(-1).right, widths: boxes.map((box) => box.width) };
+        });
+        expect(geometry.left).toBeLessThanOrEqual(1);
+        expect(geometry.right).toBeLessThanOrEqual(1);
+        expect(Math.max(...geometry.widths) - Math.min(...geometry.widths)).toBeLessThanOrEqual(1);
+        for (const mode of ["List", "Grid", "Compact"]) {
+          await page.getByRole("button", { name: `To Do ${mode} view`, exact: true }).click();
+          const target = column(page, "To Do").locator('[data-service-board-job-id="todo-30"]');
+          await expect(target).toHaveAttribute("data-job-card-view", mode.toLowerCase());
+          if (width === 1440) await target.hover();
+          await absent();
+          await capture(page, info, `planning-removed-${width}-${mode.toLowerCase()}`);
+        }
+        await page.getByRole("button", { name: "To Do List view", exact: true }).click();
+      }
+      await chooseSort(page, "Scheduled", "To Do");
+      const ids = await column(page, "To Do").locator("[data-service-board-job-id], [data-mobile-job-id]").evaluateAll((elements) => elements.map((element) => element.dataset.serviceBoardJobId || element.dataset.mobileJobId));
+      expect(ids.slice(0, 3)).toEqual(["todo-28", "todo-30", "todo-29"]);
+      await absent();
+      await capture(page, info, `planning-removed-${width}-scheduled`);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)).toBe(false);
+      expect(writes.filter((request) => request.path.startsWith("/api/jobs"))).toEqual([]);
+      expect(readWorkspace()).toEqual(before);
+      expect(rawJobs()).toEqual(rawBefore);
+      expect(before.jobs.find((job) => job.id === "todo-30").scheduledDate).toBe(tomorrow);
+      expect(before.jobs.every((job) => !Object.hasOwn(job, "serviceBoardTomorrowDate") && !Object.hasOwn(job, "serviceBoardTomorrowOrder"))).toBe(true);
+      await page.reload();
+      await expect(column(page, "To Do")).toBeVisible();
+      await absent();
+      expect(rawJobs()).toEqual(rawBefore);
+    } finally { await context.close(); }
+  } finally { db.close(); }
+});
 
 function seedQuickBooksIndicators(provider = "quickbooks") {
   const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
@@ -311,31 +379,12 @@ for (const width of [768, 1440]) test(`QuickBooks warning presence cannot change
   } finally { await context.close(); }
 });
 
-for (const width of [390, 1440]) test(`Tomorrow retains its existing commercial indicator treatment at ${width}px`, async ({ browser }) => {
-  seedQuickBooksIndicators();
-  const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
-  db.prepare("UPDATE jobs SET service_board_tomorrow_date=(SELECT service_board_tomorrow_date FROM jobs WHERE id='todo-30'), service_board_tomorrow_order=0 WHERE id='completed-175'").run();
-  db.close();
-  const { context, page } = await openBoard(browser, { width, height: 1180 });
-  try {
-    if (width < 768) {
-      await page.getByRole("button", { name: "Tomorrow, 31 planned jobs", exact: true }).click();
-      await assertQuickBooksPill(page.locator('[data-mobile-board-view="Tomorrow"] [data-mobile-job-id="completed-175"]'), false);
-    } else {
-      await page.locator("[data-desktop-tomorrow-tab]").click();
-      const target = page.locator('[data-tomorrow-job-id="completed-175"]');
-      await expect(target).toBeVisible();
-      await expect(qbWarning(target)).toHaveCount(0);
-    }
-  } finally { await context.close(); }
-});
-
 function seedNoteLayoutCases() {
   const db = openWorkspaceDb({ dbPath: path.join(dataDir, "elset-workspace.db") });
   try {
     const originalQuote = JSON.parse(fs.readFileSync(path.join(repoRoot, "fixtures/demo-workspace.json"), "utf8")).jobs[0].quote;
     for (const entry of layoutCases) {
-      db.prepare(`UPDATE jobs SET service_board_note = ?, maintenance_plan_name = ?, service_board_tomorrow_date = '',
+      db.prepare(`UPDATE jobs SET service_board_note = ?, maintenance_plan_name = ?,
         customer_name = 'Northside Apartments', title = 'Gate service' WHERE id = ?`).run(entry.note, entry.indicator ? "Scheduled maintenance" : "", entry.id);
       if (entry.rate !== null) insertQuoteTree(db, entry.id, {
         ...originalQuote, id: `layout-quote-${entry.id}`, sentHistory: [],
@@ -369,7 +418,6 @@ for (const width of [768, 1024, 1440]) test(`note layout handles all pill combin
             const content = card.querySelector('[data-slot="card-content"]');
             const number = card.querySelector("[data-job-card-number]");
             const customer = card.querySelector("[data-job-card-customer]");
-            const arrow = card.querySelector(".service-board-tomorrow-action");
             const textRects = [...card.querySelectorAll("p")].flatMap((p) => {
               const range = document.createRange(); range.selectNodeContents(p);
               const clip = p.getBoundingClientRect();
@@ -381,7 +429,7 @@ for (const width of [768, 1024, 1440]) test(`note layout handles all pill combin
               number: box(number), customer: box(customer), indicator: box(card.querySelector("[data-job-card-indicators]")),
               contentTop: content.getBoundingClientRect().top + parseFloat(getComputedStyle(content).paddingTop),
               bottomPadding: getComputedStyle(card.querySelector('[data-slot="card"]')).paddingBottom,
-              rowGap: getComputedStyle(card.parentElement).rowGap, arrow: box(arrow), textRects,
+              rowGap: getComputedStyle(card.parentElement).rowGap, textRects,
             };
           });
           const label = `${width} ${preset.id} ${view} ${entry.id}`;
@@ -411,8 +459,7 @@ for (const width of [768, 1024, 1440]) test(`note layout handles all pill combin
             }
           }
           const intersects = (a, b) => a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-          expect(intersects(values.price, values.arrow), label).toBeFalsy();
-          for (const text of values.textRects) expect(intersects(text, values.arrow), `${label} text/action overlap`).toBeFalsy();
+          for (const text of values.textRects) expect(intersects(text, values.price), `${label} text/price overlap`).toBeFalsy();
         }
         await capture(page, info, `note-layout-${preset.id}-${width}-${view.toLowerCase()}`);
       }
@@ -647,13 +694,11 @@ test("job notes do not overwrite another browser's status change", async ({ brow
   } finally { await context.close(); }
 });
 
-test("job notes leave dedicated Tomorrow and mobile Move controls available", async ({ browser }) => {
+test("job notes leave mobile Move controls available without retired planning actions", async ({ browser }) => {
   const { context, page } = await openBoard(browser);
   try {
     await page.getByRole("button", { name: "Edit job notes" }).click();
-    const source = page.locator('[data-service-board-job-id="progress-30"]');
-    await source.getByRole("button", { name: "Add Job #4030 to tomorrow" }).click();
-    await expect.poll(() => readWorkspace().jobs.find((job) => job.id === "progress-30").serviceBoardTomorrowDate).not.toBe("");
+    await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("tab", { name: /^In Progress / }).click();
@@ -707,19 +752,17 @@ let serverOutput = "";
 function workspaceFixture() {
   const fixture = JSON.parse(fs.readFileSync(path.join(repoRoot, "fixtures/demo-workspace.json"), "utf8"));
   const original = fixture.jobs[0];
-  const tomorrow = new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + 86400000));
   const makeJob = (id, jobNumber, status, index) => ({
     ...original, id, jobNumber, status, title: status + " service " + index + (status === "Completed" && index <= 8 ? " Needle" : ""),
     description: "Service Board controls fixture", urgency: index <= 70 ? "High" : "Low", scheduledDate: "2026-09-15",
     createdAt: new Date(Date.UTC(2026, 0, index)).toISOString(), updatedAt: new Date(Date.UTC(2026, 6, 176-index)).toISOString(),
     notes: [], photos: [], quote: null, invoice: null, maintenancePlanId: "", maintenancePlanName: "",
-    serviceBoardTomorrowDate: status === "To Do" ? tomorrow : "", serviceBoardTomorrowOrder: index,
   });
   fixture.jobs = [
     ...Array.from({ length: 175 }, (_, index) => makeJob("completed-" + (index+1), 2001+index, "Completed", index+1)).reverse(),
     ...Array.from({ length: 30 }, (_, index) => makeJob("todo-" + (index+1), 3001+index, "To Do", index+1)),
     ...Array.from({ length: 30 }, (_, index) => makeJob("progress-" + (index+1), 4001+index, "In Progress", index+1)),
-    { ...makeJob("old-job", 50, "To Do", 1), title: "Old job created years ago", createdAt: "2020-01-01T00:00:00.000Z", updatedAt: "2099-01-01T00:00:00.000Z", serviceBoardTomorrowDate: "", serviceBoardTomorrowOrder: null },
+    { ...makeJob("old-job", 50, "To Do", 1), title: "Old job created years ago", createdAt: "2020-01-01T00:00:00.000Z", updatedAt: "2099-01-01T00:00:00.000Z" },
   ];
   return normalizeStoredData(fixture);
 }
@@ -994,7 +1037,7 @@ test("dragging an old job into Completed keeps creation order and the current vi
   } finally { await context.close(); }
 });
 
-test("retired hidden-column preferences cannot hide columns, while page Full Screen and Tomorrow remain available", async ({ browser }) => {
+test("retired hidden-column preferences cannot hide columns, while Full Screen and genuine mobile statuses remain available", async ({ browser }) => {
   const authDb = new Database(path.join(dataDir, "auth.db"));
   try {
     authDb.prepare("INSERT INTO user_ui_preferences (user_id, preferences_json, created_at, updated_at) SELECT id, ?, '2026-01-01', '2026-01-01' FROM user").run(JSON.stringify({ boardHiddenColumns: ["To Do", "In Progress", "Completed"] }));
@@ -1010,8 +1053,10 @@ test("retired hidden-column preferences cannot hide columns, while page Full Scr
     await expect(cards(page)).toHaveCount(25);
     await page.getByRole("button", { name: "Exit Full Screen", exact: true }).click();
     await page.setViewportSize(viewports[5]);
-    await page.getByRole("button", { name: "Tomorrow, 30 planned jobs", exact: true }).click();
-    await expect(page.locator('[data-mobile-board-view="Tomorrow"] [data-mobile-job-id]')).toHaveCount(30);
+    await page.getByRole("tab", { name: /^In Progress / }).click();
+    await expect(page.locator('[data-mobile-board-view="In Progress"] [data-mobile-job-id]')).toHaveCount(30);
+    await expect(page.getByRole("tab")).toHaveCount(3);
+    await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Show \d+ more completed jobs$/ })).toHaveCount(0);
   } finally { await context.close(); }
 });

@@ -37,14 +37,14 @@ create/edit permissions apply; Technician field permissions remain unchanged.
 Job Details shows classification and reason in its existing information panel.
 Warranty Service Board cards use a semantic teal surface/border and readable text,
 without a Warranty pill or badge. Classification remains visible in Job Details and Job History.
-List, Compact, Grid, Mobile and Tomorrow keep their existing layout and interaction
+List, Compact, Grid and Mobile keep their existing layout and interaction
 handlers. Existing urgency, quote, maintenance, QuickBooks, price and note indicators
 retain their positions and label rules.
 
 The board legend includes Warranty. Its existing filter controls now contain
 All/Billable/Warranty; this combines with search and urgency and the existing status
 and authorized technician visibility. Search includes classification and reason.
-Tomorrow uses the same filtered Jobs. Completed pagination resets when the billing
+Completed pagination resets when the billing
 filter changes; sorting is unchanged. The filter is temporary, like search/urgency.
 
 Job History displays `Warranty · non-billable`, including on completed Jobs. Its

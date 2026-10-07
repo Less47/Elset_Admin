@@ -1,12 +1,9 @@
 import { matchesJobBillingFilter } from "@/lib/job-billing";
 import { useMemo } from "react";
 import {
-  addDaysToDateInput,
   sectionMeta,
   settingsTabMeta,
   sideNavItems,
-  toDateInputValue,
-  toTimestamp,
 } from "@/lib/app-support";
 
 export function useWorkspaceViewModel({
@@ -21,8 +18,6 @@ export function useWorkspaceViewModel({
   showHighUrgencyOnly,
   billingTypeFilter = "all",
 }) {
-  const tomorrowPlanningDate = addDaysToDateInput(toDateInputValue(new Date()), 1);
-
   const filteredJobs = useMemo(() => {
     const q = officeSearch.toLowerCase();
     return data.jobs.filter((job) => {
@@ -34,19 +29,6 @@ export function useWorkspaceViewModel({
       return matchesText && matchesUrgency && matchesJobBillingFilter(job, billingTypeFilter);
     });
   }, [data.jobs, officeSearch, showHighUrgencyOnly, billingTypeFilter]);
-
-  const tomorrowJobs = useMemo(() => {
-    return [...filteredJobs]
-      .filter((job) => job.serviceBoardTomorrowDate === tomorrowPlanningDate)
-      .sort((a, b) => {
-        const aOrder = Number.isFinite(Number(a.serviceBoardTomorrowOrder)) ? Number(a.serviceBoardTomorrowOrder) : Number.MAX_SAFE_INTEGER;
-        const bOrder = Number.isFinite(Number(b.serviceBoardTomorrowOrder)) ? Number(b.serviceBoardTomorrowOrder) : Number.MAX_SAFE_INTEGER;
-        return aOrder - bOrder
-          || toTimestamp(a.scheduledDate) - toTimestamp(b.scheduledDate)
-          || toTimestamp(a.updatedAt) - toTimestamp(b.updatedAt)
-          || (a.jobNumber || 0) - (b.jobNumber || 0);
-      });
-  }, [filteredJobs, tomorrowPlanningDate]);
 
   const visibleSideNavItems = useMemo(
     () => (isTechnician ? sideNavItems.filter((item) => ["service-board", "settings"].includes(item.id)) : sideNavItems),
@@ -97,8 +79,6 @@ export function useWorkspaceViewModel({
     filteredJobs,
     isServiceBoardFullScreen,
     noteAuthor,
-    tomorrowJobs,
-    tomorrowPlanningDate,
     visibleSideNavItems,
     ...selection,
   };

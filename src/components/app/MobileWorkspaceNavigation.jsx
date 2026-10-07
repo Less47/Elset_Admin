@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CalendarDays, LogOut, Menu, Plus, X } from "lucide-react";
+import { LogOut, Menu, Plus, X } from "lucide-react";
 import WorkspaceLogo from "@/components/app/WorkspaceLogo";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,12 +22,9 @@ export default function MobileWorkspaceNavigation({
   onLogout,
   onNavigate,
   onNewJob,
-  onOpenTomorrow,
   roleLabel,
   workspaceLogoUrl,
   themePalette,
-  tomorrowCount,
-  tomorrowSelected,
 }) {
   const [open, setOpen] = useState(false);
   const activeItem = items.find((item) => item.id === activeSection);
@@ -69,25 +66,6 @@ export default function MobileWorkspaceNavigation({
               <p className="truncate text-base font-semibold leading-5">{pageTitle}</p>
               <p className="truncate text-[11px] leading-4 opacity-70">{roleLabel} workspace</p>
             </div>
-
-            {activeSection === "service-board" ? (
-              <Button
-                type="button"
-                className={`relative h-11 w-11 rounded-xl p-0 ${tomorrowSelected ? "ring-3 ring-border" : ""}`}
-                style={themePalette.primaryButton}
-                onClick={onOpenTomorrow}
-                aria-label={`Tomorrow, ${tomorrowCount} planned ${tomorrowCount === 1 ? "job" : "jobs"}`}
-                aria-pressed={tomorrowSelected}
-                title="Tomorrow"
-              >
-                <CalendarDays className="h-5 w-5" />
-                <span className="absolute -bottom-1 -right-1 inline-flex min-w-5 items-center justify-center rounded-full bg-card px-1 text-[10px] font-bold text-foreground shadow-sm">
-                  {tomorrowCount}
-                </span>
-              </Button>
-            ) : (
-              <span className="h-11 w-11" aria-hidden="true" />
-            )}
           </div>
         </header>
 

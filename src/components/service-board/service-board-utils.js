@@ -1,7 +1,6 @@
 import { isWarrantyJob } from "../../lib/job-billing.js";
 import { calculateInvoiceTotal, calculateQuoteTotal, money } from "../../lib/quote-template.js";
 
-export const TOMORROW_VIEW = "__tomorrow__";
 
 export function getMobileBoardPanelId(viewId) {
   return `mobile-board-panel-${viewId.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;

@@ -512,8 +512,6 @@ function applyJobPlans(db, plan, state, summary) {
       maintenancePlanId: trimText(jobPlan.record.maintenancePlanId),
       maintenancePlanName: trimText(jobPlan.record.maintenancePlanName),
       maintenanceDueDate: trimText(jobPlan.record.maintenanceDueDate),
-      serviceBoardTomorrowDate: trimText(jobPlan.record.serviceBoardTomorrowDate),
-      serviceBoardTomorrowOrder: jobPlan.record.serviceBoardTomorrowOrder ?? null,
       createdAt: trimText(jobPlan.record.createdAt) || nowIso(),
       updatedAt: trimText(jobPlan.record.updatedAt) || nowIso(),
       notes: Array.isArray(jobPlan.record.notes) ? jobPlan.record.notes : [],

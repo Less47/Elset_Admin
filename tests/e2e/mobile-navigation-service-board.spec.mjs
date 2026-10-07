@@ -79,8 +79,8 @@ const screenshotNames = [
   "standard-controls-parts-inventory-1440x900.png",
 ];
 const accountPassword = "E2E-mobile-pass-123";
-const plannedJobId = "mobile-job-progress";
-const plannedJobNumber = 1003;
+const progressJobId = "mobile-job-progress";
+const progressJobNumber = 1003;
 
 let tempDataDir = "";
 let baseUrl = "";
@@ -140,15 +140,13 @@ function readAugmentedFixture() {
     },
     {
       ...baseJob,
-      id: plannedJobId,
-      jobNumber: plannedJobNumber,
+      id: progressJobId,
+      jobNumber: progressJobNumber,
       title: "Mobile In Progress Job",
       description: "Service the swing gate and verify all safety inputs.",
       urgency: "High",
       status: "In Progress",
       scheduledDate: tomorrowDate,
-      serviceBoardTomorrowDate: tomorrowDate,
-      serviceBoardTomorrowOrder: 0,
       createdAt: "2026-03-01T00:00:00.000Z",
       updatedAt: "2026-03-01T00:00:00.000Z",
     },
@@ -214,7 +212,7 @@ function readMobileRecordFixture() {
         },
       };
     }
-    if (job.id === plannedJobId) {
+    if (job.id === progressJobId) {
       return {
         ...job,
         maintenancePlanId,
@@ -839,8 +837,7 @@ test("mobile navigation and one-status Service Board support the core workflow",
     await expect(tabs.getByRole("tab", { name: /In Progress\s+1/ })).toBeVisible();
     await expect(tabs.getByRole("tab", { name: /Completed\s+1/ })).toBeVisible();
     await expect(tabs.getByRole("tab", { name: /Tomorrow/ })).toHaveCount(0);
-    const tomorrowButton = page.getByRole("button", { name: "Tomorrow, 1 planned job" });
-    await expect(tomorrowButton).toBeVisible();
+    await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
     const addJobButton = page.getByRole("button", { name: "Add job", exact: true });
     await expect(addJobButton).toBeVisible();
     await expect(addJobButton).toHaveCSS("position", "fixed");
@@ -880,60 +877,40 @@ test("mobile navigation and one-status Service Board support the core workflow",
     await expect(page.locator('[data-service-board-status="To Do"]')).toHaveCount(0);
     await capture(page, testInfo, "mobile-in-progress-390x844.png", "mobile In Progress list");
 
-    await page.getByRole("button", { name: new RegExp(`Open Job #${plannedJobNumber}`) }).click();
-    await expect(page).toHaveURL(new RegExp(`/jobs/${plannedJobId}$`));
+    await page.getByRole("button", { name: new RegExp(`Open Job #${progressJobNumber}`) }).click();
+    await expect(page).toHaveURL(new RegExp(`/jobs/${progressJobId}$`));
     await expect(page.getByRole("heading", { name: "Mobile In Progress Job", level: 1 })).toBeVisible();
     await expect(page.getByRole("dialog", { name: "Mobile In Progress Job" })).toHaveCount(0);
     await page.getByRole("button", { name: "Back to Service Board" }).click();
     await expect(page).toHaveURL(baseUrl + "/");
     await expect(tabs.getByRole("tab", { name: /In Progress\s+1/ })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("button", { name: new RegExp(`Open Job #${plannedJobNumber}`) })).toBeFocused();
+    await expect(page.getByRole("button", { name: new RegExp(`Open Job #${progressJobNumber}`) })).toBeFocused();
 
-    await tomorrowButton.click();
-    await expect(page.locator('[data-mobile-board-view="Tomorrow"]')).toContainText("Mobile In Progress Job");
-    await expect(page.locator("[data-desktop-tomorrow-tab]")).toHaveCount(0);
-    await search.fill("no matching planned job");
-    await expect(page.getByRole("button", { name: "Tomorrow, 1 planned job" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator('[data-mobile-board-view="Tomorrow"]')).toContainText("Mobile In Progress Job");
-    await page.getByRole("button", { name: "Clear job search" }).click();
-    const removeTomorrowResponse = page.waitForResponse((response) =>
-      response.request().method() === "DELETE" && new URL(response.url()).pathname === `/api/jobs/${plannedJobId}/tomorrow`
-    );
-    await page.getByRole("button", { name: `Remove Job #${plannedJobNumber} from tomorrow` }).click();
-    await removeTomorrowResponse;
-    await expect(page.getByRole("button", { name: "Tomorrow, 0 planned jobs" })).toBeVisible();
+    await expect(tabs.getByRole("tab")).toHaveCount(3);
 
-    await tabs.getByRole("tab", { name: /In Progress\s+1/ }).click();
-    const addTomorrowResponse = page.waitForResponse((response) =>
-      response.request().method() === "POST" && new URL(response.url()).pathname === `/api/jobs/${plannedJobId}/tomorrow`
-    );
-    await page.getByRole("button", { name: `Add Job #${plannedJobNumber} to tomorrow` }).click();
-    await addTomorrowResponse;
-    await expect(page.getByRole("button", { name: "Tomorrow, 1 planned job" })).toBeVisible();
-
-    const moveTrigger = page.getByRole("button", { name: `Move Job #${plannedJobNumber}` });
+    const moveTrigger = page.getByRole("button", { name: `Move Job #${progressJobNumber}` });
     await moveTrigger.click();
-    const moveSheet = page.getByRole("dialog", { name: `Move Job #${plannedJobNumber}` });
+    const moveSheet = page.getByRole("dialog", { name: `Move Job #${progressJobNumber}` });
     await expect(moveSheet).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(moveSheet).toBeHidden();
     await expect(moveTrigger).toBeFocused();
     await moveTrigger.click();
     const moveRequest = page.waitForRequest((request) =>
-      request.method() === "PATCH" && new URL(request.url()).pathname === `/api/jobs/${plannedJobId}/status`
+      request.method() === "PATCH" && new URL(request.url()).pathname === `/api/jobs/${progressJobId}/status`
     );
     await moveSheet.getByRole("button", { name: "Move to To Do" }).click();
     const request = await moveRequest;
     expect(request.postDataJSON()).toEqual({ status: "To Do", expectedStatus: "In Progress" });
-    await waitForJobStatus(plannedJobId, "To Do");
+    await waitForJobStatus(progressJobId, "To Do");
     await expect(tabs.getByRole("tab", { name: /To Do\s+3/ })).toHaveAttribute("aria-selected", "true");
-    const movedTrigger = page.getByRole("button", { name: `Move Job #${plannedJobNumber}` });
+    const movedTrigger = page.getByRole("button", { name: `Move Job #${progressJobNumber}` });
     await expect(movedTrigger).toBeFocused();
-    await expect(page.getByRole("status")).toContainText(`Job #${plannedJobNumber} moved to To Do.`);
+    await expect(page.getByRole("status")).toContainText(`Job #${progressJobNumber} moved to To Do.`);
 
     await movedTrigger.click();
-    await page.getByRole("dialog", { name: `Move Job #${plannedJobNumber}` }).getByRole("button", { name: "Move to In Progress" }).click();
-    await waitForJobStatus(plannedJobId, "In Progress");
+    await page.getByRole("dialog", { name: `Move Job #${progressJobNumber}` }).getByRole("button", { name: "Move to In Progress" }).click();
+    await waitForJobStatus(progressJobId, "In Progress");
 
     await assertNoHorizontalOverflow(page);
     expect(broadPuts.requests).toEqual([]);
@@ -1239,7 +1216,7 @@ test("phone database pages use contained record cards with visible identities, s
     },
     {
       section: "Job History",
-      recordSelector: `[data-record-id="${plannedJobId}"]`,
+      recordSelector: `[data-record-id="${progressJobId}"]`,
       identity: "Mobile In Progress Job",
       status: "In Progress",
       statusIsBadge: true,
@@ -1458,7 +1435,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
     { section: "Customers", rowLabel: /^Open profile for/, route: /\/customers\/[^/]+$/, headers: ["Customer", "Contact", "Activity", "Jobs"], wideHeaders: ["Customer", "Email", "Phone", "Created", "Last Activity", "Jobs", "Open"] },
     { section: "Sites", rowLabel: /^Open site/, route: /\/customers\/[^/]+\/sites\/[^/]+$/, headers: ["Site", "Customer", "Activity", "Work"], wideHeaders: ["Site", "Customer", "Type", "Last Activity", "Jobs", "Open", "Assets"] },
     { section: "Job History", rowLabel: /^Open Job #/, route: /\/jobs\/[^/]+$/, headers: ["Job", "Customer", "Status"], wideHeaders: ["Job", "Customer & Site", "Status", "Urgency", "Scheduled", "Documents", "Last Activity"] },
-    { section: "Invoices", rowLabel: /^Open invoice editor for Job #/, action: "Job", headers: ["Job", "Invoice", "Payment", "Actions"], wideHeaders: ["Job", "Customer", "Work", "Issued", "Due", "Total", "Status", "Payment", "Actions"] },
+    { section: "Invoices", rowRole: "row", rowLabel: /^Open invoice editor for Job #/, action: /^Open Job #\d+$/, headers: ["Job", "Invoice", "Payment", "Profile", "Job"], wideHeaders: ["Job", "Customer", "Work", "Issued", "Due", "Total", "Status", "Payment", "Profile", "Job"] },
     { section: "Maintenance" },
     { section: "Staff", action: "Edit", headers: ["Staff", "Contact", "Action"] },
     { section: "Parts Inventory", action: "Edit", headers: ["Part", "Stock", "Value", "Action"] },
@@ -1503,7 +1480,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
         } else await expect(desktopResults.getByRole("button", { name: pageSpec.action, exact: true }).first()).toBeVisible();
         if (pageSpec.rowLabel) {
           await expect(desktopResults.getByRole("button", { name: /^(Open|Open Profile|Open Site|Open Job|Open Invoice|Open Invoice Editor|Editor)$/ })).toHaveCount(0);
-          await expect(desktopResults.getByRole("group", { name: pageSpec.rowLabel }).first()).toHaveAttribute("tabindex", "0");
+          await expect(desktopResults.getByRole(pageSpec.rowRole || "group", { name: pageSpec.rowLabel }).first()).toHaveAttribute("tabindex", "0");
         }
 
         if (pageSpec.headers) {
@@ -1535,7 +1512,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
             await row.focus(); await row.press("Enter"); await expect(page).toHaveURL(pageSpec.route);
             await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
           } else {
-            const sentRow = desktopResults.getByRole("group", { name: "Open invoice editor for Job #1001", exact: true });
+            const sentRow = desktopResults.getByRole("row", { name: "Open invoice editor for Job #1001", exact: true });
             for (const keyboard of [false, true]) {
               if (keyboard) { await sentRow.focus(); await sentRow.press("Enter"); }
               else await sentRow.locator(":scope > *").first().dblclick();
@@ -1548,7 +1525,7 @@ test("tablet and desktop database pages retain their existing fitted result grid
               await expect(page).toHaveURL(startUrl);
               expect(context.pages()).toHaveLength(1);
             }
-            await sentRow.getByRole("button", { name: "Job", exact: true }).click();
+            await sentRow.getByRole("button", { name: "Open Job #1001", exact: true }).click();
             await expect(page).toHaveURL(/\/jobs\/demo-job-1001$/);
             await navigateToWorkspaceSection(page, pageSpec.section, viewport.width);
           }
@@ -1889,7 +1866,7 @@ test("mobile navigation and actions retain admin, office, and technician permiss
 
       if (account.canManage) {
         await expect(page.getByRole("button", { name: "Add job", exact: true })).toBeVisible();
-        await expect(page.getByRole("button", { name: /Add Job #1001 to tomorrow/ })).toBeVisible();
+        await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
       } else {
         await expect(page.getByRole("button", { name: "Add job", exact: true })).toHaveCount(0);
         await expect(page.getByRole("button", { name: /Add Job #1001 to tomorrow/ })).toHaveCount(0);
@@ -1927,7 +1904,7 @@ test("mobile navigation and actions retain admin, office, and technician permiss
   }
 });
 
-test("desktop view retains three columns, drag and drop, controls, and Tomorrow panel", async ({ browser }, testInfo) => {
+test("desktop view retains three columns, drag and drop, and controls without retired planning UI", async ({ browser }, testInfo) => {
   for (const viewport of [
     { width: 1280, height: 720 },
     { width: 1440, height: 900 },
@@ -1940,7 +1917,7 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
       await loginAs(page, "mobileadmin", false);
       await expect(page.getByRole("button", { name: "Open navigation" })).toHaveCount(0);
       await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
-      await expect(page.locator("[data-desktop-tomorrow-tab]")).toBeVisible();
+      await expect(page.locator("[data-desktop-tomorrow-tab]")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Full Screen" })).toBeVisible();
       await expect(page.getByText("Legend", { exact: true })).toBeVisible();
       await assertDesktopBoardSpacing(page);
@@ -1949,10 +1926,6 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
       await expect(page.getByRole("button", { name: "To Do Grid view" })).toHaveAttribute("aria-pressed", "true");
       await page.getByRole("button", { name: "To Do List view" }).click();
       await expect(page.getByRole("button", { name: "To Do List view" })).toHaveAttribute("aria-pressed", "true");
-
-      await page.locator("[data-desktop-tomorrow-tab]").click();
-      await expect(page.getByRole("button", { name: "Close tomorrow panel" })).toBeVisible();
-      await page.getByRole("button", { name: "Close tomorrow panel" }).click();
 
       if (viewport.width === 1280) {
         await page.getByRole("button", { name: "Full Screen" }).click();
@@ -1965,11 +1938,11 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
       const source = page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first();
       await expect(source).toHaveAttribute("draggable", "true");
       if (viewport.width === 1280) {
-        await dragJobToStatus(page, source, plannedJobId, "To Do");
-        await waitForJobStatus(plannedJobId, "To Do");
+        await dragJobToStatus(page, source, progressJobId, "To Do");
+        await waitForJobStatus(progressJobId, "To Do");
         const movedSource = page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first();
-        await dragJobToStatus(page, movedSource, plannedJobId, "In Progress");
-        await waitForJobStatus(plannedJobId, "In Progress");
+        await dragJobToStatus(page, movedSource, progressJobId, "In Progress");
+        await waitForJobStatus(progressJobId, "In Progress");
       }
 
       const boardScreenshotName = `service-board-desktop-${viewport.width}x${viewport.height}.png`;
@@ -1984,7 +1957,7 @@ test("desktop view retains three columns, drag and drop, controls, and Tomorrow 
   }
 });
 
-test("tablet three-column board keeps navigation, controls, touch drag, and Tomorrow working", async ({ browser }) => {
+test("tablet three-column board keeps navigation, controls and touch drag without retired planning UI", async ({ browser }) => {
   for (const width of [768, 820]) {
     const context = await browser.newContext(mobileContextOptions(width, 1180));
     const page = await context.newPage();
@@ -2003,9 +1976,7 @@ test("tablet three-column board keeps navigation, controls, touch drag, and Tomo
         await page.getByRole("button", { name: `To Do ${mode} view`, exact: true }).click();
         await expect(page.getByRole("button", { name: `To Do ${mode} view`, exact: true })).toHaveAttribute("aria-pressed", "true");
       }
-      await page.locator(".mobile-workspace-navigation").getByRole("button", { name: /^Tomorrow,/ }).click();
-      await expect(page.getByRole("button", { name: "Close tomorrow panel", exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Close tomorrow panel", exact: true }).click({ position: { x: 16, y: 16 } });
+      await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
       await page.getByRole("button", { name: "Full Screen", exact: true }).click();
       await expect(page.getByRole("button", { name: "Exit Full Screen", exact: true })).toBeVisible();
       await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
@@ -2019,13 +1990,13 @@ test("tablet three-column board keeps navigation, controls, touch drag, and Tomo
       const devtools = await context.newCDPSession(page);
       await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.x + start.width / 2, y: start.y + 55, id: 1 }] });
       await page.waitForTimeout(220);
-      const statusResponse = page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/api/jobs/${plannedJobId}/status`);
+      const statusResponse = page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/api/jobs/${progressJobId}/status`);
       await devtools.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: target.x + target.width / 2, y: start.y + 60, id: 1 }] });
       await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       expect((await statusResponse).status()).toBe(200);
-      await waitForJobStatus(plannedJobId, "To Do");
-      await dragJobToStatus(page, page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first(), plannedJobId, "In Progress");
-      await waitForJobStatus(plannedJobId, "In Progress");
+      await waitForJobStatus(progressJobId, "To Do");
+      await dragJobToStatus(page, page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first(), progressJobId, "In Progress");
+      await waitForJobStatus(progressJobId, "In Progress");
       await page.locator('[draggable="true"]', { hasText: "Synthetic gate service" }).first().dblclick();
       await expect(page).toHaveURL(/\/jobs\/demo-job-1001$/);
       await page.getByRole("button", { name: "Back to Service Board", exact: true }).click();
@@ -2199,17 +2170,7 @@ test("visual density preserves touch targets, focus, and card gutters at every r
         await expect(page.locator('[data-service-board-status] > [data-slot="card-content"]').first()).toHaveCSS("padding-left", "6px");
         await expect(firstCard).toHaveCSS("padding-top", "0px");
         await expect(firstCard.locator(':scope > [data-slot="card-content"]')).toHaveCSS("padding-top", "10px");
-        const wrapper = firstCard.locator("..");
-        const arrow = wrapper.locator(".service-board-tomorrow-action");
-        if (await arrow.count()) {
-          const arrowBox = await arrow.boundingBox();
-          const amountBox = await firstCard.locator('[title$=" value"]').first().boundingBox();
-          if (amountBox) {
-            const overlaps = arrowBox.x < amountBox.x + amountBox.width && arrowBox.x + arrowBox.width > amountBox.x
-              && arrowBox.y < amountBox.y + amountBox.height && arrowBox.y + arrowBox.height > amountBox.y;
-            expect(overlaps, "price remains clear of the Tomorrow action").toBe(false);
-          }
-        }
+        await expect(page.locator(".service-board-tomorrow-action")).toHaveCount(0);
       }
       await assertNoHorizontalOverflow(page);
       await navigateToWorkspaceSection(page, "Customers", viewport.width);
@@ -2280,7 +2241,7 @@ test("Create Job is a guarded page workflow using the existing record API", asyn
     await page.getByLabel("Job title").fill("Page workspace service visit");
     await page.getByLabel("Description of work").fill("Verify the responsive page workflow and existing create API.");
     await page.getByLabel("Scheduled date").fill("2026-09-10");
-    await chooseSelectOption(page, "Assigned technician", "Jordan Vale · Office Manager");
+    await chooseSelectOption(page, "Assigned technician", /Jordan Vale\s*·\s*Office Manager$/);
     await chooseSelectOption(page, "Urgency", "High");
     await page.locator("#create-job-details").scrollIntoViewIfNeeded();
     await capture(page, testInfo, "create-job-mobile-details-390x844.png", "Create Job details");
@@ -2466,7 +2427,7 @@ test("Job Details uses accessible tabs and preserves editing, status, and schedu
     await expect(scheduleTab).toHaveAttribute("aria-selected", "true");
 
     await page.getByLabel("Scheduled date").fill("2026-09-14");
-    await chooseSelectOption(page, "Assigned technician", "Jordan Vale · Office Manager");
+    await chooseSelectOption(page, "Assigned technician", /Jordan Vale\s*·\s*Office Manager$/);
     await chooseSelectOption(page, "Urgency", "High");
     const scheduleRequestPromise = page.waitForRequest((request) =>
       request.method() === "PATCH" && new URL(request.url()).pathname === "/api/jobs/demo-job-1001"
@@ -2560,7 +2521,7 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await expect(page.getByRole("button", { name: "Job History", exact: true })).toHaveAttribute("aria-current", "page");
 
     await page.getByRole("button", { name: "Invoices", exact: true }).click();
-    await page.locator(".data-grid-row", { hasText: "Job #1001" }).getByRole("button", { name: "Job", exact: true }).click();
+    await page.locator(".data-grid-row", { hasText: "Job #1001" }).getByRole("button", { name: "Open Job #1001", exact: true }).click();
     await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
     await page.getByRole("button", { name: "Back to Invoices" }).click();
     await expect(page.getByRole("button", { name: "Invoices", exact: true })).toHaveAttribute("aria-current", "page");
@@ -2568,7 +2529,7 @@ test("history, invoices, customer, and site entry points open the same Job Detai
     await page.getByRole("button", { name: "Customers", exact: true }).click();
     await page.getByRole("group", { name: "Open profile for Arcadia Example Apartments", exact: true }).press("Enter");
     await expect(page).toHaveURL(baseUrl + "/customers/demo-customer-arcadia");
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Arcadia Example Apartments", level: 1 })).toBeVisible();
     await page.getByRole("button", { name: "Open Job #1001", exact: true }).click();
     await expect(page).toHaveURL(baseUrl + "/jobs/demo-job-1001");
     await expect(page.getByRole("dialog")).toHaveCount(0);

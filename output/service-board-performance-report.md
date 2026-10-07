@@ -1,5 +1,7 @@
 # Service Board performance audit and optimisation
 
+> Historical implementation report. The dedicated Service Board Tomorrow planning feature and its APIs were removed on 7 October 2026. References below describe the earlier implementation and verification, not current functionality. Normal scheduled dates, Calendar and Scheduled sorting remain supported.
+
 Completed locally on 16 September 2026. No commit, push, deployment, production-data changes, or Fly resource changes were made.
 
 ## 1. Main causes

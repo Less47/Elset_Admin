@@ -8,9 +8,6 @@ import {
   deleteJob,
   deleteJobPhoto,
   emptyDeletedJobs,
-  planJobForTomorrow,
-  removeAllJobsFromTomorrow,
-  removeJobFromTomorrow,
   restoreDeletedJob,
   scheduleJob,
   correctCompletedMaintenanceJobSchedule,
@@ -140,24 +137,6 @@ export function createJobRouter({
     handleJobRoute((db, req) => req.body?.completedMaintenanceCorrection === true
       ? correctCompletedMaintenanceJobSchedule(db, req.params.id, req.body, { returnChange: req.query.response === "calendar" })
       : scheduleJob(db, req.params.id, req.body?.scheduledDate, { expectedScheduledDate: req.body?.expectedScheduledDate, returnChange: req.query.response === "calendar" }), env)
-  );
-
-  router.post(
-    "/api/jobs/:id/tomorrow",
-    ...manageMiddleware,
-    handleJobRoute((db, req) => planJobForTomorrow(db, req.params.id, req.body?.tomorrowDate), env)
-  );
-
-  router.delete(
-    "/api/jobs/:id/tomorrow",
-    ...manageMiddleware,
-    handleJobRoute((db, req) => removeJobFromTomorrow(db, req.params.id), env)
-  );
-
-  router.delete(
-    "/api/jobs/tomorrow",
-    ...manageMiddleware,
-    handleJobRoute((db, req) => removeAllJobsFromTomorrow(db, req.body?.tomorrowDate), env)
   );
 
   router.delete(

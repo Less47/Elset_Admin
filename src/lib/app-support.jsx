@@ -913,9 +913,8 @@ export function getInvoiceStatus(job) {
 }
 
 export function normalizeJobRecord(job) {
-  const rawTomorrowOrder = job?.serviceBoardTomorrowOrder;
-  const tomorrowOrderValue = Number(rawTomorrowOrder);
-  const hasTomorrowOrder = rawTomorrowOrder !== null && rawTomorrowOrder !== undefined && Number.isFinite(tomorrowOrderValue);
+  // Ignore retired planning metadata from older snapshots.
+  const { serviceBoardTomorrowDate: _retiredDate, serviceBoardTomorrowOrder: _retiredOrder, ...currentJob } = job;
   const legacyBillingContact = normalizeJobContactSnapshot(
     job?.customerEmail || job?.customerPhone
       ? {
@@ -931,7 +930,7 @@ export function normalizeJobRecord(job) {
   );
 
   return {
-    ...job,
+    ...currentJob,
     billingType: normalizeBillingType(job?.billingType),
     warrantyReason: normalizeWarrantyReason(job?.warrantyReason),
     jobNumber: Number.isInteger(Number(job?.jobNumber)) && Number(job.jobNumber) > 0 ? Number(job.jobNumber) : null,
@@ -944,8 +943,6 @@ export function normalizeJobRecord(job) {
     maintenancePlanName: String(job?.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job?.maintenanceDueDate),
     maintenanceOccurrenceKey: job?.maintenanceOccurrenceKey || "",
-    serviceBoardTomorrowDate: toDateInputValue(job?.serviceBoardTomorrowDate),
-    serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
     serviceBoardNote: normalizeServiceBoardNote(job?.serviceBoardNote),
     ocNumber: String(job?.ocNumber || "").trim(),
     notes: Array.isArray(job.notes) ? job.notes : [],

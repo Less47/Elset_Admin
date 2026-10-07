@@ -67,18 +67,6 @@ function normalizeDateInput(value) {
   return `${year}-${month}-${day}`;
 }
 
-function addDaysToDateInput(value, days) {
-  const normalized = normalizeDateInput(value) || normalizeDateInput(new Date());
-  const [year, month, day] = normalized.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + days);
-  return normalizeDateInput(date);
-}
-
-function getDefaultTomorrowDate() {
-  return addDaysToDateInput(new Date(), 1);
-}
-
 function normalizeSiteAddress(address) {
   return text(address).replace(/\s+/g, " ").trim();
 }
@@ -131,6 +119,7 @@ const jobKnownKeys = new Set([
   "maintenancePlanId",
   "maintenancePlanName",
   "maintenanceDueDate",
+  // Ignore retired planning metadata from older JSON snapshots; never persist it as extra data.
   "serviceBoardTomorrowDate",
   "serviceBoardTomorrowOrder",
   "serviceBoardNote",
@@ -239,15 +228,6 @@ function allocateJobNumber(db, preferredNumber = null) {
   return Number(row?.next_number || 1);
 }
 
-function getTomorrowPlanningOrder(db, tomorrowDate) {
-  const row = db.prepare(`
-    SELECT COALESCE(MAX(service_board_tomorrow_order), 0) + 1 AS next_order
-      FROM jobs
-     WHERE service_board_tomorrow_date = ?
-  `).get(tomorrowDate);
-  return Number(row?.next_order || 1);
-}
-
 function validateExistingSiteForCreate(customer, jobAddress) {
   const normalizedAddress = normalizeSiteAddress(jobAddress);
   if (!normalizedAddress) throw new WorkspaceJobError("Job address is required.");
@@ -351,12 +331,7 @@ function normalizeJobBase(input, customer, {
     maintenancePlanId: trimText(input.maintenancePlanId ?? existingJob?.maintenancePlanId),
     maintenancePlanName: trimText(input.maintenancePlanName ?? existingJob?.maintenancePlanName),
     maintenanceDueDate: normalizeDateInput(input.maintenanceDueDate ?? existingJob?.maintenanceDueDate),
-    serviceBoardTomorrowDate: normalizeDateInput(input.serviceBoardTomorrowDate ?? existingJob?.serviceBoardTomorrowDate),
     serviceBoardNote: normalizeServiceBoardNote(input.serviceBoardNote === undefined ? existingJob?.serviceBoardNote : input.serviceBoardNote),
-    serviceBoardTomorrowOrder:
-      input.serviceBoardTomorrowOrder === null || input.serviceBoardTomorrowOrder === undefined
-        ? existingJob?.serviceBoardTomorrowOrder ?? null
-        : Number(input.serviceBoardTomorrowOrder),
     createdAt: trimText(existingJob?.createdAt || input.createdAt) || now,
     updatedAt: now,
     externalRefs: input.externalRefs && typeof input.externalRefs === "object" && !Array.isArray(input.externalRefs)
@@ -412,9 +387,9 @@ function insertJobCore(db, job) {
       id, job_number, title, description, urgency, status, scheduled_date, assigned_technician_id,
       assigned_technician_name, customer_id, customer_name, customer_email, customer_phone, job_address,
       oc_number, requester_contact_json, onsite_contact_json, billing_contact_json, maintenance_plan_id,
-      maintenance_plan_name, maintenance_due_date, service_board_tomorrow_date, service_board_tomorrow_order,
+      maintenance_plan_name, maintenance_due_date,
       created_at, updated_at, external_refs_json, extra_json, service_board_note, site_id, billing_type, warranty_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.id,
     job.jobNumber,
@@ -437,10 +412,6 @@ function insertJobCore(db, job) {
     nullableText(job.maintenancePlanId),
     job.maintenancePlanName,
     job.maintenanceDueDate,
-    job.serviceBoardTomorrowDate,
-    job.serviceBoardTomorrowOrder === null || job.serviceBoardTomorrowOrder === undefined || job.serviceBoardTomorrowOrder === ""
-      ? null
-      : Number(job.serviceBoardTomorrowOrder),
     job.createdAt,
     job.updatedAt,
     objectJson(job.externalRefs),
@@ -509,8 +480,6 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
     maintenancePlanId: "maintenance_plan_id",
     maintenancePlanName: "maintenance_plan_name",
     maintenanceDueDate: "maintenance_due_date",
-    serviceBoardTomorrowDate: "service_board_tomorrow_date",
-    serviceBoardTomorrowOrder: "service_board_tomorrow_order",
     serviceBoardNote: "service_board_note",
   };
   const assignments = [];
@@ -526,8 +495,6 @@ function updateJobCore(db, jobId, updates, updatedAt = nowIso()) {
       values.push(value ? json(value) : null);
     } else if (key === "assignedTechnicianId" || key === "maintenancePlanId" || key === "siteId") {
       values.push(nullableText(value));
-    } else if (key === "serviceBoardTomorrowOrder") {
-      values.push(value === null || value === undefined || value === "" ? null : Number(value));
     } else {
       values.push(text(value));
     }
@@ -579,11 +546,7 @@ function normalizeDeletedJobPayload(payload) {
     maintenancePlanId: trimText(payload.maintenancePlanId),
     maintenancePlanName: trimText(payload.maintenancePlanName),
     maintenanceDueDate: normalizeDateInput(payload.maintenanceDueDate),
-    serviceBoardTomorrowDate: normalizeDateInput(payload.serviceBoardTomorrowDate),
     serviceBoardNote: normalizeServiceBoardNote(payload.serviceBoardNote),
-    serviceBoardTomorrowOrder: payload.serviceBoardTomorrowOrder === null || payload.serviceBoardTomorrowOrder === undefined
-      ? null
-      : Number(payload.serviceBoardTomorrowOrder),
     createdAt: trimText(payload.createdAt) || nowIso(),
     updatedAt: nowIso(),
     notes: Array.isArray(payload.notes) ? payload.notes : [],
@@ -728,7 +691,6 @@ export function updateJobDetails(db, jobIdInput, input) {
     updateJobCore(db, jobId, updates, updatedAt);
 
     if (updates.status === "Completed") {
-      clearCompletedTomorrowState(db, existingJob, updatedAt);
       recordMaintenanceJobCompletion(db, existingJob, updatedAt);
     }
 
@@ -736,16 +698,6 @@ export function updateJobDetails(db, jobIdInput, input) {
     runForeignKeyCheck(db);
     return getJobState(db, jobId);
   })();
-}
-
-function clearCompletedTomorrowState(db, job, updatedAt) {
-  db.prepare(`
-    UPDATE jobs
-       SET service_board_tomorrow_date = '',
-           service_board_tomorrow_order = NULL,
-           updated_at = ?
-     WHERE id = ?
-  `).run(updatedAt, job.id);
 }
 
 function recordMaintenanceJobCompletion(db, job, updatedAt) {
@@ -763,8 +715,6 @@ function recordMaintenanceJobCompletion(db, job, updatedAt) {
 
 function getJobStatusFields(db, jobId) {
   return db.prepare(`SELECT id, status, updated_at AS updatedAt,
-    service_board_tomorrow_date AS serviceBoardTomorrowDate,
-    service_board_tomorrow_order AS serviceBoardTomorrowOrder,
     maintenance_plan_id AS maintenancePlanId FROM jobs WHERE id = ?`).get(jobId);
 }
 
@@ -799,7 +749,6 @@ export function changeJobStatus(db, jobIdInput, statusInput, { returnDelta = fal
     const updatedAt = nowIso();
     updateJobCore(db, jobId, { status: nextStatus }, updatedAt);
     if (nextStatus === "Completed") {
-      clearCompletedTomorrowState(db, job, updatedAt);
       recordMaintenanceJobCompletion(db, job, updatedAt);
     }
     touchWorkspaceInfo(db, updatedAt);
@@ -993,69 +942,6 @@ export function rescheduleDayJobs(db, input) {
     }
     return { sourceDate, scheduledDate, succeeded, failed };
   }).immediate();
-}
-
-export function planJobForTomorrow(db, jobIdInput, tomorrowDateInput = "") {
-  const jobId = normalizeId(jobIdInput, "Job ID");
-  const tomorrowDate = normalizeDateInput(tomorrowDateInput) || getDefaultTomorrowDate();
-
-  return db.transaction(() => {
-    const job = getJobState(db, jobId);
-    if (!job) throw new WorkspaceJobError("Job not found.", 404);
-    const updatedAt = nowIso();
-    const order = job.serviceBoardTomorrowDate === tomorrowDate && Number.isFinite(Number(job.serviceBoardTomorrowOrder))
-      ? Number(job.serviceBoardTomorrowOrder)
-      : getTomorrowPlanningOrder(db, tomorrowDate);
-    updateJobCore(db, jobId, {
-      serviceBoardTomorrowDate: tomorrowDate,
-      serviceBoardTomorrowOrder: order,
-      scheduledDate: tomorrowDate,
-    }, updatedAt);
-    touchWorkspaceInfo(db, updatedAt);
-    runForeignKeyCheck(db);
-    return getJobState(db, jobId);
-  })();
-}
-
-export function removeJobFromTomorrow(db, jobIdInput) {
-  const jobId = normalizeId(jobIdInput, "Job ID");
-
-  return db.transaction(() => {
-    ensureJobExists(db, jobId);
-    const updatedAt = nowIso();
-    updateJobCore(db, jobId, {
-      serviceBoardTomorrowDate: "",
-      serviceBoardTomorrowOrder: null,
-      scheduledDate: "",
-    }, updatedAt);
-    touchWorkspaceInfo(db, updatedAt);
-    runForeignKeyCheck(db);
-    return getJobState(db, jobId);
-  })();
-}
-
-export function removeAllJobsFromTomorrow(db, tomorrowDateInput = "") {
-  const tomorrowDate = normalizeDateInput(tomorrowDateInput) || getDefaultTomorrowDate();
-
-  return db.transaction(() => {
-    const jobIds = db.prepare("SELECT id FROM jobs WHERE service_board_tomorrow_date = ?").all(tomorrowDate).map(row => row.id);
-    const updatedAt = nowIso();
-    const result = db.prepare(`
-      UPDATE jobs
-         SET service_board_tomorrow_date = '',
-             service_board_tomorrow_order = NULL,
-             scheduled_date = '',
-             updated_at = ?
-       WHERE service_board_tomorrow_date = ?
-    `).run(updatedAt, tomorrowDate);
-    touchWorkspaceInfo(db, updatedAt);
-    runForeignKeyCheck(db);
-    return {
-      tomorrowDate,
-      updatedCount: result.changes,
-      jobIds,
-    };
-  })();
 }
 
 export function deleteJob(db, jobIdInput) {

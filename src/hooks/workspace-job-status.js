@@ -1,6 +1,6 @@
 import { effectiveMaintenancePlan } from "../lib/maintenance-recurrence.js";
 
-const statusFields = ["status", "updatedAt", "serviceBoardTomorrowDate", "serviceBoardTomorrowOrder"];
+const statusFields = ["status", "updatedAt"];
 const pick = (job, keys = statusFields) => Object.fromEntries(keys.map((key) => [key, job[key]]));
 
 // Merge only fields owned by this status operation, retaining unrelated concurrent edits.
@@ -48,8 +48,7 @@ export function createJobStatusQueue() {
   const pending = new Map();
   return ({ job, nextStatus, save, merge, onSaved, onError }) => {
     const previous = pending.get(job.id);
-    const optimistic = { ...pick(job), status: nextStatus, updatedAt: new Date().toISOString(),
-      ...(nextStatus === "Completed" ? { serviceBoardTomorrowDate: "", serviceBoardTomorrowOrder: null } : {}) };
+    const optimistic = { ...pick(job), status: nextStatus, updatedAt: new Date().toISOString() };
     merge(optimistic);
     const operation = {};
     pending.set(job.id, operation);

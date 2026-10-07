@@ -445,7 +445,9 @@ test("customer/site pickers support keyboard, contact search, customer changes a
   expect(writes).toHaveLength(0);
   await page.getByRole("button", { name: "Add Site", exact: true }).click();
   await page.getByRole("button", { name: "Discard", exact: true }).click();
-  await expect(page).toHaveURL(/\/customers\/no-sites\/sites\/new$/);
+  await expect(page).toHaveURL(`${url}/sites/new?customerId=no-sites`);
+  await expect(page.getByRole("heading", { name: "New Site", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Customer", exact: true })).toHaveValue("Customer Without Sites");
   await context.close();
 });
 

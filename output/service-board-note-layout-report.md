@@ -1,5 +1,7 @@
 # Service Board note placement and spacing refinement
 
+> Historical implementation report. The dedicated Service Board Tomorrow planning feature and its APIs were removed on 7 October 2026. References below describe the earlier implementation and verification, not current functionality. Normal scheduled dates, Calendar and Scheduled sorting remain supported.
+
 Completed locally on 16 September 2026. No commit, push, or deployment was performed.
 
 ## 1. Why the Grid note sat lower

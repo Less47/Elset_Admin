@@ -138,19 +138,9 @@ for (const width of [390, 820, 1440]) test(`Warranty board, indicators, modes, l
   await expect(card(page).locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
   await expect(card(page).locator(".warranty-job-card").or(card(page).filter({ has: page.locator(":scope.warranty-job-card") })).first()).toBeVisible();
   expect(db.prepare("SELECT billing_type,warranty_reason FROM jobs WHERE id='warranty'").get()).toEqual({ billing_type: "warranty", warranty_reason: "Installation warranty" });
-  await card(page).getByRole("button", { name: "Add Job #1543 to tomorrow", exact: true }).click();
-  await expect.poll(() => db.prepare("SELECT service_board_tomorrow_date FROM jobs WHERE id='warranty'").get().service_board_tomorrow_date).not.toBe("");
-  if (width < 768) await page.getByRole("button", { name: "Tomorrow, 1 planned job", exact: true }).click();
-  else await page.locator("[data-desktop-tomorrow-tab]").click();
-  const tomorrowCard = page.locator(width < 768 ? '[data-mobile-board-view="Tomorrow"] [data-mobile-job-id="warranty"]' : '[data-tomorrow-job-id="warranty"]');
-  await expect(tomorrowCard).toBeVisible();
-  await expect(tomorrowCard).toHaveClass(/warranty-job-card/);
-  await expect(tomorrowCard.locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
-  await expect(tomorrowCard.getByText("WARRANTY", { exact: true })).toHaveCount(0);
-  await expect(tomorrowCard.getByText("High", { exact: true })).toBeVisible();
-  await expect(tomorrowCard.getByText("In Progress", { exact: true })).toBeVisible();
-  await expect(tomorrowCard.getByLabel("Job note: Waiting on parts", { exact: true })).toBeVisible();
-  await noOverflow(page); await shot(page, "board-tomorrow", width);
+  await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
+  await expect(card(page).getByLabel("Planned for tomorrow", { exact: true })).toHaveCount(0);
+  await noOverflow(page); await shot(page, "board-status-move", width);
 });
 
 for (const width of [390, 820, 1440]) test(`Create, edit, Warranty documents, costing and history at ${width}px`, async ({ page }) => {

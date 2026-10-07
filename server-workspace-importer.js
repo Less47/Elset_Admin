@@ -277,9 +277,9 @@ function buildInsertStatements(db) {
         id, job_number, title, description, urgency, status, scheduled_date, assigned_technician_id,
         assigned_technician_name, customer_id, customer_name, customer_email, customer_phone, job_address,
         oc_number, requester_contact_json, onsite_contact_json, billing_contact_json, maintenance_plan_id,
-        maintenance_plan_name, maintenance_due_date, service_board_tomorrow_date, service_board_tomorrow_order,
+        maintenance_plan_name, maintenance_due_date,
         created_at, updated_at, external_refs_json, extra_json, service_board_note, site_id, billing_type, warranty_reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     jobNote: db.prepare(`
       INSERT INTO job_notes (id, job_id, author, text, created_at, extra_json)
@@ -351,7 +351,9 @@ const jobKeys = new Set([
   "id", "jobNumber", "title", "description", "urgency", "status", "scheduledDate", "assignedTechnicianId",
   "assignedTechnicianName", "customerId", "customerName", "customerEmail", "customerPhone", "jobAddress",
   "ocNumber", "requesterContact", "onsiteContact", "billingContact", "maintenancePlanId", "maintenancePlanName",
-  "maintenanceDueDate", "serviceBoardTomorrowDate", "serviceBoardTomorrowOrder", "createdAt", "updatedAt",
+  "maintenanceDueDate", "createdAt", "updatedAt",
+  // Retired planning keys are excluded from extra_json when importing older backups.
+  "serviceBoardTomorrowDate", "serviceBoardTomorrowOrder",
   "notes", "photos", "quote", "invoice", "externalRefs", "serviceBoardNote", "siteId", "billingType", "warrantyReason",
 ]);
 const noteKeys = new Set(["id", "author", "text", "createdAt"]);
@@ -639,10 +641,6 @@ function insertWorkspaceData(db, data, { sourceJsonSha256 = "" } = {}) {
       nullableText(job.maintenancePlanId),
       text(job.maintenancePlanName),
       text(job.maintenanceDueDate),
-      text(job.serviceBoardTomorrowDate),
-      job.serviceBoardTomorrowOrder === null || job.serviceBoardTomorrowOrder === undefined || job.serviceBoardTomorrowOrder === ""
-        ? null
-        : Number(job.serviceBoardTomorrowOrder),
       text(job.createdAt || importTime),
       text(job.updatedAt || job.createdAt || importTime),
       objectJson(job.externalRefs),

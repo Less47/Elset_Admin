@@ -478,11 +478,6 @@ export default function JobDetailsPage({
                         <div className="mt-2 flex items-center gap-2"><Badge className={statusTheme.badge}>{job.status}</Badge><span className="text-muted-foreground">Change from the page header.</span></div>
                       </div>
                     </div>
-                    {job.serviceBoardTomorrowDate ? (
-                      <div className="record-thin-border mt-5 rounded-lg border-status-info-border bg-status-info-surface px-4 py-3 text-sm text-status-info">
-                        Planned for Tomorrow on {formatDate(job.serviceBoardTomorrowDate)}.
-                      </div>
-                    ) : null}
                     {canEditJob ? (
                       <div className="mt-6 flex justify-end">
                         <Button type="button" className="h-11 rounded-lg px-5 hover:opacity-90" disabled={!scheduleDirty || isSavingSchedule} aria-busy={isSavingSchedule} onClick={saveSchedule}>{isSavingSchedule ? "Saving…" : "Save schedule"}</Button>

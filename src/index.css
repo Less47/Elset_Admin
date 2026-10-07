@@ -15,7 +15,7 @@
 
   /* Job-card pills and markers keep their shape independently of panel corners. */
   :root[data-rounded-edges="false"]
-    :is([data-service-board-job-id], [data-mobile-job-id], [data-tomorrow-job-id])
+    :is([data-service-board-job-id], [data-mobile-job-id])
     :is(.rounded-full, [data-slot="badge"]) {
     border-radius: calc(infinity * 1px) !important;
   }
@@ -867,11 +867,6 @@
     background: var(--data-view-row-hover) !important;
   }
 
-  @media (hover: none), (pointer: coarse) {
-    .service-board-tomorrow-action {
-      opacity: 1 !important;
-    }
-  }
 }
 .warranty-job-card {
   background-color: var(--billing-warranty-surface);

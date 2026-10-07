@@ -11,7 +11,6 @@ import { siteAddressMetadata, updatedSiteAddressMetadata } from "@/lib/site-loca
 import { canonicalMaintenancePlanInput } from "@/lib/maintenance-plan";
 import { calendarUndoRequest } from "@/components/calendar/calendar-undo";
 import {
-  addDaysToDateInput,
   normalizeCustomerRecord,
   normalizeJobRecord,
   normalizeDeletedJobRecord,
@@ -270,10 +269,6 @@ export function useWorkspaceActions({
       : "/api/staff";
   }
 
-
-  function getTomorrowPlanningDate() {
-    return addDaysToDateInput(toDateInputValue(new Date()), 1);
-  }
 
   async function createJob({ job, customerMode, customer, siteInput = null }) {
     if (!canManageBusiness) return;
@@ -837,50 +832,6 @@ export function useWorkspaceActions({
       },
       onError: (error) => window.alert(error instanceof Error ? error.message : "Unable to update the job status."),
     });
-  }
-
-  async function handlePlanJobForTomorrow(jobId) {
-    if (!jobId) return false;
-
-    const tomorrowDate = getTomorrowPlanningDate();
-
-    const saved = await saveJobApiRequest({
-      path: jobPath(jobId, "/tomorrow"),
-      method: "POST",
-      body: { tomorrowDate },
-      errorMessage: "Unable to add the job to tomorrow.",
-    });
-    return saved.ok;
-  }
-
-  async function handleRemoveJobFromTomorrow(jobId) {
-    if (!jobId) return false;
-
-    const saved = await saveJobApiRequest({
-      path: jobPath(jobId, "/tomorrow"),
-      method: "DELETE",
-      errorMessage: "Unable to remove the job from tomorrow.",
-    });
-    return saved.ok;
-  }
-
-  async function handleRemoveAllJobsFromTomorrow() {
-    const tomorrowDate = getTomorrowPlanningDate();
-    const plannedJobCount = data.jobs.filter((entry) => entry.serviceBoardTomorrowDate === tomorrowDate).length;
-    if (plannedJobCount === 0) return false;
-
-    const confirmed = window.confirm(
-      `Remove all ${plannedJobCount} job${plannedJobCount === 1 ? "" : "s"} from tomorrow?`
-    );
-    if (!confirmed) return false;
-
-    const saved = await saveJobApiRequest({
-      path: "/api/jobs/tomorrow",
-      method: "DELETE",
-      body: { tomorrowDate },
-      errorMessage: "Unable to clear tomorrow's plan.",
-    });
-    return saved.ok;
   }
 
   async function handleUpdateJobDetails(jobId, updates) {
@@ -1517,10 +1468,7 @@ export function useWorkspaceActions({
     handlePreviewDocument,
     handleOpenSentDocumentCopy,
     handleOpenJob,
-    handlePlanJobForTomorrow,
     handleOpenSiteProfile,
-    handleRemoveAllJobsFromTomorrow,
-    handleRemoveJobFromTomorrow,
     handleRestoreDeletedCustomer,
     handleRestoreDeletedJob,
     handleSaveDocument,

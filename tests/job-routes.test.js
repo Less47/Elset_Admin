@@ -39,22 +39,28 @@ test("compact status updates return only changed fields and reject stale status 
   }));
 });
 
-test("compact completion preserves maintenance completion and Tomorrow side effects", async () => {
+test("compact completion preserves maintenance and scheduling without touching retired planning data", async () => {
   const fixture = readFixture();
   const job = fixture.jobs[0];
   fixture.maintenancePlans = [{ id: "status-plan", planName: "Annual service", customerId: job.customerId, customerName: job.customerName,
     siteAddress: job.jobAddress, frequency: "yearly", nextDueDate: "2026-09-17", checklist: [], createdAt: job.createdAt }];
-  Object.assign(job, { maintenancePlanId: "status-plan", serviceBoardTomorrowDate: "2026-09-17", serviceBoardTomorrowOrder: 1 });
+  Object.assign(job, { maintenancePlanId: "status-plan", scheduledDate: "2026-09-17" });
   await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
     const db = openWorkspaceDb({ dbPath });
-    try { db.prepare(`INSERT INTO maintenance_occurrence_exceptions
+    try {
+      db.prepare("UPDATE jobs SET service_board_tomorrow_date = ?, service_board_tomorrow_order = 1 WHERE id = ?").run("2026-09-17", job.id);
+      db.prepare(`INSERT INTO maintenance_occurrence_exceptions
       (occurrence_key, plan_id, series_id, original_date, job_id, generated_job_id, snapshot_json, created_at, updated_at)
       VALUES ('status-occurrence', 'status-plan', 'series', '2026-09-17', ?, ?, '{}', '2026-09-16', '2026-09-16')`).run(job.id, job.id); }
     finally { db.close(); }
     const result = await requestJson(baseUrl, `/api/jobs/${job.id}/status?response=delta`, { method: "PATCH", body: JSON.stringify({ status: "Completed", expectedStatus: job.status }) });
     assert.equal(result.response.status, 200, result.payload.error);
-    assert.equal(result.payload.result.job.serviceBoardTomorrowDate, "");
-    assert.equal(result.payload.result.job.serviceBoardTomorrowOrder, null);
+    assert.equal(Object.hasOwn(result.payload.result.job, "serviceBoardTomorrowDate"), false);
+    assert.equal(Object.hasOwn(result.payload.result.job, "serviceBoardTomorrowOrder"), false);
+    assert.equal(getDbState(dbPath).jobs.find((entry) => entry.id === job.id).scheduledDate, "2026-09-17");
+    const stored = openWorkspaceDb({ dbPath });
+    try { assert.deepEqual(stored.prepare("SELECT service_board_tomorrow_date AS date, service_board_tomorrow_order AS sort FROM jobs WHERE id = ?").get(job.id), { date: "2026-09-17", sort: 1 }); }
+    finally { stored.close(); }
     const plan = getDbState(dbPath).maintenancePlans[0];
     assert.equal(result.payload.result.maintenancePlan.lastCompletedAt, plan.lastCompletedAt);
     assert.equal(result.payload.result.maintenancePlan.maintenanceRevision, plan.maintenanceRevision);
@@ -67,6 +73,43 @@ test("compact completion preserves maintenance completion and Tomorrow side effe
       assert.equal(limited.response.status, 200);
       assert.equal(limited.payload.result.maintenancePlan, null, "maintenance records stay hidden from technicians");
     }, { role: "technician" });
+  }), fixture);
+});
+
+test("retired planning endpoints are unavailable and old records remain ordinary scheduled jobs", async () => {
+  const fixture = readFixture();
+  Object.assign(fixture.jobs[0], { serviceBoardTomorrowDate: "2099-01-01", serviceBoardTomorrowOrder: 8 });
+  await withTempWorkspace(async ({ env, dbPath }) => withServer(env, async (baseUrl) => {
+    const id = fixture.jobs[0].id;
+    const db = openWorkspaceDb({ dbPath });
+    const legacy = () => db.prepare("SELECT id, status, scheduled_date, service_board_tomorrow_date, service_board_tomorrow_order, extra_json FROM jobs ORDER BY id").all();
+    try {
+      assert.equal(db.prepare("SELECT service_board_tomorrow_date AS date FROM jobs WHERE id = ?").get(id).date, "", "old JSON metadata is ignored on import");
+      db.prepare("UPDATE jobs SET service_board_tomorrow_date = '2099-01-01', service_board_tomorrow_order = 8 WHERE id = ?").run(id);
+      const before = getDbState(dbPath), rawBefore = legacy();
+      for (const [method, endpoint] of [["POST", "/api/jobs/" + id + "/tomorrow"], ["DELETE", "/api/jobs/" + id + "/tomorrow"], ["DELETE", "/api/jobs/tomorrow"]]) {
+        assert.equal((await requestJson(baseUrl, endpoint, { method, body: JSON.stringify({ tomorrowDate: "2099-01-02" }) })).response.status, 404);
+      }
+      assert.deepEqual(getDbState(dbPath), before);
+      assert.deepEqual(legacy(), rawBefore);
+      assert.ok(before.jobs.every((entry) => !Object.hasOwn(entry, "serviceBoardTomorrowDate") && !Object.hasOwn(entry, "serviceBoardTomorrowOrder")));
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+      const date = [tomorrow.getFullYear(), String(tomorrow.getMonth() + 1).padStart(2, "0"), String(tomorrow.getDate()).padStart(2, "0")].join("-");
+      const schedule = await requestJson(baseUrl, "/api/jobs/" + id + "/schedule", { method: "PATCH", body: JSON.stringify({ scheduledDate: date }) });
+      assert.equal(schedule.response.status, 200, schedule.payload.error);
+      assert.equal(schedule.payload.result.scheduledDate, date);
+      const edit = await requestJson(baseUrl, "/api/jobs/" + id, { method: "PATCH", body: JSON.stringify({ title: "Ordinary job edit", serviceBoardTomorrowDate: "2099-12-31", serviceBoardTomorrowOrder: 99 }) });
+      assert.equal(edit.response.status, 200, edit.payload.error);
+      const after = getDbState(dbPath);
+      const changed = after.jobs.find((entry) => entry.id === id);
+      assert.equal(changed.scheduledDate, date);
+      assert.equal(changed.status, before.jobs.find((entry) => entry.id === id).status);
+      assert.equal(legacy().find((entry) => entry.id === id).service_board_tomorrow_date, "2099-01-01");
+      assert.equal(legacy().find((entry) => entry.id === id).service_board_tomorrow_order, 8);
+      assert.deepEqual(after.jobs.filter((entry) => entry.id !== id), before.jobs.filter((entry) => entry.id !== id));
+      for (const key of ["customers", "maintenancePlans", "deletedJobs"]) assert.deepEqual(after[key], before[key]);
+      for (const key of ["quote", "invoice"]) assert.deepEqual(changed[key], before.jobs.find((entry) => entry.id === id)[key]);
+    } finally { db.close(); }
   }), fixture);
 });
 
@@ -528,7 +571,7 @@ test("job create supports existing customer/site, new customer/site, existing cu
   });
 });
 
-test("job edit, schedule, tomorrow planning, and status updates persist", async () => {
+test("job edit, schedule, and status updates persist", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {
       const update = await requestJson(baseUrl, "/api/jobs/demo-job-1001", {
@@ -558,61 +601,13 @@ test("job edit, schedule, tomorrow planning, and status updates persist", async 
       assert.equal(schedule.response.status, 200, schedule.payload.error);
       assert.equal(schedule.payload.result.scheduledDate, "2026-02-04");
 
-      const plan = await requestJson(baseUrl, "/api/jobs/demo-job-1001/tomorrow", {
-        method: "POST",
-        body: JSON.stringify({ tomorrowDate: "2026-02-05" }),
-      });
-      assert.equal(plan.response.status, 200, plan.payload.error);
-      assert.equal(plan.payload.result.serviceBoardTomorrowDate, "2026-02-05");
-      assert.equal(plan.payload.result.scheduledDate, "2026-02-05");
-
       const status = await requestJson(baseUrl, "/api/jobs/demo-job-1001/status", {
         method: "PATCH",
         body: JSON.stringify({ status: "Completed" }),
       });
       assert.equal(status.response.status, 200, status.payload.error);
       assert.equal(status.payload.result.status, "Completed");
-      assert.equal(status.payload.result.serviceBoardTomorrowDate, "");
-
-      const replan = await requestJson(baseUrl, "/api/jobs/demo-job-1001/tomorrow", {
-        method: "POST",
-        body: JSON.stringify({ tomorrowDate: "2026-02-06" }),
-      });
-      assert.equal(replan.response.status, 200, replan.payload.error);
-
-      const remove = await requestJson(baseUrl, "/api/jobs/demo-job-1001/tomorrow", { method: "DELETE" });
-      assert.equal(remove.response.status, 200, remove.payload.error);
-      assert.equal(remove.payload.result.serviceBoardTomorrowDate, "");
-      assert.equal(remove.payload.result.scheduledDate, "");
-
-      const createSecond = await requestJson(baseUrl, "/api/jobs", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: { id: "demo-customer-arcadia" },
-          job: {
-            id: "job-tomorrow-second",
-            title: "Synthetic second tomorrow job",
-            jobAddress: "10 Example Lane, Sampleton VIC 3000",
-          },
-        }),
-      });
-      assert.equal(createSecond.response.status, 200, createSecond.payload.error);
-
-      await requestJson(baseUrl, "/api/jobs/demo-job-1001/tomorrow", {
-        method: "POST",
-        body: JSON.stringify({ tomorrowDate: "2026-02-07" }),
-      });
-      await requestJson(baseUrl, "/api/jobs/job-tomorrow-second/tomorrow", {
-        method: "POST",
-        body: JSON.stringify({ tomorrowDate: "2026-02-07" }),
-      });
-      const removeAll = await requestJson(baseUrl, "/api/jobs/tomorrow", {
-        method: "DELETE",
-        body: JSON.stringify({ tomorrowDate: "2026-02-07" }),
-      });
-      assert.equal(removeAll.response.status, 200, removeAll.payload.error);
-      assert.equal(removeAll.payload.result.updatedCount, 2);
-      assert.equal(removeAll.workspace.jobs.filter((job) => job.serviceBoardTomorrowDate === "2026-02-07").length, 0);
+      assert.equal(status.payload.result.scheduledDate, "2026-02-04");
 
       const state = getDbState(dbPath);
       assert.equal(state.jobs.find((job) => job.id === "demo-job-1001").status, "Completed");
@@ -838,12 +833,6 @@ test("technicians can use limited status, notes, and photo routes but cannot man
         body: JSON.stringify({ scheduledDate: "2026-03-01" }),
       });
       assert.equal(deniedSchedule.response.status, 403);
-
-      const deniedTomorrow = await requestJson(baseUrl, "/api/jobs/demo-job-1001/tomorrow", {
-        method: "POST",
-        body: JSON.stringify({ tomorrowDate: "2026-03-02" }),
-      });
-      assert.equal(deniedTomorrow.response.status, 403);
 
       const deniedDelete = await requestJson(baseUrl, "/api/jobs/demo-job-1001", { method: "DELETE" });
       assert.equal(deniedDelete.response.status, 403);

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
 import { useStableCallback } from "@/hooks/useStableCallback";
-import { ArrowDownUp, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { ArrowDownUp, Search, SlidersHorizontal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,6 @@ import {
   getMobileMoveButtonId,
   serviceBoardSortOptions,
   sortJobsForColumn,
-  TOMORROW_VIEW,
 } from "./service-board-utils";
 
 export default function MobileServiceBoard({
@@ -29,7 +28,6 @@ export default function MobileServiceBoard({
   noteEditMode = false,
   onToggleNoteEditMode,
   onEditNote,
-  canManageTomorrow,
   columnSortModes,
   formatDate,
   getInvoiceStatus,
@@ -37,9 +35,6 @@ export default function MobileServiceBoard({
   officeSearch,
   onColumnSortModeChange,
   onOpenJob,
-  onPlanJobForTomorrow,
-  onRemoveAllJobsFromTomorrow,
-  onRemoveJobFromTomorrow,
   onSearchChange,
   onSelectedViewChange,
   onShowTagLabelsChange,
@@ -48,8 +43,6 @@ export default function MobileServiceBoard({
   showHighUrgencyOnly,
   showTagLabels,
   selectedView,
-  tomorrowJobs,
-  tomorrowPlanningDate,
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [moveJob, setMoveJob] = useState(null);
@@ -61,34 +54,16 @@ export default function MobileServiceBoard({
     () => Object.fromEntries(statuses.map((status) => [status, jobs.filter((job) => job.status === status).length])),
     [jobs]
   );
-  const candidateJobs = useMemo(() => {
-    const byId = new Map([...jobs, ...tomorrowJobs].map((job) => [job.id, job]));
-    return [...byId.values()];
-  }, [jobs, tomorrowJobs]);
-  const isTomorrowView = selectedView === TOMORROW_VIEW;
-  const sortMode = isTomorrowView ? "recent" : columnSortModes[selectedView] || "recent";
-  const selectedJobs = useMemo(() => isTomorrowView
-    ? tomorrowJobs
-    : sortJobsForColumn(jobs.filter((job) => job.status === selectedView), sortMode),
-  [isTomorrowView, tomorrowJobs, jobs, selectedView, sortMode]);
-  const selectedLabel = isTomorrowView ? "Tomorrow" : selectedView;
-  const visibleJobs = selectedView === "Completed" ? selectedJobs.slice(0, visibleLimit) : selectedJobs;
+  const activeView = statuses.includes(selectedView) ? selectedView : statuses[0];
+  const statusDateKey = new Date().toDateString();
+  const sortMode = columnSortModes[activeView] || "recent";
+  const selectedJobs = useMemo(() => sortJobsForColumn(jobs.filter((job) => job.status === activeView), sortMode), [jobs, activeView, sortMode]);
+  const selectedLabel = activeView;
+  const visibleJobs = activeView === "Completed" ? selectedJobs.slice(0, visibleLimit) : selectedJobs;
   const activeFilterCount = Number(showHighUrgencyOnly) + Number(billingTypeFilter !== "all");
 
   const openJob = useStableCallback(onOpenJob);
   const editNote = useStableCallback(onEditNote);
-  const handlePlanForTomorrow = useStableCallback(async (jobId) => {
-    const job = candidateJobs.find((entry) => entry.id === jobId);
-    const saved = await onPlanJobForTomorrow(jobId);
-    if (saved) setStatusMessage(`Job #${job?.jobNumber || ""} added to tomorrow.`);
-  });
-
-  const handleRemoveFromTomorrow = useStableCallback(async (jobId) => {
-    const job = candidateJobs.find((entry) => entry.id === jobId);
-    const saved = await onRemoveJobFromTomorrow(jobId);
-    if (saved) setStatusMessage(`Job #${job?.jobNumber || ""} removed from tomorrow.`);
-  });
-
   const handleMoved = (job, nextStatus) => {
     setMoveJob(null);
     onSelectedViewChange(nextStatus);
@@ -103,7 +78,7 @@ export default function MobileServiceBoard({
       <PageTopBar data-service-board-toolbar innerClassName="px-2.5 pb-2.5">
       <MobileStatusTabs
         counts={counts}
-        selectedView={selectedView}
+        selectedView={activeView}
         onSelect={onSelectedViewChange}
       />
 
@@ -148,23 +123,21 @@ export default function MobileServiceBoard({
 
         <JobNoteModeButton active={noteEditMode} onToggle={onToggleNoteEditMode} mobile />
 
-        {!isTomorrowView ? (
-          <Select value={sortMode} onValueChange={(nextSortMode) => onColumnSortModeChange(selectedView, nextSortMode)}>
-            <SelectTrigger
-              className="h-11 w-11 rounded-xl bg-card px-0 sm:w-[116px] sm:px-3"
-              aria-label={`Sort ${selectedView} jobs`}
-              title="Sort jobs"
-            >
-              <ArrowDownUp className="mx-auto h-4 w-4 shrink-0 sm:mx-0" />
-              <span className="hidden sm:inline"><SelectValue /></span>
-            </SelectTrigger>
-            <SelectContent>
-              {serviceBoardSortOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
+        <Select value={sortMode} onValueChange={(nextSortMode) => onColumnSortModeChange(activeView, nextSortMode)}>
+          <SelectTrigger
+            className="h-11 w-11 rounded-xl bg-card px-0 sm:w-[116px] sm:px-3"
+            aria-label={`Sort ${activeView} jobs`}
+            title="Sort jobs"
+          >
+            <ArrowDownUp className="mx-auto h-4 w-4 shrink-0 sm:mx-0" />
+            <span className="hidden sm:inline"><SelectValue /></span>
+          </SelectTrigger>
+          <SelectContent>
+            {serviceBoardSortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       </PageTopBar>
@@ -177,10 +150,10 @@ export default function MobileServiceBoard({
       ) : null}
 
       <div
-        id={getMobileBoardPanelId(selectedView)}
+        id={getMobileBoardPanelId(activeView)}
         role="tabpanel"
         aria-label={`${selectedLabel} jobs`}
-        data-service-board-status={isTomorrowView ? undefined : selectedView}
+        data-service-board-status={activeView}
         data-mobile-board-view={selectedLabel}
         className="w-full min-w-0 max-w-full rounded-2xl border bg-card/64 p-2.5 shadow-sm backdrop-blur"
       >
@@ -189,30 +162,15 @@ export default function MobileServiceBoard({
             <h2 className="truncate text-base font-semibold text-foreground">{selectedLabel}</h2>
             <p className="text-xs text-text-secondary">{selectedJobs.length} {selectedJobs.length === 1 ? "job" : "jobs"}</p>
           </div>
-          {isTomorrowView && canManageTomorrow && tomorrowJobs.length > 0 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="min-h-11 rounded-xl px-3 text-status-danger"
-              onClick={onRemoveAllJobsFromTomorrow}
-            >
-              <Trash2 className="h-4 w-4" />
-              Clear tomorrow
-            </Button>
-          ) : null}
         </div>
 
         {selectedJobs.length === 0 ? (
           <div className={`rounded-2xl border border-dashed px-4 py-10 text-center ${
-            isTomorrowView ? "border-status-info-border bg-status-info-surface/75" : statusThemes[selectedView]?.card || "bg-muted"
+            statusThemes[activeView]?.card || "bg-muted"
           }`}>
             <p className="font-semibold text-foreground">No jobs in {selectedLabel}</p>
             <p className="mt-1 text-sm text-text-secondary">
-              {isTomorrowView
-                ? canManageTomorrow
-                  ? "Use the Tomorrow action on a job to build the plan."
-                  : "No jobs are currently planned for tomorrow."
-                : "Choose another status or adjust your filters."}
+              Choose another status or adjust your filters.
             </p>
           </div>
         ) : (
@@ -223,23 +181,18 @@ export default function MobileServiceBoard({
                 noteEditMode={noteEditMode}
                 onEditNote={editNote}
                 key={job.id}
-                canManageTomorrow={canManageTomorrow}
                 formatDate={formatDate}
                 getInvoiceStatus={getInvoiceStatus}
-                statusDateKey={tomorrowPlanningDate}
-                isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
+                statusDateKey={statusDateKey}
                 job={job}
                 onMove={setMoveJob}
                 onOpen={openJob}
-                onPlanForTomorrow={!isTomorrowView ? handlePlanForTomorrow : null}
-                onRemoveFromTomorrow={isTomorrowView ? handleRemoveFromTomorrow : null}
-                showStatus={isTomorrowView}
                 showTagLabels={showTagLabels}
               />
             ))}
           </div>
         )}
-        {selectedView === "Completed" ? <CompletedShowMore visibleLimit={visibleLimit} totalCount={selectedJobs.length} onShowMore={showMore} /> : null}
+        {activeView === "Completed" ? <CompletedShowMore visibleLimit={visibleLimit} totalCount={selectedJobs.length} onShowMore={showMore} /> : null}
       </div>
 
       </PageBody>

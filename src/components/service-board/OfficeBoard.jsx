@@ -1,7 +1,7 @@
 import { isWarrantyJob } from "@/lib/job-billing";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStableCallback } from "@/hooks/useStableCallback";
-import { ArrowUpRight, ChevronRight, LayoutGrid, List, Rows3, X } from "lucide-react";
+import { ChevronRight, LayoutGrid, List, Rows3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,196 +123,6 @@ export function ServiceBoardTagLegend({
   );
 }
 
-const TomorrowJobCard = memo(function TomorrowJobCard({ job, formatDate, onOpenJob, onRemoveJob, noteEditMode, onEditNote }) {
-  const urgencyTone = {
-    Low: "bg-surface-raised text-text-secondary",
-    Medium: "bg-status-warning-surface text-status-warning",
-    High: "bg-status-danger-surface text-status-danger",
-  };
-  const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
-
-  return (
-    <div
-      className={`relative rounded-2xl border p-4 shadow-sm ${isWarrantyJob(job) ? "warranty-job-card" : statusTheme.card}`}
-      data-note-edit-mode={noteEditMode || undefined}
-      data-tomorrow-job-id={job.id}
-      tabIndex={noteEditMode ? 0 : undefined}
-      onClick={(event) => { if (noteEditMode && !event.target.closest("button")) onEditNote(job, event); }}
-      onKeyDown={(event) => {
-        if (noteEditMode && event.target === event.currentTarget && ["Enter", " "].includes(event.key)) {
-          event.preventDefault();
-          onEditNote(job, event);
-        }
-      }}
-    >
-      <JobNotePill note={job.serviceBoardNote} />
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
-          <p className="mt-1 font-semibold leading-5 text-foreground">{job.customerName}</p>
-          <p className="mt-1 text-sm text-text-secondary">{job.title}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <Badge className={statusTheme.badge}>{job.status}</Badge>
-          {job.status !== "Completed" ? <Badge className={urgencyTone[job.urgency] || urgencyTone.Low}>{job.urgency}</Badge> : null}
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-2 text-xs text-text-secondary">
-        <div className="flex items-start justify-between gap-3">
-          <span className="shrink-0">Site</span>
-          <span className="line-clamp-2 max-w-[240px] text-right font-medium text-foreground">{job.jobAddress || "Not set"}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span>Scheduled</span>
-          <span className="text-right font-medium text-foreground">{job.scheduledDate ? formatDate(job.scheduledDate) : "Unscheduled"}</span>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <Button type="button" size="sm" variant="outline" className="rounded-xl" onClick={() => onRemoveJob(job.id)}>
-          <X className="mr-1.5 h-3.5 w-3.5" /> Remove
-        </Button>
-        <Button type="button" size="sm" variant="secondary" className="rounded-xl" onClick={() => onOpenJob(job)}>
-          View Job
-        </Button>
-      </div>
-    </div>
-  );
-});
-
-export function ServiceBoardTomorrowPanel({
-  noteEditMode = false,
-  onEditNote,
-  jobs,
-  open,
-  tomorrowDate,
-  onOpenChange,
-  onOpenJob,
-  onRemoveAllJobs,
-  onRemoveJob,
-  formatDate,
-}) {
-  const panelWidth = "min(92vw, 440px)";
-  const openJob = useStableCallback(onOpenJob);
-  const removeJob = useStableCallback(onRemoveJob);
-  const editNote = useStableCallback(onEditNote);
-  const tabButtonRef = useRef(null);
-  const [tabEdgeOffset, setTabEdgeOffset] = useState(0);
-
-  useEffect(() => {
-    if (!tabButtonRef.current) return undefined;
-
-    const measureOffset = () => {
-      const width = tabButtonRef.current?.offsetWidth || 0;
-      const height = tabButtonRef.current?.offsetHeight || 0;
-      setTabEdgeOffset(Math.max(0, (width - height) / 2));
-    };
-
-    measureOffset();
-
-    if (typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(() => {
-      measureOffset();
-    });
-
-    observer.observe(tabButtonRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [jobs.length]);
-
-  return (
-    <>
-      <Button
-        ref={tabButtonRef}
-        data-desktop-tomorrow-tab
-        type="button"
-        variant="outline"
-        className="fixed top-1/2 z-[60] flex -translate-y-1/2 rotate-90 items-center gap-2 rounded-b-2xl rounded-t-none border-border bg-card/95 px-3 py-2 shadow-lg transition-all duration-300 hover:bg-card"
-        style={{ right: open ? `calc(${panelWidth} - ${tabEdgeOffset}px)` : `${-tabEdgeOffset}px` }}
-        onClick={() => onOpenChange(!open)}
-      >
-        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-text-secondary">Tomorrow</span>
-        <Badge className="bg-status-info-surface text-status-info">{jobs.length}</Badge>
-        <ChevronRight className={`h-4 w-4 text-text-secondary transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
-      </Button>
-
-      <div className={`fixed inset-0 z-40 transition-opacity duration-300 ${open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"}`}>
-        <button
-          type="button"
-          className="absolute inset-0 bg-scrim backdrop-blur-[1px]"
-          onClick={() => onOpenChange(false)}
-          aria-label="Close tomorrow panel"
-        />
-      </div>
-
-      <aside
-        className={`fixed right-0 top-0 z-50 h-screen w-[min(92vw,440px)] border-l border-border bg-card/96 shadow-2xl backdrop-blur transition-transform duration-300 ${open ? "translate-x-0" : "translate-x-full"}`}
-      >
-        <div className="flex h-full flex-col">
-          <div className="border-b border-border px-5 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tomorrow</p>
-                <p className="mt-1 text-xl font-semibold text-foreground">{formatDate(tomorrowDate)}</p>
-                <p className="mt-2 text-sm text-text-secondary">
-                  Build tomorrow&apos;s run sheet from the board using the hover arrow on each job card.
-                </p>
-              </div>
-              <Button type="button" variant="outline" size="icon" className="rounded-xl" onClick={() => onOpenChange(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted px-3 py-2">
-              <span className="text-sm text-text-secondary">Planned jobs</span>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="rounded-xl border-status-danger-border text-status-danger hover:bg-status-danger-surface"
-                  onClick={() => onRemoveAllJobs?.()}
-                  disabled={jobs.length === 0}
-                >
-                  Remove all
-                </Button>
-                <Badge className="bg-status-info-surface text-status-info">{jobs.length}</Badge>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            {jobs.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-muted px-5 py-8 text-center text-sm text-text-secondary">
-                Hover a job card and click the arrow to send it here.
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {jobs.map((job) => (
-                  <TomorrowJobCard
-                    noteEditMode={noteEditMode}
-                    onEditNote={editNote}
-                    key={job.id}
-                    job={job}
-                    formatDate={formatDate}
-                    onOpenJob={openJob}
-                    onRemoveJob={removeJob}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </aside>
-    </>
-  );
-}
-
 function JobCardIndicators({ indicators, showLabels, className = "mt-2" }) {
   if (indicators.length === 0) return null;
 
@@ -351,9 +161,7 @@ const JobCard = memo(function JobCard({
   draggable = false,
   viewMode = "list",
   showTagLabels = false,
-  isPlannedForTomorrow = false,
   isTouchDragging = false,
-  onPlanForTomorrow = null,
   onTouchDragStart = null,
   formatDate,
   getInvoiceStatus,
@@ -381,7 +189,10 @@ const JobCard = memo(function JobCard({
     return () => observer.disconnect();
   }, [isGridView, isCompactView, jobValueMeta?.amount]);
   const cardClassName = `box-border w-full min-w-0 max-w-full ${isGridView ? "h-full overflow-visible rounded-2xl py-0" : isCompactView ? "rounded-xl py-2" : "rounded-2xl py-0"} select-none shadow-sm transition hover:shadow-md ${isWarrantyJob(job) ? "warranty-job-card" : statusTheme.card} ${isTouchDragging ? "opacity-45" : ""}`;
-  const cardContentClassName = isGridView ? "flex h-full flex-col p-2 pb-3" : isCompactView ? "px-2.5 py-0" : "p-2.5";
+  // Keep Grid text clear of the retained floating note and price pills.
+  const cardContentClassName = isGridView
+    ? `flex h-full flex-col p-2 ${jobValueMeta || job.serviceBoardNote ? "pb-5" : "pb-3"}`
+    : isCompactView ? "px-2.5 py-0" : "p-2.5";
   // Keep enough room for the full price, the gap, and a visible note ellipsis.
   const headerMetaMinWidth = job.serviceBoardNote && jobValueMeta
     ? "min-w-[calc(var(--job-price-width,5rem)+1.75rem)]"
@@ -439,34 +250,6 @@ const JobCard = memo(function JobCard({
     </div>
   ) : null;
   const compactAddress = formatStreetAndSuburb(job.jobAddress);
-  // Clear the lower half of the shared 18px floating indicator row.
-  const tomorrowActionPositionClassName = "right-1.5 top-2.5";
-  const tomorrowAction = isPlannedForTomorrow ? (
-    <span
-      className={`absolute z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-status-info-surface text-[10px] font-bold text-status-info shadow-sm ring-2 ring-border ${tomorrowActionPositionClassName}`}
-      title="Planned for tomorrow"
-      aria-label="Planned for tomorrow"
-    >
-      T
-    </span>
-  ) : onPlanForTomorrow ? (
-    <Button
-      type="button"
-      size="icon"
-      variant="outline"
-      className={`service-board-tomorrow-action absolute z-10 h-8 w-8 rounded-full border-status-info-border bg-card/95 text-status-info opacity-0 shadow-sm transition group-hover:opacity-100 focus-visible:opacity-100 ${tomorrowActionPositionClassName}`}
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onPlanForTomorrow(job.id);
-      }}
-      aria-label={`Add Job #${job.jobNumber} to tomorrow`}
-      title="Add to tomorrow"
-    >
-      <ArrowUpRight className="h-4 w-4" />
-    </Button>
-  ) : null;
-
   const handleDragStart = (event) => {
     if (noteEditMode || !draggable) { event.preventDefault(); return; }
     event.dataTransfer.setData("jobId", job.id);
@@ -484,13 +267,12 @@ const JobCard = memo(function JobCard({
         title={noteEditMode ? "Click to edit job note" : "Double-click to open job"}
       >
         {floatingIndicators}
-        {tomorrowAction}
         <Card className={cardClassName}>
           <CardContent className={`min-w-0 max-w-full [overflow-wrap:anywhere] ${cardContentClassName}`}>
             <button
               type="button"
               data-job-card-body
-              className="flex w-full min-w-0 items-start justify-between gap-2 pr-12 text-left lg:pr-9"
+              className="flex w-full min-w-0 items-start justify-between gap-2 text-left"
               onClick={() => setIsCompactExpanded((prev) => !prev)}
               aria-expanded={isCompactExpanded}
             >
@@ -548,7 +330,6 @@ const JobCard = memo(function JobCard({
     >
       {isGridView ? <JobNotePill note={job.serviceBoardNote} variant="floating" withFloatingPrice={Boolean(jobValueMeta)} /> : null}
       {floatingIndicators}
-      {tomorrowAction}
       {isGridView && jobValueMeta ? (
         <div
           data-grid-job-value
@@ -564,7 +345,6 @@ const JobCard = memo(function JobCard({
           {isGridView ? (
             <div className="flex h-full min-w-0 flex-col justify-between gap-2">
               <div className="space-y-1">
-                {tomorrowAction ? <span aria-hidden="true" className="float-right h-9 w-10 max-lg:h-12 max-lg:w-12" /> : null}
                 <p data-job-card-number className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
                 <p data-job-card-customer className="text-xs font-medium leading-4 text-foreground">{job.customerName}</p>
                 <p className="text-[11px] font-normal leading-4 text-foreground">{job.title}</p>
@@ -574,11 +354,11 @@ const JobCard = memo(function JobCard({
             </div>
           ) : (
             <>
-          {showIndicatorLabels && cardIndicators.length > 0 ? <div className="mb-1 flex min-h-6 items-center pr-8 max-lg:min-h-10 max-lg:pr-12">
+          {showIndicatorLabels && cardIndicators.length > 0 ? <div className="mb-1 flex min-h-6 items-center max-lg:min-h-10">
             <JobCardIndicators indicators={cardIndicators} showLabels={showIndicatorLabels} className="" />
           </div> : null}
 
-          <div className={`flex items-start justify-between gap-2 ${(!showIndicatorLabels || cardIndicators.length === 0) && tomorrowAction ? "pr-10 max-lg:pr-12" : ""}`}>
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <p data-job-card-number className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Job #{job.jobNumber}</p>
               <p className="font-semibold leading-5 text-foreground">{job.customerName}</p>
@@ -644,15 +424,14 @@ export function OfficeBoard({
   columnViewModes = {},
   onColumnSortModeChange,
   onColumnViewModeChange,
-  onPlanJobForTomorrow,
   showTagLabels = false,
   getInvoiceStatus,
   formatDate,
-  tomorrowPlanningDate = "",
   officeSearch = "",
   showHighUrgencyOnly = false,
   billingTypeFilter = "all",
 }) {
+  const statusDateKey = new Date().toDateString();
   const { visibleLimit, showMore } = useCompletedJobLimit(officeSearch, showHighUrgencyOnly, columnSortModes.Completed || "recent", billingTypeFilter);
   const [touchDrag, setTouchDrag] = useState(null);
   const [touchDropTargetStatus, setTouchDropTargetStatus] = useState("");
@@ -662,7 +441,6 @@ export function OfficeBoard({
   const touchDragPreviewRef = useRef(null);
   const openJob = useStableCallback(onOpenJob);
   const editNote = useStableCallback(onEditNote);
-  const planForTomorrow = useStableCallback(onPlanJobForTomorrow);
   const dropJob = useStableCallback(onDropJob);
   const todoSort = columnSortModes["To Do"] || "recent";
   const progressSort = columnSortModes["In Progress"] || "recent";
@@ -894,17 +672,11 @@ export function OfficeBoard({
                       draggable={allowDragging}
                       viewMode={viewMode}
                       showTagLabels={showTagLabels}
-                      isPlannedForTomorrow={job.serviceBoardTomorrowDate === tomorrowPlanningDate}
                       isTouchDragging={Boolean(touchDrag?.isActive && touchDrag.jobId === job.id)}
-                      onPlanForTomorrow={
-                        onPlanJobForTomorrow && job.serviceBoardTomorrowDate !== tomorrowPlanningDate
-                          ? planForTomorrow
-                          : null
-                      }
                       onTouchDragStart={allowDragging ? handleTouchDragStart : null}
                       formatDate={formatDate}
                       getInvoiceStatus={getInvoiceStatus}
-                      statusDateKey={tomorrowPlanningDate}
+                      statusDateKey={statusDateKey}
                     />
                   ))
                 )}

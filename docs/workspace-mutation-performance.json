@@ -136,21 +136,6 @@
       "file": "server-job-routes.js"
     },
     {
-      "method": "POST",
-      "path": "/api/jobs/:id/tomorrow",
-      "file": "server-job-routes.js"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/jobs/:id/tomorrow",
-      "file": "server-job-routes.js"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/jobs/tomorrow",
-      "file": "server-job-routes.js"
-    },
-    {
       "method": "DELETE",
       "path": "/api/jobs/:id",
       "file": "server-job-routes.js"

@@ -26,7 +26,9 @@ const jobOriginalTitle = "E2E Core Job Original";
 const jobEditedTitle = "E2E Core Job Updated";
 const jobOriginalDescription = "Synthetic browser-created gate service job.";
 const jobEditedDescription = "Updated synthetic browser-created gate service job.";
-const jobScheduledDate = "2026-03-17";
+const jobScheduledDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Australia/Sydney", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date(Date.now() + 86_400_000));
 const jobNoteText = "E2E synthetic job note for SQLite persistence.";
 const jobPhotoName = "e2e-job-photo.png";
 const controlCustomerId = "e2e-control-customer-job-flow";
@@ -564,31 +566,6 @@ async function changeJobStatusFromDetails(page, jobId, title, status) {
   await closeOpenDialog(page);
 }
 
-async function addAndRemoveTomorrowPlan(page, job) {
-  await openServiceBoard(page);
-  await page.getByPlaceholder("Search jobs, customer, address...").fill(jobEditedTitle);
-  await page.getByRole("button", { name: `Add Job #${job.jobNumber} to tomorrow` }).click();
-  const plannedJob = await waitForActiveJob(job.id, (entry) =>
-    Boolean(entry.serviceBoardTomorrowDate) &&
-    entry.scheduledDate === entry.serviceBoardTomorrowDate
-  );
-
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Customers" })).toBeVisible();
-  await openServiceBoard(page);
-  await page.getByRole("button", { name: /Tomorrow/ }).first().click();
-  const panel = page.locator("aside", { hasText: jobEditedTitle });
-  await expect(panel).toBeVisible();
-  await panel.getByRole("button", { name: /^Remove$/ }).click();
-  await waitForActiveJob(job.id, (entry) =>
-    !entry.serviceBoardTomorrowDate &&
-    !entry.serviceBoardTomorrowOrder &&
-    !entry.scheduledDate
-  );
-  await page.getByLabel("Close tomorrow panel").click();
-  return plannedJob.serviceBoardTomorrowDate;
-}
-
 async function addJobNoteAndPhotoMetadata(page, jobId) {
   const workspace = await openJobFromHistory(page, jobEditedTitle);
   await workspace.getByRole("tab", { name: "Notes & photos" }).click();
@@ -883,8 +860,6 @@ test("SQLite core job workflow persists through browser refreshes", async ({ pag
     );
     expect(scheduledJob.scheduledDate).toBe(jobScheduledDate);
 
-    const tomorrowDate = await addAndRemoveTomorrowPlan(page, scheduledJob);
-    expect(tomorrowDate).toBeTruthy();
     await addJobNoteAndPhotoMetadata(page, createdJob.id);
 
     await deleteAndRestoreJob(page, createdJob.id);
@@ -909,8 +884,7 @@ test("SQLite core job workflow persists through browser refreshes", async ({ pag
       customerName: unrelatedCustomerName,
       jobAddress: fixtureSiteAddress,
       ocNumber: "CLIENT-REF-E2E-JOB-EDITED",
-      scheduledDate: "",
-      serviceBoardTomorrowDate: "",
+      scheduledDate: jobScheduledDate,
     });
     expect(finalJob.notes.some((note) => note.text === jobNoteText)).toBe(true);
     expect(finalJob.photos.some((photo) => photo.name === jobPhotoName)).toBe(false);

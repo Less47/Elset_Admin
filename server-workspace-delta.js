@@ -27,8 +27,6 @@ function collectScope(db, domain, req, result, scope = {}) {
     } else if (route === "/api/jobs/reschedule-day") {
       add("jobs", req.method === "GET" ? result?.jobs?.map(entry => entry.job.id) || []
         : Array.isArray(req.body?.jobs) ? req.body.jobs.map(entry => entry?.id) : []);
-    } else if (route === "/api/jobs/tomorrow") {
-      add("jobs", result?.jobIds || []);
     } else {
       add("jobs", [id, result?.job?.id, result?.id && (route === "/api/jobs" || restoring) ? result.id : null]);
       if (restoring || (deleting && route === "/api/jobs/:id")) add("deletedJobs", [id]);

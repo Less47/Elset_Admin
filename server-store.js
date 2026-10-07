@@ -726,10 +726,6 @@ function normalizeDocumentRecord(document, fallbackType) {
 
 function normalizeJobRecord(job) {
   if (!job) return null;
-  const tomorrowOrderValue = Number(job.serviceBoardTomorrowOrder);
-  const hasTomorrowOrder = job.serviceBoardTomorrowOrder !== null
-    && job.serviceBoardTomorrowOrder !== undefined
-    && Number.isFinite(tomorrowOrderValue);
   return {
     id: job.id || crypto.randomUUID(),
     jobNumber: job.jobNumber || 1,
@@ -759,8 +755,6 @@ function normalizeJobRecord(job) {
     maintenancePlanName: String(job.maintenancePlanName || "").trim(),
     maintenanceDueDate: toDateInputValue(job.maintenanceDueDate),
     maintenanceOccurrenceKey: job.maintenanceOccurrenceKey || "",
-    serviceBoardTomorrowDate: toDateInputValue(job.serviceBoardTomorrowDate),
-    serviceBoardTomorrowOrder: hasTomorrowOrder ? tomorrowOrderValue : null,
     serviceBoardNote: normalizeServiceBoardNote(job.serviceBoardNote),
     createdAt: job.createdAt || new Date().toISOString(),
     updatedAt: job.updatedAt || new Date().toISOString(),

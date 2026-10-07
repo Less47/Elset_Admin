@@ -1,5 +1,7 @@
 # Service Board controls and Completed pagination
 
+> Historical implementation report. The dedicated Service Board Tomorrow planning feature and its APIs were removed on 7 October 2026. References below describe the earlier implementation and verification, not current functionality. Normal scheduled dates, Calendar and Scheduled sorting remain supported.
+
 Implemented locally on top of `1d36e72`. Changes remain uncommitted. No push or deployment was performed.
 
 1. **Previous Recent source.** The shared `sortJobsForColumn` comparator used `updatedAt` descending, then job number descending. Desktop/tablet and mobile used this comparator and rendered every matching Completed job.

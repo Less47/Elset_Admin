@@ -16,7 +16,7 @@ ELSET Admin theme system overhaul - 10 September 2026
 
 7. **Calendar.** The main surface, weekday strip, date cells, out-of-month cells, mini navigator, Job Queue, desktop Day Inspector, mobile day sheet and drag preview all theme. Grid lines remain visible; today and selected dates keep separate indicators. Maintenance chips retain a teal family, separate from normal job status chips. Scheduling and drag/drop logic are unchanged.
 
-8. **Service Board.** To Do, In Progress and Completed keep amber, blue and green meanings, using dark tinted columns/cards and readable badges in Midnight. Value bubbles, tags, filters, sort controls, Tomorrow panel and mobile board sheets use semantic surfaces. Solid small business indicator dots remain intentionally coloured.
+8. **Service Board.** To Do, In Progress and Completed keep amber, blue and green meanings, using dark tinted columns/cards and readable badges in Midnight. Value bubbles, tags, filters, sort controls and mobile board sheets use semantic surfaces. Solid small business indicator dots remain intentionally coloured.
 
 9. **Light presets.** Classic uses ice/blue surfaces (#EAF7FB seed) with blue/orange branding. Copper uses parchment/cream (#F1DECD) with copper/brown framing. Evergreen uses sage/eucalyptus (#DFEADA) with forest framing. Rose uses restrained blush (#EFDBE3) and plum/wine. Desert uses sand/ochre (#EEE1C3) and amber/charcoal. Every preset supplies all eleven persisted seeds; all derive distinct raised, muted, input, table and popup treatments. UI Settings previews use the same builder as the application. Preset cards include miniature surface layouts, dots and a selected state.
 

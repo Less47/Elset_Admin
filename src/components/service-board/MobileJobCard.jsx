@@ -1,6 +1,6 @@
 import { isWarrantyJob } from "@/lib/job-billing";
 import { memo } from "react";
-import { ArrowUpRight, CalendarPlus, ChevronRight, MoveRight } from "lucide-react";
+import { ChevronRight, MoveRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { statusThemes } from "@/lib/job-status";
@@ -50,16 +50,11 @@ const MobileJobCard = memo(function MobileJobCard({
   accountingProvider,
   noteEditMode = false,
   onEditNote,
-  canManageTomorrow,
   formatDate,
   getInvoiceStatus,
-  isPlannedForTomorrow,
   job,
   onMove,
   onOpen,
-  onPlanForTomorrow,
-  onRemoveFromTomorrow,
-  showStatus = false,
   showTagLabels,
 }) {
   const statusTheme = statusThemes[job.status] || statusThemes["To Do"];
@@ -122,40 +117,12 @@ const MobileJobCard = memo(function MobileJobCard({
         <div className="mt-2.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <Badge className={urgencyTone[job.urgency] || urgencyTone.Low}>{job.urgency || "Low"}</Badge>
-            {showStatus ? <Badge className={statusTheme.badge}>{job.status}</Badge> : null}
-            {isPlannedForTomorrow ? <Badge className="bg-status-info-surface text-status-info">Tomorrow</Badge> : null}
           </div>
           <MobileIndicatorList indicators={indicators} showLabels={showTagLabels} />
         </div>
       </button>
 
       <div className={`flex min-h-12 min-w-0 flex-wrap items-center justify-end gap-2 rounded-b-2xl bg-card/38 px-2.5 pt-1 ${job.serviceBoardNote ? "pb-3" : "pb-1"}`}>
-        {canManageTomorrow && onRemoveFromTomorrow ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className="min-h-11 rounded-xl px-3 text-status-info"
-            onClick={() => onRemoveFromTomorrow(job.id)}
-            aria-label={`Remove Job #${job.jobNumber} from tomorrow`}
-          >
-            <CalendarPlus className="h-4 w-4" />
-            Remove tomorrow
-          </Button>
-        ) : null}
-
-        {canManageTomorrow && !isPlannedForTomorrow && onPlanForTomorrow ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className="min-h-11 rounded-xl px-3 text-status-info"
-            onClick={() => onPlanForTomorrow(job.id)}
-            aria-label={`Add Job #${job.jobNumber} to tomorrow`}
-          >
-            <ArrowUpRight className="h-4 w-4" />
-            Tomorrow
-          </Button>
-        ) : null}
-
         <Button
           id={getMobileMoveButtonId(job.id)}
           type="button"
