@@ -338,7 +338,7 @@ function normalizeSiteAssetRecord(asset) {
 
   return {
     id: asset.id || crypto.randomUUID(),
-    name: String(asset.name || "").trim() || "Unnamed gate / project",
+    name: String(asset.name || "").trim() || "Unnamed asset",
     type: String(asset.type || "").trim(),
     location: String(asset.location || "").trim(),
     model: String(asset.model || "").trim(),

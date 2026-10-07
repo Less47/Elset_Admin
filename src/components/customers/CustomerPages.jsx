@@ -55,6 +55,7 @@ export default function CustomerPages() {
       onBack={onBack} onEdit={() => navigate(`${sitePath}/edit`, { state: linkState })}
       onOpenCustomer={() => actions.handleOpenCustomerProfile(customer.id)} onOpenJob={actions.handleOpenJob}
       onSaveSite={actions.handleSaveSiteProfile}
+      onSaveAssets={actions.handleSaveSiteAssets}
       onSaved={() => onBack()}
       onDeleteSiteProfile={async (customerId, entry) => { if (await actions.handleDeleteSiteProfile(customerId, entry)) onBack(); }} />;
   }

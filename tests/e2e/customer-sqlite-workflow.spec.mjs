@@ -332,7 +332,7 @@ async function createSite(page) {
   await sitePage.getByPlaceholder("Search this site address").fill(createdSiteAddress);
   await sitePage.getByPlaceholder("e.g. PS123456").fill("OC-E2E-SITE");
   await sitePage.getByPlaceholder("Gate code, parking, access windows, call-on-arrival details...").fill("Use synthetic keypad 1234.");
-  await sitePage.getByPlaceholder("General context, layout, project details, recurring issues...").fill("Synthetic site notes.");
+  await sitePage.getByPlaceholder("General site context, layout, recurring issues...").fill("Synthetic site notes.");
   await sitePage.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(sitePage).toContainText(createdSiteAddress);
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
@@ -341,7 +341,7 @@ async function createSite(page) {
 
 async function openSiteProfile(page, address) {
   await openSites(page);
-  await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(address);
+  await page.getByPlaceholder("Search customer, site, address, notes, or equipment...").fill(address);
   const row = page.locator(".data-grid-row", { hasText: address }).first();
   await expect(row).toBeVisible();
   await row.dblclick();
@@ -806,13 +806,13 @@ test("SQLite customer workflow persists through browser refreshes", async ({ pag
     await createSite(page);
     await page.reload();
     await openSites(page);
-    await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(createdSiteAddress);
+    await page.getByPlaceholder("Search customer, site, address, notes, or equipment...").fill(createdSiteAddress);
     await expect(siteRows(page, createdSiteAddress).first()).toBeVisible();
 
     await editSite(page);
     await deleteSite(page);
     await openSites(page);
-    await page.getByPlaceholder("Search customer, site, address, notes, or gate/project details...").fill(editedSiteAddress);
+    await page.getByPlaceholder("Search customer, site, address, notes, or equipment...").fill(editedSiteAddress);
     await expect(siteRows(page, editedSiteAddress)).toHaveCount(0);
 
     await tracker.expectNone("no PUT /api/app-state during SQLite customer workflow");

@@ -1071,6 +1071,7 @@ export function useWorkspaceActions({
       ...updatedSiteAddressMetadata(existingSite, normalizedSite),
       id: existingSite?.id || normalizedSite.id,
     };
+    if (!Object.hasOwn(siteInput, "assets")) delete siteForSave.assets;
     const saved = await saveCustomerApiRequest({
       path: existingSite
         ? customerPath(customerId, `/sites/${encodeURIComponent(existingSite.id)}`)
@@ -1087,6 +1088,21 @@ export function useWorkspaceActions({
 
     const savedSite = saved.result || siteForSave;
     return savedSite;
+  }
+
+  async function handleSaveSiteAssets(customerId, siteId, assets) {
+    if (!canManageBusiness) return false;
+    const customer = data.customers.find((entry) => entry.id === customerId);
+    const site = customer?.sites?.find((entry) => !entry._inferredProfile && entry.id === siteId);
+    if (!site || !Array.isArray(assets)) return false;
+    const saved = await saveCustomerApiRequest({
+      path: customerPath(customerId, `/sites/${encodeURIComponent(site.id)}`),
+      method: "PATCH",
+      body: { site: { assets } },
+      errorMessage: "Unable to save Site Assets.",
+      throwOnError: true,
+    });
+    return saved.ok ? saved.result : false;
   }
 
   async function handleDeleteSiteProfile(customerId, site) {
@@ -1509,6 +1525,7 @@ export function useWorkspaceActions({
     handleRestoreDeletedJob,
     handleSaveDocument,
     handleSaveSiteProfile,
+    handleSaveSiteAssets,
     handleScheduleJob,
     handlePreviewDayReschedule,
     handleRescheduleDayJobs,

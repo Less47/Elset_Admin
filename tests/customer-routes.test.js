@@ -336,6 +336,23 @@ test("customer endpoints reject invalid or missing IDs", async () => {
   });
 });
 
+test("Site Gate/Project mutation paths are unavailable while normal Site APIs remain available", async () => {
+  await withTempWorkspace(async ({ env }) => withServer(env, async (baseUrl) => {
+    for (const feature of ["gates", "projects"]) {
+      const endpoint = `/api/customers/demo-customer-arcadia/sites/demo-site-front-entry/${feature}`;
+      for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
+        const response = await fetch(baseUrl + endpoint, { method });
+        assert.equal(response.status, 404, `${method} ${feature} must not be callable`);
+      }
+    }
+    const result = await requestJson(baseUrl, "/api/customers/demo-customer-arcadia/sites", {
+      method: "POST", body: JSON.stringify({ id: "site-only-api", address: "17 Site API Avenue" }),
+    });
+    assert.equal(result.response.status, 200);
+    assert.deepEqual(result.payload.result.assets, []);
+  }));
+});
+
 test("multi-table site create rolls back when a related insert fails", async () => {
   await withTempWorkspace(async ({ env, dbPath }) => {
     await withServer(env, async (baseUrl) => {

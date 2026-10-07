@@ -32,7 +32,7 @@ export default function SiteDetailsFields({ value, onChange, onSelectionPending,
       <Textarea id={`${id}-access`} rows={4} value={value.accessNotes} onChange={(event) => update("accessNotes", event.target.value)} placeholder="Gate code, parking, access windows, call-on-arrival details..." />
     </FormField>
     <FormField label="Site notes" htmlFor={`${id}-notes`}>
-      <Textarea id={`${id}-notes`} rows={4} value={value.notes} onChange={(event) => update("notes", event.target.value)} placeholder="General context, layout, project details, recurring issues..." />
+      <Textarea id={`${id}-notes`} rows={4} value={value.notes} onChange={(event) => update("notes", event.target.value)} placeholder="General site context, layout, recurring issues..." />
     </FormField>
   </>;
 }

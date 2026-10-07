@@ -6,10 +6,7 @@ import ContactAssignmentsEditor from "@/components/shared/ContactAssignmentsEdit
 import { buildSiteProfileDraft, getCustomerContacts, normalizeSiteAddress } from "@/lib/app-support";
 import SiteCustomerPicker from "./SiteCustomerPicker";
 import SiteDetailsFields from "./SiteDetailsFields";
-import SiteAssetsEditor from "./SiteAssetsEditor";
 import "./SiteFormPage.css";
-
-const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
 export default function SiteFormPage({ customers, contacts, initialCustomerId = "", backLabel = "Sites", onCancel, onSave, onSaved }) {
   const formId = useId();
@@ -17,18 +14,16 @@ export default function SiteFormPage({ customers, contacts, initialCustomerId = 
   const customer = customers.find((entry) => entry.id === customerId);
   const [initial] = useState(() => buildSiteProfileDraft(null));
   const [draftSite, setDraftSite] = useState(initial);
-  const [newAssetDraft, setNewAssetDraft] = useState(EMPTY_ASSET);
   const [saving, setSaving] = useState(false);
   const [addressPending, setAddressPending] = useState(false);
   const [error, setError] = useState("");
   const submitting = useRef(false);
-  const dirty = customerId !== initialCustomerId || JSON.stringify(draftSite) !== JSON.stringify(initial) || JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET);
+  const dirty = customerId !== initialCustomerId || JSON.stringify(draftSite) !== JSON.stringify(initial);
   const markSaved = useUnsavedChanges(dirty, { busy: saving });
   const canSave = Boolean(customer && normalizeSiteAddress(draftSite.address)) && !saving && !addressPending;
   const save = async (event) => {
     event.preventDefault();
     if (!canSave || submitting.current) return;
-    if (JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET)) { setError("Add the gate or project before saving the site, or clear its unfinished fields."); return; }
     submitting.current = true; setSaving(true); setError("");
     try {
       const saved = await onSave(customer.id, draftSite);
@@ -51,9 +46,6 @@ export default function SiteFormPage({ customers, contacts, initialCustomerId = 
             <SiteCustomerPicker customers={customers} value={customerId} onChange={setCustomerId} />
             <SiteDetailsFields value={draftSite} onChange={setDraftSite} onSelectionPending={setAddressPending} showLabel />
           </div></WorkspaceSection>
-          <WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site.">
-            <SiteAssetsEditor assets={draftSite.assets} newAssetDraft={newAssetDraft} onChangeDraft={setNewAssetDraft} onChangeAssets={(update) => setDraftSite((current) => ({ ...current, assets: update(current.assets) }))} />
-          </WorkspaceSection>
         </div>
         <div className="min-w-0" data-site-form-column="contacts"><WorkspaceSection title="Contacts" description="People to contact about this location." panel>
           <ContactAssignmentsEditor kind="site" value={draftSite.contactAssignments} contacts={contacts} preferredContacts={customer ? getCustomerContacts(customer) : []}

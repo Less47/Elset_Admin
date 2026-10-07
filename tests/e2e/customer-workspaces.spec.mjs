@@ -949,7 +949,7 @@ test("Customer and Site pages fill desktop, tablet and phone workspaces", async 
   }
 });
 
-test("Site creation, assets, editing and dirty guards keep records and history intact", async ({ page }) => {
+test("Site creation without Gate/Projects and editing keep records and dirty guards intact", async ({ page }) => {
   const tracker = trackBroadWorkspacePuts(page);
   await login(page, { pathname: customerPath });
   const before = readWorkspaceState().customers.find((entry) => entry.id === fixtureCustomerId);
@@ -959,19 +959,18 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   await expect(page.getByRole("button", { name: "Create Site", exact: true })).toBeDisabled();
   await page.getByPlaceholder("Search this site address").fill("30 Synthetic Avenue, Testville VIC 3999");
   await page.getByPlaceholder("e.g. PS123456").fill("OC-SITE-WORKSPACE");
-  await page.getByPlaceholder("Name", { exact: true }).fill("Synthetic entry gate");
+  await page.getByLabel("Site name / label", { exact: true }).fill("Synthetic secondary site");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Keep editing", exact: true }).click();
-  await expect(page.getByPlaceholder("Name", { exact: true })).toHaveValue("Synthetic entry gate");
-  await page.getByRole("button", { name: "Create Site", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Add the gate or project before saving");
-  await page.getByRole("button", { name: "Add Gate / Project", exact: true }).click();
+  await expect(page.getByLabel("Site name / label", { exact: true })).toHaveValue("Synthetic secondary site");
+  await expect(page.getByRole("heading", { name: /Gates?\s*\/\s*Projects?/i })).toHaveCount(0);
+  await expect(page.locator('[aria-label^="Gate / project"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   const siteUrl = page.url();
   await page.reload();
-  await page.getByRole("tab", { name: /^Gates/ }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("Synthetic entry gate");
+  await page.getByRole("tab", { name: /^Assets/ }).click();
+  await expect(page.getByRole("tabpanel")).toContainText("No Site Assets");
   await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
   await expect(page).toHaveURL(siteUrl + "/edit");
   await page.reload();
@@ -985,7 +984,7 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   await showCustomerSection(page, "Sites");
   const after = readWorkspaceState().customers.find((entry) => entry.id === fixtureCustomerId);
   const saved = after.sites.find((site) => site.address.startsWith("32 Synthetic"));
-  expect(saved).toMatchObject({ ocNumber: "OC-SITE-WORKSPACE", assets: [expect.objectContaining({ name: "Synthetic entry gate" })] });
+  expect(saved).toMatchObject({ ocNumber: "OC-SITE-WORKSPACE", assets: [] });
   expect(after.address).toBe(before.address);
   // Owner saves refresh assignment write times; person/site details and the
   // relationship IDs, roles, flags and creation times must stay unchanged.
@@ -994,6 +993,138 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   expect(stableSites(after.sites.filter((site) => site.id !== saved.id))).toEqual(stableSites(before.sites));
   await tracker.expectNone("Site pages use record-specific writes");
   tracker.stop();
+});
+
+for (const width of [390, 820, 1440]) test(`Site pages omit Gate/Projects and Site saves preserve Assets at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  await login(page, { pathname: "/sites" });
+  const id = `equipment-preservation-${width}`, siteId = `${id}-site`, assetId = `${id}-equipment`;
+  await apiJson(page, "POST", "/api/customers", { customer: { id, name: `Equipment owner ${width}`, address: `${width} Equipment Street`,
+    sites: [{ id: siteId, address: `${width} Equipment Street`, accessNotes: "Use the visitor bay", notes: "Site-level information",
+      assets: [{ id: assetId, name: "Existing motor equipment", type: "Automation", model: "Existing model", notes: "Keep maintenance history" }] }] } });
+  await apiJson(page, "POST", "/api/maintenance-plans", { plan: { id: `${id}-plan`, customerId: id, siteId, assetId,
+    frequency: "quarterly", nextDueDate: "2027-01-01", active: true } });
+  const initial = readWorkspaceState(), before = initial.customers.find((customer) => customer.id === id);
+  const url = `${baseUrl}/customers/${id}/sites/${siteId}`;
+  const absent = async () => {
+    await expect(page.getByRole("tab", { name: /Gates?\s*\/\s*Projects?|^Gates$|^Projects$/i })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /Gates?\s*\/\s*Projects?/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^(Add|Edit|Delete|Remove) Gate(?:\s*\/\s*Project)?$|^(Add|Edit|Delete|Remove) Project$/i })).toHaveCount(0);
+    await expect(page.locator('[aria-label^="Gate / project"]')).toHaveCount(0);
+    await noModalOrOverflow(page);
+  };
+  await page.goto(url); await expect(page.locator(".record-workspace h1")).toHaveText(`${width} Equipment Street`);
+  await absent(); await expect(page.getByRole("tabpanel")).toContainText("Use the visitor bay");
+  await captureWorkspace(page, info, `gate-removal-profile-${width}`);
+  await page.getByRole("tab", { name: /^Assets/ }).click();
+  await expect(page.getByRole("tabpanel")).toContainText("Existing motor equipment");
+  await page.getByRole("tab", { name: /^Maintenance/ }).click();
+  await expect(page.getByRole("tabpanel").getByRole("button", { name: "Open contract", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /^Job History/ }).click();
+  await expect(page.getByRole("tabpanel")).toContainText("No jobs");
+  await page.getByRole("tab", { name: "Photos", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Site Photos", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /^Contacts/ }).click();
+  await expect(page.getByRole("tabpanel")).toContainText("No contacts assigned");
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  const payloads = [];
+  page.on("request", (request) => { if (new URL(request.url()).pathname === `/api/customers/${id}/sites/${siteId}` && request.method() === "PATCH") payloads.push(request.postDataJSON().site); });
+  await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
+  await absent(); await expect(page.getByRole("tab", { name: /^Assets/ })).toHaveCount(0);
+  await captureWorkspace(page, info, `gate-removal-edit-${width}`);
+  await page.getByLabel("Site notes", { exact: true }).fill("Changed Site information");
+  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await expect(page).toHaveURL(url);
+  expect(payloads).toHaveLength(1);
+  for (const key of ["assets", "gates", "projects", "gateProjects", "gateId", "projectId"]) expect(Object.hasOwn(payloads[0], key)).toBe(false);
+  const saved = readWorkspaceState();
+  expect(saved.customers.find((customer) => customer.id === id).sites[0].assets).toEqual(before.sites[0].assets);
+  expect(saved.jobs).toEqual(initial.jobs);
+  expect(saved.maintenancePlans).toEqual(initial.maintenancePlans);
+  await page.goto(baseUrl + siteCreatePath(id)); await absent();
+  await captureWorkspace(page, info, `gate-removal-new-${width}`);
+  const posted = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/customers/${id}/sites` && request.method() === "POST");
+  await page.getByRole("combobox", { name: "Address", exact: true }).fill(`${width} New Site Without Equipment Street`);
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
+  const body = (await posted).postDataJSON().site;
+  for (const key of ["assets", "gates", "projects", "gateProjects", "gateId", "projectId"]) expect(Object.hasOwn(body, key)).toBe(false);
+  await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
+  await absent();
+  expect(readWorkspaceState().customers.find((customer) => customer.id === id).sites).toHaveLength(2);
+  await page.goto(url); await page.getByRole("tab", { name: /^Assets/ }).click();
+  const manage = page.getByRole("button", { name: "Manage Assets", exact: true });
+  await manage.focus(); await page.keyboard.press("Enter");
+  const assetForm = page.getByRole("form", { name: "Edit Site Assets", exact: true });
+  await expect(assetForm).toBeVisible(); await absent();
+  await assetForm.getByLabel("Equipment notes", { exact: true }).fill("Updated equipment information");
+  await captureWorkspace(page, info, `gate-removal-assets-${width}`);
+  await assetForm.getByRole("button", { name: "Add Asset", exact: true }).click();
+  await assetForm.getByLabel("Asset name", { exact: true }).last().fill("New equipment");
+  await assetForm.getByRole("button", { name: "Save Assets", exact: true }).focus(); await page.keyboard.press("Enter");
+  await expect(manage).toBeVisible();
+  const withAssets = readWorkspaceState(), savedEquipment = withAssets.customers.find((customer) => customer.id === id).sites.find((entry) => entry.id === siteId).assets;
+  expect(savedEquipment).toHaveLength(2);
+  expect(savedEquipment.find((entry) => entry.id === assetId)).toMatchObject({ id: assetId, notes: "Updated equipment information", createdAt: before.sites[0].assets[0].createdAt });
+  expect(Object.keys(payloads.at(-1))).toEqual(["assets"]);
+  expect(withAssets.maintenancePlans).toEqual(initial.maintenancePlans);
+  expect(withAssets.jobs).toEqual(initial.jobs);
+  await manage.click();
+  await assetForm.getByRole("button", { name: "Remove Asset New equipment", exact: true }).click();
+  await assetForm.getByRole("button", { name: "Save Assets", exact: true }).click();
+  await expect(manage).toBeVisible();
+  expect(readWorkspaceState().customers.find((customer) => customer.id === id).sites.find((entry) => entry.id === siteId).assets.map((entry) => entry.id)).toEqual([assetId]);
+});
+
+test("separate Assets editor retains drafts across tabs, blocks dirty exits and recovers from failed/busy saves", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await login(page, { pathname: "/sites" });
+  const id = "asset-editor-guards", siteId = `${id}-site`, url = `${baseUrl}/customers/${id}/sites/${siteId}`;
+  await apiJson(page, "POST", "/api/customers", { customer: { id, name: "Equipment guard owner", sites: [{ id: siteId, address: "91 Equipment Guard Street", assets: [{ id: `${id}-equipment`, name: "Existing equipment" }] }] } });
+  await page.goto(url); await page.getByRole("tab", { name: /^Assets/ }).click();
+  const before = readWorkspaceState(), manage = page.getByRole("button", { name: "Manage Assets", exact: true });
+  await manage.click();
+  const form = page.getByRole("form", { name: "Edit Site Assets", exact: true });
+  await form.getByLabel("Asset name", { exact: true }).fill("Unsaved equipment name");
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await page.getByRole("tab", { name: /^Assets/ }).click();
+  await expect(form.getByLabel("Asset name", { exact: true })).toHaveValue("Unsaved equipment name");
+  const prompt = page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true });
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await page.getByRole("button", { name: "Remove Saved Profile", exact: true }).click();
+  await expect(prompt).toBeVisible(); await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await page.getByRole("tab", { name: /^Assets/ }).click();
+  await form.getByRole("button", { name: "Cancel Assets", exact: true }).click();
+  await expect(prompt).toBeVisible(); await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
+  await expect(prompt).toBeVisible(); await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+  expect(readWorkspaceState()).toEqual(before);
+  const apiPath = `**/api/customers/${id}/sites/${siteId}`;
+  await page.route(apiPath, route => route.request().method() === "PATCH" ? route.fulfill({ status: 409, json: { error: "Synthetic equipment conflict" } }) : route.continue());
+  await form.getByRole("button", { name: "Save Assets", exact: true }).click();
+  await expect(form.getByRole("alert")).toContainText("Synthetic equipment conflict");
+  await expect(form.getByLabel("Asset name", { exact: true })).toHaveValue("Unsaved equipment name");
+  expect(readWorkspaceState()).toEqual(before);
+  await page.unroute(apiPath);
+  let release, calls = 0;
+  const pending = new Promise(resolve => { release = resolve; });
+  await page.route(apiPath, async route => { if (route.request().method() !== "PATCH") return route.continue(); calls++; await pending; await route.continue(); });
+  await form.getByRole("button", { name: "Save Assets", exact: true }).click();
+  await expect(form.getByRole("button", { name: "Save Assets", exact: true })).toBeDisabled();
+  await expect(form.getByLabel("Asset name", { exact: true })).toBeDisabled();
+  await form.evaluate(element => element.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
+  await expect(prompt.getByRole("button", { name: "Discard", exact: true })).toBeDisabled();
+  await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+  expect(calls).toBe(1); release();
+  await expect(manage).toBeVisible(); await page.unroute(apiPath);
+  await manage.click(); await form.getByLabel("Asset name", { exact: true }).fill("Discard this name");
+  await form.getByRole("button", { name: "Cancel Assets", exact: true }).click();
+  await prompt.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(manage).toBeVisible();
+  await expect(page.getByRole("tabpanel")).toContainText("Unsaved equipment name");
+  await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
+  await expect(page).toHaveURL(url + "/edit");
+  await expect(page.getByRole("tab", { name: /^Assets/ })).toHaveCount(0);
 });
 
 for (const width of [390, 820, 1440]) test(`Sites New Site opens a separate page with a searchable required Customer at ${width}px`, async ({ page }, info) => {
@@ -1281,6 +1412,16 @@ test("Customer deep links retain authorization and missing records show a normal
         await expect(page.getByRole("form", { name: "Create Site", exact: true })).toHaveCount(0);
         const response = await page.request.post(baseUrl + "/api/customers/" + fixtureCustomerId + "/sites", { data: { site: { address: "Unauthorized Site" } } });
         expect(response.status()).toBe(403);
+      }
+      const assetsPath = `/customers/${fixtureCustomerId}/sites/demo-site-front-entry`;
+      await page.goto(baseUrl + assetsPath);
+      if (username === "office") {
+        await page.getByRole("tab", { name: /^Assets/ }).click();
+        await expect(page.getByRole("button", { name: "Manage Assets", exact: true })).toBeVisible();
+      } else {
+        await expect(page.getByText("You do not have permission to view customer records.")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Manage Assets", exact: true })).toHaveCount(0);
+        expect((await page.request.patch(baseUrl + "/api" + assetsPath, { data: { site: { assets: [] } } })).status()).toBe(403);
       }
     } finally { await context.close(); }
   }

@@ -242,7 +242,7 @@ export const sideNavItems = [
   {
     id: "sites",
     label: "Sites",
-    description: "Review each site, its gates or projects, and related job history.",
+    description: "Review each site's details, assets, and related job history.",
     icon: MapPinned,
   },
   {
@@ -326,7 +326,7 @@ export const sectionMeta = {
   sites: {
     eyebrow: "Site Profiles",
     title: "Sites",
-    description: "Open site-level records, group multiple gates or projects under one address, and review work history by site.",
+    description: "Open site-level records, review equipment, and follow work history by site.",
   },
   map: {
     eyebrow: "Field Coverage",
@@ -1170,8 +1170,9 @@ export function normalizeSiteAssetRecord(asset) {
   if (!asset) return null;
 
   return {
+    ...asset,
     id: asset.id || crypto.randomUUID(),
-    name: String(asset.name || "").trim() || "Unnamed gate / project",
+    name: String(asset.name || "").trim() || "Unnamed asset",
     type: String(asset.type || "").trim(),
     location: String(asset.location || "").trim(),
     model: String(asset.model || "").trim(),
@@ -1597,7 +1598,6 @@ export function buildSiteProfileDraft(site) {
       accessNotes: "",
       notes: "",
       contactAssignments: [],
-      assets: [],
     };
   }
 
@@ -1613,7 +1613,6 @@ export function buildSiteProfileDraft(site) {
     contactAssignments: Array.isArray(site.contactAssignments) ? site.contactAssignments.map((assignment) => ({ ...assignment }))
       : getSiteContacts(site).map((contact) => ({ contactId: contact.id, contact, roles: contact.roles || ["Site contact"], isPrimary: Boolean(contact.isPrimary) })),
     contacts: getSiteContacts(site),
-    assets: normalizeSiteAssets(site.assets),
   };
 }
 

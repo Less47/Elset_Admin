@@ -122,20 +122,20 @@ const siteKnownKeys = new Set([
   "updatedAt",
   "ocNumber",
 ]);
-const assetKnownKeys = new Set(["id", "name", "type", "location", "model", "notes", "createdAt", "updatedAt"]);
+const assetKnownKeys = new Set(["id", "name", "type", "location", "model", "notes", "createdAt", "updatedAt", "extra"]);
 const accessNoteKnownKeys = new Set(["id", "address", "notes", "updatedAt"]);
 function normalizeAssetRecord(asset) {
   if (!asset || typeof asset !== "object" || Array.isArray(asset)) return null;
   return {
     id: trimText(asset.id) || crypto.randomUUID(),
-    name: trimText(asset.name) || "Unnamed gate / project",
+    name: trimText(asset.name) || "Unnamed asset",
     type: trimText(asset.type),
     location: trimText(asset.location),
     model: trimText(asset.model),
     notes: trimText(asset.notes),
     createdAt: trimText(asset.createdAt),
     updatedAt: trimText(asset.updatedAt || asset.createdAt) || nowIso(),
-    extra: pickExtra(asset, assetKnownKeys),
+    extra: { ...(asset.extra || {}), ...pickExtra(asset, assetKnownKeys) },
   };
 }
 
@@ -327,7 +327,7 @@ function insertServiceM8Ref(db, entityType, entityId, externalRefs) {
   );
 }
 
-function replaceCustomerSites(db, customer) {
+function replaceCustomerSites(db, customer, preserveAssetsForSiteIds = new Set()) {
   const ids = new Set(customer.sites.map((site) => site.id));
   for (const row of db.prepare("SELECT id FROM sites WHERE customer_id=?").all(customer.id)) {
     if (!ids.has(row.id)) {
@@ -368,6 +368,7 @@ function replaceCustomerSites(db, customer) {
       objectJson(site.extra)
     );
 
+    if (preserveAssetsForSiteIds.has(site.id)) return;
     db.prepare("DELETE FROM site_assets WHERE site_id=?").run(site.id);
     site.assets.forEach((asset) => {
       insertAsset.run(
@@ -397,7 +398,7 @@ function replaceCustomerAccessNotes(db, customer) {
   });
 }
 
-export function insertOrReplaceCustomer(db, customer, { preserveContacts = false } = {}) {
+export function insertOrReplaceCustomer(db, customer, { preserveContacts = false, preserveAssetsForSiteIds } = {}) {
   db.prepare(`
     INSERT INTO customers (
       id, name, email, phone, customer_type, address, created_at, updated_at, external_refs_json, extra_json
@@ -423,7 +424,7 @@ export function insertOrReplaceCustomer(db, customer, { preserveContacts = false
     objectJson(customer.externalRefs),
     objectJson(customer.extra)
   );
-  replaceCustomerSites(db, customer);
+  replaceCustomerSites(db, customer, preserveAssetsForSiteIds);
   replaceCustomerAccessNotes(db, customer);
   importCustomerContactRelationships(db, customer, { preserveExisting: preserveContacts });
   insertServiceM8Ref(db, "customer", customer.id, customer.externalRefs);
@@ -618,7 +619,7 @@ export function createCustomerSite(db, customerIdInput, input) {
       siteAccessNotes: customer.siteAccessNotes || [],
       updatedAt: nextSite.updatedAt,
     });
-    insertOrReplaceCustomer(db, nextCustomer);
+    insertOrReplaceCustomer(db, nextCustomer, { preserveAssetsForSiteIds: new Set(customer.sites.map((site) => site.id)) });
     touchWorkspaceInfo(db, nextSite.updatedAt);
     runForeignKeyCheck(db);
     return getCustomerState(db, customerId).sites.find((site) => site.id === nextSite.id) || null;
@@ -638,7 +639,9 @@ export function updateCustomerSite(db, customerIdInput, siteIdInput, input) {
       throw new WorkspaceCustomerError("Site not found.", 404);
     }
 
-    const nextSite = normalizeSiteRecord({ ...existingSite, ...input, ...updatedSiteAddressMetadata(existingSite, input), id: siteId, createdAt: existingSite.createdAt });
+    const assets = Array.isArray(input.assets) ? input.assets.map((asset) => asset && typeof asset === "object" && !Array.isArray(asset)
+      ? { ...existingSite.assets.find((existing) => existing.id === asset.id), ...asset } : asset) : existingSite.assets;
+    const nextSite = normalizeSiteRecord({ ...existingSite, ...input, assets, ...updatedSiteAddressMetadata(existingSite, input), id: siteId, createdAt: existingSite.createdAt });
     if (!nextSite) {
       throw new WorkspaceCustomerError("Site address is required.");
     }
@@ -665,7 +668,8 @@ export function updateCustomerSite(db, customerIdInput, siteIdInput, input) {
       )),
       updatedAt: nextSite.updatedAt,
     });
-    insertOrReplaceCustomer(db, nextCustomer);
+    insertOrReplaceCustomer(db, nextCustomer, { preserveAssetsForSiteIds: new Set(customer.sites
+      .filter((site) => site.id !== siteId || !Object.hasOwn(input, "assets")).map((site) => site.id)) });
     syncAddressReferences(db, customerId, previousAddress, nextSite.address, nextSite.updatedAt);
     touchWorkspaceInfo(db, nextSite.updatedAt);
     runForeignKeyCheck(db);

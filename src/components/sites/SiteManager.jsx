@@ -201,7 +201,7 @@ export default function SiteManager({
                 compact
                 value={search}
                 onChange={setSearch}
-                placeholder="Search customer, site, address, notes, or gate/project details..."
+                placeholder="Search customer, site, address, notes, or equipment..."
                 label="Search sites"
               />
             </DesktopControlField>
