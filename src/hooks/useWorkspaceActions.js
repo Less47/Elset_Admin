@@ -1005,8 +1005,8 @@ export function useWorkspaceActions({
   }
 
   function handleCreateSiteProfile(customerId) {
-    if (!canManageBusiness || !customerId) return;
-    return navigate(`/customers/${encodeURIComponent(customerId)}/sites/new`, { state: linkState });
+    if (!canManageBusiness) return;
+    return navigate(`/sites/new${customerId ? `?customerId=${encodeURIComponent(customerId)}` : ""}`, { state: linkState });
   }
 
   async function handleCreateCustomer(customerInput) {

@@ -1,5 +1,5 @@
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
 import SitePhotoGallery from "./SitePhotoGallery";
 import SiteDetailsFields from "./SiteDetailsFields";
@@ -13,13 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RECORD_WORKSPACE_WIDE_MAX_WIDTH, RecordWorkspace, WorkspaceSection, WorkspaceActionBar, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
 import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts, getSiteDisplayName, normalizeSiteAddress, toTimestamp } from "@/lib/app-support";
-import "./SiteFormPage.css";
 const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
 export default function SiteWorkspace({ customer, site, contacts = [], jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, fetchWithAuth, canManagePhotos = false }) {
-  const isEditingSite = editing || !site;
-  const creating = !site;
-  const formId = useId();
+  const isEditingSite = editing;
   const [initial] = useState(() => buildSiteProfileDraft(site));
   const [draftSite, setDraftSite] = useState(initial);
   const [newAssetDraft, setNewAssetDraft] = useState(EMPTY_ASSET);
@@ -50,28 +47,11 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
     finally { submitting.current = false; setSaving(false); }
   };
-  const detailsFields = <SiteDetailsFields value={draftSite} onChange={setDraftSite} onSelectionPending={setAddressPending} showLabel={creating} />;
+  const detailsFields = <SiteDetailsFields value={draftSite} onChange={setDraftSite} onSelectionPending={setAddressPending} />;
   const contactsEditor = <ContactAssignmentsEditor kind="site" value={draftSite.contactAssignments} contacts={contacts} preferredContacts={[...(site?.contacts || []), ...customerContacts]} onChange={(assignments) => setDraftSite((current) => ({ ...current, contactAssignments: assignments }))} />;
   const assetsEditor = <SiteAssetsEditor assets={draftSite.assets} newAssetDraft={newAssetDraft} onChangeDraft={setNewAssetDraft} onChangeAssets={(update) => setDraftSite((current) => ({ ...current, assets: update(current.assets) }))} />;
-  if (creating) return <RecordWorkspace backLabel="Customer Profile" eyebrow="Sites" title="New Site" subtitle={`For ${customer.name}`} maxWidth="max-w-none" onBack={() => onBack()}
-    headerActions={<>
-      <span className="sr-only text-xs xl:not-sr-only" role="status">{saving ? "Creating…" : dirty ? "Unsaved changes" : ""}</span>
-      <Button type="button" variant="outline" className="hidden h-11 sm:inline-flex" disabled={saving} onClick={() => onBack()}>Cancel</Button>
-      <Button type="submit" form={formId} className="h-11" disabled={!canSave} aria-busy={saving}>{saving ? "Creating…" : "Create Site"}</Button>
-    </>}>
-    <form id={formId} onSubmit={save} aria-label="Create Site" className="grid min-w-0 w-full gap-4 [&_p]:[overflow-wrap:anywhere] [&_input]:min-w-0 [&_textarea]:min-w-0" data-site-create>
-      {error ? <div role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
-      <fieldset disabled={saving} className="site-create-columns">
-        <div className="grid min-w-0 gap-4" data-site-form-column="details">
-          <WorkspaceSection title="Site details" panel><div className="grid min-w-0 items-start gap-3 sm:grid-cols-2">{detailsFields}</div></WorkspaceSection>
-          <WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site.">{assetsEditor}</WorkspaceSection>
-        </div>
-        <div className="min-w-0" data-site-form-column="contacts"><WorkspaceSection title="Contacts" description="People to contact about this location." panel>{contactsEditor}</WorkspaceSection></div>
-      </fieldset>
-    </form>
-  </RecordWorkspace>;
   const currentTab = ["overview", "contacts", "assets", "maintenance", "jobs", "photos"].includes(tab) ? tab : "overview";
-  return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={!site ? "New Site" : isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
+  return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
     subtitle={site?.address || "Site details and gates / projects"} maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} onBack={() => onBack()}
     headerActions={!isEditingSite ? <Button type="button" className="h-11" onClick={onEdit}>Edit Site Profile</Button> : null}>
     <div className="min-w-0 [&_p]:[overflow-wrap:anywhere] [&_input]:min-w-0 [&_textarea]:min-w-0">

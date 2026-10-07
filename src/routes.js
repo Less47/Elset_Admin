@@ -11,13 +11,17 @@ export const workspaceRoutes = [
       { index: true, id: "customer-details", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customer Profile" } },
       { path: "edit", id: "edit-customer", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Edit Customer" } },
       { path: "sites", children: [
-        { path: "new", id: "create-site", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Customer Profile" } },
+        { path: "new", id: "legacy-create-site", lazy: async () => ({ Component: (await import("./components/sites/SiteCreatePage.jsx")).LegacySiteCreateRedirect }), handle: { section: "customers", record: true, label: "Customer Profile" } },
         { path: ":siteId", children: [
           { index: true, id: "site-details", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Site Profile" } },
           { path: "edit", id: "edit-site", lazy: async () => ({ Component: (await import("./components/customers/CustomerPages.jsx")).default }), handle: { section: "customers", record: true, label: "Edit Site" } },
         ] },
       ] },
     ] },
+  ] },
+  { path: "sites", children: [
+    { index: true, id: "sites", Component: SectionRoute, handle: { section: "sites" } },
+    { path: "new", id: "create-site", lazy: async () => ({ Component: (await import("./components/sites/SiteCreatePage.jsx")).default }), handle: { section: "sites", record: true, label: "New Site" } },
   ] },
   { path: "jobs", children: [
     { path: "new", id: "create-job", lazy: async () => ({ Component: (await import("./components/jobs/JobRoutePages.jsx")).CreateJobRoute }), handle: { record: true, label: "Service Board" } },

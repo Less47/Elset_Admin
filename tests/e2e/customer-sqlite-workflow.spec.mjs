@@ -319,20 +319,22 @@ async function restoreCustomer(page) {
 async function createSite(page) {
   await openSites(page);
   await page.getByRole("button", { name: "New Site" }).click();
+  await expect(page).toHaveURL(baseUrl + "/sites/new");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  const picker = page.getByRole("region", { name: "Choose a customer for the new site" });
-  await picker.getByPlaceholder("Search name, email, phone, or address...").fill(editedCustomerName);
-  const customerButton = picker.getByRole("button", { name: new RegExp(editedCustomerName) });
+  await expect(page.locator('[data-desktop-record-results], [data-mobile-record-card]')).toHaveCount(0);
+  const picker = page.getByRole("combobox", { name: "Customer", exact: true });
+  await picker.fill(editedCustomerName);
+  const customerButton = page.getByRole("option", { name: new RegExp(editedCustomerName) });
   await customerButton.click();
 
-  const siteDialog = page.locator(".record-workspace");
-  await expect(siteDialog).toContainText("New Site");
-  await siteDialog.getByPlaceholder("Search this site address").fill(createdSiteAddress);
-  await siteDialog.getByPlaceholder("e.g. PS123456").fill("OC-E2E-SITE");
-  await siteDialog.getByPlaceholder("Gate code, parking, access windows, call-on-arrival details...").fill("Use synthetic keypad 1234.");
-  await siteDialog.getByPlaceholder("General context, layout, project details, recurring issues...").fill("Synthetic site notes.");
-  await siteDialog.getByRole("button", { name: "Create Site", exact: true }).click();
-  await expect(siteDialog).toContainText(createdSiteAddress);
+  const sitePage = page.locator(".record-workspace");
+  await expect(sitePage).toContainText("New Site");
+  await sitePage.getByPlaceholder("Search this site address").fill(createdSiteAddress);
+  await sitePage.getByPlaceholder("e.g. PS123456").fill("OC-E2E-SITE");
+  await sitePage.getByPlaceholder("Gate code, parking, access windows, call-on-arrival details...").fill("Use synthetic keypad 1234.");
+  await sitePage.getByPlaceholder("General context, layout, project details, recurring issues...").fill("Synthetic site notes.");
+  await sitePage.getByRole("button", { name: "Create Site", exact: true }).click();
+  await expect(sitePage).toContainText(createdSiteAddress);
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to Sites", exact: true }).click();
 }

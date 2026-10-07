@@ -62,7 +62,7 @@ export default function App() {
   }, [resetWorkspaceChrome]);
 
   const handleActiveSectionChange = (section) => {
-    const path = ["customers", "maintenance", "map", "invoices", "settings", "statistics"].includes(section) ? `/${section}` : "/";
+    const path = ["customers", "sites", "maintenance", "map", "invoices", "settings", "statistics"].includes(section) ? `/${section}` : "/";
     navigate(path, { state: { section } });
   };
   useEffect(() => {
@@ -193,6 +193,7 @@ export default function App() {
           ...workspaceActions,
           handleSaveStaffLoginAccount: session.handleSaveStaffLoginAccount,
         }}
+        workspacePageId={workspacePageOpen ? match.id : ""}
         workspacePage={workspacePageOpen ? <Outlet context={{
           session, data, setData, workspaceActions, workspaceViewModel, workspaceAddons,
           setInvoiceNotice, isSendingDocument,

@@ -28,9 +28,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatCustomerType, formatSiteType, siteTypeOptions } from "@/lib/app-support";
+import { formatSiteType, siteTypeOptions } from "@/lib/app-support";
 
 const NOT_SET_FILTER_VALUE = "__not_set__";
 const siteSortOptions = [
@@ -54,38 +53,10 @@ export default function SiteManager({
   const [sortBy, setSortBy] = useState("activity");
   const [siteTypeFilter, setSiteTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useUserUiPreference("siteView");
-  const [choosingCustomer, setChoosingCustomer] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [newSiteCustomerSearch, setNewSiteCustomerSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const deferredNewSiteCustomerSearch = useDeferredValue(newSiteCustomerSearch);
   const filterTriggerRef = useRef(null);
   const isMobileRecordLayout = useMobileRecordLayout();
-
-  const customerOptions = useMemo(
-    () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
-    [customers]
-  );
-
-  const filteredNewSiteCustomers = useMemo(() => {
-    const query = deferredNewSiteCustomerSearch.toLowerCase().trim();
-    if (!query) return customerOptions;
-
-    return customerOptions.filter((customer) =>
-      [
-        customer.name,
-        customer.email,
-        customer.phone,
-        customer.customerType,
-        customer.address,
-        ...(customer.siteAccessNotes || []).flatMap((site) => [site.address, site.notes]),
-        ...(customer.sites || []).flatMap((site) => [site.label, site.address, site.siteType, site.ocNumber, site.accessNotes, site.notes]),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query)
-    );
-  }, [customerOptions, deferredNewSiteCustomerSearch]);
 
   const siteRows = useMemo(
     () =>
@@ -215,11 +186,7 @@ export default function SiteManager({
           )}
           action={(
             <PagePrimaryAction
-              disabled={customerOptions.length === 0}
-              onClick={() => {
-                setNewSiteCustomerSearch("");
-                setChoosingCustomer(true);
-              }}
+              onClick={() => onCreateSite()}
             >
               <Plus className="h-4 w-4" /> New Site
             </PagePrimaryAction>
@@ -281,11 +248,7 @@ export default function SiteManager({
           actions={(
           <PagePrimaryAction
             compact
-            disabled={customerOptions.length === 0}
-            onClick={() => {
-              setNewSiteCustomerSearch("");
-              setChoosingCustomer(true);
-            }}
+            onClick={() => onCreateSite()}
           >
             <Plus className="h-4 w-4" /> New Site
           </PagePrimaryAction>
@@ -293,20 +256,6 @@ export default function SiteManager({
         />
       </PageTopBar>
       <PageBody className="space-y-4">
-      {choosingCustomer ? <section className="grid min-w-0 gap-3 border-y border-border py-4" aria-labelledby="new-site-customer-heading" data-site-customer-picker>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h2 id="new-site-customer-heading" className="text-base font-semibold">Choose a customer for the new site</h2>
-          <Button type="button" variant="outline" onClick={() => setChoosingCustomer(false)}>Cancel</Button></div>
-        <Input aria-label="Find customer for new site" value={newSiteCustomerSearch} onChange={(event) => setNewSiteCustomerSearch(event.target.value)} placeholder="Search name, email, phone, or address..." />
-        <p role="status" className="text-xs text-text-secondary">{filteredNewSiteCustomers.length} customers found</p>
-        <div className="max-h-72 min-w-0 overflow-y-auto divide-y divide-border" aria-label="Customers for new site">
-          {!filteredNewSiteCustomers.length ? <p className="py-3 text-sm text-text-secondary">No customers match that search yet.</p>
-            : filteredNewSiteCustomers.map((customer) => <button key={customer.id} type="button" className="grid min-h-11 w-full min-w-0 gap-1 px-3 py-3 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-ring [overflow-wrap:anywhere]" onClick={() => onCreateSite(customer.id)}>
-              <span className="flex min-w-0 flex-wrap items-center gap-2"><span className="font-medium">{customer.name}</span>{customer.customerType ? <Badge variant="secondary">{formatCustomerType(customer.customerType)}</Badge> : null}</span>
-              <span className="text-xs text-text-secondary">{[customer.email, customer.phone].filter(Boolean).join(" - ") || "No contact details"}</span>
-              <span className="text-xs text-text-secondary">{customer.address || "No address saved"}</span>
-            </button>)}
-        </div>
-      </section> : null}
       <Card
           className={isMobileRecordLayout
             ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"

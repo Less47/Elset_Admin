@@ -17,11 +17,9 @@ export default function CustomerPages() {
   const customerPath = `/customers/${encodeURIComponent(customerId || "")}`;
   const sitePath = `${customerPath}/sites/${encodeURIComponent(siteId || "")}`;
   const parentPath = mode === "edit-site" ? sitePath
-    : ["site-details", "create-site", "edit-customer"].includes(mode) ? customerPath : "/customers";
-  const backLabel = mode === "create-site" ? "Customer Profile" : location.state?.returnTo?.label || (mode === "edit-site" ? "Site Profile" : parentPath === customerPath ? "Customer Profile" : "Customers");
-  const onBack = () => mode === "create-site" && location.state?.returnTo?.path !== customerPath
-    ? navigate(customerPath, { replace: true })
-    : navigate(location.state?.returnTo ? -1 : parentPath, { replace: !location.state?.returnTo });
+    : ["site-details", "edit-customer"].includes(mode) ? customerPath : "/customers";
+  const backLabel = location.state?.returnTo?.label || (mode === "edit-site" ? "Site Profile" : parentPath === customerPath ? "Customer Profile" : "Customers");
+  const onBack = () => navigate(location.state?.returnTo ? -1 : parentPath, { replace: !location.state?.returnTo });
   const linkState = recordLinkState(location, match, data.jobs);
   const tab = location.state?.tab || "overview";
   const setTab = (tab) => navigate(location.pathname + location.search, { replace: true, preventScrollReset: true, state: { ...location.state, tab } });
@@ -32,9 +30,9 @@ export default function CustomerPages() {
   const contracts = (data.maintenancePlans || []).filter((plan) => plan.customerId === customer?.id);
   const siteContracts = site ? contracts.filter((plan) => plan.siteId ? plan.siteId === site.siteProfileId
     : normalizeSiteAddress(plan.siteAddress).toLowerCase() === normalizeSiteAddress(site.address).toLowerCase()) : [];
-  const siteRoute = ["site-details", "edit-site", "create-site"].includes(mode);
+  const siteRoute = ["site-details", "edit-site"].includes(mode);
   const title = siteRoute ? "Site Profile" : "Customer";
-  if (!canManageBusiness || (mode !== "create-customer" && !customer) || (siteRoute && mode !== "create-site" && !site)) {
+  if (!canManageBusiness || (mode !== "create-customer" && !customer) || (siteRoute && !site)) {
     return <RecordWorkspace title={title} backLabel={backLabel} onBack={() => onBack()}>
       <WorkspaceMessage tone="error">{!canManageBusiness ? "You do not have permission to view customer records." : !customer ? "This customer could not be found." : "This site could not be found."}</WorkspaceMessage>
     </RecordWorkspace>;
@@ -56,10 +54,8 @@ export default function CustomerPages() {
       tab={tab} onTabChange={setTab} backLabel={mode === "edit-site" ? "Site Profile" : backLabel}
       onBack={onBack} onEdit={() => navigate(`${sitePath}/edit`, { state: linkState })}
       onOpenCustomer={() => actions.handleOpenCustomerProfile(customer.id)} onOpenJob={actions.handleOpenJob}
-      onSaveSite={mode === "create-site" ? (...args) => actions.handleSaveSiteProfile(...args, { throwOnError: true }) : actions.handleSaveSiteProfile}
-      onSaved={(saved) => mode === "create-site"
-        ? navigate(`${customerPath}/sites/${encodeURIComponent(saved.id)}`, { replace: true, state: location.state })
-        : onBack()}
+      onSaveSite={actions.handleSaveSiteProfile}
+      onSaved={() => onBack()}
       onDeleteSiteProfile={async (customerId, entry) => { if (await actions.handleDeleteSiteProfile(customerId, entry)) onBack(); }} />;
   }
   return <CustomerWorkspace key={customer.id} customer={customer} jobs={jobs} tab={tab} onTabChange={setTab} backLabel={backLabel}

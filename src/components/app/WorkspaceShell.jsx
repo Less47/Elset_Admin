@@ -44,7 +44,7 @@ import {
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
 const ReportsAnalytics = lazy(() => import("@/components/statistics/ReportsAnalytics"));
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, personalPreferences, workspaceAddons, settingsPersistence, onSettingsPreview }) {
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, workspacePageId = "", personalPreferences, workspaceAddons, settingsPersistence, onSettingsPreview }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -273,7 +273,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           </div>
         ) : null}
 
-        <div
+        {workspacePageId !== "create-site" ? <div
           className={workspacePage ? undefined : mapWorkspaceOpen || calendarWorkspaceOpen ? "relative h-full min-h-0" : "contents"}
           hidden={Boolean(workspacePage)}
           aria-hidden={workspacePage ? true : undefined}
@@ -573,7 +573,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
             toTimestamp={toTimestamp}
           />
         ) : null}
-        </div>
+        </div> : null}
       </div>
     </div>
   );
