@@ -71,7 +71,8 @@
   }
 
   .customer-workspace-column + .customer-workspace-column,
-  .customer-workspace-column > .customer-section + .customer-section {
+  .customer-workspace-column > .customer-section + .customer-section,
+  [data-customer-account] > .customer-section + .customer-section {
     border-top: 1px solid var(--data-view-border);
   }
 
@@ -154,7 +155,6 @@
 
   [data-customer-workspace] [aria-label="Open invoices"] {
     margin-top: 0 !important;
-    border-top: 1px solid var(--data-view-border);
   }
 
   [data-customer-workspace] .customer-account-invoice {
@@ -162,25 +162,15 @@
     border-radius: 0;
   }
 
-  [data-customer-workspace] [data-customer-account] > div:last-child:not(.customer-account-summary) {
+  [data-customer-section="invoices"] .customer-section-body > div:last-child {
     margin-top: 0 !important;
     padding: 8px 12px;
-  }
-
-  .customer-danger-zone {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px 12px;
-    border-top: 1px solid var(--data-view-border);
   }
 
   @media (min-width: 64rem) {
     .customer-workspace-grid {
       display: grid;
-      grid-template-columns: minmax(0, 30fr) minmax(0, 35fr) minmax(0, 35fr);
+      grid-template-columns: minmax(0, 25fr) minmax(0, 25fr) minmax(0, 20fr) minmax(0, 30fr);
       min-height: var(--customer-profile-height);
       align-items: stretch;
     }

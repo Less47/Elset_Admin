@@ -42,17 +42,18 @@ export function CustomerTypeField({ id, label, value, options, onChange }) {
   </CustomerField>;
 }
 
-export default function CustomerFormPage({ customer = null, contacts = [], backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite }) {
+export default function CustomerFormPage({ customer = null, contacts = [], backLabel = "Customers", onCancel, onSave, onSaved, onOpenSite, onDelete, onDeleted }) {
   const editing = Boolean(customer);
   const formId = useId();
   const [initial] = useState(() => buildDraft(customer));
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [addressPending, setAddressPending] = useState(false);
   const [error, setError] = useState("");
   const submitting = useRef(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
-  const markSaved = useUnsavedChanges(dirty, { busy: saving });
+  const markSaved = useUnsavedChanges(dirty, { busy: saving || deleting });
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const primarySite = editing ? buildCustomerSites(customer, []).find((site) => site.isPrimary) : null;
   const relatedRecords = [...getCustomerRelatedContacts(customer), ...contacts, ...(draft.contacts || []), ...(draft.contactUpdates || [])];
@@ -110,17 +111,30 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
   };
 
   const saveStatus = saving ? "Saving…" : dirty ? "Unsaved changes" : "";
+  const deleteCustomer = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setDeleting(true);
+    try {
+      if (await onDelete()) {
+        markSaved();
+        onDeleted();
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete the customer.");
+    } finally { submitting.current = false; setDeleting(false); }
+  };
   const formActions = <>
     <span className="sr-only text-xs xl:not-sr-only" role="status">{saveStatus}</span>
-    <Button type="button" variant="outline" className="hidden h-11 sm:inline-flex" disabled={saving} onClick={() => onCancel()}>Cancel</Button>
-    <Button type="submit" form={formId} className="h-11" disabled={saving || addressPending || (!editing && !draft.name.trim())} aria-busy={saving}>{saving ? "Saving…" : editing ? "Save Customer" : "Create Customer"}</Button>
+    <Button type="button" variant="outline" className="hidden h-11 sm:inline-flex" disabled={saving || deleting} onClick={() => onCancel()}>Cancel</Button>
+    <Button type="submit" form={formId} className="h-11" disabled={saving || deleting || addressPending || (!editing && !draft.name.trim())} aria-busy={saving}>{saving ? "Saving…" : editing ? "Save Customer" : "Create Customer"}</Button>
   </>;
 
   return <RecordWorkspace backLabel={backLabel} eyebrow="Customers" title={editing ? "Edit Customer" : "New Customer"}
     subtitle={editing ? customer.name : ""} onBack={() => onCancel()} maxWidth="max-w-none" headerActions={formActions}>
     <form id={formId} onSubmit={submit} className="grid min-w-0 w-full gap-4" aria-label={editing ? "Edit Customer" : "Create Customer"}>
       {error ? <div role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
-      <fieldset disabled={saving} className="customer-form-columns">
+      <fieldset disabled={saving || deleting} className="customer-form-columns">
         <div className="grid min-w-0 gap-4" data-customer-form-column="details">
         <WorkspaceSection title="Customer details" panel>
           <div className="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -160,6 +174,11 @@ export default function CustomerFormPage({ customer = null, contacts = [], backL
         </WorkspaceSection>
         </div>
       </fieldset>
+      {editing && onDelete ? <section className="grid min-w-0 gap-3 border-y border-status-danger-border bg-status-danger-surface p-4" aria-labelledby="customer-danger-zone-title" data-customer-danger-zone>
+        <div><h2 id="customer-danger-zone-title" className="text-base font-semibold text-status-danger">Danger zone</h2>
+          <p className="mt-1 text-sm text-text-secondary">This customer and their linked records will be moved to the Recycle Bin.</p></div>
+        <Button type="button" variant="outline" className="min-h-11 justify-self-start border-status-danger-border text-status-danger hover:bg-status-danger-surface" disabled={saving || deleting} aria-busy={deleting} onClick={deleteCustomer}>Delete Customer</Button>
+      </section> : null}
     </form>
   </RecordWorkspace>;
 }

@@ -109,7 +109,7 @@ async function openAccount(browser, { width = 1440, height = 900, preset, custom
   await page.goto(`${baseUrl}/customers/${customerId}`);
   if (width < 1024) await page.getByRole("tab", { name: "Account", exact: true }).click();
   await expect(page.locator("[data-account-balance]")).toBeVisible();
-  return { context, page, account: page.locator('[data-customer-section="account"]') };
+  return { context, page, account: page.locator('[data-customer-account]') };
 }
 
 async function expectLifetime(account, { invoiced = "$1,760.00", received = "$510.00", outstanding = "$1,250.00", invoices = "4" } = {}) {
@@ -124,6 +124,10 @@ test("invoice-only account totals, dates, ordering, navigation and customer filt
   const { context, page, account } = await openAccount(browser);
   try {
     await expectLifetime(account);
+    await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Invoices", exact: true })).toBeVisible();
+    await expect(page.locator('[data-customer-section="account"]').getByRole("button", { name: /^Open invoice/ })).toHaveCount(0);
+    await expect(page.locator('[data-customer-section="invoices"]').getByRole("button", { name: /^Open invoice/ })).toHaveCount(3);
     await expect(account.locator("[data-account-balance]")).toHaveText("$1,250.00");
     await expect(account).toContainText("3 unpaid invoices · 2 overdue");
     await expect(account).toContainText("Oldest overdue: 24 days");
@@ -150,6 +154,34 @@ test("invoice-only account totals, dates, ordering, navigation and customer filt
     await page.getByRole("button", { name: "Clear customer filter", exact: true }).click();
     await expect(page).toHaveURL(`${baseUrl}/invoices`);
     await expect(page.locator(".data-grid-row:visible")).toHaveCount(5);
+  } finally { await context.close(); }
+});
+
+for (const width of [390, 820, 1440]) test(`Account and Invoices remain separate with keyboard invoice navigation at ${width}px`, async ({ browser }) => {
+  const { context, page, account } = await openAccount(browser, { width });
+  const before = readWorkspace();
+  try {
+    await expectLifetime(account);
+    const summary = page.locator('[data-customer-section="account"]');
+    const invoices = page.locator('[data-customer-section="invoices"]');
+    await expect(summary.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+    await expect(invoices.getByRole("heading", { name: "Invoices", exact: true })).toBeVisible();
+    await expect(summary.getByRole("button", { name: /^Open invoice/ })).toHaveCount(0);
+    await expect(invoices.getByRole("button", { name: /^Open invoice/ })).toHaveCount(3);
+    const summaryBox = await summary.boundingBox(), invoiceBox = await invoices.boundingBox();
+    expect(summaryBox.x).toBeCloseTo(invoiceBox.x, 0);
+    expect(summaryBox.y + summaryBox.height).toBeCloseTo(invoiceBox.y, 0);
+    expect(await invoices.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
+    const openInvoice = invoices.getByRole("button", { name: "Open invoice INV-3001", exact: true });
+    await openInvoice.focus();
+    await openInvoice.press("Enter");
+    await expect(page).toHaveURL(`${baseUrl}/jobs/account-job-3001/invoice`);
+    await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
+    await expectLifetime(account);
+    await invoices.getByRole("button", { name: "View all invoices", exact: true }).click();
+    await expect(page).toHaveURL(`${baseUrl}/invoices?customerId=account-a`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    expect(readWorkspace()).toEqual(before);
   } finally { await context.close(); }
 });
 
@@ -229,11 +261,18 @@ test("account remains compact and legible across all themes on desktop, tablet a
         await expect(account.locator("[data-account-balance]")).toHaveText("$1,250.00");
         expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
         const box = await account.boundingBox();
-        expect(box.height).toBeLessThan(600);
+        const header = await page.locator('.record-workspace-header').boundingBox();
+        const tabs = await page.locator('.record-tab-strip').boundingBox();
+        expect(box.height).toBeLessThan(viewport.height - header.height - tabs.height);
         if (viewport.width >= 1024) {
           const sites = await page.locator('[data-customer-section="sites"]').boundingBox();
           const jobs = await page.locator('[data-customer-section="jobs"]').boundingBox();
-          expect(box.y + box.height).toBeCloseTo(sites.y, 0);
+          const summary = await page.locator('[data-customer-section="account"]').boundingBox();
+          const invoices = await page.locator('[data-customer-section="invoices"]').boundingBox();
+          expect(summary.y + summary.height).toBeCloseTo(invoices.y, 0);
+          expect(box.x + box.width + 1).toBeCloseTo(sites.x, 0);
+          expect(sites.x + sites.width + 1).toBeCloseTo(jobs.x, 0);
+          expect(box.y).toBeCloseTo(sites.y, 0);
           expect(box.y).toBeLessThan(300);
           expect(box.x + box.width).toBeLessThanOrEqual(jobs.x);
           expect(box.y).toBeCloseTo(jobs.y, 0);

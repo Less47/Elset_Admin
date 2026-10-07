@@ -301,6 +301,8 @@ async function editCustomer(page) {
 
 async function deleteCustomer(page) {
   await openCustomerProfile(page, editedCustomerName);
+  await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
   page.once("dialog", async (dialog) => { await dialog.accept(); });
   await page.getByRole("button", { name: "Delete Customer", exact: true }).click();
   await expect(page).toHaveURL(baseUrl + "/customers");

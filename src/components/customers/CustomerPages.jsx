@@ -41,6 +41,8 @@ export default function CustomerPages() {
     const editing = mode === "edit-customer";
     return <CustomerFormPage contacts={data.contacts} key={location.pathname} customer={editing ? customer : null} backLabel={editing ? "Customer Profile" : "Customers"}
       onCancel={onBack}
+      onDelete={editing ? () => actions.handleDeleteCustomer(customer.id) : undefined}
+      onDeleted={() => navigate("/customers")}
       onOpenSite={(entry) => navigate(`${customerPath}/sites/${encodeURIComponent(entry.siteProfileId || entry.id)}`, { state: linkState })}
       onSave={(draft) => editing ? actions.handleUpdateCustomer(customer.id, draft) : actions.handleCreateCustomer(draft)}
       onSaved={(saved) => editing ? onBack() : navigate(`/customers/${encodeURIComponent(saved.id)}`, { replace: true, state: location.state })} />;
@@ -74,6 +76,5 @@ export default function CustomerPages() {
     onViewInvoices={() => navigate(`/invoices?customerId=${encodeURIComponent(customer.id)}`)}
     onBack={onBack} onEdit={() => navigate(`${customerPath}/edit`, { state: linkState })}
     onOpenSite={(entry) => actions.handleOpenSiteProfile(customer.id, entry.siteProfileId || entry.id)}
-    onCreateSite={() => actions.handleCreateSiteProfile(customer.id)} onOpenJob={actions.handleOpenJob}
-    onDelete={async () => { if (await actions.handleDeleteCustomer(customer.id)) navigate("/customers"); }} />;
+    onCreateSite={() => actions.handleCreateSiteProfile(customer.id)} onOpenJob={actions.handleOpenJob} />;
 }

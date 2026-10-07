@@ -4,15 +4,18 @@ import { useCustomerAccount } from "@/hooks/useCustomerAccount";
 import { money } from "@/lib/quote-template";
 import { formatDate } from "@/lib/app-support";
 
-export default function CustomerAccount({ customerId, jobs, onOpenInvoice, onViewInvoices }) {
+export default function CustomerAccount({ customerId, jobs, onOpenInvoice, onViewInvoices, renderSections }) {
   const { summary, loading, error, retry } = useCustomerAccount(customerId, jobs);
-  if (loading) return <p className="py-2 text-sm text-text-secondary" role="status">Loading account…</p>;
-  if (error) return <div className="flex flex-wrap items-center justify-between gap-2 text-sm" role="alert">
-    <span>Account balance unavailable.</span><Button variant="outline" size="sm" onClick={retry}>Retry</Button>
+  const render = (account, invoices = null) => <div className="min-w-0" data-customer-account>
+    {renderSections ? renderSections(account, invoices) : <>{account}{invoices}</>}
   </div>;
+  if (loading) return render(<p className="py-2 text-sm text-text-secondary" role="status">Loading account…</p>);
+  if (error) return render(<div className="flex flex-wrap items-center justify-between gap-2 text-sm" role="alert">
+    <span>Account balance unavailable.</span><Button variant="outline" size="sm" onClick={retry}>Retry</Button>
+  </div>);
   const overdue = summary.overdueInvoiceCount > 0;
   const balanceColor = summary.outstandingCents > 0 ? "text-status-danger" : "text-status-success";
-  return <div className="min-w-0" data-customer-account>
+  return render(
     <div className="customer-account-summary border-border bg-surface-raised">
       <dl className="customer-account-totals" aria-label="Lifetime account summary">
         <div><dt>Total invoiced</dt><dd data-account-total-invoiced>{money(summary.totalInvoicedCents / 100)}</dd></div>
@@ -24,7 +27,8 @@ export default function CustomerAccount({ customerId, jobs, onOpenInvoice, onVie
         <p>{summary.outstandingCents === 0 ? "Account up to date" : `${summary.openInvoiceCount} unpaid ${summary.openInvoiceCount === 1 ? "invoice" : "invoices"}${overdue ? ` · ${summary.overdueInvoiceCount} overdue` : ""}`}</p>
         {overdue ? <p className="mt-1 text-xs">Oldest overdue: {summary.oldestOverdueDays} {summary.oldestOverdueDays === 1 ? "day" : "days"}</p> : null}
       </div>
-    </div>
+    </div>,
+    <>
     {summary.invoices.length > 0 ? <ul className="mt-2 divide-y divide-border" aria-label="Open invoices">
       {summary.invoices.map((invoice) => <li key={invoice.invoiceId}>
         <button type="button" className="customer-account-invoice" onClick={() => onOpenInvoice(invoice.jobId)} aria-label={`Open invoice ${invoice.invoiceNumber}`}>
@@ -38,5 +42,6 @@ export default function CustomerAccount({ customerId, jobs, onOpenInvoice, onVie
       <span>{summary.hasMore ? `Showing ${summary.invoices.length} of ${summary.openInvoiceCount} open invoices` : "Issued invoices across all sites"}</span>
       <Button type="button" variant="link" size="sm" className="h-8 px-0" onClick={onViewInvoices}>View all invoices</Button>
     </div>
-  </div>;
+    </>
+  );
 }

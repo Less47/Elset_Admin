@@ -450,11 +450,11 @@ for (const [width, height] of [[390, 844], [820, 1180], [1440, 900]]) {
       const region = page.getByRole("region", { name: "Customer job history", exact: true });
       const heading = region.locator("header");
       const headingBefore = await heading.boundingBox();
-      const stationaryBefore = await page.locator('[data-customer-column="left"], [data-customer-column="middle"]').evaluateAll((elements) => elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y, height: element.getBoundingClientRect().height })));
+      const stationaryBefore = await page.locator('[data-customer-column]:not([data-customer-column="right"])').evaluateAll((elements) => elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y, height: element.getBoundingClientRect().height })));
       expect(await region.evaluate((element) => ({ overflow: getComputedStyle(element).overflowY, minHeight: getComputedStyle(element).minHeight, scrollbar: getComputedStyle(element).scrollbarWidth, overflows: element.scrollHeight > element.clientHeight }))).toEqual({ overflow: "auto", minHeight: "0px", scrollbar: "auto", overflows: true });
       await region.evaluate((element) => { element.scrollTop = element.scrollHeight; });
       expect(await page.evaluate(() => scrollY)).toBe(0);
-      expect(await page.locator('[data-customer-column="left"], [data-customer-column="middle"]').evaluateAll((elements) => elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y, height: element.getBoundingClientRect().height })))).toEqual(stationaryBefore);
+      expect(await page.locator('[data-customer-column]:not([data-customer-column="right"])').evaluateAll((elements) => elements.map((element) => ({ x: element.getBoundingClientRect().x, y: element.getBoundingClientRect().y, height: element.getBoundingClientRect().height })))).toEqual(stationaryBefore);
       expect((await heading.boundingBox()).y).toBeCloseTo(headingBefore.y, 0);
       await expect(region.getByRole("button", { name: "Open Job #9000", exact: true })).toBeInViewport();
       await region.evaluate((element) => { element.scrollTop = 0; });
@@ -464,7 +464,7 @@ for (const [width, height] of [[390, 844], [820, 1180], [1440, 900]]) {
       await region.evaluate((element) => { element.scrollTop = 0; });
       await captureWorkspace(page, info, `continuous-overview-${width}`);
     } else {
-      expect(await page.locator('[data-customer-section]').evaluateAll((elements) => elements.map((element) => element.dataset.customerSection))).toEqual(["details", "contacts", "account", "sites", "jobs"]);
+      expect(await page.locator('[data-customer-section]').evaluateAll((elements) => elements.map((element) => element.dataset.customerSection))).toEqual(["details", "contacts", "account", "invoices", "sites", "jobs"]);
       expect(await page.locator('.customer-workspace-grid').evaluate((element) => getComputedStyle(element).display)).toBe("block");
       expect(await jobs.evaluate((element) => ({ overflow: getComputedStyle(element).overflowY, constrained: element.scrollHeight > element.clientHeight + 1 }))).toEqual({ overflow: "visible", constrained: false });
       await jobs.getByRole("button", { name: "Open Job #9000", exact: true }).scrollIntoViewIfNeeded();
@@ -475,12 +475,15 @@ for (const [width, height] of [[390, 844], [820, 1180], [1440, 900]]) {
       await expect(jobs.locator('[data-mobile-record-card]')).toHaveCount(50);
       await page.getByRole("tab", { name: "Overview", exact: true }).click();
     }
+    await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-customer-danger-zone]')).toHaveCount(0);
     await noModalOrOverflow(page);
     await page.getByRole("tab", { name: /^Maintenance/ }).click();
     await expect(page.getByText("No maintenance contracts recorded.", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "Overview", exact: true }).click();
     await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
     await expect(page).toHaveURL(`${baseUrl}/customers/${historyCustomerId}/edit`);
+    await expect(page.getByRole("region", { name: "Danger zone" }).getByRole("button", { name: "Delete Customer", exact: true })).toBeVisible();
     await page.goBack();
     await page.getByRole("button", { name: "Add Site", exact: true }).click();
     await expect(page).toHaveURL(`${baseUrl}/customers/${historyCustomerId}/sites/new`);
@@ -508,38 +511,43 @@ async function checkCustomerGrid(page) {
   await expect(page.locator(".customer-workspace-grid")).toBeVisible();
   await expect(page.getByRole("tab")).toHaveCount(2);
   await expect(page.getByRole("tabpanel")).toHaveCount(1);
-  await expect(page.locator('[data-customer-section]')).toHaveCount(5);
+  await expect(page.locator('[data-customer-section]')).toHaveCount(6);
   const boxes = {};
   await expect(page.locator('[data-account-balance]')).toBeVisible();
-  for (const name of ["details", "sites", "contacts", "account", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
+  for (const name of ["details", "sites", "contacts", "account", "invoices", "jobs"]) boxes[name] = await page.locator(`[data-customer-section="${name}"]`).boundingBox();
   expect(boxes.details.x).toBeCloseTo(boxes.contacts.x, 0);
-  expect(boxes.sites.x).toBeCloseTo(boxes.account.x, 0);
+  expect(boxes.invoices.x).toBeCloseTo(boxes.account.x, 0);
   expect(boxes.details.y).toBeCloseTo(boxes.account.y, 0);
   expect(boxes.contacts.y - boxes.details.y - boxes.details.height).toBeCloseTo(0, 0);
-  expect(boxes.sites.y - boxes.account.y - boxes.account.height).toBeCloseTo(0, 0);
+  expect(boxes.invoices.y - boxes.account.y - boxes.account.height).toBeCloseTo(0, 0);
+  expect(boxes.sites.y).toBeCloseTo(boxes.details.y, 0);
   expect(boxes.jobs.y).toBeCloseTo(boxes.details.y, 0);
   expect(boxes.account.x - boxes.details.x - boxes.details.width).toBeCloseTo(1, 0);
-  expect(boxes.jobs.x - boxes.account.x - boxes.account.width).toBeCloseTo(1, 0);
+  expect(boxes.sites.x - boxes.account.x - boxes.account.width).toBeCloseTo(1, 0);
+  expect(boxes.jobs.x - boxes.sites.x - boxes.sites.width).toBeCloseTo(1, 0);
   const columns = await page.locator('[data-customer-column]').evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
     return { width: rect.width, height: rect.height, border: style.borderLeftWidth };
   }));
-  expect(columns[0].width / columns[1].width).toBeCloseTo(30 / 35, 2);
-  expect(columns[1].width / columns[2].width).toBeCloseTo(1, 2);
-  expect(columns.map((column) => column.border)).toEqual(["0px", "1px", "1px"]);
-  expect(columns[0].height).toBeCloseTo(columns[2].height, 0);
+  expect(columns).toHaveLength(4);
+  expect(columns[0].width / columns[1].width).toBeCloseTo(1, 2);
+  expect(columns[1].width / columns[2].width).toBeCloseTo(25 / 20, 2);
+  expect(columns[2].width / columns[3].width).toBeCloseTo(20 / 30, 2);
+  expect(columns.map((column) => column.border)).toEqual(["0px", "1px", "1px", "1px"]);
+  for (const column of columns) expect(column.height).toBeCloseTo(columns[0].height, 0);
+  for (const [column, sections] of [["left", ["details", "contacts"]], ["account", ["account", "invoices"]], ["sites", ["sites"]], ["right", ["jobs"]]]) {
+    expect(await page.locator(`[data-customer-column="${column}"] [data-customer-section]`).evaluateAll((elements) => elements.map((element) => element.dataset.customerSection))).toEqual(sections);
+  }
   expect(await page.locator('[data-customer-section="contacts"]').evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
-  expect(await page.locator('[data-customer-section="sites"]').evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
-  await expect(page.locator('[data-customer-section="details"]').getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Destructive customer actions" }).getByRole("button", { name: "Delete Customer", exact: true })).toBeVisible();
+  expect(await page.locator('[data-customer-section="invoices"]').evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
+  await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
   const header = await page.locator('.record-workspace-header').boundingBox();
   const grid = await page.locator('.customer-workspace-grid').boundingBox();
   expect(header.y).toBe(0);
   expect(grid.x).toBeCloseTo(header.x, 0);
   expect(grid.x + grid.width).toBeCloseTo(header.x + header.width, 0);
   expect(header.x + header.width).toBeCloseTo(page.viewportSize().width, 0);
-  const danger = await page.locator('[data-customer-danger-zone]').boundingBox();
-  expect(danger.y - grid.y - grid.height).toBeCloseTo(0, 0);
+  await expect(page.locator('[data-customer-danger-zone]')).toHaveCount(0);
   await expect(page.locator('.customer-section-panel, [data-customer-workspace] .record-major-panel')).toHaveCount(0);
   expect(await page.locator('.customer-workspace-grid').evaluate((element) => getComputedStyle(element).gap)).toBe("normal");
   const styles = await page.locator('.customer-section').evaluateAll((panels) => panels.map((panel) => {
@@ -752,6 +760,8 @@ test("Customer save errors retain the draft and delete requires the existing con
   await page.getByRole("button", { name: "Discard", exact: true }).click();
   const { result } = await apiJson(page, "POST", "/api/customers", { customer: { name: "Delete Confirmation Customer" } });
   await page.goto(baseUrl + "/customers/" + result.id);
+  await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
   const confirmation = page.waitForEvent("dialog");
   const deleteClick = page.getByRole("button", { name: "Delete Customer", exact: true }).click();
   const cancelDialog = await confirmation;
@@ -759,11 +769,76 @@ test("Customer save errors retain the draft and delete requires the existing con
   await cancelDialog.dismiss();
   await deleteClick;
   await page.reload();
-  await expect(page.locator(".record-workspace h1")).toHaveText("Delete Confirmation Customer");
+  await expect(page.locator(".record-workspace h1")).toHaveText("Edit Customer");
+  await expect(page.getByLabel("Customer / company name")).toHaveValue("Delete Confirmation Customer");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete Customer", exact: true }).click();
   await expect(page).toHaveURL(baseUrl + "/customers");
   expect(readWorkspaceState().customers.some((entry) => entry.id === result.id)).toBe(false);
+});
+
+for (const width of [390, 820, 1440]) test(`Edit Customer alone exposes confirmed recoverable deletion at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: width === 820 ? 1180 : 900 });
+  await login(page);
+  const id = `delete-relocation-${width}`;
+  await apiJson(page, "POST", "/api/customers", { id, name: `Delete relocation ${width}`, contacts: [{ id: `${id}-contact`, name: "Deletion caretaker", isPrimary: true }],
+    sites: [{ id: `${id}-site`, address: "1 Deletion Test Street", label: "Retained site", siteType: "commercial" }] });
+  const { result: job } = await apiJson(page, "POST", "/api/jobs", { customer: { id }, job: { title: "Recoverable linked job", jobAddress: "1 Deletion Test Street" } });
+  const before = readWorkspaceState();
+  const customerBefore = before.customers.find((customer) => customer.id === id);
+  const jobBefore = before.jobs.find((entry) => entry.id === job.id);
+  await page.goto(`${baseUrl}/customers/${id}`);
+  await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-customer-danger-zone]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit Customer", exact: true }).click();
+  const danger = page.getByRole("region", { name: "Danger zone" });
+  const deleteButton = danger.getByRole("button", { name: "Delete Customer", exact: true });
+  await expect(deleteButton).toHaveAttribute("type", "button");
+  expect((await danger.boundingBox()).y).toBeGreaterThanOrEqual((await page.locator('.customer-form-columns').boundingBox()).y + (await page.locator('.customer-form-columns').boundingBox()).height);
+  await noModalOrOverflow(page);
+  await deleteButton.scrollIntoViewIfNeeded();
+  await captureWorkspace(page, info, `delete-editor-${width}`);
+  await page.getByLabel("Customer / company name").fill("Unsaved deletion draft");
+  const confirmation = page.waitForEvent("dialog");
+  const click = deleteButton.click();
+  const dialog = await confirmation;
+  expect(dialog.type()).toBe("confirm");
+  expect(dialog.message()).toBe(`Delete ${customerBefore.name} and 1 related job? This will also remove linked quotes, invoices, notes, and photos.`);
+  await dialog.dismiss();
+  await click;
+  await expect(page.getByLabel("Customer / company name")).toHaveValue("Unsaved deletion draft");
+  expect(readWorkspaceState()).toEqual(before);
+  // A failed delete must also preserve the draft and the archived records.
+  await page.route(`**/api/customers/${id}`, (route) => route.request().method() === "DELETE" ? route.fulfill({ status: 409, json: { error: "Synthetic delete conflict" } }) : route.continue());
+  page.on("dialog", (dialog) => dialog.accept());
+  await deleteButton.click();
+  await expect(deleteButton).toBeEnabled();
+  await expect(page.getByLabel("Customer / company name")).toHaveValue("Unsaved deletion draft");
+  expect(readWorkspaceState()).toEqual(before);
+  await page.unroute(`**/api/customers/${id}`);
+  await deleteButton.focus();
+  await deleteButton.press("Enter");
+  await expect(page).toHaveURL(baseUrl + "/customers");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const deleted = readWorkspaceState();
+  expect(deleted.customers.some((customer) => customer.id === id)).toBe(false);
+  expect(deleted.jobs.some((entry) => entry.id === job.id)).toBe(false);
+  expect(deleted.deletedCustomers.find((entry) => entry.customer.id === id).customer).toEqual(customerBefore);
+  expect(deleted.deletedJobs.find((entry) => entry.job.id === job.id).job).toEqual(jobBefore);
+  await apiJson(page, "POST", `/api/customers/${id}/restore`);
+  const restored = readWorkspaceState();
+  expect(restored.customers.find((customer) => customer.id === id)).toMatchObject({ name: customerBefore.name, sites: customerBefore.sites, contactAssignments: customerBefore.contactAssignments });
+  expect(restored.jobs.some((entry) => entry.id === job.id)).toBe(false);
+  expect(restored.deletedJobs.find((entry) => entry.job.id === job.id).job).toEqual(jobBefore);
+  await apiJson(page, "POST", `/api/jobs/${job.id}/restore`);
+  expect(readWorkspaceState().jobs.find((entry) => entry.id === job.id)).toMatchObject({ id: job.id, customerId: id, title: jobBefore.title });
+  expect(restored.contacts).toEqual(before.contacts);
+  expect(restored.customers.find((customer) => customer.id === fixtureCustomerId)).toEqual(before.customers.find((customer) => customer.id === fixtureCustomerId));
+  await page.goto(`${baseUrl}/customers/${id}`);
+  await expect(page.locator('.record-workspace h1')).toHaveText(customerBefore.name);
+  await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
+  await page.goto(baseUrl + "/customers/new");
+  await expect(page.locator('[data-customer-danger-zone]')).toHaveCount(0);
 });
 
 for (const width of [1440, 390]) {
@@ -925,12 +1000,17 @@ test("Customer deep links retain authorization and missing records show a normal
     const page = await context.newPage();
     try {
       await login(page, { username, pathname: customerPath + "/edit" });
-      if (username === "office") await expect(page.getByLabel("Customer / company name")).toHaveValue(unrelatedCustomerName);
+      if (username === "office") {
+        await expect(page.getByLabel("Customer / company name")).toHaveValue(unrelatedCustomerName);
+        await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toBeVisible();
+      }
       else {
         await expect(page.getByText("You do not have permission to view customer records.")).toBeVisible();
         await expect(page.getByLabel("Customer / company name")).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Delete Customer", exact: true })).toHaveCount(0);
         const response = await page.request.patch(baseUrl + "/api/customers/" + fixtureCustomerId, { data: { customer: { name: "Unauthorized" } } });
         expect(response.status()).toBe(403);
+        expect((await page.request.delete(baseUrl + "/api/customers/" + fixtureCustomerId)).status()).toBe(403);
       }
       await noModalOrOverflow(page);
     } finally { await context.close(); }

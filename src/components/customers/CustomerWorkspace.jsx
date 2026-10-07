@@ -1,6 +1,6 @@
 import { ContactList } from "@/components/shared/ContactAssignmentsEditor";
 import { getCustomerRelatedContacts } from "@/lib/contact-model";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import CustomerAccount from "./CustomerAccount";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
 import { customerPostalFields } from "@/lib/customer-profile";
@@ -47,7 +47,7 @@ function CustomerSection({ name, title, count, summary, action, description = ""
   );
 }
 
-function CustomerDetailsSection({ customer, deleting, onDelete, desktop }) {
+function CustomerDetailsSection({ customer }) {
   return (
     <CustomerSection name="details" title="Customer details">
         <dl className="grid min-w-0 grid-cols-2 gap-x-4 gap-y-2">
@@ -59,9 +59,6 @@ function CustomerDetailsSection({ customer, deleting, onDelete, desktop }) {
           <CustomerInfo label="Postal address">{customerPostalFields(customer).postalAddress}</CustomerInfo>
           <CustomerInfo label="Created">{formatDate(customer.createdAt)}</CustomerInfo>
         </dl>
-        {!desktop ? <div className="mt-3 flex justify-end border-t pt-3">
-          <Button type="button" variant="outline" className="border-status-danger-border text-status-danger hover:bg-status-danger-surface" disabled={deleting} onClick={onDelete}>Delete Customer</Button>
-        </div> : null}
     </CustomerSection>
   );
 }
@@ -101,9 +98,8 @@ function CustomerJobsSection({ jobs, onOpenJob, desktop }) {
   );
 }
 
-export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, maintenancePlans = [], onOpenPlan, onOpenInvoice, onViewInvoices, tab = "overview", onTabChange, backLabel, onBack, onEdit, onDelete, onOpenSite, onCreateSite, onOpenJob }) {
+export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, maintenancePlans = [], onOpenPlan, onOpenInvoice, onViewInvoices, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenSite, onCreateSite, onOpenJob }) {
   const desktop = useMediaQuery("(min-width: 64rem)");
-  const [deleting, setDeleting] = useState(false);
   const workspaceRef = useRef(null);
   const sites = buildCustomerSites(customer, jobs);
   const contacts = getCustomerRelatedContacts(customer);
@@ -113,11 +109,10 @@ export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, 
     const workspace = workspaceRef.current;
     const header = workspace.closest(".record-workspace").querySelector(".record-workspace-header");
     const strip = workspace.querySelector(".record-tab-strip");
-    const footer = workspace.querySelector("[data-customer-danger-zone]");
-    const update = () => workspace.style.setProperty("--customer-profile-chrome-height", `${header.getBoundingClientRect().bottom + strip.getBoundingClientRect().height + footer.getBoundingClientRect().height}px`);
+    const update = () => workspace.style.setProperty("--customer-profile-chrome-height", `${header.getBoundingClientRect().bottom + strip.getBoundingClientRect().height}px`);
     update();
     const observer = new ResizeObserver(update);
-    [header, strip, footer].forEach((element) => observer.observe(element));
+    [header, strip].forEach((element) => observer.observe(element));
     window.addEventListener("resize", update);
     return () => {
       observer.disconnect();
@@ -125,16 +120,13 @@ export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, 
       workspace.style.removeProperty("--customer-profile-chrome-height");
     };
   }, [desktop]);
-  const deleteCustomer = async () => {
-    setDeleting(true);
-    try { await onDelete(); } finally { setDeleting(false); }
-  };
   const sections = {
-    overview: <CustomerDetailsSection desktop={desktop} customer={customer} deleting={deleting} onDelete={deleteCustomer} />,
+    overview: <CustomerDetailsSection customer={customer} />,
     sites: <CustomerSitesSection desktop={desktop} sites={sites} onOpenSite={onOpenSite} onCreateSite={onCreateSite} />,
     maintenance: <CustomerSection name="maintenance" title="Maintenance contracts" count={maintenancePlans.length}><ProfileMaintenanceContracts plans={maintenancePlans} jobs={jobs} onOpenPlan={onOpenPlan} /></CustomerSection>,
     contacts: <CustomerContactsSection contacts={contacts} />,
-    account: <CustomerSection name="account" title="Account"><CustomerAccount customerId={customer.id} jobs={accountJobs} onOpenInvoice={onOpenInvoice} onViewInvoices={onViewInvoices} /></CustomerSection>,
+    account: <CustomerAccount customerId={customer.id} jobs={accountJobs} onOpenInvoice={onOpenInvoice} onViewInvoices={onViewInvoices}
+      renderSections={(account, invoices) => <><CustomerSection name="account" title="Account">{account}</CustomerSection><CustomerSection name="invoices" title="Invoices">{invoices}</CustomerSection></>} />,
     jobs: <CustomerJobsSection desktop={desktop} jobs={jobs} onOpenJob={onOpenJob} />,
   };
 
@@ -155,16 +147,13 @@ export default function CustomerWorkspace({ customer, jobs, accountJobs = jobs, 
             <TabsContent value="overview" className="min-w-0">
               <div className="customer-workspace-grid">
                 <div className="customer-workspace-column" data-customer-column="left">{sections.overview}{sections.contacts}</div>
-                <div className="customer-workspace-column" data-customer-column="middle">{sections.account}{sections.sites}</div>
+                <div className="customer-workspace-column" data-customer-column="account">{sections.account}</div>
+                <div className="customer-workspace-column" data-customer-column="sites">{sections.sites}</div>
                 <div className="customer-workspace-column" data-customer-column="right">{sections.jobs}</div>
               </div>
             </TabsContent>
             {Object.entries(sections).filter(([value]) => value !== "overview" && (!desktop || value === "maintenance")).map(([value, content]) => <TabsContent key={value} value={value} className="min-w-0">{content}</TabsContent>)}
           </Tabs>
-          {desktop ? <section className="customer-danger-zone" aria-label="Destructive customer actions" data-customer-danger-zone>
-            <span className="text-xs font-medium text-text-secondary">Danger zone</span>
-            <Button type="button" variant="outline" className="border-status-danger-border text-status-danger hover:bg-status-danger-surface" disabled={deleting} onClick={deleteCustomer}>Delete Customer</Button>
-          </section> : null}
       </div>
     </RecordWorkspace>
   );
