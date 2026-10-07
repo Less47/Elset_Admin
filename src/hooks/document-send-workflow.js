@@ -20,7 +20,9 @@ export async function sendDocumentAndPersistHistory({
     if (persisted && typeof onSuccess === "function") {
       onSuccess({ payload, historyEntry });
     }
-    return { status: "sent", payload, historySaved: Boolean(persisted) };
+    return { status: "sent", payload, historySaved: Boolean(persisted),
+      ...(persisted?.document ? { document: persisted.document } : {}),
+    };
   } catch {
     // The email was already accepted. A local save failure must not invite a resend.
     return { status: "sent", payload, historySaved: false };

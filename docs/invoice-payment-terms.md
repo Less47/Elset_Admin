@@ -1,0 +1,13 @@
+# Invoice payment terms and Service Board states
+
+New invoices use `dueDateMode: "auto"` in existing invoice `extra_json` metadata. The editor displays a provisional date one calendar month after the issue date. Editing Due date marks it `manual`, including through the invoice PATCH route.
+
+The first confirmed customer send establishes the automatic date: the Sydney business date of successful `sentAt`, plus one calendar month, clamped to the last valid day of the following month. Due dates become overdue after the date, using the existing daily boundary. Resends cannot extend the term. The send workflow records history only after email acceptance to at least one To recipient; failed or unconfirmed sends do not establish an anchor.
+
+The existing sent-history transaction updates the automatic due date and inserts history atomically, returning the saved invoice through document mutation reconciliation. A history-save failure rolls back both changes and retains the existing “email sent, history not saved” warning without automatically sending again. Quotes, accounting ownership, provider mappings and payment reconciliation keep their existing workflows.
+
+Legacy invoices are classified once when saved, without a migration or bulk rewrite. Sent and fully paid invoices keep their stored dates. An unsent invoice without term metadata is automatic only when its date is absent or exactly issue date plus seven days; other dates are manual. Explicit metadata survives workspace normalization, persistence and backups. A later explicit manual edit can change an invoice date; stale automatic editor saves cannot replace an already persisted first-send date.
+
+The board has one primary invoice indicator: Paid, Overdue, the existing deposit/partial-payment state, Outstanding, Unsent, or Not invoiced. A positive balance requires confirmed invoice send history before it can be overdue. Account summaries and reports preserve their existing actual-invoice eligibility (sent history or recorded payments); unsent deposits remain eligible but never overdue, and appear in the current aging bucket. Unsent drafts remain excluded from the Invoice list, account receivables and financial reports as before.
+
+Legend order: Quote sent (cyan), Not invoiced (slate), Invoice not sent (amber), Outstanding invoice (violet), Invoice overdue (rose red), Invoice paid (green), Maintenance (orange), Not in QuickBooks (the existing green warning with a white centre). QuickBooks remains last and only appears when enabled. Service Board indicator styling is borderless; unrelated borders and card presentation remain unchanged.

@@ -131,6 +131,8 @@ function JobCardIndicators({ indicators, showLabels, className = "mt-2" }) {
         indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : showLabels ? (
           <div
             key={indicator.id}
+            data-service-board-indicator={indicator.id}
+            data-indicator-expanded="true"
             className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-secondary"
             title={indicator.label}
           >
@@ -140,7 +142,9 @@ function JobCardIndicators({ indicators, showLabels, className = "mt-2" }) {
         ) : (
           <span
             key={indicator.id}
-            className={`inline-flex h-3.5 w-3.5 rounded-full ring-2 ring-border ${indicator.dotClassName}`}
+            data-service-board-indicator={indicator.id}
+            data-indicator-expanded="false"
+            className={`inline-flex h-3.5 w-3.5 rounded-full ${indicator.dotClassName}`}
             title={indicator.label}
             aria-label={indicator.label}
           />

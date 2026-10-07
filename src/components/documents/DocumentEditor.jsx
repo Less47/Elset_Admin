@@ -183,7 +183,11 @@ export default function DocumentEditor({ job, type, initialDraft, backLabel, onB
         setSendStatus({ phase: "error", message: documentSendErrorMessage(type, sent?.code || "SEND_UNCONFIRMED"), delivery: sent?.delivery });
         return;
       }
-      if (sent.historySaved) setBaseline(draftSnapshot(docState));
+      if (sent.historySaved) {
+        const savedDocument = sent.document ? normalizeDocument(type, sent.document) : docState;
+        setDocState(savedDocument);
+        setBaseline(draftSnapshot(savedDocument));
+      }
       setSendStatus({
         phase: "success", recipient: sent.payload.recipientEmail || sendPreview.toEmail || recipientEmail,
         warning: sent.payload.warning,
@@ -242,7 +246,7 @@ export default function DocumentEditor({ job, type, initialDraft, backLabel, onB
           <div className="document-fields">
             <Field id="document-customer" label="Customer"><Input id="document-customer" value={job.customerName} disabled /></Field>
             <Field id="document-issue-date" label="Issue date"><Input id="document-issue-date" type="date" value={docState.issueDate} onChange={(e) => setDocState((p) => ({ ...p, issueDate: e.target.value }))} /></Field>
-            {type === "invoice" ? <Field id="document-due-date" label="Due date"><Input id="document-due-date" type="date" value={docState.dueDate || ""} onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value }))} /></Field> : null}
+            {type === "invoice" ? <Field id="document-due-date" label="Due date"><Input id="document-due-date" type="date" value={docState.dueDate || ""} onChange={(e) => setDocState((p) => ({ ...p, dueDate: e.target.value, dueDateMode: "manual" }))} />{docState.dueDateMode === "auto" && sentCount === 0 ? <p className="mt-1 text-xs text-text-secondary">Automatic: one calendar month from the first successful send. This date is provisional.</p> : null}</Field> : null}
             {clientReference ? <Field id="document-reference" label="Client reference / PO number"><Input id="document-reference" value={clientReference} disabled /></Field> : null}
           </div>
         </section>

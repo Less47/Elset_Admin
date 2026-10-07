@@ -455,7 +455,7 @@ test("invoice routes calculate totals and payment-driven statuses", async () => 
         }),
       });
       assert.equal(overdue.response.status, 200, overdue.payload.error);
-      assert.equal(overdue.payload.result.status.id, "overdue");
+      assert.equal(overdue.payload.result.status.id, "deposit-paid", "an unsent invoice with a deposit is not overdue");
       assert.equal(overdue.payload.result.invoice.paymentNotes, "Updated synthetic payment notes.");
 
       const deleteInvoice = await requestJson(baseUrl, "/api/jobs/demo-job-1001/invoice", { method: "DELETE" });

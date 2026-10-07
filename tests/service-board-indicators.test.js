@@ -24,7 +24,7 @@ test("Warranty cards omit the badge while preserving tags, classification and ur
 });
 
 test("shared legend starts with Quote, omits Warranty and ends with the special QuickBooks warning", () => {
-  const labels = ["Quote sent", "Outstanding invoice", "Invoice paid", "Invoice needs attention", "Maintenance"];
+  const labels = ["Quote sent", "Not invoiced", "Invoice not sent", "Outstanding invoice", "Invoice overdue", "Invoice paid", "Maintenance"];
   for (const provider of ["quickbooks", "xero", "", undefined]) {
     const legend = getServiceBoardIndicatorLegend(provider);
     assert.deepEqual(legend.map(entry => entry.label), provider === "quickbooks" ? [...labels, "Not in QuickBooks"] : labels);
@@ -49,7 +49,7 @@ for (const [name, record, provider, shown] of [
   assert.deepEqual(record, before, "building presentation indicators must not persist or mutate sync state");
 });
 
-for (const [id, label, existing] of [["paid", "Paid", "invoice-paid"], ["outstanding", "Outstanding", "invoice-pending"], ["overdue", "Overdue", "invoice-attention"]]) {
+for (const [id, label, existing] of [["paid", "Paid", "invoice-paid"], ["outstanding", "Outstanding", "invoice-pending"], ["overdue", "Overdue", "invoice-overdue"]]) {
   test(`QuickBooks warning coexists with ${label}, quote and maintenance indicators`, () => {
     const record = { ...job, maintenancePlanName: "Quarterly service", quote: { sentHistory: [{}] } };
     assert.deepEqual(indicators(record, "quickbooks", { id, label }).map((entry) => entry.id), ["quote", existing, warning, "maintenance"]);
@@ -86,6 +86,6 @@ test("app-state normalization preserves projected mapping ownership without addi
     const record = normalized.jobs[0];
     assert.equal(record.invoice.paymentManagement, owner);
     assert.equal(indicators(record).some((entry) => entry.id === warning), owner === "manual");
-    assert.deepEqual(Object.keys(record.invoice).sort(), ["dueDate", "issueDate", "items", "notes", "paymentManagement", "paymentNotes", "payments", "sentHistory", "type"].sort());
+    assert.deepEqual(Object.keys(record.invoice).sort(), ["dueDate", "dueDateMode", "issueDate", "items", "notes", "paymentManagement", "paymentNotes", "payments", "sentHistory", "type"].sort());
   }
 });

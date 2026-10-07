@@ -45,6 +45,7 @@ import { sendDocumentAndPersistHistory } from "./document-send-workflow";
 import { buildDocumentPdfPayload } from "../lib/document-pdf-payload.js";
 import { createDocumentEmailDraft, documentContactSuggestions } from "../lib/document-email.js";
 import { recipientList } from "../lib/recipient-display.js";
+import { invoiceTermsOnFirstSend } from "../lib/invoice-payment-terms.js";
 import { getSupportedInvoiceUpdateKeys } from "./workspace-invoice-updates";
 import { withDocumentSiteSnapshot } from "@/lib/document-site-snapshot";
 
@@ -1132,6 +1133,7 @@ export function useWorkspaceActions({
 
   async function handlePreviewDocument(doc, options = {}) {
     if (!canManageBusiness || !selectedFreshJob) return null;
+    const previewDocument = docType === "invoice" ? invoiceTermsOnFirstSend(doc, new Date().toISOString()) : doc;
 
     const documentLabel = docType === "invoice" ? "invoice" : "quote";
     const recipientEmail = getDocumentRecipientEmail(selectedFreshJob);
@@ -1145,7 +1147,7 @@ export function useWorkspaceActions({
       body: JSON.stringify(buildDocumentPdfPayload({
         documentType: docType,
         job: withDocumentSiteSnapshot(selectedFreshJob, data.customers, docType),
-        document: doc,
+        document: previewDocument,
         template,
         stampText: options.stampText || "",
       })),
@@ -1254,6 +1256,7 @@ export function useWorkspaceActions({
     documentSendInFlightRef.current = true;
     setIsSendingDocument(true);
     try {
+      const sendingDocument = docType === "invoice" ? invoiceTermsOnFirstSend(doc, new Date().toISOString()) : doc;
       const template = getDocumentTemplateSnapshot(docType);
       const documentJob = withDocumentSiteSnapshot(selectedFreshJob, data.customers, docType);
       const requestHeaders = {
@@ -1267,7 +1270,7 @@ export function useWorkspaceActions({
             body: JSON.stringify({ ...buildDocumentPdfPayload({
               job: documentJob,
               documentType: docType,
-              document: doc,
+              document: sendingDocument,
               template,
               stampText: options.stampText || "",
               emailPurpose: options.emailPurpose || "",
@@ -1313,7 +1316,7 @@ export function useWorkspaceActions({
           stampText: options.stampText || "",
           emailPurpose: options.emailPurpose || "",
           jobSnapshot: buildDocumentJobSnapshot(documentJob),
-          documentSnapshot: normalizeDocument(docType, { ...doc, sentHistory: [] }),
+          documentSnapshot: normalizeDocument(docType, { ...sendingDocument, sentHistory: [] }),
           templateSnapshot: template,
         }),
         persistHistory: async ({ historyEntry }) => {
@@ -1326,7 +1329,7 @@ export function useWorkspaceActions({
             body: { history: historyEntry },
             errorMessage: `Email was sent, but the ${docType} send history could not be saved.`,
           });
-          return savedHistory.ok;
+          return savedHistory.ok ? { document: savedHistory.result?.[docType] } : false;
         },
       });
     } finally {

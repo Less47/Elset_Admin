@@ -8,8 +8,8 @@ export function invoiceDate(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : "";
 }
 
-export function invoiceOverdueDays(balance, dueDate, today = invoiceToday()) {
-  if (!(balance > 0) || !invoiceDate(dueDate) || !invoiceDate(today) || dueDate >= today) return 0;
+export function invoiceOverdueDays(balance, dueDate, today = invoiceToday(), sentCount = 0) {
+  if (!(sentCount > 0) || !(balance > 0) || !invoiceDate(dueDate) || !invoiceDate(today) || dueDate >= today) return 0;
   return Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${dueDate}T00:00:00Z`)) / 86_400_000);
 }
 
@@ -17,7 +17,7 @@ export function invoiceOverdueDays(balance, dueDate, today = invoiceToday()) {
 export function invoiceStatusFromAmounts({ exists = true, total = 0, balance = 0, paid = 0, paymentCount = 0, sentCount = 0, dueDate = "", today = invoiceToday() } = {}) {
   const status = !exists ? ["not-invoiced", "Not invoiced", 0, "bg-surface-raised text-secondary-foreground"]
     : total > 0 && balance <= 0 ? ["paid", "Paid", 6, "bg-status-success-surface text-status-success"]
-    : invoiceOverdueDays(balance, dueDate, today) ? ["overdue", "Overdue", 1, "bg-status-danger-surface text-status-danger"]
+    : invoiceOverdueDays(balance, dueDate, today, sentCount) ? ["overdue", "Overdue", 1, "bg-status-danger-surface text-status-danger"]
     : paid > 0 ? paymentCount <= 1
       ? ["deposit-paid", "Deposit Paid", 4, "bg-status-warning-surface text-status-warning"]
       : ["partially-paid", "Partially Paid", 5, "bg-status-special-surface text-status-special"]
@@ -67,7 +67,7 @@ export function summarizeInvoiceAccount(customerId, records, { today = invoiceTo
     // Paid invoices contribute to lifetime value, but not the open-invoice list.
     if (balanceCents === 0) continue;
     const dueDate = invoiceDate(record.dueDate), issueDate = invoiceDate(record.issueDate);
-    const overdueDays = invoiceOverdueDays(balanceCents, dueDate, today);
+    const overdueDays = invoiceOverdueDays(balanceCents, dueDate, today, record.sentCount);
     const status = invoiceStatusFromAmounts({ total: totalCents, balance: balanceCents, paid: paidCents,
       paymentCount: record.paymentCount, sentCount: record.sentCount, dueDate, today });
     invoices.push({ invoiceId: record.invoiceId, jobId: record.jobId, invoiceNumber: record.invoiceNumber,

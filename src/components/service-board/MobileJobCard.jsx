@@ -27,9 +27,11 @@ function MobileIndicatorList({ indicators, showLabels }) {
       {indicators.map((indicator) => (
         indicator.type === "quickbooks-warning" ? <ServiceBoardIndicatorSymbol key={indicator.id} indicator={indicator} showLabel={showLabels} /> : <span
           key={indicator.id}
+          data-service-board-indicator={indicator.id}
+          data-indicator-expanded={showLabels}
           className={showLabels
             ? "inline-flex items-center gap-1.5 rounded-full bg-card/80 px-2 py-1 text-[10px] font-semibold text-text-secondary"
-            : `inline-flex h-3 w-3 rounded-full ring-2 ring-border ${indicator.dotClassName}`}
+            : `inline-flex h-3 w-3 rounded-full ${indicator.dotClassName}`}
           title={indicator.label}
           aria-label={indicator.label}
         >

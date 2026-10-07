@@ -174,7 +174,7 @@ for (const width of [390, 1440]) test(`authoritative QuickBooks invoice reconcil
     expect(await page.evaluate(() => window.__boardSyncSession)).toBe(marker);
     await capture(page, info, `board-after-qb-sync-${width}`, boardJob());
     const persisted = withDb(db => db.prepare("SELECT extra_json FROM invoices WHERE job_id='costing-job'").get());
-    expect(JSON.parse(persisted.extra_json)).toEqual({});
+    expect(JSON.parse(persisted.extra_json)).toEqual({ dueDateMode: "manual" });
     // Even a failed later update keeps the invoice mapping, so the warning stays absent.
     if (width < 768) await boardJob().getByRole("button", { name: /^Open Job #7101/ }).click();
     else await boardJob().dblclick();

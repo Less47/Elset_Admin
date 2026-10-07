@@ -5,6 +5,7 @@ import { customerPostalFields } from "./customer-profile.js";
 import { createBlankDocumentLine } from "./price-list.js";
 import { normalizeServiceBoardNote } from "./service-board-note.js";
 import { invoiceStatusFromAmounts } from "./invoice-account.js";
+import { addCalendarMonth, invoiceDueDateMode } from "./invoice-payment-terms.js";
 import { buildSemanticTheme, contrastText } from "./theme-tokens.js";
 /* eslint-disable react-refresh/only-export-components */
 import { getMaintenanceFrequencyMeta, normalizeMaintenanceFrequency } from "./maintenance-frequency.js";
@@ -893,11 +894,12 @@ export function normalizeDocument(type, doc) {
 
   if (type !== "invoice") return baseDocument;
 
-  const dueDate = toDateInputValue(doc.dueDate) || addDaysToDateInput(baseDocument.issueDate, 7);
+  const dueDate = toDateInputValue(doc.dueDate) || addCalendarMonth(baseDocument.issueDate);
   const invoiceTotal = calculateInvoiceTotal(baseDocument.items);
   return {
     ...baseDocument,
     dueDate,
+    dueDateMode: invoiceDueDateMode({ ...doc, issueDate: baseDocument.issueDate }),
     paymentNotes: String(doc.paymentNotes || "").trim(),
     payments: normalizeInvoicePayments(doc, invoiceTotal, dueDate || baseDocument.issueDate),
     paymentManagement: ["xero", "quickbooks"].includes(doc.paymentManagement) ? doc.paymentManagement : "manual",
@@ -1817,7 +1819,8 @@ export function buildDefaultDoc(_job, type) {
     notes: "",
     ...(isInvoice
       ? {
-          dueDate: addDaysToDateInput(issueDate, 7),
+          dueDate: addCalendarMonth(issueDate),
+          dueDateMode: "auto",
           paymentNotes: "",
           payments: [],
         }

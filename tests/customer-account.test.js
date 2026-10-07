@@ -92,7 +92,8 @@ test("overdue sorting, counts and oldest age use a positive balance and a real d
   assert.deepEqual(result.invoices.map((row) => row.dueDate), ["2026-08-22", "2026-09-14", today, ""]);
   assert.equal(invoiceOverdueDays(100, "2026-02-30", today), 0);
   assert.equal(invoiceOverdueDays(0, "2026-09-01", today), 0);
-  assert.equal(invoiceOverdueDays(100, "2026-10-04", "2026-10-05"), 1);
+  assert.equal(invoiceOverdueDays(100, "2026-10-04", "2026-10-05", 1), 1);
+  assert.equal(invoiceOverdueDays(100, "2026-10-04", "2026-10-05", 0), 0);
 });
 
 test("deleted archives and explicit legacy void/cancel markers are excluded without altering records", (t) => {

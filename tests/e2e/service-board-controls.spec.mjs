@@ -188,6 +188,10 @@ function seedQuickBooksIndicators(provider = "quickbooks") {
     }
     for (const index of [175, 171, 169]) insertQuoteTree(db, `completed-${index}`, { id: `qb-board-quote-${index}`, items: [{ description: "Quoted work", qty: 1, rate: 100 }],
       sentHistory: [{ id: `quote-sent-${index}`, sentAt: "2026-10-05", toEmail: "fixture@example.test" }] });
+    for (const [index, sent] of [[168, false], [167, true]]) insertInvoiceTree(db, `completed-${index}`, {
+      issueDate: "2000-01-01", dueDate: "2000-01-08", items: [{ description: "Old invoice", qty: 1, rate: 100 }],
+      sentHistory: sent ? [{ id: "old-sent", sentAt: "2000-01-01", toEmail: "fixture@example.test" }] : [],
+    });
     db.prepare("UPDATE jobs SET maintenance_plan_name='Quarterly service', service_board_note='Waiting on parts' WHERE id='completed-175'").run();
   } finally { db.close(); }
 }
@@ -212,9 +216,12 @@ async function assertQuickBooksPill(target, expanded) {
     return { outer: rect(element), inner: rect(circle), foreground: hex(getComputedStyle(element).color), background: hex(getComputedStyle(element).backgroundColor),
       circleBackground: hex(getComputedStyle(circle).backgroundColor), exclamationColor: hex(getComputedStyle(circle).color),
       circleText: circle.textContent, paddingLeft: getComputedStyle(element).paddingLeft, paddingRight: getComputedStyle(element).paddingRight,
+      border: getComputedStyle(element).borderWidth, shadow: getComputedStyle(element).boxShadow,
       clipped: element.scrollWidth > element.clientWidth };
   });
   expect(geometry.circleText).toBe("!");
+  expect(geometry.border).toBe("0px");
+  expect(geometry.shadow).toBe("none");
   expect(geometry.inner.width).toBe(geometry.inner.height);
   expect(geometry.inner.left).toBeGreaterThan(geometry.outer.left);
   expect(geometry.inner.right).toBeLessThan(geometry.outer.right);
@@ -297,18 +304,36 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
           for (const index of [175, 174, 169]) await assertQuickBooksPill(qbBoardCard(page, index), expanded);
           for (const index of [173, 172, 171, 170]) await expect(qbWarning(qbBoardCard(page, index))).toHaveCount(0);
           const paid = qbBoardCard(page, 175);
-          await expect(paid.getByTitle("Invoice Paid", { exact: true })).toBeVisible();
+          await expect(paid.getByTitle("Invoice paid", { exact: true })).toBeVisible();
           await expect(paid.getByTitle("Quoted", { exact: true })).toBeVisible();
           await expect(paid.getByTitle("Maintenance", { exact: true })).toBeVisible();
           if (!expanded) {
-            const paidDot = await paid.getByTitle("Invoice Paid", { exact: true }).boundingBox();
+            const paidDot = await paid.getByTitle("Invoice paid", { exact: true }).boundingBox();
             const warningPill = await qbWarning(paid).boundingBox();
             expect(paidDot.width).toBe(paidDot.height);
             expect(warningPill.width).toBe(warningPill.height);
-            await expect(paid.getByTitle("Invoice Paid", { exact: true }).locator("[data-quickbooks-warning-centre]")).toHaveCount(0);
+            await expect(paid.getByTitle("Invoice paid", { exact: true }).locator("[data-quickbooks-warning-centre]")).toHaveCount(0);
           }
           await expect(paid.getByLabel("Job note: Waiting on parts")).toBeVisible();
-          await expect(qbBoardCard(page, 174).getByTitle("Unpaid", { exact: true })).toBeVisible();
+          await expect(qbBoardCard(page, 174).getByTitle("Outstanding invoice", { exact: true })).toBeVisible();
+          const unsent = qbBoardCard(page, 168).locator('[data-service-board-indicator="invoice-unsent"]');
+          const overdue = qbBoardCard(page, 167).locator('[data-service-board-indicator="invoice-overdue"]');
+          await expect(unsent).toHaveAttribute("title", "Invoice not sent");
+          await expect(overdue).toHaveAttribute("title", "Invoice overdue");
+          await expect(qbBoardCard(page, 168).getByTitle("Invoice overdue")).toHaveCount(0);
+          await expect(qbBoardCard(page, 172).getByTitle("Not invoiced", { exact: true })).toBeVisible();
+          const colour = (element) => getComputedStyle(element.querySelector("span") || element).backgroundColor;
+          expect(await unsent.evaluate(colour)).not.toBe(await overdue.evaluate(colour));
+          for (const index of [175, 174, 172, 168, 167]) {
+            const target = qbBoardCard(page, index);
+            for (const pill of await target.locator("[data-service-board-indicator]").all()) {
+              expect(await pill.evaluate((element) => {
+                const style = getComputedStyle(element);
+                return { border: style.borderWidth, shadow: style.boxShadow };
+              })).toEqual({ border: "0px", shadow: "none" });
+            }
+            if (!mobile && !expanded) await assertFloatingIndicators(target);
+          }
           for (const index of [175, 174, 173, 172, 171, 170, 169]) {
             const target = qbBoardCard(page, index);
             await target.scrollIntoViewIfNeeded();

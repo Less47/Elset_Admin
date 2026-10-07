@@ -91,7 +91,7 @@ export function deriveAnalytics(data, financials, range, filters = {}, today = i
   const scope = analyticsScope(data, financials, filters), { jobs, customers, plans, allCustomers } = scope;
   const jobsById = new Map(jobs.map(job => [job.id, job]));
   const invoices = scope.invoices.map(row => ({ ...row, id: row.invoiceId, name: row.invoiceNumber,
-    customerName: allCustomers.get(row.customerId)?.name || "Unknown customer", overdueDays: invoiceOverdueDays(row.balanceCents, row.dueDate, today),
+    customerName: allCustomers.get(row.customerId)?.name || "Unknown customer", overdueDays: invoiceOverdueDays(row.balanceCents, row.dueDate, today, row.sentCount),
     status: invoiceStatusFromAmounts({ total: row.totalCents, balance: row.balanceCents, paid: row.paidCents, paymentCount: row.paymentCount, sentCount: row.sentCount, dueDate: row.dueDate, today }).label }));
   const payments = scope.payments.map(row => ({ ...row, customerName: allCustomers.get(row.customerId)?.name || "Unknown customer" }));
   const periodInvoices = invoices.filter(row => inRange(row.issueDate, range)), periodPayments = payments.filter(row => inRange(row.date, range));

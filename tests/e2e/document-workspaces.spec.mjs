@@ -12,9 +12,10 @@ import { openWorkspaceDb } from "../../server-workspace-db.js";
 import { importWorkspaceJsonData } from "../../server-workspace-importer.js";
 import { loadWorkspaceStateFromDb } from "../../server-workspace-state.js";
 import { readPdfTextRuns } from "../helpers/pdf-text.js";
-import { getDocumentRecipientEmail } from "../../src/lib/quote-template.js";
+import { formatDocumentDate, getDocumentRecipientEmail } from "../../src/lib/quote-template.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
 import { DOCUMENT_JSON_LIMIT_BYTES } from "../../server-document-json.js";
+import { addCalendarMonth, invoiceSendDate } from "../../src/lib/invoice-payment-terms.js";
 
 import { insertJobTree } from "../../server-workspace-jobs.js";
 import { updateCustomer } from "../../server-workspace-customers.js";
@@ -511,6 +512,79 @@ async function openWorkspace(browser, {width=1440,height=900,jobId=EXISTING_JOB,
 }
 const editor=page=>page.locator('[data-document-workspace]');
 const dbJob=id=>readWorkspaceState().jobs.find(job=>job.id===id);
+
+for (const manual of [false, true]) test(`invoice first-send calendar-month terms ${manual ? "preserve manual due dates" : "reconcile the automatic due date without reload"}`, async ({ browser }, info) => {
+  const job = dbJob(NEW_JOB);
+  job.invoice = { issueDate: "2026-01-31", dueDate: "2026-02-28", dueDateMode: "auto",
+    items: [{ id: "terms-line", description: "Gate service", qty: 1, rate: 100 }], payments: [], sentHistory: [] };
+  const db = openWorkspaceDb({ dbPath: path.join(tempDataDir, "elset-workspace.db") });
+  try { db.prepare("DELETE FROM jobs WHERE id=?").run(job.id); insertJobTree(db, job); } finally { db.close(); }
+  const { context, page, writes } = await openWorkspace(browser, { type: "invoice", jobId: NEW_JOB });
+  try {
+    await expect(page.getByLabel("Due date", { exact: true })).toHaveValue("2026-02-28");
+    await expect(page.locator(".document-summary")).toContainText("Draft");
+    if (manual) {
+      await page.getByLabel("Due date", { exact: true }).fill("2027-02-15");
+      await page.getByRole("button", { name: "Save Invoice", exact: true }).click();
+      await expect.poll(() => dbJob(NEW_JOB).invoice.dueDateMode).toBe("manual");
+    }
+    const beforeFailed = dbJob(NEW_JOB).invoice;
+    const mailCount = messages.length;
+    await page.getByRole("button", { name: /^Preview & Send/ }).click();
+    rejectMail = true;
+    await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+    await expect(page.locator('[data-document-send-status="error"]')).toBeVisible();
+    expect(dbJob(NEW_JOB).invoice).toEqual(beforeFailed);
+    rejectMail = false;
+    await page.getByRole("button", { name: "Retry Send", exact: true }).click();
+    await expect(page.locator('[data-document-send-status="success"]')).toBeVisible();
+    const sent = dbJob(NEW_JOB).invoice;
+    const expected = manual ? "2027-02-15" : addCalendarMonth(invoiceSendDate(sent.sentHistory[0].sentAt));
+    expect(sent.dueDate).toBe(expected);
+    await expect(page.getByLabel("Due date", { exact: true })).toHaveValue(expected);
+    await expect(page.locator(".document-summary")).toContainText("Unpaid");
+    await expect(page.getByText("Unsaved changes", { exact: true })).toHaveCount(0);
+    expect(messages.length).toBe(mailCount + 1);
+    const attachment = messages.at(-1).split(/\r\n--/).find(part => part.includes("Content-Type: application/pdf"));
+    const pdf = Buffer.from(attachment.slice(attachment.indexOf("\r\n\r\n") + 4).trim(), "base64");
+    const runs = await readPdfTextRuns(pdf);
+    expect(sent.sentHistory[0].documentSnapshot.dueDate).toBe(expected);
+    expect(runs.flat().some(run => run.text.includes(formatDocumentDate(expected)))).toBe(true);
+    await capture(page, info, `invoice-terms-${manual ? "manual" : "automatic"}`, false);
+    await page.getByRole("button", { name: /^Preview & Send/ }).click();
+    await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+    await expect.poll(() => dbJob(NEW_JOB).invoice.sentHistory.length).toBe(2);
+    expect(dbJob(NEW_JOB).invoice.dueDate).toBe(expected);
+    expect(writes.some(write => /\/api\/(quickbooks|xero)/.test(write.path))).toBe(false);
+    await page.reload();
+    await expect(page.getByLabel("Due date", { exact: true })).toHaveValue(expected);
+    expect(dbJob(NEW_JOB).invoice.dueDateMode).toBe(manual ? "manual" : "auto");
+  } finally { rejectMail = false; await context.close(); }
+});
+
+test("invoice new draft defaults to a calendar month and a history-save failure never offers another send", async ({ browser }) => {
+  const { context, page, writes } = await openWorkspace(browser, { type: "invoice", jobId: NEW_JOB });
+  try {
+    const issueDate = await page.getByLabel("Issue date", { exact: true }).inputValue();
+    const provisional = addCalendarMonth(issueDate);
+    await expect(page.getByLabel("Due date", { exact: true })).toHaveValue(provisional);
+    await page.getByLabel("Item 1 description", { exact: true }).fill("Calendar-month invoice");
+    await page.getByLabel("Item 1 rate", { exact: true }).fill("100");
+    await page.getByRole("button", { name: "Save Invoice", exact: true }).click();
+    await expect.poll(() => dbJob(NEW_JOB).invoice?.dueDateMode).toBe("auto");
+    const before = dbJob(NEW_JOB).invoice;
+    const mailCount = messages.length;
+    await page.route(`**/api/jobs/${NEW_JOB}/invoice/sent-history*`, route => route.fulfill({ status: 503, json: { error: "History temporarily unavailable" } }));
+    await page.getByRole("button", { name: /^Preview & Send/ }).click();
+    await page.getByRole("button", { name: /^Confirm & Send/ }).click();
+    await expect(page.locator('[data-document-send-status="success"]')).toContainText("send record could not be saved");
+    await expect(page.getByRole("button", { name: "Retry Send", exact: true })).toHaveCount(0);
+    expect(messages.length).toBe(mailCount + 1);
+    expect(dbJob(NEW_JOB).invoice.dueDate).toBe(before.dueDate);
+    expect(dbJob(NEW_JOB).invoice.sentHistory).toEqual([]);
+    expect(writes.filter(write => write.path === "/api/documents/send")).toHaveLength(1);
+  } finally { await context.close(); }
+});
 
 function prepareConversionQuote() {
   const job = dbJob(NEW_JOB);

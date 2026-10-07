@@ -114,7 +114,7 @@ for (const width of [390, 820, 1440]) test(`Warranty board, indicators, modes, l
   const legend = page.locator("[data-service-board-legend]");
   await expect(page.getByText("Legend", { exact: true })).toHaveCount(0);
   await expect(legend.getByText("Warranty", { exact: true })).toHaveCount(0);
-  await expect(legend.locator(":scope > li > span:last-child")).toHaveText(["Quote sent", "Outstanding invoice", "Invoice paid", "Invoice needs attention", "Maintenance", "Not in QuickBooks"]);
+  await expect(legend.locator(":scope > li > span:last-child")).toHaveText(["Quote sent", "Not invoiced", "Invoice not sent", "Outstanding invoice", "Invoice overdue", "Invoice paid", "Maintenance", "Not in QuickBooks"]);
   await select(page, "Billing Type filter", "Warranty"); await shot(page, "board-filter", width); await closeFilters(page, width);
   await expect(page.locator('[data-service-board-job-id="billable"], [data-mobile-job-id="billable"]')).toHaveCount(0);
   await page.getByRole("textbox", { name: "Search jobs", exact: true }).fill("Installation warranty"); await expect(card(page)).toBeVisible();
@@ -230,7 +230,7 @@ for (const theme of themePresets) test(`Warranty card contrast and stable indica
   await shot(page, `theme-${theme.id}`, 1440);
 });
 
-const legendLabels = ["Quote sent", "Outstanding invoice", "Invoice paid", "Invoice needs attention", "Maintenance"];
+const legendLabels = ["Quote sent", "Not invoiced", "Invoice not sent", "Outstanding invoice", "Invoice overdue", "Invoice paid", "Maintenance"];
 async function assertLegend(page, provider) {
   const legend = page.getByRole("list", { name: "Job indicators", exact: true });
   await expect(legend).toBeVisible();

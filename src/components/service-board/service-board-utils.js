@@ -23,9 +23,11 @@ const quickBooksUnsyncedIndicator = { id: "quickbooks-unsynced", label: "Not in 
 
 export const serviceBoardIndicatorLegend = [
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
+  { id: "not-invoiced", label: "Not invoiced", dotClassName: "bg-slate-500" },
+  { id: "invoice-unsent", label: "Invoice not sent", dotClassName: "bg-amber-400" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
+  { id: "invoice-overdue", label: "Invoice overdue", dotClassName: "bg-rose-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
-  { id: "invoice-attention", label: "Invoice needs attention", dotClassName: "bg-rose-500" },
   { id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" },
   quickBooksUnsyncedIndicator,
 ];
@@ -122,15 +124,13 @@ export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider 
   }
 
   if (showInvoiceStatus) {
-    if (invoiceStatus.id === "paid") {
-      indicators.push({ id: "invoice-paid", label: "Invoice Paid", dotClassName: "bg-emerald-500" });
-    } else if (invoiceStatus.id === "draft") {
-      indicators.push({ id: "invoice-draft", label: "Draft Invoice", dotClassName: "bg-orange-500" });
-    } else if (invoiceStatus.id === "overdue" || invoiceStatus.id === "not-invoiced") {
-      indicators.push({ id: "invoice-attention", label: invoiceStatus.label, dotClassName: "bg-rose-500" });
-    } else {
-      indicators.push({ id: "invoice-pending", label: invoiceStatus.label, dotClassName: "bg-violet-500" });
-    }
+    const id = invoiceStatus.id === "paid" ? "invoice-paid"
+      : invoiceStatus.id === "overdue" ? "invoice-overdue"
+      : invoiceStatus.id === "not-invoiced" ? "not-invoiced"
+      : invoiceStatus.id === "draft" ? "invoice-unsent" : "invoice-pending";
+    const indicator = serviceBoardIndicatorLegend.find((entry) => entry.id === id);
+    indicators.push(["deposit-paid", "partially-paid"].includes(invoiceStatus.id)
+      ? { ...indicator, label: invoiceStatus.label } : indicator);
   }
 
   // Mapping ownership is independent of invoice issuance, payment and sync errors.

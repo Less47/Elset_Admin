@@ -10,6 +10,7 @@ import { getJobById } from "./server-workspace-state.js";
 import { invoiceDeletionRestriction, invoiceHasBeenSent } from "./src/lib/invoice-deletion.js";
 import { buildDocumentReference } from "./src/lib/quote-template.js";
 import { invoiceStatusFromAmounts } from "./src/lib/invoice-account.js";
+import { addCalendarMonth, invoiceDueDateMode, invoiceTermsOnFirstSend } from "./src/lib/invoice-payment-terms.js";
 import { assertLocalPaymentAllowed } from "./server-accounting-payment-policy.js";
 import { queueQuickBooksPayment } from "./server-accounting-payment-intents.js";
 
@@ -147,14 +148,6 @@ function normalizeDateInput(value, label, { defaultValue = "", allowEmpty = true
   const normalized = toDateInputValue(value);
   if (!normalized) throw new WorkspaceDocumentError(`${label} is invalid.`);
   return normalized;
-}
-
-function addDaysToDateInput(value, days) {
-  const normalized = toDateInputValue(value) || toDateInputValue(new Date());
-  const [year, month, day] = normalized.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() + days);
-  return toDateInputValue(date);
 }
 
 function isDecimalInput(value) {
@@ -554,9 +547,20 @@ function writeInvoiceTree(
   const issueDate = normalizeDateInput(input.issueDate, "Invoice issue date", {
     defaultValue: toDateInputValue(new Date()),
   });
-  const dueDate = normalizeDateInput(input.dueDate, "Invoice due date", {
-    defaultValue: addDaysToDateInput(issueDate, 7),
+  let dueDate = normalizeDateInput(input.dueDate, "Invoice due date", {
+    defaultValue: existingRow?.due_date || addCalendarMonth(issueDate),
   });
+  const existingInvoice = existingRow ? getJobState(db, jobId)?.invoice : null;
+  const changedDueDate = existingRow && Object.hasOwn(input, "dueDate") && dueDate !== existingRow.due_date;
+  const dueDateMode = invoiceDueDateMode({ ...existingInvoice, ...input, issueDate,
+    ...(changedDueDate && !["auto", "manual"].includes(input.dueDateMode) ? { dueDateMode: "manual" } : {}),
+    ...(existingInvoice ? { sentHistory: existingInvoice.sentHistory } : {}),
+  });
+  // An older editor's automatic provisional date cannot replace a first-send
+  // anchor already committed by another request. Explicit manual edits can.
+  if (existingInvoice?.sentHistory?.length && existingInvoice.dueDateMode === "auto" && dueDateMode === "auto") {
+    dueDate = existingRow.due_date;
+  }
   const lineItems = normalizeLineItems(input.items, invoiceId, "Invoice line items");
 
   db.prepare(`
@@ -580,7 +584,7 @@ function writeInvoiceTree(
     trimText(input.paymentNotes),
     existingRow?.created_at || trimText(input.createdAt) || now,
     now,
-    objectJson(pickExtra(input, documentKnownKeys))
+    objectJson({ ...pickExtra(input, documentKnownKeys), dueDateMode })
   );
   db.prepare("DELETE FROM invoice_line_items WHERE invoice_id = ?").run(invoiceId);
   insertLineItems(db, "invoice_line_items", "invoice_id", invoiceId, lineItems);
@@ -695,6 +699,8 @@ export function updateInvoiceForJob(db, jobIdInput, input) {
     if (Object.prototype.hasOwnProperty.call(input, "dueDate")) {
       assignments.push("due_date = ?");
       values.push(normalizeDateInput(input.dueDate, "Invoice due date"));
+      assignments.push("extra_json = ?");
+      values.push(objectJson({ ...JSON.parse(invoiceRow.extra_json || "{}"), dueDateMode: "manual" }));
     }
     if (Object.prototype.hasOwnProperty.call(input, "notes")) {
       assignments.push("notes = ?");
@@ -916,8 +922,19 @@ export function addDocumentSentHistory(db, jobIdInput, documentTypeInput, input)
       };
     }
 
-    insertSentHistoryRow(db, history);
     const updatedAt = nowIso();
+    if (documentType === "invoice") {
+      const current = getInvoiceResult(db, jobId);
+      const terms = current.status.id === "paid" ? current.invoice
+        : invoiceTermsOnFirstSend(current.invoice, history.sentAt);
+      if (terms !== current.invoice) {
+        db.prepare("UPDATE invoices SET due_date = ?, extra_json = ?, updated_at = ? WHERE id = ?")
+          .run(terms.dueDate, objectJson({ ...JSON.parse(documentRow.extra_json || "{}"), dueDateMode: "auto" }), updatedAt, documentRow.id);
+        if (history.documentSnapshot) history.documentSnapshot = { ...history.documentSnapshot, dueDate: terms.dueDate, dueDateMode: "auto" };
+      }
+    }
+    // The automatic due date and successful history commit or roll back together.
+    insertSentHistoryRow(db, history);
     updateJobTouchedAt(db, jobId, updatedAt);
     touchWorkspaceInfo(db, updatedAt);
     runForeignKeyCheck(db);

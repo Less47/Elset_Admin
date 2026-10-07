@@ -5,6 +5,7 @@ import { normalizeBillingType, normalizeWarrantyReason } from "./src/lib/job-bil
 import { customerPostalFields } from "./src/lib/customer-profile.js";
 import { normalizeServiceBoardNote } from "./src/lib/service-board-note.js";
 import { normalizeDeletedInvoices } from "./src/lib/invoice-deletion.js";
+import { addCalendarMonth, invoiceDueDateMode } from "./src/lib/invoice-payment-terms.js";
 import crypto from "crypto";
 import { normalizeMaintenanceFrequency } from "./src/lib/maintenance-frequency.js";
 import {
@@ -282,13 +283,6 @@ function toDateInputValue(value) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function addDaysToDateInput(value, days) {
-  const normalized = toDateInputValue(value);
-  const date = normalized ? new Date(`${normalized}T00:00:00`) : new Date();
-  date.setDate(date.getDate() + days);
-  return toDateInputValue(date);
 }
 
 function normalizeSiteAccessNoteRecord(note) {
@@ -713,10 +707,11 @@ function normalizeDocumentRecord(document, fallbackType) {
   if (fallbackType !== "invoice" && document.type !== "invoice") return baseDocument;
 
   const invoiceTotal = calculateDocTotal(baseDocument.items);
-  const dueDate = toDateInputValue(document.dueDate) || addDaysToDateInput(baseDocument.issueDate, 7);
+  const dueDate = toDateInputValue(document.dueDate) || addCalendarMonth(baseDocument.issueDate);
   return {
     ...baseDocument,
     dueDate,
+    dueDateMode: invoiceDueDateMode({ ...document, issueDate: baseDocument.issueDate }),
     paymentNotes: String(document.paymentNotes || "").trim(),
     payments: normalizeInvoicePayments(document, invoiceTotal, dueDate || baseDocument.issueDate),
     // Preserve the provider projected from invoice mappings through app-state reads.
