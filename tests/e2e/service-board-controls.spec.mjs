@@ -278,14 +278,15 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
           await page.getByRole("button", { name: "Open board filters", exact: true }).click();
           const filters = page.getByRole("dialog", { name: "Board filters", exact: true });
           await filters.getByRole("checkbox", { name: "Show indicator labels" }).setChecked(enabled);
-          await filters.locator("summary").filter({ hasText: "Legend" }).click();
-          await assertQuickBooksPill(filters, false);
+          await expect(filters.getByText("Legend", { exact: true })).toHaveCount(0);
+          await assertQuickBooksPill(filters.getByRole("list", { name: "Job indicators" }), false);
           await expect(filters.getByText("Not in QuickBooks", { exact: true })).toBeVisible();
           await capture(page, info, `qb-legend-${width}-${theme}-${enabled}`);
           await page.keyboard.press("Escape");
         } else {
           await page.getByText("Show tag info", { exact: true }).locator("..").getByRole("checkbox").setChecked(enabled);
-          await assertQuickBooksPill(page.getByText("Legend", { exact: true }).locator(".."), false);
+          await expect(page.getByText("Legend", { exact: true })).toHaveCount(0);
+          await assertQuickBooksPill(page.getByRole("list", { name: "Job indicators" }), false);
         }
       };
       for (const enabled of [false, true]) {

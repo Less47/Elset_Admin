@@ -103,15 +103,14 @@ export function ServiceBoardTagLegend({
 
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 ${isHeroTone ? "border-white/20" : "border-border"}`}>
-      <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${isHeroTone ? "text-inherit" : "text-muted-foreground"}`}>Legend</p>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <ul aria-label="Job indicators" data-service-board-legend className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         {getServiceBoardIndicatorLegend(accountingProvider).map((indicator) => (
-          <div key={indicator.id} className={`inline-flex items-center gap-1.5 text-[11px] ${isHeroTone ? "text-inherit" : "text-text-secondary"}`}>
+          <li key={indicator.id} className={`inline-flex items-center gap-1.5 text-[11px] ${isHeroTone ? "text-inherit" : "text-text-secondary"}`}>
             <ServiceBoardIndicatorSymbol indicator={indicator} />
             <span>{indicator.label}</span>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <div className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 ${isHeroTone ? "border-white/20 bg-current/10" : "border-border bg-muted"}`}>
           <Checkbox checked={showTagLabels} onCheckedChange={(checked) => onToggleShowTagLabels(Boolean(checked))} />

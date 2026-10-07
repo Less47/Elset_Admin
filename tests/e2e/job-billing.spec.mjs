@@ -15,12 +15,14 @@ import { createDocumentRouter } from "../../server-document-routes.js";
 import { createJobCostingRouter } from "../../server-job-costing-routes.js";
 import { updateWorkspaceAddons } from "../../server-workspace-addons.js";
 import { createAddonRouter } from "../../server-addon-routes.js";
+import { insertJobTree } from "../../server-workspace-jobs.js";
 import { themePresets } from "../../src/lib/theme-presets.js";
 import { contrastRatio } from "../../src/lib/theme-tokens.js";
 import { getBuildMetadata } from "../../scripts/build-metadata.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const screenshots = path.join(root, "test-results/warranty-badge-removal");
+const refinementScreenshots = path.join(root, "test-results/legend-warranty-refinement");
 const fixture = JSON.parse(fs.readFileSync(path.join(root, "fixtures/demo-workspace.json"), "utf8"));
 let vite, api, baseUrl, apiUrl, directory, db, customer, preferences = {}, testRole = "admin";
 const env = {}, user = { id: "warranty-browser-test", name: "Billing Tester", role: "admin" };
@@ -28,6 +30,7 @@ const env = {}, user = { id: "warranty-browser-test", name: "Billing Tester", ro
 test.beforeAll(async () => {
   directory = fs.mkdtempSync(path.join(os.tmpdir(), "elset-billing-browser-"));
   fs.mkdirSync(screenshots, { recursive: true });
+  fs.mkdirSync(refinementScreenshots, { recursive: true });
   const app = express(); app.use(express.json());
   const requireAuth = (req, _res, next) => { req.user = { ...user, role: testRole }; next(); };
   const requireRole = roles => (req, res, next) => roles.includes(req.user.role) ? next() : res.sendStatus(403);
@@ -108,8 +111,10 @@ for (const width of [390, 820, 1440]) test(`Warranty board, indicators, modes, l
     await noOverflow(page); await shot(page, `board-${mode.toLowerCase()}`, width);
   }
   await filters(page, width);
-  if (width < 768) await page.locator("summary").filter({ hasText: "Legend" }).click();
-  await expect(page.getByText("Warranty", { exact: true }).first()).toBeVisible();
+  const legend = page.locator("[data-service-board-legend]");
+  await expect(page.getByText("Legend", { exact: true })).toHaveCount(0);
+  await expect(legend.getByText("Warranty", { exact: true })).toHaveCount(0);
+  await expect(legend.locator(":scope > li > span:last-child")).toHaveText(["Quote sent", "Outstanding invoice", "Invoice paid", "Invoice needs attention", "Maintenance", "Not in QuickBooks"]);
   await select(page, "Billing Type filter", "Warranty"); await shot(page, "board-filter", width); await closeFilters(page, width);
   await expect(page.locator('[data-service-board-job-id="billable"], [data-mobile-job-id="billable"]')).toHaveCount(0);
   await page.getByRole("textbox", { name: "Search jobs", exact: true }).fill("Installation warranty"); await expect(card(page)).toBeVisible();
@@ -224,3 +229,106 @@ for (const theme of themePresets) test(`Warranty card contrast and stable indica
   await expect(card(page).getByTitle("Maintenance", { exact: true })).toBeVisible();
   await shot(page, `theme-${theme.id}`, 1440);
 });
+
+const legendLabels = ["Quote sent", "Outstanding invoice", "Invoice paid", "Invoice needs attention", "Maintenance"];
+async function assertLegend(page, provider) {
+  const legend = page.getByRole("list", { name: "Job indicators", exact: true });
+  await expect(legend).toBeVisible();
+  await expect(legend.locator(":scope > li > span:last-child")).toHaveText(provider === "quickbooks" ? [...legendLabels, "Not in QuickBooks"] : legendLabels);
+  await expect(page.getByText("Legend", { exact: true })).toHaveCount(0);
+  await expect(legend.getByText("Warranty", { exact: true })).toHaveCount(0);
+  const warning = legend.locator('[data-service-board-indicator="quickbooks-unsynced"]');
+  if (provider === "quickbooks") {
+    await expect(warning).toHaveAttribute("data-indicator-expanded", "false");
+    await expect(warning).toHaveCSS("width", "18px");
+    await expect(warning).toHaveCSS("height", "18px");
+    await expect(warning.locator("[data-quickbooks-warning-centre]")).toHaveText("!");
+    await expect(warning.locator("[data-quickbooks-warning-centre]")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  } else await expect(warning).toHaveCount(0);
+  return legend;
+}
+
+async function assertWarrantyTextContrast(target) {
+  const samples = await target.evaluate(element => {
+    const canvas = document.createElement("canvas"), context = canvas.getContext("2d");
+    const rgba = color => {
+      context.clearRect(0, 0, 1, 1); context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data];
+    };
+    const blend = (front, back) => front.slice(0, 3).map((channel, i) => channel * front[3] / 255 + back[i] * (1 - front[3] / 255));
+    const hex = channels => "#" + channels.slice(0, 3).map(channel => Math.round(channel).toString(16).padStart(2, "0")).join("");
+    const samples = [], walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.textContent.trim()) continue;
+      const owner = text.parentElement, box = owner.getBoundingClientRect();
+      if (!box.width || !box.height || owner.closest('[aria-hidden="true"]')) continue;
+      const ancestors = []; for (let node = owner; node; node = node.parentElement) ancestors.unshift(node);
+      let background = [255, 255, 255];
+      for (const node of ancestors) background = blend(rgba(getComputedStyle(node).backgroundColor), background);
+      const foreground = blend(rgba(getComputedStyle(owner).color), background);
+      samples.push({ text: text.textContent.trim(), foreground: hex(foreground), background: hex(background) });
+    }
+    return samples;
+  });
+  expect(samples.length).toBeGreaterThanOrEqual(3);
+  for (const sample of samples) expect(contrastRatio(sample.foreground, sample.background), sample.text).toBeGreaterThanOrEqual(4.5);
+}
+
+for (const themeId of ["elset", "midnight-signal"]) for (const provider of ["quickbooks", ""]) {
+  test(`Warranty comparisons across all statuses and view modes in ${themeId}, accounting ${provider || "disabled"}`, async ({ page }) => {
+    preferences = { ...themePresets.find(theme => theme.id === themeId).values };
+    updateWorkspaceAddons(db, { quickbooks: provider === "quickbooks", xero: false });
+    const state = loadWorkspaceStateFromDb(db), warranty = state.jobs.find(job => job.id === "warranty"), billable = state.jobs.find(job => job.id === "billable");
+    for (const [base, id, jobNumber, status, title] of [
+      [warranty, "warranty-progress", 1546, "In Progress", "Warranty progress callback"],
+      [billable, "billable-progress", 1547, "In Progress", "Ordinary progress work"],
+      [billable, "billable-completed", 1548, "Completed", "Ordinary completed work"],
+    ]) insertJobTree(db, { ...base, id, jobNumber, status, title, invoice: null, quote: null, notes: [], photos: [] });
+    const before = db.prepare("SELECT * FROM jobs ORDER BY id").all();
+    await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(baseUrl);
+    await assertLegend(page, provider);
+    const selectors = {
+      "To Do": ["warranty", "billable"],
+      "In Progress": ["warranty-progress", "billable-progress"],
+      Completed: ["completed-warranty", "billable-completed"],
+    };
+    for (const view of ["List", "Grid", "Compact"]) {
+      for (const status of Object.keys(selectors)) await page.getByRole("button", { name: `${status} ${view} view`, exact: true }).click();
+      const surfaces = [];
+      for (const [status, [warrantyId, billableId]] of Object.entries(selectors)) {
+        const column = page.locator(`[data-service-board-status="${status}"]`);
+        const warrantyCard = column.locator(`[data-service-board-job-id="${warrantyId}"]`);
+        const billableCard = column.locator(`[data-service-board-job-id="${billableId}"]`);
+        await expect(warrantyCard).toBeVisible(); await expect(billableCard).toBeVisible();
+        await expect(warrantyCard.locator(".warranty-job-card")).toHaveCount(1);
+        await expect(billableCard.locator(".warranty-job-card")).toHaveCount(0);
+        const surface = warrantyCard.locator(".warranty-job-card");
+        await expect(surface).toHaveCSS("border-top-width", "1px");
+        const background = await surface.evaluate(element => getComputedStyle(element).backgroundColor);
+        const ordinaryBackground = await billableCard.locator('[data-slot="card"]').evaluate(element => getComputedStyle(element).backgroundColor);
+        expect(background).not.toBe(ordinaryBackground); surfaces.push(background);
+        await assertWarrantyTextContrast(warrantyCard);
+        await expect(warrantyCard.getByText("WARRANTY", { exact: true })).toHaveCount(0);
+        await expect(warrantyCard.locator('[data-service-board-indicator="warranty"]')).toHaveCount(0);
+      }
+      expect(new Set(surfaces).size).toBe(1);
+      await noOverflow(page);
+      await page.screenshot({ path: path.join(refinementScreenshots, `${themeId}-${provider || "disabled"}-${view.toLowerCase()}.png`), fullPage: true, animations: "disabled" });
+    }
+    expect(db.prepare("SELECT * FROM jobs ORDER BY id").all()).toEqual(before);
+    await expect(page.locator("[data-tomorrow-job-id]")).toHaveCount(0);
+  });
+}
+
+for (const width of [320, 390]) for (const provider of ["quickbooks", "xero", ""]) {
+  test(`mobile legend starts with indicators and wraps cleanly at ${width}px with ${provider || "disabled accounting"}`, async ({ page }) => {
+    updateWorkspaceAddons(db, { quickbooks: provider === "quickbooks", xero: provider === "xero" });
+    await page.setViewportSize({ width, height: 900 }); await page.goto(baseUrl); await expect(card(page)).toBeVisible();
+    await filters(page, width);
+    const legend = await assertLegend(page, provider);
+    const wrapped = await legend.getByRole("listitem").evaluateAll(items => items.at(-1).getBoundingClientRect().top > items[0].getBoundingClientRect().top);
+    expect(wrapped).toBe(true);
+    await noOverflow(page);
+    await page.screenshot({ path: path.join(refinementScreenshots, `mobile-${width}-${provider || "disabled"}.png`), animations: "disabled" });
+  });
+}

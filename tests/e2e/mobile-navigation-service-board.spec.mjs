@@ -1919,7 +1919,8 @@ test("desktop view retains three columns, drag and drop, and controls without re
       await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
       await expect(page.locator("[data-desktop-tomorrow-tab]")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Full Screen" })).toBeVisible();
-      await expect(page.getByText("Legend", { exact: true })).toBeVisible();
+      await expect(page.getByText("Legend", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("list", { name: "Job indicators" })).toBeVisible();
       await assertDesktopBoardSpacing(page);
 
       await page.getByRole("button", { name: "To Do Grid view" }).click();

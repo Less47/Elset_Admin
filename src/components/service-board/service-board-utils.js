@@ -22,13 +22,12 @@ export const serviceBoardSortOptions = [
 const quickBooksUnsyncedIndicator = { id: "quickbooks-unsynced", label: "Not in QuickBooks", type: "quickbooks-warning" };
 
 export const serviceBoardIndicatorLegend = [
-  { id: "warranty", label: "Warranty", dotClassName: "bg-billing-warranty" },
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
   { id: "invoice-attention", label: "Invoice needs attention", dotClassName: "bg-rose-500" },
-  quickBooksUnsyncedIndicator,
   { id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" },
+  quickBooksUnsyncedIndicator,
 ];
 
 export function getServiceBoardIndicatorLegend(accountingProvider) {

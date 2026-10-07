@@ -10,7 +10,7 @@ const job = { status: "To Do", invoice };
 const indicators = (record, provider = "quickbooks", status = { id: "draft", label: "Draft Invoice" }) =>
   buildJobCardIndicators({ job: record, accountingProvider: provider, invoiceStatus: status });
 
-test("Warranty cards omit the badge while preserving tags, classification, urgency and legend", () => {
+test("Warranty cards omit the badge while preserving tags, classification and urgency", () => {
   const record = { billingType: "warranty", urgency: "High", quote: { sentHistory: [{}] }, maintenancePlanName: "Annual service" };
   const before = structuredClone(record);
   const entries = indicators(record);
@@ -20,7 +20,17 @@ test("Warranty cards omit the badge while preserving tags, classification, urgen
   ]);
   assert.equal(entries.some(entry => entry.id === "warranty" || entry.type === "warranty"), false);
   assert.deepEqual(record, before);
-  assert.ok(getServiceBoardIndicatorLegend("quickbooks").some(entry => entry.id === "warranty"));
+  assert.equal(getServiceBoardIndicatorLegend("quickbooks").some(entry => entry.id === "warranty"), false);
+});
+
+test("shared legend starts with Quote, omits Warranty and ends with the special QuickBooks warning", () => {
+  const labels = ["Quote sent", "Outstanding invoice", "Invoice paid", "Invoice needs attention", "Maintenance"];
+  for (const provider of ["quickbooks", "xero", "", undefined]) {
+    const legend = getServiceBoardIndicatorLegend(provider);
+    assert.deepEqual(legend.map(entry => entry.label), provider === "quickbooks" ? [...labels, "Not in QuickBooks"] : labels);
+    assert.equal(legend.some(entry => entry.id === "warranty"), false);
+    if (provider === "quickbooks") assert.equal(legend.at(-1).type, "quickbooks-warning");
+  }
 });
 
 for (const [name, record, provider, shown] of [

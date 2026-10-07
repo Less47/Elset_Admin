@@ -120,7 +120,7 @@ export function buildSemanticTheme(settings) {
     warning: ['#F5E8C5', '#684407', '#574427', '#F9D88A', '#AD8847'],
     danger: ['#F7DFE5', '#8A2440', '#572C3C', '#FFBACB', '#B66D83'],
     maintenance: ['#DDEFE9', '#245B50', '#224D47', '#99DFCF', '#509D8D'],
-    warranty: ['#D0EAE5', '#184B42', '#173E39', '#A5E5D8', '#548F83'],
+    warranty: ['#A8DDD0', '#12483C', '#13564A', '#B5EBDD', '#388773'],
     special: ['#EBDFF5', '#5A3577', '#45345D', '#DFC0FA', '#9877B5'],
   };
   for (const [prefix, isDark, base, backgrounds] of [['', dark, surface, surfaces], ['dialog-', popupText === '#FFFFFF', popup, [popup, vars['--dialog-muted-surface']]]]) {

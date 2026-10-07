@@ -130,21 +130,14 @@ export function MobileBoardFilters({
               />
             </label>
 
-            <details className="group rounded-2xl border bg-card/70">
-              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-status-info-border/35 [&::-webkit-details-marker]:hidden">
-                Legend
-                <span className="text-xs font-medium text-muted-foreground group-open:hidden">Show</span>
-                <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">Hide</span>
-              </summary>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-3 border-t p-panel text-xs text-text-secondary">
-                {getServiceBoardIndicatorLegend(accountingProvider).map((indicator) => (
-                  <div key={indicator.id} className="flex items-center gap-2">
-                    <ServiceBoardIndicatorSymbol indicator={indicator} dotSizeClassName="h-2.5 w-2.5" />
-                    <span>{indicator.label}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
+            <ul aria-label="Job indicators" data-service-board-legend className="flex flex-wrap gap-x-3 gap-y-2 rounded-2xl border bg-card/70 p-panel text-xs text-text-secondary">
+              {getServiceBoardIndicatorLegend(accountingProvider).map((indicator) => (
+                <li key={indicator.id} className="flex items-center gap-2">
+                  <ServiceBoardIndicatorSymbol indicator={indicator} dotSizeClassName="h-2.5 w-2.5" />
+                  <span>{indicator.label}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </DialogBody>
       </DialogContent>

@@ -190,7 +190,7 @@ test("board Warranty cards retain quote/maintenance without a Warranty badge or 
   assert.deepEqual(buildJobCardIndicators({ job, invoiceStatus: { id: "not-invoiced" }, accountingProvider: "quickbooks" }).map(item => item.id), ["quote", "maintenance"]);
   const billable = { ...job, billingType: "billable", invoice: {} };
   assert.ok(buildJobCardIndicators({ job: billable, invoiceStatus: { id: "draft" }, accountingProvider: "quickbooks" }).some(item => item.id === "quickbooks-unsynced"));
-  assert.ok(getServiceBoardIndicatorLegend("quickbooks").some(item => item.id === "warranty"));
+  assert.equal(getServiceBoardIndicatorLegend("quickbooks").some(item => item.id === "warranty"), false);
   assert.equal(matchesJobBillingFilter(job, "all"), true); assert.equal(matchesJobBillingFilter(job, "billable"), false);
   assert.equal(matchesJobBillingFilter(job, "warranty"), true); assert.equal(matchesJobBillingFilter({}, "billable"), true);
 });

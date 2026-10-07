@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSemanticTheme, contrastRatio, contrastText, luminance } from '../src/lib/theme-tokens.js';
+import { buildSemanticTheme, contrastRatio, contrastText, luminance, mixColor } from '../src/lib/theme-tokens.js';
 import { themePresets } from '../src/lib/theme-presets.js';
 import { normalizeUserUiPreferences, validateUserUiPreferencePatch } from '../src/lib/user-ui-preferences.js';
 
@@ -45,11 +45,46 @@ for (const preset of themePresets) {
     for (const name of ['info', 'success', 'warning', 'danger', 'maintenance', 'special']) {
       assert.ok(contrastRatio(v[`--status-${name}`], v[`--status-${name}-surface`]) >= 4.5, name);
     }
+    for (const prefix of ['', 'dialog-']) {
+      const token = `--${prefix}billing-warranty`;
+      for (const background of [`${token}-surface`, `${token}-hover`]) {
+        assert.ok(contrastRatio(v[token], v[background]) >= 4.5, `Warranty text on ${background}`);
+      }
+    }
     if (dark) for (const key of [...surfaces, '--background', '--popover', '--dialog-surface']) assert.ok(luminance(v[key]) < 0.07, `${key} must stay dark`);
     // Every preset is a valid patch in the existing per-account schema.
     assert.deepEqual(validateUserUiPreferencePatch(preset.values), preset.values);
   });
 }
+
+test('Warranty surfaces are richer teal in both light and dark themes while remaining restrained', () => {
+  const chroma = hex => {
+    const channels = hex.slice(1).match(/../g).map(part => parseInt(part, 16));
+    return Math.max(...channels) - Math.min(...channels);
+  };
+  for (const id of ['elset', 'midnight-signal']) {
+    const { vars, dark } = buildSemanticTheme(themePresets.find(preset => preset.id === id).values);
+    const background = vars['--billing-warranty-surface'];
+    const previous = dark ? mixColor(vars['--card'], '#173E39', 0.65) : '#D0EAE5';
+    assert.ok(chroma(background) > chroma(previous) + (dark ? 10 : 20), `${id}: visible increase in teal chroma`);
+    assert.ok(contrastRatio(background, vars['--billing-warranty']) >= 4.5);
+    if (dark) assert.ok(luminance(background) < 0.07, 'Warranty surface must remain dark');
+  }
+});
+
+test('Warranty foregrounds remain readable on custom light and dark card and dialog surfaces', () => {
+  for (const dataViewSurface of ['#FCFDFD', '#091B16', '#234567']) {
+    for (const dialogSurface of ['#E5EEDD', '#162235']) {
+      const settings = normalizeUserUiPreferences({ dataViewSurface, dialogSurface });
+      const { vars } = buildSemanticTheme(settings);
+      for (const prefix of ['', 'dialog-']) {
+        const token = `--${prefix}billing-warranty`;
+        assert.ok(contrastRatio(vars[token], vars[`${token}-surface`]) >= 4.5);
+        assert.ok(contrastRatio(vars[token], vars[`${token}-hover`]) >= 4.5);
+      }
+    }
+  }
+});
 
 test('custom foreground selection uses WCAG luminance, including mid-tone colours', () => {
   for (let r = 0; r <= 255; r += 17) for (let g = 0; g <= 255; g += 17) for (let b = 0; b <= 255; b += 17) {
