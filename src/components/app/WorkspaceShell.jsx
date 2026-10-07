@@ -49,6 +49,9 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
   const accountingProvider = activeAccountingProvider(workspaceAddons.addons);
   const { authError, authUser, canManageBusiness, handleLogout, isAdmin, isAuthenticated, isTechnician } = auth;
+  const currentStaff = authUser?.staffId
+    ? data.staff.find((staff) => staff.id === authUser.staffId) || null
+    : null;
   const {
     activeSection,
     activeSettingsTab,
@@ -216,6 +219,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           ref={mobileNavigationRef}
           activeSection={activeSection}
           authUser={authUser}
+          currentStaff={currentStaff}
           canManageBusiness={canManageBusiness}
           currentSection={currentSection}
           items={visibleSideNavItems}
@@ -233,6 +237,7 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
           activeSection={activeSection}
           items={visibleSideNavItems}
           authUser={authUser}
+          currentStaff={currentStaff}
           isAuthenticated={isAuthenticated}
           themeSettings={themeSettings}
           onLogout={handleLogout}

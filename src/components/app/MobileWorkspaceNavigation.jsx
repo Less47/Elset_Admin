@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { LogOut, Menu, Plus, X } from "lucide-react";
 import WorkspaceLogo from "@/components/app/WorkspaceLogo";
+import StaffAvatar from "@/components/shared/StaffAvatar";
+import { staffInitials } from "@/lib/workspace-media";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +18,7 @@ export default function MobileWorkspaceNavigation({
   ref,
   activeSection,
   authUser,
+  currentStaff,
   canManageBusiness,
   currentSection,
   items,
@@ -27,6 +30,7 @@ export default function MobileWorkspaceNavigation({
   themePalette,
 }) {
   const [open, setOpen] = useState(false);
+  const name = authUser?.name || "Signed in";
   const activeItem = items.find((item) => item.id === activeSection);
   const pageTitle = activeSection === "settings"
     ? currentSection?.title || activeItem?.label
@@ -149,8 +153,9 @@ export default function MobileWorkspaceNavigation({
             }}
           >
             <div className="flex items-center gap-3">
+              <StaffAvatar staff={currentStaff} name={name} initials={staffInitials(name)} className="workspace-sidebar-avatar" decorative />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{authUser?.name || "Signed in"}</p>
+                <p className="truncate text-sm font-semibold">{name}</p>
                 <p className="truncate text-xs capitalize" style={{ color: themePalette.sidebarInactiveMuted }}>
                   {authUser?.role || "staff"}{authUser?.username ? ` · ${authUser.username}` : ""}
                 </p>

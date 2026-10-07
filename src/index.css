@@ -875,3 +875,6 @@
   --text-secondary: var(--billing-warranty);
   --muted-foreground: var(--billing-warranty);
 }
+@layer utilities {
+  .workspace-sidebar-avatar [data-slot="avatar-fallback"] { background: inherit; color: inherit; font-size: inherit; font-weight: inherit; }
+}
