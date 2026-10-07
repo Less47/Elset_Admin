@@ -28,7 +28,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCustomerType, formatSiteType, siteTypeOptions } from "@/lib/app-support";
@@ -55,9 +54,8 @@ export default function SiteManager({
   const [sortBy, setSortBy] = useState("activity");
   const [siteTypeFilter, setSiteTypeFilter] = useState("all");
   const [viewMode, setViewMode] = useUserUiPreference("siteView");
-  const [createSiteDialogOpen, setCreateSiteDialogOpen] = useState(false);
+  const [choosingCustomer, setChoosingCustomer] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [newSiteCustomerId, setNewSiteCustomerId] = useState("");
   const [newSiteCustomerSearch, setNewSiteCustomerSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const deferredNewSiteCustomerSearch = useDeferredValue(newSiteCustomerSearch);
@@ -67,14 +65,6 @@ export default function SiteManager({
   const customerOptions = useMemo(
     () => [...customers].sort((a, b) => a.name.localeCompare(b.name)),
     [customers]
-  );
-
-  const selectedNewSiteCustomerId = customerOptions.some((customer) => customer.id === newSiteCustomerId)
-    ? newSiteCustomerId
-    : customerOptions[0]?.id || "";
-  const selectedNewSiteCustomer = useMemo(
-    () => customerOptions.find((customer) => customer.id === selectedNewSiteCustomerId) || null,
-    [customerOptions, selectedNewSiteCustomerId]
   );
 
   const filteredNewSiteCustomers = useMemo(() => {
@@ -228,7 +218,7 @@ export default function SiteManager({
               disabled={customerOptions.length === 0}
               onClick={() => {
                 setNewSiteCustomerSearch("");
-                setCreateSiteDialogOpen(true);
+                setChoosingCustomer(true);
               }}
             >
               <Plus className="h-4 w-4" /> New Site
@@ -294,7 +284,7 @@ export default function SiteManager({
             disabled={customerOptions.length === 0}
             onClick={() => {
               setNewSiteCustomerSearch("");
-              setCreateSiteDialogOpen(true);
+              setChoosingCustomer(true);
             }}
           >
             <Plus className="h-4 w-4" /> New Site
@@ -303,6 +293,20 @@ export default function SiteManager({
         />
       </PageTopBar>
       <PageBody className="space-y-4">
+      {choosingCustomer ? <section className="grid min-w-0 gap-3 border-y border-border py-4" aria-labelledby="new-site-customer-heading" data-site-customer-picker>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2"><h2 id="new-site-customer-heading" className="text-base font-semibold">Choose a customer for the new site</h2>
+          <Button type="button" variant="outline" onClick={() => setChoosingCustomer(false)}>Cancel</Button></div>
+        <Input aria-label="Find customer for new site" value={newSiteCustomerSearch} onChange={(event) => setNewSiteCustomerSearch(event.target.value)} placeholder="Search name, email, phone, or address..." />
+        <p role="status" className="text-xs text-text-secondary">{filteredNewSiteCustomers.length} customers found</p>
+        <div className="max-h-72 min-w-0 overflow-y-auto divide-y divide-border" aria-label="Customers for new site">
+          {!filteredNewSiteCustomers.length ? <p className="py-3 text-sm text-text-secondary">No customers match that search yet.</p>
+            : filteredNewSiteCustomers.map((customer) => <button key={customer.id} type="button" className="grid min-h-11 w-full min-w-0 gap-1 px-3 py-3 text-left hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-ring [overflow-wrap:anywhere]" onClick={() => onCreateSite(customer.id)}>
+              <span className="flex min-w-0 flex-wrap items-center gap-2"><span className="font-medium">{customer.name}</span>{customer.customerType ? <Badge variant="secondary">{formatCustomerType(customer.customerType)}</Badge> : null}</span>
+              <span className="text-xs text-text-secondary">{[customer.email, customer.phone].filter(Boolean).join(" - ") || "No contact details"}</span>
+              <span className="text-xs text-text-secondary">{customer.address || "No address saved"}</span>
+            </button>)}
+        </div>
+      </section> : null}
       <Card
           className={isMobileRecordLayout
             ? "gap-0 overflow-visible rounded-none border-0 bg-transparent py-0 shadow-none"
@@ -494,135 +498,6 @@ export default function SiteManager({
           </Select>
         </FilterSheetField>
       </MobileFilterSheet>
-
-      <Dialog
-        open={createSiteDialogOpen}
-        onOpenChange={(open) => {
-          setCreateSiteDialogOpen(open);
-          if (!open) setNewSiteCustomerSearch("");
-        }}
-      >
-        <DialogContent className="rounded-3xl sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create New Site</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Find customer</p>
-              <Input
-                className="rounded-lg bg-card"
-                value={newSiteCustomerSearch}
-                onChange={(event) => setNewSiteCustomerSearch(event.target.value)}
-                placeholder="Search name, email, phone, or address..."
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span>{filteredNewSiteCustomers.length} customer{filteredNewSiteCustomers.length === 1 ? "" : "s"} found</span>
-              <span>{selectedNewSiteCustomer ? `Selected: ${selectedNewSiteCustomer.name}` : "No customer selected"}</span>
-            </div>
-
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-border bg-muted">
-              {filteredNewSiteCustomers.length === 0 ? (
-                <div className="p-4 text-sm text-muted-foreground">No customers match that search yet.</div>
-              ) : (
-                filteredNewSiteCustomers.map((customer, index) => {
-                  const isSelected = customer.id === selectedNewSiteCustomerId;
-                  return (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      onClick={() => setNewSiteCustomerId(customer.id)}
-                      className={`grid w-full gap-1 px-4 py-3 text-left transition ${
-                        index !== filteredNewSiteCustomers.length - 1 ? "border-b border-border" : ""
-                      } ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card text-foreground hover:bg-surface-raised"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <p className="truncate font-medium">{customer.name}</p>
-                          {customer.customerType ? (
-                            <Badge className={isSelected ? "bg-current/15 text-primary-foreground" : "bg-surface-raised text-text-secondary"}>
-                              {formatCustomerType(customer.customerType)}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <span
-                          className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
-                            isSelected
-                              ? "bg-current/15 text-primary-foreground"
-                              : "bg-surface-raised text-text-secondary"
-                          }`}
-                        >
-                          {isSelected ? "Selected" : "Record"}
-                        </span>
-                      </div>
-                      <p className={`truncate text-sm ${isSelected ? "text-muted-foreground" : "text-text-secondary"}`}>
-                        {customer.email || "No email"}{customer.phone ? ` - ${customer.phone}` : ""}
-                      </p>
-                      <p className={`truncate text-xs ${isSelected ? "text-muted-foreground" : "text-muted-foreground"}`}>
-                        {customer.address || "No address saved"}
-                      </p>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
-            {selectedNewSiteCustomer ? (
-              <div className="rounded-xl border border-border bg-muted p-3 text-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Selected customer</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Customer</p>
-                    <p className="mt-1 font-medium text-foreground">{selectedNewSiteCustomer.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Email</p>
-                    <p className="mt-1 font-medium text-foreground">{selectedNewSiteCustomer.email || "Not set"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Phone</p>
-                    <p className="mt-1 font-medium text-foreground">{selectedNewSiteCustomer.phone || "Not set"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase text-muted-foreground">Customer type</p>
-                    <p className="mt-1 font-medium text-foreground">{formatCustomerType(selectedNewSiteCustomer.customerType)}</p>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <p className="text-xs uppercase text-muted-foreground">Address</p>
-                    <p className="mt-1 font-medium text-foreground">{selectedNewSiteCustomer.address || "Not set"}</p>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCreateSiteDialogOpen(false);
-                setNewSiteCustomerSearch("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={!selectedNewSiteCustomerId}
-              onClick={() => {
-                onCreateSite(selectedNewSiteCustomerId);
-                setCreateSiteDialogOpen(false);
-                setNewSiteCustomerSearch("");
-              }}
-            >
-              Continue
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

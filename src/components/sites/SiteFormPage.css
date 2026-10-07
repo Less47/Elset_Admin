@@ -1,0 +1,16 @@
+.site-create-columns {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  gap: 1rem;
+}
+
+.record-workspace:has([data-site-create]) .record-workspace-subtitle {
+  display: block !important;
+}
+
+@media (min-width: 80rem) {
+  .site-create-columns {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}

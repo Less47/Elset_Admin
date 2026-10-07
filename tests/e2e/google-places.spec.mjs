@@ -189,17 +189,20 @@ test("Create/Edit Site updates coordinates, retains existing Sites, and invalida
   await expect(page.getByRole("combobox", { name: "Address", exact: true })).toHaveValue(original[0].address);
   await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
-  // Existing save semantics materialize a contact ID from the contact snapshot.
-  const preserved = ({ updatedAt: _updatedAt, contactId: _contactId, ...fields }) => fields;
-  expect(app.state().customers.find((c) => c.id === customerId).sites[0]).toMatchObject(preserved(original[0]));
+  // Owner saves refresh assignment write times and materialize a contact ID;
+  // identities, roles, flags, creation times and Site metadata must survive.
+  const preserved = ({ updatedAt: _updatedAt, contactId: _contactId, contactAssignments, ...fields }) => ({
+    ...fields, contactAssignments: contactAssignments.map(({ updatedAt: _writtenAt, ...assignment }) => assignment),
+  });
+  expect(preserved(app.state().customers.find((c) => c.id === customerId).sites[0])).toMatchObject(preserved(original[0]));
   expect(await page.evaluate(() => window.placesCalls.queries)).toHaveLength(0);
   await page.goto(`${baseUrl}/customers/${customerId}/sites/new`);
   await choose(page);
-  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   const site = app.state().customers.find((c) => c.id === customerId).sites.find((s) => s.address === selected.address);
   expect(site).toMatchObject(selected);
-  for (const previous of original) expect(app.state().customers.find((c) => c.id === customerId).sites.find((s) => s.id === previous.id)).toMatchObject(preserved(previous));
+  for (const previous of original) expect(preserved(app.state().customers.find((c) => c.id === customerId).sites.find((s) => s.id === previous.id))).toMatchObject(preserved(previous));
   await page.reload();
   await page.getByRole("button", { name: "Edit Site Profile", exact: true }).click();
   await choose(page, "14 Brighton");
@@ -220,7 +223,7 @@ test("Google unavailable leaves manual save usable", async ({ page }) => {
   await page.getByRole("combobox", { name: "Address", exact: true }).fill("PO Box 41, South Melbourne VIC 3205");
   await expect(page.getByRole("status").filter({ hasText: "Google Places address lookup could not be loaded" })).toBeVisible();
   await page.screenshot({ path: path.join(shots, "manual-fallback.png"), fullPage: true });
-  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   expect(app.state().customers.find((c) => c.id === customerId).sites.find((s) => s.address.startsWith("PO Box"))).toMatchObject({ latitude: null, longitude: null });
 });
@@ -270,7 +273,7 @@ test("mobile touch unit selection and Midnight Signal suggestions fit the viewpo
     await page.screenshot({ path: path.join(shots, "mobile-midnight-suggestions-390x844.png"), fullPage: true });
     await page.getByRole("option").getByRole("button").tap();
     await expect(page.getByRole("status").filter({ hasText: "Address selected" })).toBeVisible();
-    await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+    await page.getByRole("button", { name: "Create Site", exact: true }).click();
     await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
     expect(app.state().customers.find((c) => c.id === customerId).sites.find((s) => s.address.startsWith("Unit 4/"))).toMatchObject({ streetAddress: "Unit 4/14 Sesame Street", suburb: "Caroline Springs", latitude: selected.latitude });
   } finally { await context.close(); }
@@ -308,7 +311,7 @@ test("live Places selection saves a Site and its job maps without geocoding", as
   await page.screenshot({ path: path.join(shots, "live-google-suggestions-1440x900.png"), fullPage: true });
   await page.getByRole("option").first().getByRole("button").click();
   await expect(page.getByRole("status").filter({ hasText: "Address selected" })).toBeVisible({ timeout: 20000 });
-  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   const site = app.state().customers.find((c) => c.id === customerId).sites.find((s) => /200 Queen/i.test(s.address));
   expect(site).toMatchObject({ streetAddress: "200 Queen Street", suburb: "Melbourne", state: "VIC", postcode: "3000" });
@@ -333,7 +336,7 @@ test("a saved Places fixture renders on live Google Maps without a geocoding cal
   const liveUrl = process.env.ELSET_GOOGLE_PLACES_TEST_URL || "http://localhost:5173";
   await page.goto(`${liveUrl}/customers/${customerId}/sites/new`);
   await choose(page);
-  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   const site = app.state().customers.find((c) => c.id === customerId).sites.find((s) => s.address === selected.address);
   expect(site).toMatchObject(selected);
@@ -365,7 +368,8 @@ for (const flow of ['create-customer', 'edit-customer-site-link', 'create-site',
   } else if (flow === 'edit-customer-site-link') {
     await page.goto(activeUrl + '/customers/' + customerId + '/edit');
     await expect(page.getByRole('form', { name: 'Edit Customer' })).toBeVisible();
-    await expect(page.locator('[data-google-address-picker]')).toHaveCount(0);
+    await expect(page.locator('[data-google-address-picker]')).toHaveCount(1);
+    await expect(page.getByRole('combobox', { name: 'Address', exact: true })).toHaveValue(app.state().customers.find((customer) => customer.id === customerId).address);
     await page.getByRole('button', { name: 'Open Site Profile', exact: true }).click();
     await page.getByRole('button', { name: 'Edit Site Profile', exact: true }).click();
   } else {
@@ -395,7 +399,7 @@ test('missing Google key names the Vite variable and allows Customer and Site ma
   await page.goto(missingKeyUrl + '/customers/' + customerId + '/sites/new');
   await page.getByRole('combobox', { name: 'Address', exact: true }).fill('Manual Site without a provider');
   await expect(page.getByRole('status').filter({ hasText: 'Google address lookup is not configured.' })).toContainText('VITE_GOOGLE_MAPS_API_KEY');
-  await page.getByRole('button', { name: 'Save Site Profile', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Site', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit Site Profile', exact: true })).toBeVisible();
   expect(googleRequests).toBe(0);
   expect(app.calls.some((call) => call.includes('/api/address/autocomplete'))).toBe(false);

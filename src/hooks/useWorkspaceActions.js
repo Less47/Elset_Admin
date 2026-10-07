@@ -97,6 +97,7 @@ export function useWorkspaceActions({
     method = "POST",
     body,
     errorMessage = "Unable to update the customer records.",
+    throwOnError = false,
   }) {
     try {
       const payload = await requestCustomerWorkspaceUpdate({
@@ -110,6 +111,7 @@ export function useWorkspaceActions({
       const state = applyMutationPayload(payload);
       return { ok: true, payload, result: payload.result, state };
     } catch (error) {
+      if (throwOnError) throw error;
       window.alert(error instanceof Error ? error.message : errorMessage);
       return { ok: false, result: null, state: null };
     }
@@ -1046,7 +1048,7 @@ export function useWorkspaceActions({
     return savedCustomer;
   }
 
-  async function handleSaveSiteProfile(customerId, siteInput, previousAddress = "") {
+  async function handleSaveSiteProfile(customerId, siteInput, previousAddress = "", { throwOnError = false } = {}) {
     if (!canManageBusiness) return false;
 
     const normalizedPreviousAddress = normalizeSiteAddress(previousAddress);
@@ -1079,6 +1081,7 @@ export function useWorkspaceActions({
         previousAddress: normalizedPreviousAddress,
       },
       errorMessage: "Unable to save the site profile.",
+      throwOnError,
     });
     if (!saved.ok) return false;
 

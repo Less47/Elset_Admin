@@ -1,26 +1,25 @@
 import { useUnsavedChanges } from "@/components/workspace/unsaved-changes-context";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import ProfileMaintenanceContracts from "@/components/maintenance/ProfileMaintenanceContracts";
 import SitePhotoGallery from "./SitePhotoGallery";
-import { GoogleAddressAutocompleteInput } from "@/components/shared/GoogleAddressAutocompleteInput";
+import SiteDetailsFields from "./SiteDetailsFields";
+import SiteAssetsEditor from "./SiteAssetsEditor";
 import ContactAssignmentsEditor, { ContactList } from "@/components/shared/ContactAssignmentsEditor";
 import { getSiteContacts } from "@/lib/contact-model";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { FormField } from "@/components/shared/FormField";
 import { CustomerJobHistory } from "@/components/customers/CustomerWorkspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RECORD_WORKSPACE_WIDE_MAX_WIDTH, RecordWorkspace, WorkspaceSection, WorkspaceActionBar, WorkspaceMessage } from "@/components/workspace/RecordWorkspace";
-import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts, getSiteDisplayName, normalizeSiteAddress, normalizeSiteAssetRecord, siteTypeOptions, toTimestamp } from "@/lib/app-support";
-const NOT_SET_VALUE = "not-set";
+import { buildSiteProfileDraft, formatDate, formatSiteType, getCustomerContacts, getSiteDisplayName, normalizeSiteAddress, toTimestamp } from "@/lib/app-support";
+import "./SiteFormPage.css";
 const EMPTY_ASSET = { name: "", type: "", location: "", model: "", notes: "" };
 
 export default function SiteWorkspace({ customer, site, contacts = [], jobs, maintenancePlans = [], onOpenPlan, editing = false, tab = "overview", onTabChange, backLabel, onBack, onEdit, onOpenCustomer, onOpenJob, onSaveSite, onSaved, onDeleteSiteProfile, fetchWithAuth, canManagePhotos = false }) {
   const isEditingSite = editing || !site;
+  const creating = !site;
+  const formId = useId();
   const [initial] = useState(() => buildSiteProfileDraft(site));
   const [draftSite, setDraftSite] = useState(initial);
   const [newAssetDraft, setNewAssetDraft] = useState(EMPTY_ASSET);
@@ -38,10 +37,8 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
   const hasSavedProfile = Boolean(site?.siteProfileId);
   const mediaSiteId = customer?.sites?.find(entry => !entry._inferredProfile && entry.id === site?.siteProfileId)?.id || "";
   const canSave = Boolean(activeAddress) && !saving && !addressPending;
-  const canAddAsset = Boolean(newAssetDraft.name.trim());
-  const updateDraftAsset = (assetId, key, value) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.map((asset) => asset.id === assetId ? { ...asset, [key]: value } : asset) }));
-  const removeDraftAsset = (assetId) => setDraftSite((prev) => ({ ...prev, assets: prev.assets.filter((asset) => asset.id !== assetId) }));
-  const save = async () => {
+  const save = async (event) => {
+    event?.preventDefault();
     if (!canSave || submitting.current) return;
     if (JSON.stringify(newAssetDraft) !== JSON.stringify(EMPTY_ASSET)) { setError("Add the gate or project before saving the site, or clear its unfinished fields."); return; }
     submitting.current = true; setSaving(true); setError("");
@@ -53,6 +50,26 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
     } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "Unable to save the site."); }
     finally { submitting.current = false; setSaving(false); }
   };
+  const detailsFields = <SiteDetailsFields value={draftSite} onChange={setDraftSite} onSelectionPending={setAddressPending} showLabel={creating} />;
+  const contactsEditor = <ContactAssignmentsEditor kind="site" value={draftSite.contactAssignments} contacts={contacts} preferredContacts={[...(site?.contacts || []), ...customerContacts]} onChange={(assignments) => setDraftSite((current) => ({ ...current, contactAssignments: assignments }))} />;
+  const assetsEditor = <SiteAssetsEditor assets={draftSite.assets} newAssetDraft={newAssetDraft} onChangeDraft={setNewAssetDraft} onChangeAssets={(update) => setDraftSite((current) => ({ ...current, assets: update(current.assets) }))} />;
+  if (creating) return <RecordWorkspace backLabel="Customer Profile" eyebrow="Sites" title="New Site" subtitle={`For ${customer.name}`} maxWidth="max-w-none" onBack={() => onBack()}
+    headerActions={<>
+      <span className="sr-only text-xs xl:not-sr-only" role="status">{saving ? "Creating…" : dirty ? "Unsaved changes" : ""}</span>
+      <Button type="button" variant="outline" className="hidden h-11 sm:inline-flex" disabled={saving} onClick={() => onBack()}>Cancel</Button>
+      <Button type="submit" form={formId} className="h-11" disabled={!canSave} aria-busy={saving}>{saving ? "Creating…" : "Create Site"}</Button>
+    </>}>
+    <form id={formId} onSubmit={save} aria-label="Create Site" className="grid min-w-0 w-full gap-4 [&_p]:[overflow-wrap:anywhere] [&_input]:min-w-0 [&_textarea]:min-w-0" data-site-create>
+      {error ? <div role="alert"><WorkspaceMessage tone="error">{error}</WorkspaceMessage></div> : null}
+      <fieldset disabled={saving} className="site-create-columns">
+        <div className="grid min-w-0 gap-4" data-site-form-column="details">
+          <WorkspaceSection title="Site details" panel><div className="grid min-w-0 items-start gap-3 sm:grid-cols-2">{detailsFields}</div></WorkspaceSection>
+          <WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site.">{assetsEditor}</WorkspaceSection>
+        </div>
+        <div className="min-w-0" data-site-form-column="contacts"><WorkspaceSection title="Contacts" description="People to contact about this location." panel>{contactsEditor}</WorkspaceSection></div>
+      </fieldset>
+    </form>
+  </RecordWorkspace>;
   const currentTab = ["overview", "contacts", "assets", "maintenance", "jobs", "photos"].includes(tab) ? tab : "overview";
   return <RecordWorkspace backLabel={backLabel} eyebrow={customer.name} title={!site ? "New Site" : isEditingSite ? "Edit Site Profile" : getSiteDisplayName(site)}
     subtitle={site?.address || "Site details and gates / projects"} maxWidth={RECORD_WORKSPACE_WIDE_MAX_WIDTH} onBack={() => onBack()}
@@ -70,60 +87,7 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
         <TabsContent value="overview" className="min-w-0"><WorkspaceSection title="Site details" panel>
           <fieldset disabled={saving} className={isEditingSite ? "grid min-w-0 items-start gap-3 sm:grid-cols-2" : "grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3"}>
 
-                {isEditingSite ? (
-                  <>
-                    <FormField label="Address">
-                      <GoogleAddressAutocompleteInput
-                        value={draftSite}
-                        onChange={(address) => setDraftSite((current) => ({ ...current, ...address }))}
-                        onSelectionPending={setAddressPending}
-                        placeholder="Search this site address"
-                      />
-                    </FormField>
-                    <FormField label="Site type">
-                      <Select
-                        value={draftSite.siteType || NOT_SET_VALUE}
-                        onValueChange={(value) => setDraftSite((prev) => ({ ...prev, siteType: value === NOT_SET_VALUE ? "" : value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select site type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={NOT_SET_VALUE}>Not set</SelectItem>
-                          {siteTypeOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormField>
-                    <FormField label="OC number">
-                      <Input
-                        value={draftSite.ocNumber}
-                        onChange={(e) => setDraftSite((prev) => ({ ...prev, ocNumber: e.target.value }))}
-                        placeholder="e.g. PS123456"
-                      />
-                      <p className="text-sm text-muted-foreground">Owners Corporation / plan reference for this property.</p>
-                    </FormField>
-                    <FormField label="Access notes">
-                      <Textarea
-                        rows={4}
-                        value={draftSite.accessNotes}
-                        onChange={(e) => setDraftSite((prev) => ({ ...prev, accessNotes: e.target.value }))}
-                        placeholder="Gate code, parking, access windows, call-on-arrival details..."
-                      />
-                    </FormField>
-                    <FormField label="Site notes">
-                      <Textarea
-                        rows={4}
-                        value={draftSite.notes}
-                        onChange={(e) => setDraftSite((prev) => ({ ...prev, notes: e.target.value }))}
-                        placeholder="General context, layout, project details, recurring issues..."
-                      />
-                    </FormField>
-                  </>
-                ) : (
+                {isEditingSite ? detailsFields : (
                   <>
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Customer</p>
@@ -166,127 +130,27 @@ export default function SiteWorkspace({ customer, site, contacts = [], jobs, mai
         {!isEditingSite && hasSavedProfile ? <div className="mt-4 flex justify-end"><Button type="button" variant="outline" className="border-status-danger-border text-status-danger" onClick={() => onDeleteSiteProfile(customer.id, site)}>Remove Saved Profile</Button></div> : null}
         </TabsContent>
         <TabsContent value="contacts" className="min-w-0"><WorkspaceSection title="Site contacts" description="People to contact about this location." panel>
-          <fieldset disabled={saving} className="min-w-0">{isEditingSite ? <ContactAssignmentsEditor kind="site" value={draftSite.contactAssignments} contacts={contacts} preferredContacts={[...(site?.contacts || []), ...customerContacts]} onChange={(assignments) => setDraftSite((current) => ({ ...current, contactAssignments: assignments }))} /> : <ContactList contacts={getSiteContacts(site)} />}</fieldset>
+          <fieldset disabled={saving} className="min-w-0">{isEditingSite ? contactsEditor : <ContactList contacts={getSiteContacts(site)} />}</fieldset>
         </WorkspaceSection></TabsContent>
         <TabsContent value="assets" className="min-w-0"><WorkspaceSection title="Gates / Projects" description="Gates, entry points and project areas attached to this site."><fieldset disabled={saving} className="min-w-0">
-
-              <div className="grid gap-3">
-                {!isEditingSite && site.accessNotes ? (
-                  <div className="rounded-lg border border-status-warning-border bg-status-warning-surface p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-status-warning">Access notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-status-warning">{site.accessNotes}</p>
-                  </div>
-                ) : null}
-
-                {!isEditingSite && site.profileNotes ? (
-                  <div className="rounded-lg border bg-card p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Site notes</p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary">{site.profileNotes}</p>
-                  </div>
-                ) : null}
-
-                {isEditingSite ? (
-                  <div className="rounded-lg border border-dashed border-border bg-card p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Add gate or project</p>
-                    <div className="mt-3 grid gap-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Input
-                          value={newAssetDraft.name}
-                          onChange={(e) => setNewAssetDraft((prev) => ({ ...prev, name: e.target.value }))}
-                          placeholder="Name"
-                        />
-                        <Input
-                          value={newAssetDraft.type}
-                          onChange={(e) => setNewAssetDraft((prev) => ({ ...prev, type: e.target.value }))}
-                          placeholder="Type"
-                        />
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Input
-                          value={newAssetDraft.location}
-                          onChange={(e) => setNewAssetDraft((prev) => ({ ...prev, location: e.target.value }))}
-                          placeholder="Location on site"
-                        />
-                        <Input
-                          value={newAssetDraft.model}
-                          onChange={(e) => setNewAssetDraft((prev) => ({ ...prev, model: e.target.value }))}
-                          placeholder="Model / operator"
-                        />
-                      </div>
-                      <Textarea
-                        rows={3}
-                        value={newAssetDraft.notes}
-                        onChange={(e) => setNewAssetDraft((prev) => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Fault history, setup notes, remotes, access method..."
-                      />
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          className="rounded-xl"
-                          disabled={!canAddAsset}
-                          onClick={() => {
-                            setDraftSite((prev) => ({
-                              ...prev,
-                              assets: [
-                                ...prev.assets,
-                                normalizeSiteAssetRecord({
-                                  ...newAssetDraft,
-                                  id: crypto.randomUUID(),
-                                  updatedAt: new Date().toISOString(),
-                                }),
-                              ],
-                            }));
-                            setNewAssetDraft({ name: "", type: "", location: "", model: "", notes: "" });
-                          }}
-                        >
-                          Add Gate / Project
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {(isEditingSite ? draftSite.assets : site.assets || []).length === 0 ? (
-                  <EmptyState title="No gate or project records yet" text="Add each gate, operator, or project area here so the site history stays grouped together." />
-                ) : (
-                  (isEditingSite ? draftSite.assets : site.assets || []).map((asset) => (
-                    <div key={asset.id} className="rounded-lg border bg-card p-3 shadow-sm">
-                      {isEditingSite ? (
-                        <div className="grid gap-3">
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <Input value={asset.name} onChange={(e) => updateDraftAsset(asset.id, "name", e.target.value)} placeholder="Name" />
-                            <Input value={asset.type} onChange={(e) => updateDraftAsset(asset.id, "type", e.target.value)} placeholder="Type" />
-                          </div>
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <Input value={asset.location} onChange={(e) => updateDraftAsset(asset.id, "location", e.target.value)} placeholder="Location on site" />
-                            <Input value={asset.model} onChange={(e) => updateDraftAsset(asset.id, "model", e.target.value)} placeholder="Model / operator" />
-                          </div>
-                          <Textarea rows={3} value={asset.notes} onChange={(e) => updateDraftAsset(asset.id, "notes", e.target.value)} placeholder="Notes" />
-                          <div className="flex justify-end">
-                            <Button variant="outline" className="rounded-xl border-status-danger-border text-status-danger hover:bg-status-danger-surface hover:text-status-danger" onClick={() => removeDraftAsset(asset.id)}>
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="grid gap-3">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-foreground">{asset.name}</p>
-                              <p className="mt-1 text-sm text-text-secondary">
-                                {[asset.type, asset.location].filter(Boolean).join(" - ") || "No type or location saved"}
-                              </p>
-                            </div>
-                            {asset.model ? <Badge variant="secondary">{asset.model}</Badge> : null}
-                          </div>
-                          {asset.notes ? <p className="text-sm leading-6 text-text-secondary">{asset.notes}</p> : null}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            
+          {isEditingSite ? assetsEditor : <div className="grid gap-3">
+            {site.accessNotes ? <div className="rounded-lg border border-status-warning-border bg-status-warning-surface p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-status-warning">Access notes</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-status-warning">{site.accessNotes}</p>
+            </div> : null}
+            {site.profileNotes ? <div className="rounded-lg border bg-card p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Site notes</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-secondary">{site.profileNotes}</p>
+            </div> : null}
+            {!(site.assets || []).length ? <EmptyState title="No gate or project records yet" text="Add each gate, operator, or project area here so the site history stays grouped together." />
+              : site.assets.map((asset) => <div key={asset.id} className="rounded-lg border bg-card p-3 shadow-sm">
+                <div className="grid gap-3"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0">
+                  <p className="font-semibold text-foreground">{asset.name}</p><p className="mt-1 text-sm text-text-secondary">{[asset.type, asset.location].filter(Boolean).join(" - ") || "No type or location saved"}</p>
+                </div>{asset.model ? <Badge variant="secondary">{asset.model}</Badge> : null}</div>
+                  {asset.notes ? <p className="text-sm leading-6 text-text-secondary">{asset.notes}</p> : null}
+                </div>
+              </div>)}
+          </div>}
         </fieldset></WorkspaceSection></TabsContent>
         <TabsContent value="photos" className="min-w-0"><WorkspaceSection title="Photos">
           {mediaSiteId && !isEditingSite ? <SitePhotoGallery siteId={mediaSiteId} fetchWithAuth={fetchWithAuth} canManage={canManagePhotos} onOpenJob={id => { const job = jobs.find(entry => entry.id === id); if (job) onOpenJob(job); }} /> : <p className="text-sm text-muted-foreground">Save the Site profile, then open its Photos tab to upload photos.</p>}

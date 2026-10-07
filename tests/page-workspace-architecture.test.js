@@ -74,7 +74,7 @@ test("site OC numbers and job client references stay separate in record workflow
 test("site forms consistently describe OC number as a property reference", () => {
   for (const relativePath of [
     "src/components/customers/CustomerFormPage.jsx",
-    "src/components/sites/SiteWorkspace.jsx",
+    "src/components/sites/SiteDetailsFields.jsx",
   ]) {
     const source = readSource(relativePath);
     assert.match(source, /label="OC number"/);

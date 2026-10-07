@@ -18,8 +18,10 @@ export default function CustomerPages() {
   const sitePath = `${customerPath}/sites/${encodeURIComponent(siteId || "")}`;
   const parentPath = mode === "edit-site" ? sitePath
     : ["site-details", "create-site", "edit-customer"].includes(mode) ? customerPath : "/customers";
-  const backLabel = location.state?.returnTo?.label || (mode === "edit-site" ? "Site Profile" : parentPath === customerPath ? "Customer Profile" : "Customers");
-  const onBack = () => navigate(location.state?.returnTo ? -1 : parentPath, { replace: !location.state?.returnTo });
+  const backLabel = mode === "create-site" ? "Customer Profile" : location.state?.returnTo?.label || (mode === "edit-site" ? "Site Profile" : parentPath === customerPath ? "Customer Profile" : "Customers");
+  const onBack = () => mode === "create-site" && location.state?.returnTo?.path !== customerPath
+    ? navigate(customerPath, { replace: true })
+    : navigate(location.state?.returnTo ? -1 : parentPath, { replace: !location.state?.returnTo });
   const linkState = recordLinkState(location, match, data.jobs);
   const tab = location.state?.tab || "overview";
   const setTab = (tab) => navigate(location.pathname + location.search, { replace: true, preventScrollReset: true, state: { ...location.state, tab } });
@@ -54,7 +56,7 @@ export default function CustomerPages() {
       tab={tab} onTabChange={setTab} backLabel={mode === "edit-site" ? "Site Profile" : backLabel}
       onBack={onBack} onEdit={() => navigate(`${sitePath}/edit`, { state: linkState })}
       onOpenCustomer={() => actions.handleOpenCustomerProfile(customer.id)} onOpenJob={actions.handleOpenJob}
-      onSaveSite={actions.handleSaveSiteProfile}
+      onSaveSite={mode === "create-site" ? (...args) => actions.handleSaveSiteProfile(...args, { throwOnError: true }) : actions.handleSaveSiteProfile}
       onSaved={(saved) => mode === "create-site"
         ? navigate(`${customerPath}/sites/${encodeURIComponent(saved.id)}`, { replace: true, state: location.state })
         : onBack()}

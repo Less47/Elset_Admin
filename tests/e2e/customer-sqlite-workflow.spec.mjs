@@ -319,12 +319,11 @@ async function restoreCustomer(page) {
 async function createSite(page) {
   await openSites(page);
   await page.getByRole("button", { name: "New Site" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Create New Site");
-  await dialog.getByPlaceholder("Search name, email, phone, or address...").fill(editedCustomerName);
-  const customerButton = dialog.getByRole("button", { name: new RegExp(editedCustomerName) });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const picker = page.getByRole("region", { name: "Choose a customer for the new site" });
+  await picker.getByPlaceholder("Search name, email, phone, or address...").fill(editedCustomerName);
+  const customerButton = picker.getByRole("button", { name: new RegExp(editedCustomerName) });
   await customerButton.click();
-  await dialog.getByRole("button", { name: "Continue" }).click();
 
   const siteDialog = page.locator(".record-workspace");
   await expect(siteDialog).toContainText("New Site");
@@ -332,7 +331,7 @@ async function createSite(page) {
   await siteDialog.getByPlaceholder("e.g. PS123456").fill("OC-E2E-SITE");
   await siteDialog.getByPlaceholder("Gate code, parking, access windows, call-on-arrival details...").fill("Use synthetic keypad 1234.");
   await siteDialog.getByPlaceholder("General context, layout, project details, recurring issues...").fill("Synthetic site notes.");
-  await siteDialog.getByRole("button", { name: "Save Site Profile" }).click();
+  await siteDialog.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(siteDialog).toContainText(createdSiteAddress);
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to Sites", exact: true }).click();

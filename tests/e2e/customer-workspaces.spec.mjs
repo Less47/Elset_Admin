@@ -953,18 +953,17 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   await showCustomerSection(page, "Sites");
   await page.getByRole("button", { name: "Add Site", exact: true }).click();
   await expect(page).toHaveURL(baseUrl + customerPath + "/sites/new");
-  await expect(page.getByRole("button", { name: "Save Site Profile", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Create Site", exact: true })).toBeDisabled();
   await page.getByPlaceholder("Search this site address").fill("30 Synthetic Avenue, Testville VIC 3999");
   await page.getByPlaceholder("e.g. PS123456").fill("OC-SITE-WORKSPACE");
-  await page.getByRole("tab", { name: /^Gates/ }).click();
   await page.getByPlaceholder("Name", { exact: true }).fill("Synthetic entry gate");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Keep editing", exact: true }).click();
   await expect(page.getByPlaceholder("Name", { exact: true })).toHaveValue("Synthetic entry gate");
-  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Add the gate or project before saving");
   await page.getByRole("button", { name: "Add Gate / Project", exact: true }).click();
-  await page.getByRole("button", { name: "Save Site Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
   const siteUrl = page.url();
   await page.reload();
@@ -994,6 +993,154 @@ test("Site creation, assets, editing and dirty guards keep records and history i
   tracker.stop();
 });
 
+for (const width of [390, 820, 1440]) test(`New Site page preserves contacts, transactions and Customer ownership at ${width}px`, async ({ page }, info) => {
+  await page.setViewportSize({ width, height: 900 });
+  await login(page, { pathname: "/customers" });
+  const id = `site-create-page-${width}`, primaryId = `${id}-primary`, contactId = `${id}-contact`;
+  const name = `Site creation Customer ${width}`, contactName = `Site person ${width}`;
+  await apiJson(page, "POST", "/api/contacts", { id: contactId, name: contactName, phone: "0400 111 222" });
+  await apiJson(page, "POST", "/api/customers", { customer: { id, name, address: "1 Existing Primary Street", postalAddressSameAsPrimary: false,
+    postalAddress: "PO Box 28", contactAssignments: [{ contactId, roles: ["Accounts"], isBilling: true }],
+    sites: [{ id: primaryId, address: "1 Existing Primary Street", label: "Existing primary", ocNumber: "KEEP-PRIMARY" }] } });
+  const profileUrl = `${baseUrl}/customers/${id}`, createUrl = profileUrl + "/sites/new";
+  await page.goto(profileUrl); await showCustomerSection(page, "Sites");
+  await page.getByRole("button", { name: "Add Site", exact: true }).click();
+  await expect(page).toHaveURL(createUrl);
+  await expect(page.locator(".record-workspace h1")).toHaveText("New Site");
+  await expect(page.locator(".record-workspace-subtitle")).toHaveText(`For ${name}`);
+  await expect(page.locator(".record-workspace-subtitle")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create Site", exact: true })).toHaveCount(1);
+  await expect(page.locator(".record-workspace-header").getByRole("button", { name: "Create Site", exact: true })).toBeVisible();
+  await noModalOrOverflow(page);
+  await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
+  await expect(page).toHaveURL(profileUrl);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goto(createUrl); await page.reload();
+  await expect(page.getByRole("form", { name: "Create Site", exact: true })).toBeVisible();
+  if (width >= 640) {
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page).toHaveURL(profileUrl);
+    await page.goto(createUrl);
+  }
+  const initial = readWorkspaceState(), before = initial.customers.find((customer) => customer.id === id);
+  await page.getByLabel("Site name / label", { exact: true }).fill("Secondary workshop");
+  await page.getByRole("combobox", { name: "Address", exact: true }).fill(before.address);
+  await page.getByLabel("OC number", { exact: true }).fill("OC-CREATE-PAGE");
+  await page.getByLabel("Access notes", { exact: true }).fill("Call before attending");
+  await page.getByLabel("Site notes", { exact: true }).fill("Secondary site context");
+  await page.getByRole("combobox", { name: "Site type", exact: true }).click();
+  await page.getByRole("option", { name: "Commercial", exact: true }).click();
+  const editor = page.locator('[aria-label="Site contact management"]');
+  await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+  const picker = editor.getByRole("combobox", { name: "Search contacts", exact: true });
+  await picker.fill(contactName);
+  await expect(editor.getByRole("option")).toHaveCount(1);
+  await picker.press("ArrowDown"); await picker.press("Enter");
+  await editor.getByLabel("Roles at this site").fill("Caretaker");
+  const existing = editor.locator(`[data-contact-id="${contactId}"]`);
+  await existing.getByLabel("Phone", { exact: true }).fill("0400 999 888");
+  await existing.getByRole("button", { name: "Close details", exact: true }).click();
+  await editor.getByRole("button", { name: "Add Contact", exact: true }).click();
+  await editor.getByRole("button", { name: "New contact", exact: true }).click();
+  const added = editor.locator("section").filter({ has: page.getByLabel("Name", { exact: true }) });
+  // The same name must remain two independent identities.
+  await added.getByLabel("Name", { exact: true }).fill(contactName);
+  await added.getByLabel("Email", { exact: true }).fill(`site-only-${width}@example.test`);
+  await added.getByLabel("Roles at this site").fill("Building Manager, Operations");
+  await added.getByRole("checkbox", { name: "Primary contact", exact: true }).check();
+  await noModalOrOverflow(page);
+  const columns = await page.locator('[data-site-form-column]').evaluateAll((elements) => elements.map((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect(); return { x, y, width, height };
+  }));
+  if (width === 1440) {
+    expect(Math.abs(columns[0].y - columns[1].y)).toBeLessThan(2);
+    expect(columns[0].width / columns[1].width).toBeCloseTo(2, 1);
+  } else {
+    expect(columns[1].y).toBeGreaterThanOrEqual(columns[0].y + columns[0].height);
+    expect(columns[0].width).toBeCloseTo(columns[1].width, 0);
+  }
+  await captureWorkspace(page, info, `site-create-contacts-${width}`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await captureWorkspace(page, info, `site-create-page-${width}`);
+  // The real duplicate-address error must roll back the Site and new Contact.
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("A site with that ID or address already exists for this customer.");
+  await expect(page).toHaveURL(createUrl);
+  await expect(page.getByLabel("Site name / label")).toHaveValue("Secondary workshop");
+  await expect(page.getByLabel("OC number")).toHaveValue("OC-CREATE-PAGE");
+  await expect(page.getByLabel("Access notes")).toHaveValue("Call before attending");
+  await expect(added.getByLabel("Email", { exact: true })).toHaveValue(`site-only-${width}@example.test`);
+  expect(readWorkspaceState()).toEqual(initial);
+  await page.getByRole("combobox", { name: "Address", exact: true }).fill(`${width} New Site Street`);
+  let requests = 0, release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  await page.route(`**/api/customers/${id}/sites`, async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    requests += 1; await pending; await route.continue();
+  });
+  await page.getByRole("button", { name: "Create Site", exact: true }).click();
+  try {
+    await expect(page.getByRole("button", { name: "Creating…", exact: true })).toBeDisabled();
+    await expect(page.getByLabel("Site name / label")).toBeDisabled();
+    await page.getByRole("form", { name: "Create Site", exact: true }).evaluate((form) => { form.requestSubmit(); form.requestSubmit(); });
+    await expect.poll(() => requests).toBe(1);
+  } finally { release(); }
+  await expect(page.getByRole("button", { name: "Edit Site Profile", exact: true })).toBeVisible();
+  const saved = readWorkspaceState(), customer = saved.customers.find((entry) => entry.id === id);
+  expect(customer.sites).toHaveLength(before.sites.length + 1);
+  const site = customer.sites.find((entry) => entry.label === "Secondary workshop");
+  await expect(page).toHaveURL(`${profileUrl}/sites/${encodeURIComponent(site.id)}`);
+  expect(site).toMatchObject({ address: `${width} New Site Street`, siteType: "commercial", ocNumber: "OC-CREATE-PAGE", accessNotes: "Call before attending", notes: "Secondary site context" });
+  const createdContact = saved.contacts.find((contact) => contact.email === `site-only-${width}@example.test`);
+  expect(createdContact.id).not.toBe(contactId);
+  expect(saved.contacts.filter((contact) => contact.name === contactName)).toHaveLength(2);
+  expect(saved.contacts.find((contact) => contact.id === contactId).phone).toBe("0400 999 888");
+  expect(site.contactAssignments).toEqual(expect.arrayContaining([
+    expect.objectContaining({ contactId, roles: ["Caretaker"], isPrimary: false }),
+    expect.objectContaining({ contactId: createdContact.id, roles: ["Building Manager", "Operations"], isPrimary: true }),
+  ]));
+  const stableAssignments = (assignments) => assignments.map(({ updatedAt: _updatedAt, ...assignment }) => assignment);
+  expect(stableAssignments(customer.contactAssignments)).toEqual(stableAssignments(before.contactAssignments));
+  expect(customer.contactAssignments.some((assignment) => assignment.contactId === createdContact.id)).toBe(false);
+  expect(customer.sites.find((entry) => entry.id === primaryId)).toEqual(before.sites.find((entry) => entry.id === primaryId));
+  for (const field of ["address", "postalAddress", "postalAddressSameAsPrimary"]) expect(customer[field]).toEqual(before[field]);
+  expect(saved.customers.filter((entry) => entry.id !== id)).toEqual(initial.customers.filter((entry) => entry.id !== id));
+  expect(saved.jobs).toEqual(initial.jobs);
+  await page.reload();
+  await expect(page.locator(".record-workspace h1")).toHaveText(`${width} New Site Street`);
+  await page.getByRole("tab", { name: /^Contacts/ }).click();
+  await expect(page.getByRole("tabpanel")).toContainText(`site-only-${width}@example.test`);
+  await expect(page.getByRole("tabpanel")).toContainText("Primary");
+  await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
+  await expect(page).toHaveURL(profileUrl);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(requests).toBe(1);
+});
+
+test("New Site uses the existing dirty guard for header, sidebar, browser Back and reload", async ({ page }) => {
+  await login(page, { pathname: customerPath });
+  await showCustomerSection(page, "Sites");
+  await page.getByRole("button", { name: "Add Site", exact: true }).click();
+  const url = customerPath + "/sites/new", label = page.getByLabel("Site name / label");
+  await label.fill("Keep this Site draft");
+  const prompt = page.getByRole("dialog", { name: "Discard unsaved changes?" });
+  for (const button of ["Back to Customer Profile", "Cancel", "Service Board"]) {
+    await page.getByRole("button", { name: button, exact: true }).click();
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(label).toHaveValue("Keep this Site draft");
+    await expect(page).toHaveURL(baseUrl + url);
+  }
+  await page.goBack(); await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+  const unload = page.waitForEvent("dialog"), reload = page.reload().catch(() => null);
+  const dialog = await unload; expect(dialog.type()).toBe("beforeunload"); await dialog.dismiss(); await reload;
+  await expect(label).toHaveValue("Keep this Site draft");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await prompt.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page).toHaveURL(baseUrl + customerPath);
+});
+
 test("Customer deep links retain authorization and missing records show a normal page", async ({ browser }) => {
   for (const username of ["office", "technician"]) {
     const context = await browser.newContext();
@@ -1013,6 +1160,14 @@ test("Customer deep links retain authorization and missing records show a normal
         expect((await page.request.delete(baseUrl + "/api/customers/" + fixtureCustomerId)).status()).toBe(403);
       }
       await noModalOrOverflow(page);
+      await page.goto(baseUrl + customerPath + "/sites/new");
+      if (username === "office") await expect(page.getByRole("form", { name: "Create Site", exact: true })).toBeVisible();
+      else {
+        await expect(page.getByText("You do not have permission to view customer records.")).toBeVisible();
+        await expect(page.getByRole("form", { name: "Create Site", exact: true })).toHaveCount(0);
+        const response = await page.request.post(baseUrl + "/api/customers/" + fixtureCustomerId + "/sites", { data: { site: { address: "Unauthorized Site" } } });
+        expect(response.status()).toBe(403);
+      }
     } finally { await context.close(); }
   }
   const context = await browser.newContext();
@@ -1026,6 +1181,11 @@ test("Customer deep links retain authorization and missing records show a normal
     await expect(page.getByText("This site could not be found.")).toBeVisible();
     await page.getByRole("button", { name: "Back to Customer Profile", exact: true }).click();
     await expect(page).toHaveURL(baseUrl + customerPath);
+    await page.goto(baseUrl + "/customers/missing-customer/sites/new");
+    await expect(page.getByText("This customer could not be found.")).toBeVisible();
+    await expect(page.getByRole("form", { name: "Create Site", exact: true })).toHaveCount(0);
+    const response = await page.request.post(baseUrl + "/api/customers/missing-customer/sites", { data: { site: { address: "Missing owner" } } });
+    expect(response.status()).toBe(404);
   } finally { await context.close(); }
 });
 
