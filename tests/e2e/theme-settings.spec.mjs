@@ -310,9 +310,44 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
     const signOut = sidebar.getByRole("button", { name: "Sign Out", exact: true });
     const account = sidebar.getByRole("button", { name: "Account", exact: true });
     const collapseBox = await collapse.boundingBox(), signOutBox = await signOut.boundingBox(), accountBox = await account.boundingBox();
-    expect(collapseBox.x + collapseBox.width).toBeLessThanOrEqual(signOutBox.x);
-    expect(collapseBox.y).toBe(signOutBox.y);
+    expect(collapseBox.x).toBe(signOutBox.x);
+    expect(collapseBox.y + collapseBox.height).toBeLessThanOrEqual(signOutBox.y);
     expect(collapseBox.y).toBeGreaterThanOrEqual(accountBox.y + accountBox.height);
+    const positions = [];
+    const measureFooter = async () => {
+      const toggleBox = await sidebar.locator(".workspace-sidebar-toggle").boundingBox();
+      const centers = await Promise.all([
+        account.locator(".workspace-sidebar-avatar"),
+        sidebar.locator(".workspace-sidebar-toggle .workspace-sidebar-icon"),
+        signOut.locator(".workspace-sidebar-icon"),
+      ].map(async locator => { const box = await locator.boundingBox(); return box.x + box.width / 2; }));
+      expect(centers[0]).toBe(centers[1]); expect(centers[1]).toBe(centers[2]);
+      expect(toggleBox.width).toBe(44); expect(toggleBox.height).toBe(44);
+      expect(await sidebar.locator(".workspace-sidebar-account button").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label"))))
+        .toEqual(["Account", await sidebar.locator(".workspace-sidebar-toggle").getAttribute("aria-label"), "Sign Out"]);
+      return { viewport: page.viewportSize(), collapsed: await sidebar.getAttribute("data-compact"), toggle: toggleBox, iconCenters: centers };
+    };
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 600 }, { width: 1024, height: 768 }]) {
+      await page.setViewportSize(viewport);
+      const before = await measureFooter();
+      const point = { x: before.toggle.x + 22, y: before.toggle.y + 22 };
+      await page.mouse.click(point.x, point.y);
+      await expect(sidebar).toHaveCSS("width", "68px");
+      const afterCollapse = await measureFooter();
+      expect(afterCollapse.toggle).toEqual(before.toggle);
+      expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.getAttribute("aria-label"), point)).toBe("Expand sidebar");
+      await page.mouse.click(point.x, point.y);
+      await expect(sidebar).toHaveCSS("width", "248px");
+      const afterExpand = await measureFooter();
+      expect(afterExpand.toggle).toEqual(before.toggle);
+      expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.getAttribute("aria-label"), point)).toBe("Collapse sidebar");
+      positions.push({ before, afterCollapse, afterExpand });
+    }
+    fs.writeFileSync(path.join(screenshotDir, "sidebar-footer-positions.json"), JSON.stringify(positions, null, 2));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await account.focus(); await page.keyboard.press("Tab"); await expect(collapse).toBeFocused();
+    await page.keyboard.press("Escape"); await page.keyboard.press("Tab"); await expect(signOut).toBeFocused();
+    await page.keyboard.press("Escape"); await signOut.evaluate(element => element.blur());
     await expect(sidebar.locator(".workspace-sidebar-controls")).toHaveCount(0);
     expect(await sidebar.evaluate(element => element.firstElementChild.className)).toBe("workspace-sidebar-brand");
     await signOut.hover(); await expect(page.getByRole("tooltip")).toContainText("Log out");
@@ -329,6 +364,7 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
     expect((await sidebar.boundingBox()).width).toBe(68);
     const expandBox = await expand.boundingBox(), railSignOutBox = await signOut.boundingBox();
     expect(expandBox.x).toBe(railSignOutBox.x);
+    expect(expandBox).toEqual(collapseBox);
     expect(expandBox.y + expandBox.height).toBeLessThanOrEqual(railSignOutBox.y);
     await expect(expand).toBeInViewport(); await expect(signOut).toBeInViewport();
     await expect(sidebar.locator(".workspace-sidebar-utilities span")).toHaveCount(0);
