@@ -1,7 +1,7 @@
 import { FilterPopover, PagePrimaryAction } from "@/components/shared/ResponsivePageControls";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PageWorkspace, PageTopBar, PageBody } from "@/components/workspace/PageWorkspace";
-import { Maximize2, Minimize2, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import WorkspaceSidebar from "@/components/app/WorkspaceSidebar";
 import MobileWorkspaceNavigation from "@/components/app/MobileWorkspaceNavigation";
 import CalendarManager from "@/components/calendar/CalendarManager";
@@ -43,7 +43,7 @@ import {
 const GoogleJobsMap = lazy(() => import("@/components/map/GoogleJobsMap"));
 const ReportsAnalytics = lazy(() => import("@/components/statistics/ReportsAnalytics"));
 
-export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, workspacePageId = "", personalPreferences, workspaceAddons, settingsPersistence, onSettingsPreview }) {
+export default function WorkspaceShell({ auth, chrome, data, derived, actions, workspacePage = null, workspacePageId = "", personalPreferences, workspaceAddons, settingsPersistence, onSettingsPreview, sidebarNavigation }) {
   const [mobileServiceBoardView, setMobileServiceBoardView] = useState("To Do");
   const isDesktopLayout = useMediaQuery("(min-width: 64rem)");
   const isThreeColumnBoard = useMediaQuery("(min-width: 48rem)");
@@ -67,7 +67,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     setOfficeSearch,
     setServiceBoardColumnSorts,
     setServiceBoardColumnViews,
-    setServiceBoardFullScreen,
     setShowHighUrgencyOnly,
     setShowServiceBoardTagLabels,
     showHighUrgencyOnly,
@@ -78,7 +77,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
   const {
     currentSection,
     filteredJobs,
-    isServiceBoardFullScreen,
     themePalette,
     themeSettings,
     visibleSideNavItems,
@@ -108,7 +106,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     handleUpdateStaff,
   } = actions;
   const roleMenuLabel = isTechnician ? "Technician" : isAdmin ? "Admin" : "Office";
-  const desktopServiceBoardFullScreen = isThreeColumnBoard && isServiceBoardFullScreen;
   const mapWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "map";
   const calendarWorkspaceOpen = !workspacePage && canManageBusiness && activeSection === "calendar";
   const jobNotes = useJobNoteEditor({ jobs: data.jobs, onSave: actions.handleSaveServiceBoardNote });
@@ -145,9 +142,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
     const searchInputClassName = isHeroTone
       ? "min-w-0 flex-1 border-border bg-card/95 text-foreground placeholder:text-muted-foreground shadow-sm"
       : "min-w-0 flex-1";
-    const fullScreenButtonClassName = isHeroTone
-      ? "rounded-2xl border-white/30 bg-card/95 text-foreground hover:bg-card"
-      : "rounded-2xl bg-card";
 
     return (
       <div className="grid gap-3">
@@ -167,21 +161,6 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
               <Checkbox checked={showHighUrgencyOnly} onCheckedChange={(checked) => setShowHighUrgencyOnly(Boolean(checked))} />
               <span className="whitespace-nowrap text-sm">High urgency only</span>
             </label></FilterPopover>
-            <PagePrimaryAction
-              variant="outline"
-              className={`${fullScreenButtonClassName} whitespace-nowrap px-3`}
-              onClick={() => setServiceBoardFullScreen((prev) => !prev)}
-            >
-              {isServiceBoardFullScreen ? (
-                <>
-                  <Minimize2 className="mr-2 h-4 w-4" /> Exit Full Screen
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="mr-2 h-4 w-4" /> Full Screen
-                </>
-              )}
-            </PagePrimaryAction>
             {canManageBusiness ? (
               <PagePrimaryAction className="whitespace-nowrap rounded-2xl hover:opacity-95" style={themePalette.primaryButton} onClick={() => openCreateJob()}>
                 <Plus className="mr-2 h-4 w-4" /> New Job
@@ -232,28 +211,26 @@ export default function WorkspaceShell({ auth, chrome, data, derived, actions, w
         />
       ) : null}
 
-      {!desktopServiceBoardFullScreen ? (
-        <WorkspaceSidebar
-          activeSection={activeSection}
-          items={visibleSideNavItems}
-          authUser={authUser}
-          currentStaff={currentStaff}
-          isAuthenticated={isAuthenticated}
-          themeSettings={themeSettings}
-          onLogout={handleLogout}
-          onNavigate={(sectionId) => {
-            const navigationStarted = setActiveSection(sectionId);
-            if (navigationStarted !== false && sectionId === "settings" && !activeSettingsTab) setActiveSettingsTab("preferences");
-          }}
-        />
-      ) : null}
+      <WorkspaceSidebar
+        collapsed={sidebarNavigation.collapsed}
+        onToggleCollapsed={sidebarNavigation.toggle}
+        activeSection={activeSection}
+        items={visibleSideNavItems}
+        authUser={authUser}
+        currentStaff={currentStaff}
+        isAuthenticated={isAuthenticated}
+        themeSettings={themeSettings}
+        onLogout={handleLogout}
+        onNavigate={(sectionId) => {
+          const navigationStarted = setActiveSection(sectionId);
+          if (navigationStarted !== false && sectionId === "settings" && !activeSettingsTab) setActiveSettingsTab("preferences");
+        }}
+      />
 
       <div
         className={
           workspacePage
             ? "min-w-0 lg:pl-[var(--sidebar-width)]"
-            : desktopServiceBoardFullScreen
-            ? "workspace-page-column workspace-page-column--fullscreen min-w-0"
             : mapWorkspaceOpen
             ? "map-workspace-shell min-h-0 min-w-0 flex-1 overflow-hidden lg:h-full lg:pl-[var(--sidebar-width)]"
             : calendarWorkspaceOpen

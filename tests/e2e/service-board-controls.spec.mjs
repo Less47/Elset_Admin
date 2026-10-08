@@ -316,12 +316,14 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
           }
           await expect(paid.getByLabel("Job note: Waiting on parts")).toBeVisible();
           await expect(qbBoardCard(page, 174).getByTitle("Outstanding invoice", { exact: true })).toBeVisible();
-          const unsent = qbBoardCard(page, 168).locator('[data-service-board-indicator="invoice-unsent"]');
+          const unsent = qbBoardCard(page, 168).locator('[data-service-board-indicator="not-invoiced"]');
           const overdue = qbBoardCard(page, 167).locator('[data-service-board-indicator="invoice-overdue"]');
-          await expect(unsent).toHaveAttribute("title", "Invoice not sent");
+          await expect(unsent).toHaveAttribute("title", "Not invoiced");
           await expect(overdue).toHaveAttribute("title", "Invoice overdue");
           await expect(qbBoardCard(page, 168).getByTitle("Invoice overdue")).toHaveCount(0);
           await expect(qbBoardCard(page, 172).getByTitle("Not invoiced", { exact: true })).toBeVisible();
+          expect(await unsent.evaluate(element => getComputedStyle(element.querySelector("span") || element).backgroundColor)).toBe(await qbBoardCard(page, 172).locator('[data-service-board-indicator="not-invoiced"]').evaluate(element => getComputedStyle(element.querySelector("span") || element).backgroundColor));
+          await expect(page.getByTitle("Invoice not sent", { exact: true })).toHaveCount(0);
           const colour = (element) => getComputedStyle(element.querySelector("span") || element).backgroundColor;
           expect(await unsent.evaluate(colour)).not.toBe(await overdue.evaluate(colour));
           for (const index of [175, 174, 172, 168, 167]) {
@@ -364,6 +366,10 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
           await assertLayout(page, { width, height: 1180 });
           await paid.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" }));
           await capture(page, info, `qb-board-${width}-${theme}-${view}-${enabled}`);
+          if (width === 1440 && view === "List" && enabled) {
+            await unsent.evaluate(element => element.scrollIntoView({ block: "center", behavior: "instant" }));
+            await capture(page, info, `invoice-lifecycle-${width}-${theme}`);
+          }
         }
       }
       expect(readWorkspace()).toEqual(before);
@@ -480,7 +486,9 @@ for (const width of [768, 1024, 1440]) test(`note layout handles all pill combin
               expect((values.indicator.top + values.indicator.bottom) / 2, label).toBeCloseTo(values.card.top, 1);
               expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);
             } else {
-              expect(values.indicator, label).toBeNull();
+              await expect(target.getByTitle("Not invoiced", { exact: true })).toBeVisible();
+              expect(values.indicator, label).not.toBeNull();
+              expect((values.indicator.top + values.indicator.bottom) / 2, label).toBeCloseTo(values.card.top, 1);
               expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);
             }
           }
@@ -948,7 +956,7 @@ async function assertLayout(page, viewport) {
     if (index) expect(box.left).toBeGreaterThan(geometry[index - 1].right);
     if (viewport.width >= 1440) expect(Math.abs(box.viewsTop - box.sortTop)).toBeLessThanOrEqual(1);
   }
-  await expect(page.getByRole("button", { name: "Full Screen", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /full ?screen/i })).toHaveCount(0);
 }
 
 for (const viewport of viewports) test(`Service Board controls and initial 25 Completed jobs at ${viewport.width}x${viewport.height}`, async ({ browser }, info) => {
@@ -1063,21 +1071,20 @@ test("dragging an old job into Completed keeps creation order and the current vi
   } finally { await context.close(); }
 });
 
-test("retired hidden-column preferences cannot hide columns, while Full Screen and genuine mobile statuses remain available", async ({ browser }) => {
+test("retired hidden-column preferences cannot hide columns, fullscreen is absent and genuine mobile statuses remain available", async ({ browser }) => {
   const authDb = new Database(path.join(dataDir, "auth.db"));
   try {
-    authDb.prepare("INSERT INTO user_ui_preferences (user_id, preferences_json, created_at, updated_at) SELECT id, ?, '2026-01-01', '2026-01-01' FROM user").run(JSON.stringify({ boardHiddenColumns: ["To Do", "In Progress", "Completed"] }));
+    authDb.prepare("INSERT INTO user_ui_preferences (user_id, preferences_json, created_at, updated_at) SELECT id, ?, '2026-01-01', '2026-01-01' FROM user").run(JSON.stringify({ boardHiddenColumns: ["To Do", "In Progress", "Completed"], serviceBoardFullScreen: true }));
   } finally { authDb.close(); }
   const { page, context } = await openBoard(browser);
   try {
     await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
     const response = await page.request.get(`${baseUrl}/api/user-preferences`);
     expect(Object.hasOwn((await response.json()).preferences, "boardHiddenColumns")).toBe(false);
-    await page.getByRole("button", { name: "Full Screen", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Exit Full Screen", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /full ?screen/i })).toHaveCount(0);
+    await expect(page.locator("aside.workspace-sidebar")).toBeVisible();
     await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
     await expect(cards(page)).toHaveCount(25);
-    await page.getByRole("button", { name: "Exit Full Screen", exact: true }).click();
     await page.setViewportSize(viewports[5]);
     await page.getByRole("tab", { name: /^In Progress / }).click();
     await expect(page.locator('[data-mobile-board-view="In Progress"] [data-mobile-job-id]')).toHaveCount(30);

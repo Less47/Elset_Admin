@@ -14,7 +14,6 @@ export function useWorkspaceViewModel({
   isTechnician,
   officeSearch,
   selectedJob,
-  serviceBoardFullScreen,
   showHighUrgencyOnly,
   billingTypeFilter = "all",
 }) {
@@ -50,7 +49,6 @@ export function useWorkspaceViewModel({
     };
   }, [data.customers, data.jobs, selectedJob]);
 
-  const isServiceBoardFullScreen = activeSection === "service-board" && serviceBoardFullScreen;
 
   const currentSection = useMemo(() => {
     const serviceBoardMeta = isTechnician
@@ -77,7 +75,6 @@ export function useWorkspaceViewModel({
   return {
     currentSection,
     filteredJobs,
-    isServiceBoardFullScreen,
     noteAuthor,
     visibleSideNavItems,
     ...selection,

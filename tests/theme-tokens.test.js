@@ -6,6 +6,13 @@ import { normalizeUserUiPreferences, validateUserUiPreferencePatch } from '../sr
 
 const surfaces = ['--card', '--surface-raised', '--muted', '--input-surface', '--surface-hover', '--surface-selected', '--data-view-header-cell', '--data-view-row', '--data-view-row-alt'];
 
+test('legacy header colours cannot create tokens or change the continuous sidebar surface', () => {
+  const current = buildSemanticTheme(themePresets[0].values).vars;
+  const legacy = buildSemanticTheme({ ...themePresets[0].values, sidebarHeader: '#FF0000', sidebarHeaderForeground: '#00FF00', sidebarWidth: 'wide', contentDensity: 'spacious' }).vars;
+  assert.deepEqual(legacy, current);
+  assert.equal(Object.keys(legacy).some(key => key.startsWith('--sidebar-header')), false);
+});
+
 test('preset order, stable IDs and existing saved colour seeds remain compatible', () => {
   assert.deepEqual(themePresets.map(({ id }) => id), [
     'elset', 'midnight-signal', 'copper-dawn', 'evergreen-ledger',
@@ -23,12 +30,13 @@ test('preset order, stable IDs and existing saved colour seeds remain compatible
   };
   for (const [id, colours] of Object.entries(saved)) {
     const values = Object.fromEntries(colours.split(' ').map((value, index) => [keys[index], value]));
+    delete values.sidebarHeader;
     assert.deepEqual(themePresets.find(preset => preset.id === id).values, values);
     const loaded = normalizeUserUiPreferences(values);
-    assert.deepEqual(Object.fromEntries(keys.map(key => [key, loaded[key]])), values);
+    assert.deepEqual(Object.fromEntries(keys.filter(key => key !== "sidebarHeader").map(key => [key, loaded[key]])), values);
   }
   const defaults = normalizeUserUiPreferences();
-  assert.deepEqual(Object.fromEntries(keys.map(key => [key, defaults[key]])), themePresets[0].values);
+  assert.deepEqual(Object.fromEntries(keys.filter(key => key !== "sidebarHeader").map(key => [key, defaults[key]])), themePresets[0].values);
 });
 
 for (const preset of themePresets) {
@@ -39,7 +47,7 @@ for (const preset of themePresets) {
     for (const bg of surfaces) for (const fg of ['--foreground', '--text-secondary', '--muted-foreground']) {
       assert.ok(contrastRatio(v[fg], v[bg]) >= 4.5, `${fg} on ${bg}`);
     }
-    for (const [bg, fg] of [['--primary', '--primary-foreground'], ['--primary-hover', '--primary-foreground'], ['--popover', '--popover-foreground'], ['--sidebar', '--sidebar-foreground'], ['--sidebar', '--sidebar-muted'], ['--sidebar-primary', '--sidebar-primary-foreground'], ['--sidebar-primary', '--sidebar-primary-muted'], ['--sidebar-header', '--sidebar-header-muted'], ['--workspace-hero-bg', '--workspace-hero-text'], ['--workspace-hero-bg', '--workspace-hero-muted']]) {
+    for (const [bg, fg] of [['--primary', '--primary-foreground'], ['--primary-hover', '--primary-foreground'], ['--popover', '--popover-foreground'], ['--sidebar', '--sidebar-foreground'], ['--sidebar', '--sidebar-muted'], ['--sidebar-primary', '--sidebar-primary-foreground'], ['--sidebar-primary', '--sidebar-primary-muted'], ['--workspace-hero-bg', '--workspace-hero-text'], ['--workspace-hero-bg', '--workspace-hero-muted']]) {
       assert.ok(contrastRatio(v[bg], v[fg]) >= 4.5, `${fg} on ${bg}`);
     }
     for (const name of ['info', 'success', 'warning', 'danger', 'maintenance', 'special']) {
@@ -97,7 +105,7 @@ test('old records derive missing tokens without altering custom preferences', ()
   const prefs = normalizeUserUiPreferences({ actionColor: '#abc', dataViewSurface: '#234567', sidebarWidth: 'compact' });
   assert.equal(prefs.actionColor, '#AABBCC');
   assert.equal(prefs.dataViewSurface, '#234567');
-  assert.equal(prefs.sidebarWidth, 'compact');
+  assert.equal(Object.hasOwn(prefs, "sidebarWidth"), false);
   assert.equal(buildSemanticTheme(prefs).vars['--card'], '#234567');
   assert.ok(buildSemanticTheme(normalizeUserUiPreferences()).vars['--input-surface']);
 });

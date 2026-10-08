@@ -34,7 +34,6 @@ These are the eleven values saved through the existing personal appearance contr
 | `pageBackgroundStart` | `#DDE5ED` | `#F8FBF9` |
 | `pageBackgroundEnd` | `#C5D1DD` | `#EEF6F2` |
 | `sidebarSurface` | `#1F2D3A` | `#EAF2EE` |
-| `sidebarHeader` | `#152330` | `#DCE9E2` |
 | `sidebarActive` | `#305773` | `#D7E6E0` |
 | `heroSurface` | `#2B4357` | `#F2F7F4` |
 | `actionColor` | `#25647A` | `#2D70B4` |

@@ -56,14 +56,13 @@ The timestamp is an ISO string. Repeated startup is idempotent. Existing auth ro
 
 ## 6. Preference schema
 
-The explicit flat schema has 23 fields. Its defaults are:
+The explicit flat schema has 20 fields. Its defaults are:
 
 ```json
 {
   "pageBackgroundStart": "#0F90CD",
   "pageBackgroundEnd": "#0F90CD",
   "sidebarSurface": "#FFFFFF",
-  "sidebarHeader": "#0F90CD",
   "sidebarActive": "#F69320",
   "heroSurface": "#0F90CD",
   "actionColor": "#F69320",
@@ -71,8 +70,6 @@ The explicit flat schema has 23 fields. Its defaults are:
   "dialogSurface": "#9FE4FB",
   "dataViewSurface": "#EAF7FB",
   "dataViewAccent": "#0F90CD",
-  "sidebarWidth": "standard",
-  "contentDensity": "comfortable",
   "roundedEdges": true,
   "customerView": "list",
   "siteView": "list",
@@ -106,7 +103,11 @@ Logged-out screens use safe defaults and make no preference request. Auth identi
 
 ## 10. Legacy transition
 
-Global appearance values remain as a migration fallback. `PATCH /api/settings` rejects personal keys, including mixed company/appearance patches; the old global UI reset rejects requests. Broad workspace saves are removed. Personal controls always use the account-specific endpoint. Explicit business backup/import behavior remains intact. Reset UI Settings resets this account's 14 appearance values, leaving page/board choices under their existing controls.
+Global appearance values remain as a migration fallback. `PATCH /api/settings` rejects personal keys, including mixed company/appearance patches; the old global UI reset rejects requests. Broad workspace saves are removed. Personal controls always use the account-specific endpoint. Explicit business backup/import behavior remains intact. Reset UI Settings resets this account's 11 appearance values, leaving page/board choices under their existing controls.
+
+The sidebar is fixed at 248px expanded and 68px collapsed. Its top PanelLeftClose / PanelLeftOpen button remembers navigation state in browser localStorage per authenticated user (`elset.sidebar-collapsed:<user id>`), outside Settings saves. Missing/blocked storage defaults to expanded and retains toggles in memory. Mobile uses its dedicated navigation below 1024px. Expanded branding uses Company Logo; the rail uses Brand Mark or the generic workspace icon.
+
+Content spacing is fixed to the previous Comfortable default: 1rem section gaps, 0.75rem mobile padding, 1rem small-screen padding and 1.25rem desktop padding. Legacy `sidebarWidth`, `contentDensity` and `sidebarHeader` are ignored on read; no database migration rewrites old records. They are absent from the active personal schema and Settings save payloads. Legacy workspace/backup keys remain safe to load. Sidebar header theme tokens and preview bands are removed; sidebar branding uses the continuous sidebar surface. Service Board fullscreen is removed entirely.
 
 ## 11. Save strategy
 
@@ -172,4 +173,4 @@ Logs and extracted browser results are in ignored `test-results/user-ui-preferen
 
 ## 18. Deliberately shared or transient settings
 
-Company/email/bank/document/operational configuration stays shared because it controls business behavior and generated documents. Legacy global appearance remains solely for compatibility/fallback. Dormant legacy `showHeroMetrics`, `showSectionDescriptions` and `showHeroEyebrow` keys have no UI readers and were preserved without adding controls. Search, filters, focused records, fullscreen, open panels and the current mobile status remain transient session state. Job statuses, permissions and record ownership are never personal UI preferences.
+Company/email/bank/document/operational configuration stays shared because it controls business behavior and generated documents. Legacy global appearance remains solely for compatibility/fallback. Dormant legacy `showHeroMetrics`, `showSectionDescriptions` and `showHeroEyebrow` keys have no UI readers and were preserved without adding controls. Search, filters, focused records, open panels and the current mobile status remain transient session state. Job statuses, permissions and record ownership are never personal UI preferences.

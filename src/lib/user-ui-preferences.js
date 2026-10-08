@@ -1,11 +1,12 @@
 import { upgradeLegacyAppearance } from './theme-presets.js';
 // Presentation only. Company/document settings never belong in this schema.
+export const retiredAppearanceSettingKeys = ["sidebarWidth", "contentDensity", "sidebarHeader"];
 export const defaultAppearanceSettings = {
   pageBackgroundStart: "#0F90CD", pageBackgroundEnd: "#0F90CD",
-  sidebarSurface: "#FFFFFF", sidebarHeader: "#0F90CD", sidebarActive: "#F69320",
+  sidebarSurface: "#FFFFFF", sidebarActive: "#F69320",
   heroSurface: "#0F90CD", actionColor: "#F69320", borderColor: "#1E293B",
   dialogSurface: "#9FE4FB", dataViewSurface: "#EAF7FB", dataViewAccent: "#0F90CD",
-  sidebarWidth: "standard", contentDensity: "comfortable", roundedEdges: true,
+  roundedEdges: true,
 };
 export const appearanceSettingKeys = Object.keys(defaultAppearanceSettings);
 export const boardPreferenceKeys = {
@@ -22,10 +23,8 @@ export const defaultUserUiPreferences = {
 };
 export const userUiPreferenceKeys = Object.keys(defaultUserUiPreferences);
 const allowedKeys = new Set(userUiPreferenceKeys);
-const colorKeys = new Set(appearanceSettingKeys.filter((key) => !["sidebarWidth", "contentDensity", "roundedEdges"].includes(key)));
+const colorKeys = new Set(appearanceSettingKeys.filter((key) => key !== "roundedEdges"));
 const choices = {
-  sidebarWidth: ["icon-only", "compact", "standard", "wide"],
-  contentDensity: ["compact", "comfortable", "spacious"],
   customerView: ["list", "grid"], siteView: ["list", "grid"],
 };
 for (const keys of Object.values(boardPreferenceKeys)) {

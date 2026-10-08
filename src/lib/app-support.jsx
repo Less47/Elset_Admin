@@ -41,14 +41,12 @@ import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
   RECYCLE_BIN_RETENTION_MS,
-  contentDensityOptions,
   customerTypeOptions,
   defaultStaffMembers,
   defaultThemeSettings,
   inventoryCategories,
   loginAccessRoleOptions,
   preferenceSettingKeys,
-  sidebarWidthOptions,
   siteTypeOptions,
   uiSettingKeys,
 } from "./app-support-config.js";
@@ -58,15 +56,12 @@ export {
   APP_TEXT_LIGHT,
   LOGO_SRC,
   RECYCLE_BIN_RETENTION_MS,
-  contentDensityOptions,
   customerTypeOptions,
   defaultStaffMembers,
   defaultThemeSettings,
   inventoryCategories,
   loginAccessRoleOptions,
   maintenanceFrequencyOptions,
-  sidebarWidthOptions,
-  sidebarWidthStyles,
   siteTypeOptions,
   uiSettingKeys,
   preferenceSettingKeys,
@@ -94,36 +89,6 @@ export function formatSiteType(type) {
   const match = siteTypeOptions.find((option) => option.value === type);
   return match?.label || "Not set";
 }
-
-export const contentDensityStyles = {
-  compact: {
-    sectionGap: "0.75rem",
-    mobileX: "0.75rem",
-    mobileY: "0.75rem",
-    smX: "0.875rem",
-    smY: "0.875rem",
-    lgX: "1rem",
-    lgY: "1rem",
-  },
-  comfortable: {
-    sectionGap: "1rem",
-    mobileX: "0.75rem",
-    mobileY: "0.75rem",
-    smX: "1rem",
-    smY: "1rem",
-    lgX: "1.25rem",
-    lgY: "1.25rem",
-  },
-  spacious: {
-    sectionGap: "1.5rem",
-    mobileX: "0.875rem",
-    mobileY: "0.875rem",
-    smX: "1.25rem",
-    smY: "1.25rem",
-    lgX: "1.5rem",
-    lgY: "1.5rem",
-  },
-};
 
 export const settingsTabs = [
   { value: "preferences", label: "Preferences" },
@@ -182,11 +147,6 @@ export const themeColorFields = [
     key: "sidebarSurface",
     label: "Sidebar surface",
     description: "The main background color of the left menu.",
-  },
-  {
-    key: "sidebarHeader",
-    label: "Sidebar header",
-    description: "The dark branded header block in the menu.",
   },
   {
     key: "sidebarActive",
@@ -778,7 +738,6 @@ export function normalizeThemeSettings(settings) {
     pageBackgroundStart: normalizeHexColor(settings?.pageBackgroundStart, defaultThemeSettings.pageBackgroundStart),
     pageBackgroundEnd: normalizeHexColor(settings?.pageBackgroundEnd, defaultThemeSettings.pageBackgroundEnd),
     sidebarSurface: normalizeHexColor(settings?.sidebarSurface, defaultThemeSettings.sidebarSurface),
-    sidebarHeader: normalizeHexColor(settings?.sidebarHeader, defaultThemeSettings.sidebarHeader),
     sidebarActive: normalizeHexColor(settings?.sidebarActive, defaultThemeSettings.sidebarActive),
     heroSurface: normalizeHexColor(settings?.heroSurface, defaultThemeSettings.heroSurface),
     actionColor: normalizeHexColor(settings?.actionColor, defaultThemeSettings.actionColor),
@@ -786,8 +745,6 @@ export function normalizeThemeSettings(settings) {
     dialogSurface: normalizeHexColor(settings?.dialogSurface, defaultThemeSettings.dialogSurface),
     dataViewSurface: normalizeHexColor(settings?.dataViewSurface, defaultThemeSettings.dataViewSurface),
     dataViewAccent: normalizeHexColor(settings?.dataViewAccent, defaultThemeSettings.dataViewAccent),
-    sidebarWidth: normalizeOptionValue(settings?.sidebarWidth, sidebarWidthOptions, defaultThemeSettings.sidebarWidth),
-    contentDensity: normalizeOptionValue(settings?.contentDensity, contentDensityOptions, defaultThemeSettings.contentDensity),
     roundedEdges: typeof settings?.roundedEdges === "boolean" ? settings.roundedEdges : defaultThemeSettings.roundedEdges,
     companyName: normalizeTextSetting(settings?.companyName, defaultThemeSettings.companyName),
     companyAbn: normalizeTextSetting(settings?.companyAbn, defaultThemeSettings.companyAbn),

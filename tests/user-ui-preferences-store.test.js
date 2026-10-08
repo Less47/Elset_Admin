@@ -18,13 +18,13 @@ test("explicit personal save normalizes only on success, rejects invalid values 
     await pause();
     await assert.rejects(store.save({ actionColor: "invalid" }), /valid hex/);
     assert.equal(writes.length, 0);
-    await assert.rejects(store.save({ actionColor: "#abc", contentDensity: "compact" }), /Save failed/);
+    await assert.rejects(store.save({ actionColor: "#abc", roundedEdges: false }), /Save failed/);
     assert.equal(visible(store).actionColor, "#123456");
     fail = false;
-    const saved = await store.save({ actionColor: "#abc", contentDensity: "compact" });
+    const saved = await store.save({ actionColor: "#abc", roundedEdges: false });
     assert.equal(saved.actionColor, "#AABBCC");
-    assert.equal(visible(store).contentDensity, "compact");
-    assert.deepEqual(writes, [{ actionColor: "#AABBCC", contentDensity: "compact" }, { actionColor: "#AABBCC", contentDensity: "compact" }]);
+    assert.equal(visible(store).roundedEdges, false);
+    assert.deepEqual(writes, [{ actionColor: "#AABBCC", roundedEdges: false }, { actionColor: "#AABBCC", roundedEdges: false }]);
   } finally { store.dispose(); }
 });
 

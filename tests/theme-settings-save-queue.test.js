@@ -76,14 +76,14 @@ test("one request stays in flight while further changes merge, and an old acknow
   const { queue, requests, tick, maximumRequests } = harness();
   queue.change({ actionColor: "#0000FF" });
   await tick(400);
-  queue.change({ actionColor: "#00FF00", sidebarHeader: "#112233" });
+  queue.change({ actionColor: "#00FF00", sidebarSurface: "#112233" });
   queue.change({ actionColor: "#FF8800" });
   await tick(4000);
   assert.equal(requests.length, 1);
   requests[0].resolve();
   await tick();
   assert.equal(queue.getSnapshot().overrides.actionColor, "#FF8800");
-  assert.deepEqual(requests[1].patch, { actionColor: "#FF8800", sidebarHeader: "#112233" });
+  assert.deepEqual(requests[1].patch, { actionColor: "#FF8800", sidebarSurface: "#112233" });
   requests[1].resolve();
   await tick();
   assert.equal(maximumRequests(), 1);
@@ -119,7 +119,7 @@ test("returning to the in-flight value avoids a duplicate write", async () => {
 for (const message of ["Theme change could not be saved.", "409: Workspace settings conflict."]) {
   test(`failure retains the latest visual choice and retries once without bypassing: ${message}`, async () => {
     const { queue, requests, tick, acknowledgements } = harness();
-    queue.change({ actionColor: "#111111", sidebarHeader: "#333333" });
+    queue.change({ actionColor: "#111111", sidebarSurface: "#333333" });
     await tick(400);
     queue.change({ actionColor: "#222222" });
     await tick(400);
@@ -133,7 +133,7 @@ for (const message of ["Theme change could not be saved.", "409: Workspace setti
     queue.retry();
     queue.retry();
     assert.equal(requests.length, 2);
-    assert.deepEqual(requests[1].patch, { actionColor: "#222222", sidebarHeader: "#333333" });
+    assert.deepEqual(requests[1].patch, { actionColor: "#222222", sidebarSurface: "#333333" });
     requests[1].resolve();
     await tick();
     assert.equal(queue.getSnapshot().status, "saved");
@@ -147,9 +147,9 @@ test("changing colours after an error resumes saving the entire unsaved patch", 
   await tick(400);
   requests[0].reject("Offline");
   await tick();
-  queue.change({ sidebarHeader: "#222222" });
+  queue.change({ sidebarSurface: "#222222" });
   await tick(400);
-  assert.deepEqual(requests[1].patch, { actionColor: "#111111", sidebarHeader: "#222222" });
+  assert.deepEqual(requests[1].patch, { actionColor: "#111111", sidebarSurface: "#222222" });
 });
 
 test("Settings subscriptions can unmount without losing pending changes", async () => {

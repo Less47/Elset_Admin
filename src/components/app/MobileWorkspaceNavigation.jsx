@@ -47,7 +47,7 @@ export default function MobileWorkspaceNavigation({
         <header
           className="border-b shadow-sm"
           style={{
-            ...themePalette.sidebarHeader,
+            ...themePalette.sidebarShell,
             borderColor: themePalette.borderColor,
             paddingTop: "env(safe-area-inset-top)",
             paddingLeft: "env(safe-area-inset-left)",

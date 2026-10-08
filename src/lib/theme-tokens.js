@@ -98,8 +98,6 @@ export function buildSemanticTheme(settings) {
     '--dialog-footer-surface': mixColor(popup, popupText, 0.06),
     '--dialog-surface-gradient': `linear-gradient(180deg, ${popup}, ${mixColor(popup, popupText, 0.025)})`,
     '--sidebar': settings.sidebarSurface, '--sidebar-foreground': contrastText(settings.sidebarSurface),
-    '--sidebar-header': settings.sidebarHeader, '--sidebar-header-foreground': contrastText(settings.sidebarHeader),
-    '--sidebar-header-muted': readable(mixColor(contrastText(settings.sidebarHeader), settings.sidebarHeader, 0.16), [settings.sidebarHeader]),
     '--sidebar-muted': readable(mixColor(contrastText(settings.sidebarSurface), settings.sidebarSurface, 0.20), [settings.sidebarSurface]),
     '--sidebar-primary-muted': readable(mixColor(contrastText(settings.sidebarActive), settings.sidebarActive, 0.15), [settings.sidebarActive]),
     '--sidebar-primary': settings.sidebarActive, '--sidebar-primary-foreground': contrastText(settings.sidebarActive),

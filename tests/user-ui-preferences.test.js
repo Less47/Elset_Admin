@@ -28,7 +28,7 @@ function fixture() {
 test("personal schema matches legacy appearance defaults and strictly validates its allowlist", () => {
   assert.deepEqual(appearanceSettingKeys, workspaceUiSettingKeys);
   for (const key of appearanceSettingKeys) assert.equal(defaultUserUiPreferences[key], defaultWorkspaceSettings[key]);
-  assert.deepEqual(validateUserUiPreferencePatch({ actionColor: "#abc", contentDensity: "compact" }), { actionColor: "#AABBCC", contentDensity: "compact" });
+  assert.deepEqual(validateUserUiPreferencePatch({ actionColor: "#abc", roundedEdges: false }), { actionColor: "#AABBCC", roundedEdges: false });
   assert.deepEqual(validateUserUiPreferencePatch({ roundedEdges: false }), { roundedEdges: false });
   assert.equal(normalizeUserUiPreferences({}).roundedEdges, true);
   for (const input of [null, [], {}, { userId: "B" }, { companyName: "Private company" }, { theme: { accent: "#abc" } },
@@ -39,6 +39,24 @@ test("personal schema matches legacy appearance defaults and strictly validates 
   }
   assert.equal({}.polluted, undefined);
   assert.equal(normalizeUserUiPreferences({ actionColor: "invalid" }).actionColor, defaultUserUiPreferences.actionColor);
+});
+
+test("retired appearance values are ignored on read without rewriting stored preferences or workspace settings", () => {
+  const f = fixture();
+  const db = openUserPreferencesDb({ env: f.env, migrate: true });
+  try {
+    const legacy = JSON.stringify({ sidebarWidth: "icon-only", contentDensity: "spacious", sidebarHeader: "#FF0000", actionColor: "#123456" });
+    db.prepare("INSERT INTO user_ui_preferences VALUES ('legacy', ?, '2026-01-01', '2026-01-01')").run(legacy);
+    const workspaceBefore = fs.readFileSync(path.join(f.dir, "elset-workspace.db"));
+    const current = getUserUiPreferences(db, "legacy");
+    for (const key of ["sidebarWidth", "contentDensity", "sidebarHeader"]) {
+      assert.equal(Object.hasOwn(current, key), false);
+      assert.throws(() => validateUserUiPreferencePatch({ [key]: JSON.parse(legacy)[key] }));
+    }
+    assert.equal(current.actionColor, "#123456");
+    assert.equal(db.prepare("SELECT preferences_json FROM user_ui_preferences WHERE user_id='legacy'").get().preferences_json, legacy);
+    assert.deepEqual(fs.readFileSync(path.join(f.dir, "elset-workspace.db")), workspaceBefore);
+  } finally { db.close(); f.cleanup(); }
 });
 
 test("additive account migration leaves an existing auth schema and workspace intact", () => {
@@ -87,7 +105,7 @@ test("fresh users get fallback without a row; partial upserts isolate users and 
     patchUserUiPreferences(db, "A", { actionColor: "#ff8800", customerView: "grid" }, fallback);
     patchUserUiPreferences(db, "B", { actionColor: "#0077ff" }, fallback);
     const firstCreated = db.prepare("SELECT created_at FROM user_ui_preferences WHERE user_id='A'").get().created_at;
-    patchUserUiPreferences(db, "A", { contentDensity: "compact" }, fallback);
+    patchUserUiPreferences(db, "A", { roundedEdges: false }, fallback);
     assert.equal(db.prepare("SELECT count(*) AS n FROM user_ui_preferences").get().n, 2);
     assert.equal(db.prepare("SELECT created_at FROM user_ui_preferences WHERE user_id='A'").get().created_at, firstCreated);
     db.close();
@@ -95,7 +113,7 @@ test("fresh users get fallback without a row; partial upserts isolate users and 
     assert.equal(getUserUiPreferences(db, "A").actionColor, "#FF8800");
     assert.equal(getUserUiPreferences(db, "A").customerView, "grid");
     assert.equal(getUserUiPreferences(db, "B").actionColor, "#0077FF");
-    assert.equal(getUserUiPreferences(db, "B").contentDensity, "comfortable");
+    assert.equal(getUserUiPreferences(db, "B").roundedEdges, true);
     assert.equal(Object.hasOwn(getUserUiPreferences(db, "A"), "companyName"), false);
     const before = getUserUiPreferences(db, "A");
     assert.throws(() => patchUserUiPreferences(db, "A", { actionColor: "#fff", userId: "B" }));
@@ -138,9 +156,9 @@ test("preference API authenticates, rejects identity spoofing and exposes only t
   await api("b", "PATCH", { actionColor: "#0077ff" });
   assert.equal((await api("a")).body.preferences.actionColor, "#FF8800");
   assert.equal((await api("b")).body.preferences.actionColor, "#0077FF");
-  const technician = await api("tech", "PATCH", { sidebarWidth: "compact" });
+  const technician = await api("tech", "PATCH", { customerView: "grid" });
   assert.equal(technician.status, 200);
-  assert.equal(technician.body.preferences.sidebarWidth, "compact");
+  assert.equal(technician.body.preferences.customerView, "grid");
   assert.equal(technician.cache, "private, no-store");
   assert.deepEqual(Object.keys(technician.body), ["ok", "preferences"]);
 }));
@@ -152,6 +170,9 @@ test("shared company settings stay shared while global theme writes and reset ar
     await api("a", "PATCH", { actionColor: "#ff8800" });
     assert.deepEqual(loadWorkspaceStateFromDb(db), original);
     assert.equal((await api("a", "PATCH", { settings: { actionColor: "#fff", companyName: "Must not apply" } }, "/api/settings")).status, 400);
+    for (const [key, value] of Object.entries({ sidebarWidth: "wide", contentDensity: "spacious", sidebarHeader: "#FF0000" })) {
+      assert.equal((await api("a", "PATCH", { settings: { [key]: value } }, "/api/settings")).status, 400);
+    }
     assert.equal((await api("a", "POST", { group: "ui" }, "/api/settings/reset")).status, 400);
     assert.deepEqual(loadWorkspaceStateFromDb(db), original);
     const shared = await api("a", "PATCH", { settings: { companyName: "Company for everyone" } }, "/api/settings");

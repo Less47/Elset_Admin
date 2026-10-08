@@ -10,6 +10,14 @@ const job = { status: "To Do", invoice };
 const indicators = (record, provider = "quickbooks", status = { id: "draft", label: "Draft Invoice" }) =>
   buildJobCardIndicators({ job: record, accountingProvider: provider, invoiceStatus: status });
 
+for (const status of ["To Do", "In Progress", "Completed"]) test(`${status}: missing and saved unsent invoices share one pre-send indicator without changing the document`, () => {
+  for (const invoice of [null, { items: [{ qty: 1, rate: 100 }], sentHistory: [], dueDate: "2000-01-01" }]) {
+    const record = { status, invoice }, before = structuredClone(record);
+    assert.deepEqual(indicators(record, "", { id: invoice ? "draft" : "not-invoiced" }).map(entry => [entry.id, entry.label]), [["not-invoiced", "Not invoiced"]]);
+    assert.deepEqual(record, before);
+  }
+});
+
 test("Warranty cards omit the badge while preserving tags, classification and urgency", () => {
   const record = { billingType: "warranty", urgency: "High", quote: { sentHistory: [{}] }, maintenancePlanName: "Annual service" };
   const before = structuredClone(record);
@@ -24,7 +32,7 @@ test("Warranty cards omit the badge while preserving tags, classification and ur
 });
 
 test("shared legend starts with Quote, omits Warranty and ends with the special QuickBooks warning", () => {
-  const labels = ["Quote sent", "Not invoiced", "Invoice not sent", "Outstanding invoice", "Invoice overdue", "Invoice paid", "Maintenance"];
+  const labels = ["Quote sent", "Not invoiced", "Outstanding invoice", "Invoice overdue", "Invoice paid", "Maintenance"];
   for (const provider of ["quickbooks", "xero", "", undefined]) {
     const legend = getServiceBoardIndicatorLegend(provider);
     assert.deepEqual(legend.map(entry => entry.label), provider === "quickbooks" ? [...labels, "Not in QuickBooks"] : labels);
@@ -51,7 +59,7 @@ for (const [name, record, provider, shown] of [
 
 for (const [id, label, existing] of [["paid", "Paid", "invoice-paid"], ["outstanding", "Outstanding", "invoice-pending"], ["overdue", "Overdue", "invoice-overdue"]]) {
   test(`QuickBooks warning coexists with ${label}, quote and maintenance indicators`, () => {
-    const record = { ...job, maintenancePlanName: "Quarterly service", quote: { sentHistory: [{}] } };
+    const record = { ...job, invoice: { ...invoice, sentHistory: [{}] }, maintenancePlanName: "Quarterly service", quote: { sentHistory: [{}] } };
     assert.deepEqual(indicators(record, "quickbooks", { id, label }).map((entry) => entry.id), ["quote", existing, warning, "maintenance"]);
   });
 }

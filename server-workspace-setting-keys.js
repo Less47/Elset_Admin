@@ -4,7 +4,6 @@ export const workspaceUiSettingKeys = [
   "pageBackgroundStart",
   "pageBackgroundEnd",
   "sidebarSurface",
-  "sidebarHeader",
   "sidebarActive",
   "heroSurface",
   "actionColor",
@@ -12,8 +11,6 @@ export const workspaceUiSettingKeys = [
   "dialogSurface",
   "dataViewSurface",
   "dataViewAccent",
-  "sidebarWidth",
-  "contentDensity",
   "roundedEdges",
 ];
 
@@ -39,7 +36,6 @@ export const defaultWorkspaceSettings = {
   pageBackgroundStart: "#0F90CD",
   pageBackgroundEnd: "#0F90CD",
   sidebarSurface: "#FFFFFF",
-  sidebarHeader: "#0F90CD",
   sidebarActive: "#F69320",
   heroSurface: "#0F90CD",
   actionColor: "#F69320",
@@ -47,8 +43,6 @@ export const defaultWorkspaceSettings = {
   dialogSurface: "#9FE4FB",
   dataViewSurface: "#EAF7FB",
   dataViewAccent: "#0F90CD",
-  sidebarWidth: "standard",
-  contentDensity: "comfortable",
   companyName: "Elset",
   companyAbn: "",
   companyAcn: "",

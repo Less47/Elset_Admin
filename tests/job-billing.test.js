@@ -217,7 +217,7 @@ for (const billingType of [undefined, "warranty"]) test(`maintenance-generated J
 });
 
 for (const surface of ["#EAF7FB", "#F1DECD", "#DFEADA", "#101826", "#EFDBE3", "#EEE1C3", "#F4F7F9", "#F9FBFC"]) test(`Warranty text contrast is accessible on ${surface}`, () => {
-  const { vars } = buildSemanticTheme({ dataViewSurface: surface, dataViewAccent: "#5F87A5", borderColor: "#72828E", dialogSurface: surface, actionColor: "#175B6E", pageBackgroundStart: surface, pageBackgroundEnd: surface, heroSurface: surface, sidebarSurface: surface, sidebarHeader: surface, sidebarActive: surface });
+  const { vars } = buildSemanticTheme({ dataViewSurface: surface, dataViewAccent: "#5F87A5", borderColor: "#72828E", dialogSurface: surface, actionColor: "#175B6E", pageBackgroundStart: surface, pageBackgroundEnd: surface, heroSurface: surface, sidebarSurface: surface, sidebarActive: surface });
   for (const prefix of ["", "dialog-"]) assert.ok(contrastRatio(vars[`--${prefix}billing-warranty`], vars[`--${prefix}billing-warranty-surface`]) >= 4.5);
 });
 

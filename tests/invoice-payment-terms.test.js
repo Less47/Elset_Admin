@@ -114,17 +114,17 @@ test("saving an existing manual invoice without term metadata cannot reset its p
 test("invoice states and Service Board lifecycle indicators are mutually exclusive", () => {
   for (const [name, patch, id, indicator] of [
     ["no invoice", { exists: false }, "not-invoiced", "not-invoiced"],
-    ["old unsent invoice", { sentCount: 0 }, "draft", "invoice-unsent"],
+    ["old unsent invoice", { sentCount: 0 }, "draft", "not-invoiced"],
     ["sent before due", { sentCount: 1, dueDate: "2026-11-01" }, "unpaid", "invoice-pending"],
     ["due today", { sentCount: 1, dueDate: "2026-10-08" }, "unpaid", "invoice-pending"],
     ["sent overdue", { sentCount: 1 }, "overdue", "invoice-overdue"],
     ["paid", { balance: 0, paid: 110 }, "paid", "invoice-paid"],
     ["overdue partial", { sentCount: 1, paid: 10, balance: 100, paymentCount: 1 }, "overdue", "invoice-overdue"],
-    ["unsent deposit", { paid: 10, balance: 100, paymentCount: 1 }, "deposit-paid", "invoice-pending"],
+    ["unsent deposit", { paid: 10, balance: 100, paymentCount: 1 }, "deposit-paid", "not-invoiced"],
   ]) {
     const status = invoiceStatusFromAmounts({ total: 110, balance: 110, dueDate: "2000-01-01", today: "2026-10-08", ...patch });
     assert.equal(status.id, id, name);
-    const job = { status: "Completed", invoice: patch.exists === false ? null : invoice() };
+    const job = { status: "Completed", invoice: patch.exists === false ? null : invoice({ sentHistory: patch.sentCount ? [{}] : [] }) };
     const entries = buildJobCardIndicators({ job, invoiceStatus: status });
     assert.deepEqual(entries.map(entry => entry.id), [indicator], name);
   }

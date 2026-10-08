@@ -19,11 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  contentDensityOptions,
   createTemplatePreviewFixture,
   normalizeThemeSettings,
   settingsTabs,
-  sidebarWidthOptions,
   templateTypeOptions,
   themeColorFields,
   themePresets,
@@ -108,7 +106,7 @@ const templateFields = [
 const presetPreviewKeys = [
   "pageBackgroundStart",
   "pageBackgroundEnd",
-  "sidebarHeader",
+  "sidebarSurface",
   "actionColor",
   "dialogSurface",
   "dataViewAccent",
@@ -123,7 +121,7 @@ function WorkspacePreview({ settings }) {
         <div data-workspace-preview style={vars} className="theme-workspace-preview rounded-2xl border p-3 text-sm">
           <div className="grid min-w-0 grid-cols-[76px_minmax(0,1fr)] gap-3">
             <aside className="overflow-hidden rounded-xl border bg-sidebar text-sidebar-foreground">
-              <div className="theme-preview-sidebar-header p-2 text-xs font-semibold">ELSET</div>
+              <div className="p-2 text-xs font-semibold">ELSET</div>
               <div className="grid gap-2 p-2 text-[10px]">
                 <div className="rounded bg-sidebar-primary px-1 py-2 text-sidebar-primary-foreground">Customers</div>
                 <div className="rounded bg-sidebar-accent px-1 py-2">Calendar</div>
@@ -801,41 +799,10 @@ function SettingsContent({
                 <CardTitle className="text-lg">Layout</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField label="Sidebar width">
-                    <Select value={normalizedSettings.sidebarWidth} onValueChange={(value) => onSettingChange("sidebarWidth", value)}>
-                      <SelectTrigger aria-label="Sidebar width" className="w-full rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sidebarWidthOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-
-                  <FormField label="Content density">
-                    <Select value={normalizedSettings.contentDensity} onValueChange={(value) => onSettingChange("contentDensity", value)}>
-                      <SelectTrigger aria-label="Content density" className="w-full rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {contentDensityOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormField>
-                  <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-                    <input type="checkbox" className="h-4 w-4 accent-primary" checked={normalizedSettings.roundedEdges} onChange={(event) => onSettingChange("roundedEdges", event.target.checked)} />
-                    <span><span className="block font-medium">Rounded edges</span><span className="text-xs text-text-secondary">Turn off for square corners throughout the app.</span></span>
-                  </label>
-                </div>
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
+                  <input type="checkbox" className="h-4 w-4 accent-primary" checked={normalizedSettings.roundedEdges} onChange={(event) => onSettingChange("roundedEdges", event.target.checked)} />
+                  <span><span className="block font-medium">Rounded edges</span><span className="text-xs text-text-secondary">Turn off for square corners throughout the app.</span></span>
+                </label>
               </CardContent>
             </Card>
           </div>

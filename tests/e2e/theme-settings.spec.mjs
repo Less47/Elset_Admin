@@ -255,6 +255,100 @@ async function openSettings(browser, width = 1440, height = 900, tab = "UI Setti
 }
 const status = (page) => page.getByRole("status", { name: "Theme save status" });
 const saveButton = page => page.getByRole("button", { name: "Save changes", exact: true });
+
+test("sidebar navigation remains usable when local browser storage is blocked", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await context.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new Error("Storage blocked"); } }));
+  const page = await context.newPage();
+  const errors = []; page.on("pageerror", error => errors.push(error.message));
+  try {
+    await page.goto(baseUrl);
+    await page.getByPlaceholder("Enter your username").fill("mobileadmin");
+    await page.getByPlaceholder("Enter your password").fill(accountPassword);
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+    await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Collapse sidebar", exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally { await context.close(); }
+});
+
+test("retired appearance settings are inert, sidebar toggles locally with keyboard access, and preview has one surface", async ({ browser }) => {
+  const { context, page, writes } = await openSettings(browser);
+  const sidebar = page.locator("aside.workspace-sidebar");
+  const snapshot = readWorkspaceState();
+  try {
+    for (const sidebarWidth of ["standard", "compact", "wide", "icon-only"]) {
+      await page.route("**/api/user-preferences", async route => {
+        if (route.request().method() !== "GET") return route.continue();
+        const response = await route.fetch(), payload = await response.json();
+        await route.fulfill({ response, json: { ...payload, preferences: { ...payload.preferences, sidebarWidth, contentDensity: "spacious", sidebarHeader: "#FF0000", serviceBoardFullScreen: true } } });
+      });
+      await page.reload();
+      await page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
+      expect((await sidebar.boundingBox()).width).toBe(248);
+      await expect(sidebar).toHaveAttribute("data-compact", "false");
+      for (const name of ["Sidebar width", "Content density"]) await expect(page.getByRole("combobox", { name, exact: true })).toHaveCount(0);
+      await expect(page.getByLabel("Sidebar header colour", { exact: true })).toHaveCount(0);
+      const spacing = await page.evaluate(() => {
+        const style = getComputedStyle(document.documentElement);
+        return ["--section-gap", "--content-padding-x-mobile", "--content-padding-x-sm", "--content-padding-x-lg", "--sidebar-header"].map(key => style.getPropertyValue(key).trim());
+      });
+      expect(spacing).toEqual(["1rem", "0.75rem", "1rem", "1.25rem", ""]);
+      const preview = page.locator("[data-workspace-preview] aside");
+      expect(await preview.evaluate(element => {
+        const surface = getComputedStyle(element).backgroundColor;
+        const top = getComputedStyle(element.firstElementChild).backgroundColor;
+        return surface !== "rgba(0, 0, 0, 0)" && top === "rgba(0, 0, 0, 0)";
+      })).toBe(true);
+      await expect(saveButton(page)).toBeDisabled();
+      await page.unroute("**/api/user-preferences");
+    }
+    const collapse = sidebar.getByRole("button", { name: "Collapse sidebar", exact: true });
+    expect((await collapse.boundingBox()).y + 44).toBeLessThanOrEqual((await sidebar.locator("[data-workspace-logo]").boundingBox()).y);
+    await collapse.hover(); await expect(page.getByRole("tooltip")).toContainText("Collapse sidebar");
+    await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await collapse.focus();
+    await expect(page.getByRole("tooltip")).toContainText("Collapse sidebar");
+    await expect(collapse).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Enter");
+    const expand = sidebar.getByRole("button", { name: "Expand sidebar", exact: true });
+    expect((await sidebar.boundingBox()).width).toBe(68);
+    await expect(sidebar.locator("[data-workspace-logo]")).toHaveCount(0);
+    await expect(sidebar.locator("[data-workspace-brand-mark]")).toBeVisible();
+    await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await expand.evaluate(element => element.blur()); await expand.focus();
+    await expect(page.getByRole("tooltip")).toContainText("Expand sidebar");
+    await expect(expand).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Space");
+    expect((await sidebar.boundingBox()).width).toBe(248);
+    await collapse.click(); await page.reload(); await expect(expand).toBeVisible();
+    expect(writes).toEqual([]);
+    await expand.click();
+    await page.locator(".floating-page-toolbar").getByRole("button", { name: "UI Settings", exact: true }).click();
+    await colourInput(page).fill("#123456");
+    await collapse.click(); await expand.click();
+    await expect(saveButton(page)).toBeEnabled(); expect(writes).toEqual([]);
+    await saveDraft(page);
+    expect(writes.map(write => write.body)).toEqual([{ actionColor: "#123456" }]);
+    expect(readWorkspaceState()).toEqual(snapshot);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: path.join(screenshotDir, "simplified-settings-preview.png"), fullPage: true });
+    await collapse.click();
+    for (const width of [320, 390, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(sidebar).toBeHidden();
+      await expect(page.getByRole("button", { name: "Expand sidebar", exact: true })).toBeHidden();
+      await expect(page.getByRole("button", { name: "Open navigation", exact: true })).toBeVisible();
+    }
+    await page.setViewportSize({ width: 1024, height: 900 }); await expect(expand).toBeVisible();
+    await page.getByRole("button", { name: "Sign Out", exact: true }).click();
+    await page.getByPlaceholder("Enter your username").fill("mobileoffice");
+    await page.getByPlaceholder("Enter your password").fill(accountPassword);
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
+    await expect(collapse).toBeVisible(); expect((await sidebar.boundingBox()).width).toBe(248);
+  } finally { await context.close(); }
+});
 test("rounded edges preview globally, save per account and survive reload", async ({ browser }) => {
   const { context, page, writes } = await openSettings(browser);
   try {
@@ -286,7 +380,7 @@ test("rounded edges preview globally, save per account and survive reload", asyn
       await expect(desktopJob).toBeVisible();
       await expect(desktopJob.locator('[data-slot="card"]')).toHaveCSS("border-radius", "0px");
       await expectRound(desktopJob.getByTitle(/^Invoice value/));
-      await expectRound(desktopJob.getByTitle("Overdue", { exact: true }));
+      await expectRound(desktopJob.getByTitle("Not invoiced", { exact: true }));
       if (mode !== "Grid") await expectRound(desktopJob.getByText("Medium", { exact: true }));
     }
     await page.setViewportSize({ width: 390, height: 844 });
@@ -294,7 +388,7 @@ test("rounded edges preview globally, save per account and survive reload", asyn
     await expect(mobileJob).toBeVisible();
     await expect(mobileJob).toHaveCSS("border-radius", "0px");
     await expectRound(mobileJob.getByTitle("Invoice value", { exact: true }));
-    await expectRound(mobileJob.getByTitle("Overdue", { exact: true }));
+    await expectRound(mobileJob.getByTitle("Not invoiced", { exact: true }));
     await expectRound(mobileJob.getByText("Medium", { exact: true }));
     await expect(mobileJob.getByRole("button", { name: "Move Job #1001", exact: true })).toHaveCSS("border-radius", "0px");
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -540,13 +634,8 @@ test('workspace branding upload, persistence, themes, permissions and responsive
     await screenshot(fresh.page, 'mobile-navigation-midnight');
     await fresh.page.keyboard.press('Escape');
     await screenshot(fresh.page, 'mobile-settings-branding');
-    // Each saved sidebar width keeps its configured width and fits the same asset.
-    await preferences(a.page);
-    await a.page.locator('.floating-page-toolbar').getByRole('button', { name: 'UI Settings', exact: true }).click();
-    await a.page.getByRole('combobox', { name: 'Sidebar width', exact: true }).click();
-    await a.page.getByRole('option', { name: 'Icon only', exact: true }).click();
-    await saveDraft(a.page);
-    await expect(status(a.page)).toHaveText('Saved');
+    // Collapse is immediate navigation state, independent of Settings saves.
+    await a.page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     await expect(sidebarLogo(a.page)).toHaveCount(0);
     await expect(a.page.locator('aside [data-workspace-brand-mark-fallback]')).toBeVisible();
     expect((await a.page.locator('aside.workspace-sidebar').boundingBox()).width).toBe(68);
@@ -721,11 +810,11 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await page.reload(); await navigate(page, "Customers", 1920);
     await expect(image("logo")).toHaveAttribute("src", logoUrl);
     await expect(image("mark")).toHaveCount(0);
-    expect((await sidebar.boundingBox()).width).toBe(280);
+    expect((await sidebar.boundingBox()).width).toBe(248);
     await flatRows(); await shot("A-standard-1920-company-logo");
     const scroll = sidebar.locator(".workspace-sidebar-scroll");
     expect(await scroll.evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
-    await appearance({ sidebarWidth: "icon-only" });
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     await expect(image("mark")).toHaveAttribute("src", markUrl);
     await expect(image("logo")).toHaveCount(0);
     await expect(image("mark")).toHaveCSS("object-fit", "contain");
@@ -744,7 +833,7 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
       expect(tooltipBox.y + tooltipBox.height).toBeLessThanOrEqual(1080);
       if (["Reports & Analytics", "Sign Out"].includes(label)) await shot(`tooltip-${label === "Sign Out" ? "logout" : "reports"}`);
       await page.keyboard.press("Escape");
-      await page.mouse.move(800, 800); await button.focus();
+      await page.mouse.move(800, 800); await button.evaluate(element => element.blur()); await button.focus();
       await expect(page.getByRole("tooltip")).toContainText(label === "Sign Out" ? "Log out" : label);
       await expect(button).toHaveCSS("outline-style", "solid");
       await page.keyboard.press("Escape"); await button.evaluate(el => el.blur());
@@ -764,17 +853,16 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await navigate(page, "Reports & Analytics", 1920);
     await expect(sidebar.getByRole("button", { name: "Reports & Analytics", exact: true })).toHaveAttribute("aria-current", "page");
     await shot("H-reports-active-rail");
-    await appearance({ sidebarWidth: "standard" });
+    await page.getByRole("button", { name: "Expand sidebar", exact: true }).click();
     await expect(image("logo")).toHaveAttribute("src", logoUrl);
-    for (const [width, pixels] of [["compact", 248], ["wide", 320], ["standard", 280]]) {
-      await appearance({ sidebarWidth: width }); expect((await sidebar.boundingBox()).width).toBe(pixels);
-    }
-    await appearance({ sidebarSurface: "#101826", sidebarHeader: "#233D5A", sidebarActive: "#5F87A5", actionColor: "#F69320" });
+    expect((await sidebar.boundingBox()).width).toBe(248);
+    await appearance({ sidebarSurface: "#101826", sidebarActive: "#5F87A5", actionColor: "#F69320" });
     await shot("E-dark-standard");
-    await appearance({ sidebarWidth: "icon-only", roundedEdges: false });
+    await appearance({ roundedEdges: false });
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     await expect(sidebar.getByRole("button", { name: "Customers", exact: true })).toHaveCSS("border-radius", "0px");
     await shot("E-dark-rail-square-edges");
-    await appearance({ sidebarSurface: "#FCFDFD", sidebarHeader: "#245B50", sidebarActive: "#B7DEC9", roundedEdges: true });
+    await appearance({ sidebarSurface: "#FCFDFD", sidebarActive: "#B7DEC9", roundedEdges: true });
     await shot("F-light-rail-rounded");
     await page.setViewportSize({ width: 1280, height: 600 });
     await expect(sidebar.getByRole("button", { name: "Recycle Bin", exact: true })).toBeInViewport();
@@ -782,12 +870,13 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await expect(sidebar.getByRole("button", { name: "Sign Out", exact: true })).toBeInViewport();
     for (const button of await sidebar.getByRole("navigation").getByRole("button").all()) { await button.focus(); await expect(button).toBeInViewport(); await page.keyboard.press("Escape"); }
     await shot("I-short-desktop-rail");
-    await appearance({ sidebarWidth: "standard" }); await shot("I-short-desktop-standard");
+    await page.getByRole("button", { name: "Expand sidebar", exact: true }).click(); await shot("I-short-desktop-standard");
     await page.request.delete(baseUrl + "/api/settings/workspace-logo"); await page.reload();
     await expect(sidebar.locator("[data-workspace-logo-fallback]")).toBeVisible(); await shot("C-standard-no-company-logo");
     await upload("logo", png);
     await page.request.delete(baseUrl + "/api/settings/workspace-brand-mark");
-    await appearance({ sidebarWidth: "icon-only" });
+    await page.reload();
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     await expect(sidebar.locator("[data-workspace-brand-mark-fallback]")).toBeVisible();
     await expect(sidebar.locator("img")).toHaveCount(0); await shot("D-rail-no-brand-mark");
     // Missing marks never borrow a valid company logo. Mobile retains the company logo.
@@ -944,7 +1033,8 @@ test('semantic light preset screenshot matrix changes real database surfaces and
       else { await saveDraft(a.page); await expect(status(a.page)).toHaveText("Saved"); }
       await expect(a.page.locator('html')).toHaveAttribute('data-theme-mode', 'light');
       await themeScreenshot(a.page, `${preset.id}-settings`, { dark: false, fullPage: true });
-      await a.page.getByRole('combobox', { name: 'Content density', exact: true }).click();
+      await navigate(a.page, "Service Board", 1440);
+      await a.page.getByRole("combobox", { name: "To Do sort order", exact: true }).click();
       await expect(a.page.locator('[data-slot="select-content"]')).toHaveCSS('background-color', `rgb(${preset.values.dialogSurface.slice(1).match(/../g).map(v => parseInt(v,16)).join(', ')})`);
       await a.page.keyboard.press('Escape');
       await navigate(a.page, 'Customers', 1440);
@@ -1025,7 +1115,8 @@ test('semantic custom popup colours select a safe local foreground independently
     await a.page.getByLabel('Popup surface colour', { exact: true }).fill('#f7eee0');
     await saveDraft(a.page);
     await expect(status(a.page)).toHaveText('Saved');
-    await a.page.getByRole('combobox', { name: 'Content density', exact: true }).click();
+    await navigate(a.page, "Service Board", 1440);
+      await a.page.getByRole("combobox", { name: "To Do sort order", exact: true }).click();
     const popup = a.page.locator('[data-slot="select-content"]');
     await expect(popup).toHaveCSS('background-color', 'rgb(247, 238, 224)');
     await expect(popup).toHaveCSS('color', 'rgb(15, 23, 42)');
@@ -1049,7 +1140,8 @@ test('semantic mobile fields, autocomplete, focus, drawers and discard dialogs r
     await page.getByRole('button', { name: /^Midnight Signal/ }).click();
     await saveDraft(page);
     await expect(status(page)).toHaveText('Saved');
-    await page.getByRole('combobox', { name: 'Content density', exact: true }).click();
+    await navigate(page, "Service Board", 390);
+    await page.getByRole("combobox", { name: "Sort To Do jobs", exact: true }).click();
     await page.keyboard.press('ArrowDown');
     await themeScreenshot(page, 'midnight-390-dropdown');
     await page.keyboard.press('Escape');
@@ -1633,14 +1725,13 @@ test("two simultaneous accounts keep separate appearance across a fresh browser,
     await saveDraft(b.page);
     await expect(status(b.page)).toHaveText("Saved");
     await assertPrimary(a.page, "#FF8800");
-    await a.page.getByRole("combobox", { name: "Content density", exact: true }).click();
-    await a.page.getByRole("option", { name: "Compact", exact: true }).click();
+    await a.page.getByRole("checkbox", { name: /Rounded edges/ }).uncheck();
     await saveDraft(a.page);
     await expect(status(a.page)).toHaveText("Saved");
     device = await openSettings(browser);
     await assertPrimary(device.page, "#FF8800");
-    await expect(device.page.getByRole("combobox", { name: "Content density", exact: true })).toHaveText("Compact");
-    await expect(b.page.getByRole("combobox", { name: "Content density", exact: true })).toHaveText("Comfortable");
+    await expect(device.page.getByRole("checkbox", { name: /Rounded edges/ })).not.toBeChecked();
+    await expect(b.page.getByRole("checkbox", { name: /Rounded edges/ })).toBeChecked();
     await Promise.all([a.page.reload(), b.page.reload()]);
     await assertPrimary(a.page, "#FF8800");
     await assertPrimary(b.page, "#0077FF");

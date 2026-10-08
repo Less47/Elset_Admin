@@ -234,7 +234,7 @@ async function navigate(page, label, width) {
   }
 }
 
-async function headerBounds(page, selector = "[data-page-top-bar]", fullscreen = false) {
+async function headerBounds(page, selector = "[data-page-top-bar]") {
   const header = page.locator(`${selector}:visible`);
   await expect(header).toHaveCount(1);
   const measure = () => page.evaluate((selector) => {
@@ -256,7 +256,7 @@ async function headerBounds(page, selector = "[data-page-top-bar]", fullscreen =
   // visibility check and evaluation. Wait for the new layout to settle.
   await expect.poll(async () => {
     const bounds = await measure();
-    return Math.abs(bounds.x - (fullscreen ? 0 : bounds.sidebarRight));
+    return Math.abs(bounds.x - bounds.sidebarRight);
   }).toBeLessThanOrEqual(1);
   const bounds = await measure();
   expect(Math.abs(bounds.right - bounds.viewportWidth)).toBeLessThanOrEqual(1);
@@ -423,23 +423,19 @@ for (const [width, height] of [[1920, 1080], [1366, 768], [1024, 768], [390, 844
   });
 }
 
-test("normal and icon-only sidebars, fullscreen board, filters and dialogs retain their layers", async ({ browser }) => {
+test("expanded and collapsed sidebars, normal board, filters and dialogs retain their layers", async ({ browser }) => {
   for (const sidebarWidth of ["default", "icon-only"]) {
     const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, reducedMotion: "reduce" });
     const page = await context.newPage();
     try {
-      if (sidebarWidth === "icon-only") await page.route("**/api/user-preferences", async (route) => {
-        const response = await route.fetch();
-        const payload = await response.json();
-        await route.fulfill({ response, json: { ...payload, preferences: { ...payload.preferences, sidebarWidth } } });
-      });
       await login(page);
+      if (sidebarWidth === "icon-only") await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
       await headerBounds(page);
-      await page.getByRole("button", { name: "Full Screen", exact: true }).click();
-      await expect(page.locator('aside:has(nav[aria-label="Application"])')).toHaveCount(0);
-      const full = await headerBounds(page, "[data-page-top-bar]", true);
+      await expect(page.getByRole("button", { name: /full ?screen/i })).toHaveCount(0);
+      await expect(page.locator("aside.workspace-sidebar")).toBeVisible();
+      const full = await headerBounds(page);
       await primaryToolbarControls(page, "Service Board", 1366);
-      await screenshot(page, `fullscreen-${sidebarWidth}`);
+      await screenshot(page, `normal-board-${sidebarWidth}`);
       await scrollUnderHeader(page, full);
       await page.getByRole("button", { name: "Filters", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Filters", exact: true });
@@ -451,7 +447,6 @@ test("normal and icon-only sidebars, fullscreen board, filters and dialogs retai
       await page.getByRole("checkbox").click();
       await page.getByRole("button", { name: "Done", exact: true }).click();
       await expect(page.getByRole("button", { name: "Filters, 1 active" })).toBeVisible();
-      await page.getByRole("button", { name: "Exit Full Screen", exact: true }).click();
       await headerBounds(page);
       await navigate(page, "Customers", 1366);
       await headerBounds(page);

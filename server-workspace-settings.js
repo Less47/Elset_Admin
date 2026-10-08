@@ -14,13 +14,10 @@ import {
 } from "./server-workspace-setting-keys.js";
 import { readWorkspaceRecords } from "./server-workspace-state.js";
 
-const sidebarWidthValues = new Set(["icon-only", "compact", "standard", "wide"]);
-const contentDensityValues = new Set(["compact", "comfortable", "spacious"]);
 const colorSettingKeys = new Set([
   "pageBackgroundStart",
   "pageBackgroundEnd",
   "sidebarSurface",
-  "sidebarHeader",
   "sidebarActive",
   "heroSurface",
   "actionColor",
@@ -213,17 +210,6 @@ function normalizeSettingValue(key, value) {
   if (colorSettingKeys.has(key)) return normalizeHexColor(value, key);
   if (emailSettingKeys.has(key)) return normalizeEmail(value, key);
   if (textSettingKeys.has(key)) return text(value);
-  if (key === "sidebarWidth") {
-    const normalized = trimText(value);
-    if (!sidebarWidthValues.has(normalized)) throw new WorkspaceSettingsError("Sidebar width is invalid.");
-    return normalized;
-  }
-  if (key === "contentDensity") {
-    const normalized = trimText(value);
-    if (!contentDensityValues.has(normalized)) throw new WorkspaceSettingsError("Content density is invalid.");
-    return normalized;
-  }
-
   return normalizeUnknownSetting(key, value);
 }
 

@@ -8,7 +8,7 @@ import {
 } from "./server-workspace-settings.js";
 import { getWorkspaceDbPath, openWorkspaceDb } from "./server-workspace-db.js";
 import { workspaceMutationResponse } from "./server-workspace-delta.js";
-import { userUiPreferenceKeys } from "./src/lib/user-ui-preferences.js";
+import { retiredAppearanceSettingKeys, userUiPreferenceKeys } from "./src/lib/user-ui-preferences.js";
 
 function getRequestBody(req, key) {
   const body = req.body || {};
@@ -64,7 +64,7 @@ export function createSettingsRouter({
     ...middleware,
     handleSettingsRoute((db, req) => {
       const patch = getRequestBody(req, "settings");
-      if (patch && Object.keys(patch).some((key) => userUiPreferenceKeys.includes(key))) {
+      if (patch && Object.keys(patch).some((key) => userUiPreferenceKeys.includes(key) || retiredAppearanceSettingKeys.includes(key))) {
         throw new WorkspaceSettingsError("Appearance and display preferences are personal. Use /api/user-preferences.");
       }
       return updateWorkspaceSettings(db, patch);

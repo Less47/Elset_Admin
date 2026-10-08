@@ -3,26 +3,21 @@ import { useLayoutEffect, useMemo } from "react";
 import {
   APP_TEXT_DARK,
   APP_TEXT_LIGHT,
-  contentDensityStyles,
   getContrastTextColor,
   hexToRgba,
   normalizeThemeSettings,
-  sidebarWidthStyles,
 } from "@/lib/app-support";
 
-export function useThemePalette(settings) {
+export function useThemePalette(settings, sidebarCollapsed = false) {
   const themeSettings = useMemo(() => normalizeThemeSettings(settings), [settings]);
 
   const themePalette = useMemo(() => {
     const sidebarSurfaceText = getContrastTextColor(themeSettings.sidebarSurface);
     const sidebarSurfaceTone = sidebarSurfaceText === APP_TEXT_LIGHT ? APP_TEXT_LIGHT : APP_TEXT_DARK;
-    const sidebarHeaderText = getContrastTextColor(themeSettings.sidebarHeader);
     const heroText = getContrastTextColor(themeSettings.heroSurface);
     const actionText = getContrastTextColor(themeSettings.actionColor);
     const sidebarActiveText = getContrastTextColor(themeSettings.sidebarActive);
     const dialogText = getContrastTextColor(themeSettings.dialogSurface);
-    const sidebarSize = sidebarWidthStyles[themeSettings.sidebarWidth] || sidebarWidthStyles.standard;
-    const density = contentDensityStyles[themeSettings.contentDensity] || contentDensityStyles.comfortable;
     const borderColor = themeSettings.borderColor;
     const dialogBorder = borderColor;
     const semantic = buildSemanticTheme(themeSettings);
@@ -37,25 +32,21 @@ export function useThemePalette(settings) {
         color: semantic.vars["--foreground"],
         colorScheme: semantic.dark ? "dark" : "light",
         ...semantic.vars,
-        "--sidebar-width": sidebarSize.width,
-        "--sidebar-offset": sidebarSize.offset,
-        "--section-gap": density.sectionGap,
-        "--content-padding-x-mobile": density.mobileX,
-        "--content-padding-y-mobile": density.mobileY,
-        "--content-padding-x-sm": density.smX,
-        "--content-padding-y-sm": density.smY,
-        "--content-padding-x-lg": density.lgX,
-        "--content-padding-y-lg": density.lgY,
+        "--sidebar-width": sidebarCollapsed ? "68px" : "248px",
+        "--sidebar-offset": sidebarCollapsed ? "92px" : "272px",
+        "--section-gap": "1rem",
+        "--content-padding-x-mobile": "0.75rem",
+        "--content-padding-y-mobile": "0.75rem",
+        "--content-padding-x-sm": "1rem",
+        "--content-padding-y-sm": "1rem",
+        "--content-padding-x-lg": "1.25rem",
+        "--content-padding-y-lg": "1.25rem",
       },
       sidebarShell: {
         backgroundColor: hexToRgba(themeSettings.sidebarSurface, 0.94),
         borderColor,
+        color: sidebarSurfaceText,
       },
-      sidebarHeader: {
-        backgroundColor: themeSettings.sidebarHeader,
-        color: sidebarHeaderText,
-      },
-      sidebarHeaderMuted: semantic.vars['--sidebar-header-muted'],
       sidebarInactiveButton: {
         backgroundColor: hexToRgba(sidebarSurfaceTone, sidebarSurfaceText === APP_TEXT_LIGHT ? 0.08 : 0.04),
         borderColor,
@@ -98,7 +89,7 @@ export function useThemePalette(settings) {
       dialogBorder,
       dialogMutedSurface,
     };
-  }, [themeSettings]);
+  }, [themeSettings, sidebarCollapsed]);
 
   useLayoutEffect(() => {
     if (typeof document === "undefined") return undefined;

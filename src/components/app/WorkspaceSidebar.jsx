@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import WorkspaceLogo, { WorkspaceBrandMark } from "./WorkspaceLogo";
 import StaffAvatar from "@/components/shared/StaffAvatar";
 import { staffInitials } from "@/lib/workspace-media";
@@ -10,8 +10,10 @@ function SidebarTooltip({ compact, label, children }) {
   return compact ? <Tooltip><TooltipTrigger asChild>{children}</TooltipTrigger><TooltipContent side="right" sideOffset={16}>{label}</TooltipContent></Tooltip> : children;
 }
 
-export default function WorkspaceSidebar({ activeSection, items, onNavigate, onLogout, authUser, currentStaff, isAuthenticated, themeSettings }) {
-  const compact = themeSettings.sidebarWidth === "icon-only";
+export default function WorkspaceSidebar({ activeSection, items, onNavigate, onLogout, authUser, currentStaff, isAuthenticated, themeSettings, collapsed: compact, onToggleCollapsed }) {
+  const collapseLabel = compact ? "Expand sidebar" : "Collapse sidebar";
+  const CollapseIcon = compact ? PanelLeftOpen : PanelLeftClose;
+  const [collapseTooltipOpen, setCollapseTooltipOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountButton = useRef(null);
   const name = authUser?.name || "Signed in";
@@ -29,6 +31,19 @@ export default function WorkspaceSidebar({ activeSection, items, onNavigate, onL
   return (
     <TooltipProvider delayDuration={200}>
       <aside className="workspace-sidebar hidden lg:flex" data-compact={compact} aria-label="Workspace sidebar">
+        <div className="workspace-sidebar-controls">
+          <Tooltip open={collapseTooltipOpen} onOpenChange={setCollapseTooltipOpen}>
+            <TooltipTrigger asChild>
+              <button type="button" className="workspace-sidebar-toggle" aria-label={collapseLabel} aria-expanded={!compact}
+                onPointerMove={event => { if (event.pointerType !== "touch") setCollapseTooltipOpen(true); }}
+                onFocus={() => setCollapseTooltipOpen(true)}
+                onClick={() => { setCollapseTooltipOpen(false); onToggleCollapsed(); }}>
+                <CollapseIcon className="workspace-sidebar-icon" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" sideOffset={16}>{collapseLabel}</TooltipContent>
+          </Tooltip>
+        </div>
         <div className="workspace-sidebar-brand">
           {compact ? <WorkspaceBrandMark url={themeSettings.workspaceBrandMarkUrl} /> : <WorkspaceLogo url={themeSettings.workspaceLogoUrl} />}
         </div>

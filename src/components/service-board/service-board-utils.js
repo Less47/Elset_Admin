@@ -24,7 +24,6 @@ const quickBooksUnsyncedIndicator = { id: "quickbooks-unsynced", label: "Not in 
 export const serviceBoardIndicatorLegend = [
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
   { id: "not-invoiced", label: "Not invoiced", dotClassName: "bg-slate-500" },
-  { id: "invoice-unsent", label: "Invoice not sent", dotClassName: "bg-amber-400" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-overdue", label: "Invoice overdue", dotClassName: "bg-rose-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
@@ -117,7 +116,7 @@ export function sortJobsForColumn(jobs, sortMode = "recent") {
 export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider }) {
   const indicators = [];
   const quoteSent = Boolean(job.quote?.sentHistory?.length);
-  const showInvoiceStatus = !isWarrantyJob(job) && (Boolean(job.invoice) || job.status === "Completed");
+  const showInvoiceStatus = !isWarrantyJob(job);
 
   if (quoteSent) {
     indicators.push({ id: "quote", label: "Quoted", dotClassName: "bg-cyan-500" });
@@ -125,12 +124,11 @@ export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider 
 
   if (showInvoiceStatus) {
     const id = invoiceStatus.id === "paid" ? "invoice-paid"
+      : !job.invoice?.sentHistory?.length ? "not-invoiced"
       : invoiceStatus.id === "overdue" ? "invoice-overdue"
-      : invoiceStatus.id === "not-invoiced" ? "not-invoiced"
-      : invoiceStatus.id === "draft" ? "invoice-unsent" : "invoice-pending";
+      : "invoice-pending";
     const indicator = serviceBoardIndicatorLegend.find((entry) => entry.id === id);
-    indicators.push(["deposit-paid", "partially-paid"].includes(invoiceStatus.id)
-      ? { ...indicator, label: invoiceStatus.label } : indicator);
+    indicators.push(indicator);
   }
 
   // Mapping ownership is independent of invoice issuance, payment and sync errors.

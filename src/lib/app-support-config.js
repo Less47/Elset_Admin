@@ -52,7 +52,6 @@ export const defaultThemeSettings = {
   pageBackgroundStart: "#0F90CD",
   pageBackgroundEnd: "#0F90CD",
   sidebarSurface: "#FFFFFF",
-  sidebarHeader: "#0F90CD",
   sidebarActive: "#F69320",
   heroSurface: "#0F90CD",
   actionColor: "#F69320",
@@ -60,8 +59,6 @@ export const defaultThemeSettings = {
   dialogSurface: "#9FE4FB",
   dataViewSurface: "#EAF7FB",
   dataViewAccent: "#0F90CD",
-  sidebarWidth: "standard",
-  contentDensity: "comfortable",
   roundedEdges: true,
   companyName: "Elset",
   companyAbn: "",
@@ -83,7 +80,6 @@ export const uiSettingKeys = [
   "pageBackgroundStart",
   "pageBackgroundEnd",
   "sidebarSurface",
-  "sidebarHeader",
   "sidebarActive",
   "heroSurface",
   "actionColor",
@@ -91,8 +87,6 @@ export const uiSettingKeys = [
   "dialogSurface",
   "dataViewSurface",
   "dataViewAccent",
-  "sidebarWidth",
-  "contentDensity",
   "roundedEdges",
 ];
 
@@ -113,24 +107,4 @@ export const preferenceSettingKeys = [
   "emailSignature",
 ];
 
-export const sidebarWidthOptions = [
-  { value: "icon-only", label: "Icon only", description: "A compact navigation rail with your Brand Mark or the default workspace icon." },
-  { value: "compact", label: "Compact", description: "Keeps the sidebar tighter and leaves more room for content." },
-  { value: "standard", label: "Standard", description: "Balanced spacing for everyday admin work." },
-  { value: "wide", label: "Wide", description: "Gives the menu more breathing room and presence." },
-];
-
-export const contentDensityOptions = [
-  { value: "compact", label: "Compact", description: "Reduces page padding and section gaps." },
-  { value: "comfortable", label: "Comfortable", description: "Balanced spacing across the workspace." },
-  { value: "spacious", label: "Spacious", description: "Adds extra padding for a more open layout." },
-];
-
 export const inventoryCategories = ["Automation", "Access Control", "Electrical", "Hardware", "Consumables", "Tools", "Other"];
-
-export const sidebarWidthStyles = {
-  "icon-only": { width: "68px", offset: "92px" },
-  compact: { width: "248px", offset: "272px" },
-  standard: { width: "280px", offset: "304px" },
-  wide: { width: "320px", offset: "344px" },
-};

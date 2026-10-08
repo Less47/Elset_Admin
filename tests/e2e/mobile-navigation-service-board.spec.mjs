@@ -102,6 +102,8 @@ function dateKeyInSydney(daysFromToday = 0) {
 function readAugmentedFixture() {
   const fixture = JSON.parse(fs.readFileSync(fixturePath, "utf8"));
   const sourceJob = fixture.jobs[0];
+  // Overdue filter coverage needs a successfully sent invoice; drafts never age.
+  sourceJob.invoice.sentHistory = [{ id: "mobile-overdue-sent", sentAt: "2026-01-04T00:00:00.000Z" }];
   const tomorrowDate = dateKeyInSydney(1);
   const baseJob = {
     ...sourceJob,
@@ -698,14 +700,6 @@ test("build diagnostics stay in Settings About and leave desktop and mobile navi
       : desktopContextOptions(viewport.width, viewport.height));
     const page = await context.newPage();
     try {
-      if (viewport.compact) {
-        await page.route("**/api/user-preferences", async (route) => {
-          if (route.request().method() !== "GET") return route.continue();
-          const response = await route.fetch();
-          const payload = await response.json();
-          await route.fulfill({ response, json: { ...payload, preferences: { ...payload.preferences, sidebarWidth: "icon-only" } } });
-        });
-      }
       if (viewport.width === 375) {
         const devtools = await context.newCDPSession(page);
         await devtools.send("Emulation.setSafeAreaInsetsOverride", {
@@ -713,6 +707,7 @@ test("build diagnostics stay in Settings About and leave desktop and mobile navi
         });
       }
       await loginAs(page, "mobileadmin", mobile);
+      if (viewport.compact) await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
       if (mobile) await page.getByRole("button", { name: "Open navigation" }).click();
       const surface = mobile ? page.getByRole("dialog", { name: "Application navigation" }) : page.locator("aside");
       await expect(surface.locator("[data-build-indicator]")).toHaveCount(0);
@@ -1918,7 +1913,7 @@ test("desktop view retains three columns, drag and drop, and controls without re
       await expect(page.getByRole("button", { name: "Open navigation" })).toHaveCount(0);
       await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
       await expect(page.locator("[data-desktop-tomorrow-tab]")).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Full Screen" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /full ?screen/i })).toHaveCount(0);
       await expect(page.getByText("Legend", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("list", { name: "Job indicators" })).toBeVisible();
       await assertDesktopBoardSpacing(page);
@@ -1927,14 +1922,6 @@ test("desktop view retains three columns, drag and drop, and controls without re
       await expect(page.getByRole("button", { name: "To Do Grid view" })).toHaveAttribute("aria-pressed", "true");
       await page.getByRole("button", { name: "To Do List view" }).click();
       await expect(page.getByRole("button", { name: "To Do List view" })).toHaveAttribute("aria-pressed", "true");
-
-      if (viewport.width === 1280) {
-        await page.getByRole("button", { name: "Full Screen" }).click();
-        await expect(page.getByRole("button", { name: "Exit Full Screen" })).toBeVisible();
-        await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
-        await page.getByRole("button", { name: "Exit Full Screen" }).click();
-        await expect(page.getByRole("button", { name: "Full Screen" })).toBeVisible();
-      }
 
       const source = page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first();
       await expect(source).toHaveAttribute("draggable", "true");
@@ -1978,10 +1965,8 @@ test("tablet three-column board keeps navigation, controls and touch drag withou
         await expect(page.getByRole("button", { name: `To Do ${mode} view`, exact: true })).toHaveAttribute("aria-pressed", "true");
       }
       await expect(page.getByRole("button", { name: /tomorrow/i })).toHaveCount(0);
-      await page.getByRole("button", { name: "Full Screen", exact: true }).click();
-      await expect(page.getByRole("button", { name: "Exit Full Screen", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: /full ?screen/i })).toHaveCount(0);
       await expect(page.locator("[data-service-board-status]")).toHaveCount(3);
-      await page.getByRole("button", { name: "Exit Full Screen", exact: true }).click();
 
       // Exercise the existing long-press touch handler against the real local status API.
       const source = page.locator('[draggable="true"]', { hasText: "Mobile In Progress Job" }).first();

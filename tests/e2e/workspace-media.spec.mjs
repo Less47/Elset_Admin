@@ -252,7 +252,7 @@ for (const width of [390, 1440]) test(`navigation handles missing Staff image at
 for (const mode of ["desktop", "compact", "mobile"]) test(`navigation photo upload, change and removal update live in ${mode} mode without layout jumps`, async ({ page }) => {
   const mobile = mode === "mobile";
   await page.setViewportSize({ width: mobile ? 390 : 1440, height: 900 });
-  preferences = { sidebarWidth: mode === "compact" ? "icon-only" : "standard" };
+  preferences = {};
   const initialSchema = readWorkspaceSchemaVersion(db);
   const documentRequests = [], stateRequests = [];
   page.on("request", request => {
@@ -260,6 +260,7 @@ for (const mode of ["desktop", "compact", "mobile"]) test(`navigation photo uplo
     if (new URL(request.url()).pathname === "/api/app-state") stateRequests.push(request.url());
   });
   await openStaff(page);
+  if (mode === "compact") await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   const initialStateRequests = stateRequests.length;
   let avatar = await openNavigationIdentity(page, mobile);
   await expect(avatar.locator('[data-slot="avatar-fallback"]')).toHaveText("PT");
@@ -324,10 +325,11 @@ for (const mode of ["desktop", "compact", "mobile"]) test(`navigation photo uplo
 });
 
 test("compact navigation avatar remains centered with account tooltip and keyboard dialog activation", async ({ page }) => {
-  preferences = { sidebarWidth: "icon-only" };
+  preferences = {};
   saveOwnerPhoto(db, admin, "staff", staff.id, await processMediaImage(png, "image/png", "staff", "Account.png"), "Account.png");
   await page.goto(baseUrl);
   const sidebar = page.getByRole("complementary", { name: "Workspace sidebar" });
+  await sidebar.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   const account = sidebar.getByRole("button", { name: "Account", exact: true });
   const avatar = accountAvatar(page);
   await expect(avatar.locator("img")).toBeVisible();

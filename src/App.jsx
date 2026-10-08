@@ -7,6 +7,7 @@ import { AuthLoadingScreen } from "@/components/auth/AuthLoadingScreen";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import { useAppSession } from "@/hooks/useAppSession";
 import { useWorkspaceAddons } from "@/hooks/useWorkspaceAddons";
+import { useSidebarNavigation } from "@/hooks/useSidebarNavigation";
 import { useThemePalette } from "@/hooks/useThemePalette";
 import { useSettingsPersistence } from "@/hooks/useSettingsPersistence";
 import { UserUiPreferencesContext, useUserUiPreferences } from "@/hooks/useUserUiPreferences";
@@ -35,7 +36,6 @@ export default function App() {
   const [officeSearch, setOfficeSearch] = useState("");
   const [billingTypeFilter, setBillingTypeFilter] = useState("all");
   const [showHighUrgencyOnly, setShowHighUrgencyOnly] = useState(false);
-  const [serviceBoardFullScreen, setServiceBoardFullScreen] = useState(false);
   const resetWorkspaceChromeRef = useRef(() => {});
 
   const session = useAppSession({
@@ -51,7 +51,6 @@ export default function App() {
     setOfficeSearch("");
     setBillingTypeFilter("all");
     setShowHighUrgencyOnly(false);
-    setServiceBoardFullScreen(false);
     navigate("/", { replace: true });
   }, [navigate]);
 
@@ -65,9 +64,6 @@ export default function App() {
   };
   useEffect(() => {
     if (activeSection !== "invoices") setInvoiceNotice("");
-    if (activeSection !== "service-board") {
-      setServiceBoardFullScreen(false);
-    }
   }, [activeSection]);
   const effectiveActiveSection = session.isTechnician && activeSection !== "settings" ? "service-board" : activeSection;
   const effectiveActiveSettingsTab = session.isTechnician ? "ui" : activeSettingsTab;
@@ -102,7 +98,8 @@ export default function App() {
   const setShowServiceBoardTagLabels = (value) => personalPreferences.change({ boardShowTagLabels: value });
 
   const settingsPersistence = useSettingsPersistence({ session, personal: personalPreferences, setData });
-  const { themeSettings, themePalette } = useThemePalette({ ...data.settings, ...personalPreferences.preferences, ...settingsPreview });
+  const sidebarNavigation = useSidebarNavigation(session.isAuthenticated ? session.authUser.id : "");
+  const { themeSettings, themePalette } = useThemePalette({ ...data.settings, ...personalPreferences.preferences, ...settingsPreview }, sidebarNavigation.collapsed);
   const workspaceViewModel = useWorkspaceViewModel({
     activeSection: effectiveActiveSection,
     activeSettingsTab: effectiveActiveSettingsTab,
@@ -111,7 +108,6 @@ export default function App() {
     isTechnician: session.isTechnician,
     officeSearch,
     selectedJob: routeSelectedJob,
-    serviceBoardFullScreen,
     showHighUrgencyOnly,
     billingTypeFilter,
   });
@@ -161,7 +157,6 @@ export default function App() {
           officeSearch,
           serviceBoardColumnSorts,
           serviceBoardColumnViews,
-          serviceBoardFullScreen,
           setActiveSection: handleActiveSectionChange,
           setActiveSettingsTab: (tab) => requestAction(() => setActiveSettingsTab(tab)),
           setActiveTemplateType,
@@ -170,7 +165,6 @@ export default function App() {
           setOfficeSearch,
           setServiceBoardColumnSorts,
           setServiceBoardColumnViews,
-          setServiceBoardFullScreen,
           setShowHighUrgencyOnly,
           setShowServiceBoardTagLabels,
           showHighUrgencyOnly,
@@ -178,6 +172,7 @@ export default function App() {
           setBillingTypeFilter,
           showServiceBoardTagLabels,
         }}
+        sidebarNavigation={sidebarNavigation}
         data={data}
         derived={{
           ...workspaceViewModel,
