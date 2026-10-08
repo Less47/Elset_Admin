@@ -13,7 +13,6 @@ function SidebarTooltip({ compact, label, children }) {
 export default function WorkspaceSidebar({ activeSection, items, onNavigate, onLogout, authUser, currentStaff, isAuthenticated, themeSettings, collapsed: compact, onToggleCollapsed }) {
   const collapseLabel = compact ? "Expand sidebar" : "Collapse sidebar";
   const CollapseIcon = compact ? PanelLeftOpen : PanelLeftClose;
-  const [collapseTooltipOpen, setCollapseTooltipOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountButton = useRef(null);
   const name = authUser?.name || "Signed in";
@@ -48,25 +47,12 @@ export default function WorkspaceSidebar({ activeSection, items, onNavigate, onL
             </button>
           </SidebarTooltip>
           <div className="workspace-sidebar-utilities">
-            <Tooltip open={collapseTooltipOpen} onOpenChange={setCollapseTooltipOpen}>
-              <TooltipTrigger asChild>
-                <button type="button" className="workspace-sidebar-item workspace-sidebar-toggle" aria-label={collapseLabel} aria-expanded={!compact}
-                  onPointerMove={event => { if (event.pointerType !== "touch") setCollapseTooltipOpen(true); }}
-                  onFocus={() => setCollapseTooltipOpen(true)}
-                  onClick={() => { setCollapseTooltipOpen(false); onToggleCollapsed(); }}>
-                  <CollapseIcon className="workspace-sidebar-icon" aria-hidden="true" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={16}>{collapseLabel}</TooltipContent>
-            </Tooltip>
-            {isAuthenticated ? <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" className="workspace-sidebar-item workspace-sidebar-logout" aria-label="Sign Out" onClick={onLogout}>
-                  <LogOut className="workspace-sidebar-icon" aria-hidden="true" />{!compact ? <span>Sign Out</span> : null}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={16}>Log out</TooltipContent>
-            </Tooltip> : null}
+            <button type="button" className="workspace-sidebar-item workspace-sidebar-toggle" aria-label={collapseLabel} aria-expanded={!compact} onClick={onToggleCollapsed}>
+              <CollapseIcon className="workspace-sidebar-icon" aria-hidden="true" />
+            </button>
+            {isAuthenticated ? <button type="button" className="workspace-sidebar-item workspace-sidebar-logout" aria-label="Sign Out" onClick={onLogout}>
+              <LogOut className="workspace-sidebar-icon" aria-hidden="true" />{!compact ? <span>Sign Out</span> : null}
+            </button> : null}
           </div>
         </div>
       </aside>

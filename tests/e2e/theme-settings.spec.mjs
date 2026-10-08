@@ -256,6 +256,20 @@ async function openSettings(browser, width = 1440, height = 900, tab = "UI Setti
 const status = (page) => page.getByRole("status", { name: "Theme save status" });
 const saveButton = page => page.getByRole("button", { name: "Save changes", exact: true });
 
+async function expectNoUtilityTooltip(page, button) {
+  expect(await button.getAttribute("title")).toBeNull();
+  await page.keyboard.press("Escape"); await button.evaluate(element => element.blur());
+  await button.hover();
+  // Hold hover and focus beyond the sidebar tooltip delay to detect popup labels.
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await page.mouse.move(600, 500); await button.focus();
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(button).toHaveCSS("outline-style", "solid");
+  await button.evaluate(element => element.blur());
+}
+
 test("sidebar navigation remains usable when local browser storage is blocked", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(() => Object.defineProperty(window, "localStorage", { get() { throw new Error("Storage blocked"); } }));
@@ -310,8 +324,8 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
     const signOut = sidebar.getByRole("button", { name: "Sign Out", exact: true });
     const account = sidebar.getByRole("button", { name: "Account", exact: true });
     const collapseBox = await collapse.boundingBox(), signOutBox = await signOut.boundingBox(), accountBox = await account.boundingBox();
-    expect(collapseBox.x).toBe(signOutBox.x);
-    expect(collapseBox.y + collapseBox.height).toBeLessThanOrEqual(signOutBox.y);
+    expect(collapseBox.x + collapseBox.width).toBeLessThanOrEqual(signOutBox.x);
+    expect(collapseBox.y + collapseBox.height / 2).toBe(signOutBox.y + signOutBox.height / 2);
     expect(collapseBox.y).toBeGreaterThanOrEqual(accountBox.y + accountBox.height);
     const positions = [];
     const measureFooter = async () => {
@@ -321,11 +335,20 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
         sidebar.locator(".workspace-sidebar-toggle .workspace-sidebar-icon"),
         signOut.locator(".workspace-sidebar-icon"),
       ].map(async locator => { const box = await locator.boundingBox(); return box.x + box.width / 2; }));
-      expect(centers[0]).toBe(centers[1]); expect(centers[1]).toBe(centers[2]);
+      const collapsed = await sidebar.getAttribute("data-compact");
+      const logoutBox = await signOut.boundingBox();
+      expect(centers[0]).toBe(centers[1]);
+      if (collapsed === "true") {
+        expect(centers[1]).toBe(centers[2]);
+        expect(logoutBox.y + logoutBox.height).toBeLessThanOrEqual(toggleBox.y);
+      } else {
+        expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(logoutBox.x);
+        expect(toggleBox.y + toggleBox.height / 2).toBe(logoutBox.y + logoutBox.height / 2);
+      }
       expect(toggleBox.width).toBe(44); expect(toggleBox.height).toBe(44);
       expect(await sidebar.locator(".workspace-sidebar-account button").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label"))))
         .toEqual(["Account", await sidebar.locator(".workspace-sidebar-toggle").getAttribute("aria-label"), "Sign Out"]);
-      return { viewport: page.viewportSize(), collapsed: await sidebar.getAttribute("data-compact"), toggle: toggleBox, iconCenters: centers };
+      return { viewport: page.viewportSize(), collapsed, toggle: toggleBox, iconCenters: centers };
     };
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 600 }, { width: 1024, height: 768 }]) {
       await page.setViewportSize(viewport);
@@ -350,29 +373,21 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
     await page.keyboard.press("Escape"); await signOut.evaluate(element => element.blur());
     await expect(sidebar.locator(".workspace-sidebar-controls")).toHaveCount(0);
     expect(await sidebar.evaluate(element => element.firstElementChild.className)).toBe("workspace-sidebar-brand");
-    await signOut.hover(); await expect(page.getByRole("tooltip")).toContainText("Log out");
-    await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await signOut.focus();
-    await expect(page.getByRole("tooltip")).toContainText("Log out");
-    await expect(signOut).toHaveCSS("outline-style", "solid");
-    await page.keyboard.press("Escape"); await signOut.evaluate(element => element.blur());
-    await collapse.hover(); await expect(page.getByRole("tooltip")).toContainText("Collapse sidebar");
-    await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await collapse.focus();
-    await expect(page.getByRole("tooltip")).toContainText("Collapse sidebar");
-    await expect(collapse).toHaveCSS("outline-style", "solid");
+    await expectNoUtilityTooltip(page, signOut); await expectNoUtilityTooltip(page, collapse);
+    await collapse.focus();
     await page.keyboard.press("Enter");
     const expand = sidebar.getByRole("button", { name: "Expand sidebar", exact: true });
     expect((await sidebar.boundingBox()).width).toBe(68);
     const expandBox = await expand.boundingBox(), railSignOutBox = await signOut.boundingBox();
     expect(expandBox.x).toBe(railSignOutBox.x);
     expect(expandBox).toEqual(collapseBox);
-    expect(expandBox.y + expandBox.height).toBeLessThanOrEqual(railSignOutBox.y);
+    expect(railSignOutBox.y + railSignOutBox.height).toBeLessThanOrEqual(expandBox.y);
     await expect(expand).toBeInViewport(); await expect(signOut).toBeInViewport();
     await expect(sidebar.locator(".workspace-sidebar-utilities span")).toHaveCount(0);
     await expect(sidebar.locator("[data-workspace-logo]")).toHaveCount(0);
     await expect(sidebar.locator("[data-workspace-brand-mark]")).toBeVisible();
-    await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await expand.evaluate(element => element.blur()); await expand.focus();
-    await expect(page.getByRole("tooltip")).toContainText("Expand sidebar");
-    await expect(expand).toHaveCSS("outline-style", "solid");
+    await expectNoUtilityTooltip(page, signOut); await expectNoUtilityTooltip(page, expand);
+    await expand.focus();
     await page.keyboard.press("Space");
     expect((await sidebar.boundingBox()).width).toBe(248);
     await collapse.click(); await page.reload(); await expect(expand).toBeVisible();
@@ -877,18 +892,22 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await flatRows(); await shot("B-rail-1920-brand-mark");
     for (const button of await sidebar.locator("button").all()) {
       const label = await button.getAttribute("aria-label");
+      if (["Collapse sidebar", "Expand sidebar", "Sign Out"].includes(label)) {
+        await expectNoUtilityTooltip(page, button);
+        continue;
+      }
       await button.scrollIntoViewIfNeeded(); await button.hover();
-      await expect(page.getByRole("tooltip")).toContainText(label === "Sign Out" ? "Log out" : label);
+      await expect(page.getByRole("tooltip")).toContainText(label);
       const tooltipContent = page.locator('[data-slot="tooltip-content"]');
       // Radix measures and places the portal after it mounts.
       await expect.poll(async () => (await tooltipContent.boundingBox())?.x ?? 0).toBeGreaterThanOrEqual(68);
       const tooltipBox = await tooltipContent.boundingBox();
       expect(tooltipBox.y).toBeGreaterThanOrEqual(0);
       expect(tooltipBox.y + tooltipBox.height).toBeLessThanOrEqual(1080);
-      if (["Reports & Analytics", "Sign Out"].includes(label)) await shot(`tooltip-${label === "Sign Out" ? "logout" : "reports"}`);
+      if (label === "Reports & Analytics") await shot("tooltip-reports");
       await page.keyboard.press("Escape");
       await page.mouse.move(800, 800); await button.evaluate(element => element.blur()); await button.focus();
-      await expect(page.getByRole("tooltip")).toContainText(label === "Sign Out" ? "Log out" : label);
+      await expect(page.getByRole("tooltip")).toContainText(label);
       await expect(button).toHaveCSS("outline-style", "solid");
       await page.keyboard.press("Escape"); await button.evaluate(el => el.blur());
     }
