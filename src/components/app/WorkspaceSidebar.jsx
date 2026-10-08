@@ -31,19 +31,6 @@ export default function WorkspaceSidebar({ activeSection, items, onNavigate, onL
   return (
     <TooltipProvider delayDuration={200}>
       <aside className="workspace-sidebar hidden lg:flex" data-compact={compact} aria-label="Workspace sidebar">
-        <div className="workspace-sidebar-controls">
-          <Tooltip open={collapseTooltipOpen} onOpenChange={setCollapseTooltipOpen}>
-            <TooltipTrigger asChild>
-              <button type="button" className="workspace-sidebar-toggle" aria-label={collapseLabel} aria-expanded={!compact}
-                onPointerMove={event => { if (event.pointerType !== "touch") setCollapseTooltipOpen(true); }}
-                onFocus={() => setCollapseTooltipOpen(true)}
-                onClick={() => { setCollapseTooltipOpen(false); onToggleCollapsed(); }}>
-                <CollapseIcon className="workspace-sidebar-icon" aria-hidden="true" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={16}>{collapseLabel}</TooltipContent>
-          </Tooltip>
-        </div>
         <div className="workspace-sidebar-brand">
           {compact ? <WorkspaceBrandMark url={themeSettings.workspaceBrandMarkUrl} /> : <WorkspaceLogo url={themeSettings.workspaceLogoUrl} />}
         </div>
@@ -60,11 +47,27 @@ export default function WorkspaceSidebar({ activeSection, items, onNavigate, onL
               {!compact ? <span className="workspace-sidebar-user-details"><span>{name}</span><span className="capitalize">{role}</span></span> : null}
             </button>
           </SidebarTooltip>
-          {isAuthenticated ? <SidebarTooltip compact={compact} label="Log out">
-            <button type="button" className="workspace-sidebar-item workspace-sidebar-logout" aria-label="Sign Out" onClick={onLogout}>
-              <LogOut className="workspace-sidebar-icon" aria-hidden="true" />{!compact ? <span>Sign Out</span> : null}
-            </button>
-          </SidebarTooltip> : null}
+          <div className="workspace-sidebar-utilities">
+            <Tooltip open={collapseTooltipOpen} onOpenChange={setCollapseTooltipOpen}>
+              <TooltipTrigger asChild>
+                <button type="button" className="workspace-sidebar-item workspace-sidebar-toggle" aria-label={collapseLabel} aria-expanded={!compact}
+                  onPointerMove={event => { if (event.pointerType !== "touch") setCollapseTooltipOpen(true); }}
+                  onFocus={() => setCollapseTooltipOpen(true)}
+                  onClick={() => { setCollapseTooltipOpen(false); onToggleCollapsed(); }}>
+                  <CollapseIcon className="workspace-sidebar-icon" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={16}>{collapseLabel}</TooltipContent>
+            </Tooltip>
+            {isAuthenticated ? <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" className="workspace-sidebar-item workspace-sidebar-logout" aria-label="Sign Out" onClick={onLogout}>
+                  <LogOut className="workspace-sidebar-icon" aria-hidden="true" />{!compact ? <span>Sign Out</span> : null}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={16}>Log out</TooltipContent>
+            </Tooltip> : null}
+          </div>
         </div>
       </aside>
       <Dialog open={accountOpen} onOpenChange={setAccountOpen}>

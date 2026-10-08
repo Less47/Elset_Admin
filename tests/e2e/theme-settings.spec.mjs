@@ -307,7 +307,19 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
       await page.unroute("**/api/user-preferences");
     }
     const collapse = sidebar.getByRole("button", { name: "Collapse sidebar", exact: true });
-    expect((await collapse.boundingBox()).y + 44).toBeLessThanOrEqual((await sidebar.locator("[data-workspace-logo]").boundingBox()).y);
+    const signOut = sidebar.getByRole("button", { name: "Sign Out", exact: true });
+    const account = sidebar.getByRole("button", { name: "Account", exact: true });
+    const collapseBox = await collapse.boundingBox(), signOutBox = await signOut.boundingBox(), accountBox = await account.boundingBox();
+    expect(collapseBox.x + collapseBox.width).toBeLessThanOrEqual(signOutBox.x);
+    expect(collapseBox.y).toBe(signOutBox.y);
+    expect(collapseBox.y).toBeGreaterThanOrEqual(accountBox.y + accountBox.height);
+    await expect(sidebar.locator(".workspace-sidebar-controls")).toHaveCount(0);
+    expect(await sidebar.evaluate(element => element.firstElementChild.className)).toBe("workspace-sidebar-brand");
+    await signOut.hover(); await expect(page.getByRole("tooltip")).toContainText("Log out");
+    await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await signOut.focus();
+    await expect(page.getByRole("tooltip")).toContainText("Log out");
+    await expect(signOut).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Escape"); await signOut.evaluate(element => element.blur());
     await collapse.hover(); await expect(page.getByRole("tooltip")).toContainText("Collapse sidebar");
     await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await collapse.focus();
     await expect(page.getByRole("tooltip")).toContainText("Collapse sidebar");
@@ -315,6 +327,11 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
     await page.keyboard.press("Enter");
     const expand = sidebar.getByRole("button", { name: "Expand sidebar", exact: true });
     expect((await sidebar.boundingBox()).width).toBe(68);
+    const expandBox = await expand.boundingBox(), railSignOutBox = await signOut.boundingBox();
+    expect(expandBox.x).toBe(railSignOutBox.x);
+    expect(expandBox.y + expandBox.height).toBeLessThanOrEqual(railSignOutBox.y);
+    await expect(expand).toBeInViewport(); await expect(signOut).toBeInViewport();
+    await expect(sidebar.locator(".workspace-sidebar-utilities span")).toHaveCount(0);
     await expect(sidebar.locator("[data-workspace-logo]")).toHaveCount(0);
     await expect(sidebar.locator("[data-workspace-brand-mark]")).toBeVisible();
     await page.keyboard.press("Escape"); await page.mouse.move(600, 500); await expand.evaluate(element => element.blur()); await expand.focus();
@@ -789,7 +806,7 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
   const sidebar = page.locator("aside.workspace-sidebar");
   const shot = async name => {
     await expect(page.getByText(/Loading reports/)).toHaveCount(0);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: path.join(directory, name + ".png"), animations: "disabled" });
   };
   const appearance = async patch => {
@@ -798,11 +815,12 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await expect(sidebar).toBeVisible();
   };
   const flatRows = async () => {
+    await page.mouse.move(800, 800);
     for (const button of await sidebar.locator('.workspace-sidebar-item').all()) {
-      const style = await button.evaluate(el => { const s = getComputedStyle(el); return { border: s.borderTopWidth, shadow: s.boxShadow, background: s.backgroundColor, height: el.getBoundingClientRect().height }; });
+      const style = await button.evaluate(el => { const s = getComputedStyle(el); return { border: s.borderTopWidth, shadow: s.boxShadow, height: el.getBoundingClientRect().height }; });
       expect(style.border).toBe("0px"); expect(style.shadow).toBe("none"); expect(style.height).toBeGreaterThanOrEqual(44);
-      if (!await button.getAttribute("aria-current")) expect(style.background).toBe("rgba(0, 0, 0, 0)");
-      else expect(style.background).not.toBe("rgba(0, 0, 0, 0)");
+      if (!await button.getAttribute("aria-current")) await expect(button).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      else await expect(button).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     }
   };
   try {
