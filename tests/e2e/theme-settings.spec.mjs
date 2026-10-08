@@ -256,6 +256,18 @@ async function openSettings(browser, width = 1440, height = 900, tab = "UI Setti
 const status = (page) => page.getByRole("status", { name: "Theme save status" });
 const saveButton = page => page.getByRole("button", { name: "Save changes", exact: true });
 
+async function measureSidebarNavigation(page) {
+  const sidebar = page.locator("aside.workspace-sidebar");
+  return {
+    brandingHeight: (await sidebar.locator(".workspace-sidebar-brand").boundingBox()).height,
+    items: await sidebar.locator(".workspace-sidebar-scroll button").evaluateAll(buttons => buttons.map(button => ({
+      label: button.getAttribute("aria-label"),
+      top: button.getBoundingClientRect().top,
+      iconY: button.querySelector(".workspace-sidebar-icon").getBoundingClientRect().top,
+    }))),
+  };
+}
+
 async function expectNoUtilityTooltip(page, button) {
   expect(await button.getAttribute("title")).toBeNull();
   await page.keyboard.press("Escape"); await button.evaluate(element => element.blur());
@@ -348,7 +360,7 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
       expect(toggleBox.width).toBe(44); expect(toggleBox.height).toBe(44);
       expect(await sidebar.locator(".workspace-sidebar-account button").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label"))))
         .toEqual(["Account", await sidebar.locator(".workspace-sidebar-toggle").getAttribute("aria-label"), "Sign Out"]);
-      return { viewport: page.viewportSize(), collapsed, toggle: toggleBox, iconCenters: centers };
+      return { viewport: page.viewportSize(), collapsed, toggle: toggleBox, iconCenters: centers, navigation: await measureSidebarNavigation(page) };
     };
     for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 600 }, { width: 1024, height: 768 }]) {
       await page.setViewportSize(viewport);
@@ -367,6 +379,11 @@ test("retired appearance settings are inert, sidebar toggles locally with keyboa
       positions.push({ before, afterCollapse, afterExpand });
     }
     fs.writeFileSync(path.join(screenshotDir, "sidebar-footer-positions.json"), JSON.stringify(positions, null, 2));
+    for (const { before, afterCollapse, afterExpand } of positions) {
+      for (const state of [before, afterCollapse, afterExpand]) expect(state.navigation.brandingHeight).toBe(96);
+      expect(afterCollapse.navigation.items).toEqual(before.navigation.items);
+      expect(afterExpand.navigation.items).toEqual(before.navigation.items);
+    }
     await page.setViewportSize({ width: 1440, height: 900 });
     await account.focus(); await page.keyboard.press("Tab"); await expect(collapse).toBeFocused();
     await page.keyboard.press("Escape"); await page.keyboard.press("Tab"); await expect(signOut).toBeFocused();
@@ -844,6 +861,16 @@ test("branding grouped saves retry only the failed image and discard restores bo
 test("workspace sidebar visual matrix, brand switching, tooltips and short-screen keyboard access", async ({ browser }) => {
   const a = await openSettings(browser, 1920, 1080, "Preferences");
   const { page } = a;
+  const navigationPositions = [];
+  let navigationReference;
+  const checkNavigationPosition = async label => {
+    await page.locator(".workspace-sidebar-scroll").evaluate(element => { element.scrollTop = 0; });
+    const measured = await measureSidebarNavigation(page);
+    navigationReference ||= measured.items;
+    navigationPositions.push({ label, ...measured });
+    expect(measured.brandingHeight).toBe(96);
+    expect(measured.items).toEqual(navigationReference);
+  };
   const directory = path.join(repoRoot, "test-results/sidebar-redesign");
   fs.mkdirSync(directory, { recursive: true });
   const errors = []; page.on("pageerror", error => errors.push(error.message));
@@ -878,9 +905,17 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     const logoUrl = await upload("logo", png), markUrl = await upload("mark", markPng);
     await page.reload(); await navigate(page, "Customers", 1920);
     await expect(image("logo")).toHaveAttribute("src", logoUrl);
+    await expect(image("logo")).toHaveCSS("object-fit", "contain");
     await expect(image("mark")).toHaveCount(0);
     expect((await sidebar.boundingBox()).width).toBe(248);
+    await checkNavigationPosition("company-logo-expanded");
     await flatRows(); await shot("A-standard-1920-company-logo");
+    await page.route("**/api/settings/workspace-logo/*", route => route.abort());
+    await page.reload();
+    await expect(sidebar.locator("[data-workspace-logo-fallback]")).toBeVisible();
+    await checkNavigationPosition("unavailable-logo-expanded");
+    await page.unroute("**/api/settings/workspace-logo/*"); await page.reload();
+    await expect(image("logo")).toHaveAttribute("src", logoUrl);
     const scroll = sidebar.locator(".workspace-sidebar-scroll");
     expect(await scroll.evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
     await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
@@ -889,7 +924,14 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await expect(image("mark")).toHaveCSS("object-fit", "contain");
     expect((await image("mark").boundingBox()).width).toBeLessThanOrEqual(36);
     expect((await sidebar.boundingBox()).width).toBe(68);
+    await checkNavigationPosition("brand-mark-collapsed");
     await flatRows(); await shot("B-rail-1920-brand-mark");
+    await page.route("**/api/settings/workspace-brand-mark/*", route => route.abort());
+    await page.reload();
+    await expect(sidebar.locator("[data-workspace-brand-mark-fallback]")).toBeVisible();
+    await checkNavigationPosition("unavailable-mark-collapsed");
+    await page.unroute("**/api/settings/workspace-brand-mark/*"); await page.reload();
+    await expect(image("mark")).toHaveAttribute("src", markUrl);
     for (const button of await sidebar.locator("button").all()) {
       const label = await button.getAttribute("aria-label");
       if (["Collapse sidebar", "Expand sidebar", "Sign Out"].includes(label)) {
@@ -945,12 +987,15 @@ test("workspace sidebar visual matrix, brand switching, tooltips and short-scree
     await shot("I-short-desktop-rail");
     await page.getByRole("button", { name: "Expand sidebar", exact: true }).click(); await shot("I-short-desktop-standard");
     await page.request.delete(baseUrl + "/api/settings/workspace-logo"); await page.reload();
-    await expect(sidebar.locator("[data-workspace-logo-fallback]")).toBeVisible(); await shot("C-standard-no-company-logo");
+    await expect(sidebar.locator("[data-workspace-logo-fallback]")).toBeVisible();
+    await checkNavigationPosition("missing-logo-expanded"); await shot("C-standard-no-company-logo");
     await upload("logo", png);
     await page.request.delete(baseUrl + "/api/settings/workspace-brand-mark");
     await page.reload();
     await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     await expect(sidebar.locator("[data-workspace-brand-mark-fallback]")).toBeVisible();
+    await checkNavigationPosition("missing-mark-collapsed");
+    fs.writeFileSync(path.join(screenshotDir, "sidebar-branding-navigation-positions.json"), JSON.stringify(navigationPositions, null, 2));
     await expect(sidebar.locator("img")).toHaveCount(0); await shot("D-rail-no-brand-mark");
     // Missing marks never borrow a valid company logo. Mobile retains the company logo.
     await page.setViewportSize({ width: 390, height: 844 });

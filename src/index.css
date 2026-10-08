@@ -293,7 +293,7 @@
     color: var(--sidebar-foreground);
     border-right: 1px solid color-mix(in srgb, var(--sidebar-border) 18%, var(--sidebar));
   }
-  .workspace-sidebar-brand { display: flex; flex-shrink: 0; align-items: center; justify-content: center; padding: 8px 12px; }
+  .workspace-sidebar-brand { display: flex; height: 6rem; flex: 0 0 6rem; align-items: center; justify-content: center; padding: 8px 12px; }
   .workspace-sidebar-navigation { display: flex; flex: 1; min-height: 0; flex-direction: column; }
   .workspace-sidebar-scroll { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; padding: 2px 12px 8px; }
   .workspace-sidebar-item {
