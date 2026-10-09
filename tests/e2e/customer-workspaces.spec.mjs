@@ -23,6 +23,7 @@ const fixtureCustomerId = "demo-customer-arcadia";
 const denseCustomerId = "customer-layout-many";
 const emptyCustomerId = "customer-layout-empty";
 const historyCustomerId = "customer-layout-history";
+const scrollingCustomerId = "customer-layout-scrolling";
 
 let tempDataDir = "";
 let baseUrl = "";
@@ -47,6 +48,11 @@ function readFixture() {
     ...fixture.jobs[0], id: `history-job-${index}`, jobNumber: 9000 + index, customerId: historyCustomerId, customerName: "History workspace customer",
     jobAddress: `${1 + index % 2} History Street`, title: `Historical service ${index + 1}`, status: index % 3 ? "Completed" : "To Do",
     updatedAt: new Date(Date.UTC(2026, 9, 6, 12, 0, index)).toISOString(), notes: [], photos: [], quote: null, invoice: null,
+  })));
+  fixture.customers.push({ ...customer, id: scrollingCustomerId, name: "Independent scrolling customer", address: "1 Scroll Street",
+    sites: Array.from({ length: 30 }, (_, index) => ({ ...sites[0], id: `scroll-site-${index}`, label: `Scroll site ${index + 1}`, address: `${index + 1} Scroll Street`, ocNumber: `PS-SCROLL-${index + 1}` })) });
+  fixture.jobs.push(...fixture.jobs.filter(job => job.customerId === historyCustomerId).map((job, index) => ({
+    ...job, id: `scroll-job-${index}`, jobNumber: 9500 + index, customerId: scrollingCustomerId, customerName: "Independent scrolling customer", jobAddress: `${index % 30 + 1} Scroll Street`,
   })));
   fixture.jobs.push(...Array.from({ length: 16 }, (_, index) => ({
     ...fixture.jobs[0], id: `layout-job-${index}`, jobNumber: 5000 + index, customerId: denseCustomerId, customerName: customer.name,
@@ -508,6 +514,78 @@ async function showCustomerSection(page, label) {
   else await expect(page.getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
   const section = { Overview: "details", Sites: "sites", Contacts: "contacts", "Job History": "jobs" }[label];
   await expect(page.locator(`[data-customer-section="${section}"]`)).toBeVisible();
+}
+
+for (const [width, height] of [[1024, 768], [1440, 900], [1920, 1080], [1440, 540], [820, 1180], [390, 844]]) {
+  test(`Customer Sites and Job History scroll independently at ${width}x${height}`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height });
+    await login(page, { pathname: `/customers/${scrollingCustomerId}` });
+    const before = readWorkspaceState();
+    const sites = page.locator('[data-customer-section="sites"]');
+    const jobs = page.locator('[data-customer-section="jobs"]');
+    await expect(sites.locator('[data-mobile-record-card]')).toHaveCount(30);
+    await expect(jobs.locator('[data-mobile-record-card]')).toHaveCount(50);
+    await expect(page.locator('[data-account-balance]')).toHaveText("$0.00");
+    const position = target => target.evaluate(element => element.scrollTop);
+    if (width >= 1024) {
+      await checkCustomerGrid(page);
+      if (height >= 768) expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(1);
+      const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      for (const section of [sites, jobs]) {
+        expect(await section.evaluate(element => ({ overflow: getComputedStyle(element).overflowY, minHeight: getComputedStyle(element).minHeight, overflows: element.scrollHeight > element.clientHeight }))).toEqual({ overflow: "auto", minHeight: "0px", overflows: true });
+        // The section is the sole scrolling container, not a nested body/list.
+        expect(await section.locator("*").evaluateAll(elements => elements.filter(element => /auto|scroll/.test(getComputedStyle(element).overflowY) && element.scrollHeight > element.clientHeight).length)).toBe(0);
+      }
+      const heading = sites.locator(".customer-section-header"), headingY = (await heading.boundingBox()).y;
+      await captureWorkspace(page, info, `sites-top-${width}x${height}`);
+      await sites.evaluate(element => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
+      const halfway = await position(sites);
+      expect(halfway).toBeGreaterThan(0);
+      expect(await position(jobs)).toBe(0);
+      expect((await heading.boundingBox()).y).toBeCloseTo(headingY, 0);
+      await expect(sites.getByRole("button", { name: "Add Site", exact: true })).toBeInViewport();
+      await captureWorkspace(page, info, `sites-halfway-${width}x${height}`);
+      await sites.evaluate(element => { element.scrollTop = 0; });
+      await jobs.evaluate(element => { element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.7; });
+      const jobPosition = await position(jobs);
+      expect(jobPosition).toBeGreaterThan(0);
+      expect(await position(sites)).toBe(0);
+      await captureWorkspace(page, info, `jobs-independent-${width}x${height}`);
+      await sites.evaluate(element => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
+      expect(await position(jobs)).toBe(jobPosition);
+      await captureWorkspace(page, info, `different-positions-${width}x${height}`);
+      for (const section of [sites, jobs]) {
+        await section.evaluate(element => { element.scrollTop = element.scrollHeight; });
+        await expect(section.locator('[data-mobile-record-card]').last().getByRole("button")).toBeInViewport();
+      }
+      await sites.evaluate(element => { element.scrollTop = 0; });
+      await sites.focus();
+      await expect(sites).toBeFocused();
+      await sites.press("PageDown");
+      await expect.poll(() => position(sites)).toBeGreaterThan(0);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(pageHeight);
+      expect(await page.evaluate(() => scrollY)).toBe(0);
+      expect((await page.locator(".record-workspace-header").boundingBox()).y).toBe(0);
+      // A short Sites list uses the same height without a vertical scrollbar.
+      await page.goto(`${baseUrl}/customers/${historyCustomerId}`);
+      await expect(sites.locator('[data-mobile-record-card]')).toHaveCount(2);
+      expect(await sites.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(false);
+    } else {
+      for (const section of [sites, jobs]) {
+        expect(await section.evaluate(element => ({ overflow: getComputedStyle(element).overflowY, overflows: element.scrollHeight > element.clientHeight + 1 }))).toEqual({ overflow: "visible", overflows: false });
+        await section.locator('[data-mobile-record-card]').last().getByRole("button").scrollIntoViewIfNeeded();
+        await expect(section.locator('[data-mobile-record-card]').last().getByRole("button")).toBeInViewport();
+      }
+      expect(await page.evaluate(() => scrollY)).toBeGreaterThan(0);
+      await page.getByRole("tab", { name: /^Sites/ }).click();
+      await expect(sites.locator('[data-mobile-record-card]')).toHaveCount(30);
+      await sites.getByRole("button", { name: "Add Site", exact: true }).scrollIntoViewIfNeeded();
+      await expect(sites.getByRole("button", { name: "Add Site", exact: true })).toBeInViewport();
+      await captureWorkspace(page, info, `sites-stacked-${width}`);
+    }
+    await noModalOrOverflow(page);
+    expect(readWorkspaceState()).toEqual(before);
+  });
 }
 
 async function checkCustomerGrid(page) {
@@ -1493,7 +1571,10 @@ test("Customer layout handles empty sections, long text and many uncapped record
       if (width >= 1024) {
         const boxes = await checkCustomerGrid(page);
         if (kind === "many") expect(boxes.contacts.y).toBeGreaterThan(boxes.jobs.y);
-        else for (const name of ["sites", "contacts"]) expect(boxes[name].height).toBeLessThan(150);
+        else {
+          expect(boxes.contacts.height).toBeLessThan(150);
+          expect(await page.locator('[data-customer-section="sites"]').evaluate(element => element.scrollHeight > element.clientHeight)).toBe(false);
+        }
       }
       await captureWorkspace(page, info, `${kind}-${width}x${height}`);
       for (const [label, section, records] of [["Sites", "sites", 8], ["Contacts", "contacts", 12], ["Job History", "jobs", 16]]) {

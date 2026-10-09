@@ -180,6 +180,11 @@
       border-left: 1px solid var(--data-view-border);
     }
 
+    .customer-workspace-column {
+      min-height: 0;
+    }
+
+    [data-customer-section="sites"],
     [data-customer-section="jobs"] {
       height: var(--customer-profile-height);
       min-height: 0;
@@ -189,6 +194,7 @@
       scrollbar-color: var(--muted-foreground) var(--card);
     }
 
+    [data-customer-section="sites"] > .customer-section-header,
     [data-customer-section="jobs"] > .customer-section-header {
       position: sticky;
       top: 0;
@@ -196,6 +202,7 @@
       background: var(--card);
     }
 
+    [data-customer-section="sites"]:focus-visible,
     [data-customer-section="jobs"]:focus-visible {
       outline: 2px solid var(--ring);
       outline-offset: -2px;

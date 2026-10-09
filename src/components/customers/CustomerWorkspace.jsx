@@ -30,7 +30,7 @@ export function CustomerJobHistory({ jobs, onOpenJob }) {
 function CustomerSection({ name, title, count, summary, action, description = "", children, scrollable = false }) {
   return (
         <section className="customer-section" data-customer-section={name} aria-labelledby={scrollable ? undefined : `customer-section-${name}`}
-          aria-label={scrollable ? "Customer job history" : undefined} tabIndex={scrollable ? 0 : undefined}>
+          aria-label={scrollable ? (name === "jobs" ? "Customer job history" : `Customer ${name}`) : undefined} tabIndex={scrollable ? 0 : undefined}>
           <header className="customer-section-header">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 id={`customer-section-${name}`} className="min-w-0 text-base font-semibold leading-5 [overflow-wrap:anywhere]">{title}</h2>
@@ -65,7 +65,7 @@ function CustomerDetailsSection({ customer }) {
 
 function CustomerSitesSection({ sites, onOpenSite, onCreateSite, desktop }) {
   return (
-    <CustomerSection name="sites" title="Sites" count={sites.length}
+    <CustomerSection scrollable={desktop} name="sites" title="Sites" count={sites.length}
       action={<Button type="button" className={desktop ? "h-7" : ""} size={desktop ? "sm" : "default"} onClick={onCreateSite}>Add Site</Button>}>
         {!sites.length ? <p className="text-sm text-text-secondary">No sites saved yet. Add a site for this customer.</p> : (
           <MobileRecordList label="Customer sites">{sites.map((site) => (
