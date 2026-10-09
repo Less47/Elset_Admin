@@ -23,11 +23,11 @@ const quickBooksUnsyncedIndicator = { id: "quickbooks-unsynced", label: "Not in 
 
 export const serviceBoardIndicatorLegend = [
   { id: "quote", label: "Quote sent", dotClassName: "bg-cyan-500" },
-  { id: "not-invoiced", label: "Not invoiced", dotClassName: "bg-slate-500" },
+  { id: "not-invoiced", label: "Not invoiced", dotClassName: "bg-orange-300" },
   { id: "invoice-pending", label: "Outstanding invoice", dotClassName: "bg-violet-500" },
   { id: "invoice-overdue", label: "Invoice overdue", dotClassName: "bg-rose-500" },
   { id: "invoice-paid", label: "Invoice paid", dotClassName: "bg-emerald-500" },
-  { id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" },
+  { id: "maintenance", label: "Maintenance", dotClassName: "bg-yellow-400" },
   quickBooksUnsyncedIndicator,
 ];
 
@@ -128,7 +128,8 @@ export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider 
       : invoiceStatus.id === "overdue" ? "invoice-overdue"
       : "invoice-pending";
     const indicator = serviceBoardIndicatorLegend.find((entry) => entry.id === id);
-    indicators.push(indicator);
+    // Board columns are assigned by job.status; keep the pre-send warning in Completed only.
+    if (id !== "not-invoiced" || job.status === "Completed") indicators.push(indicator);
   }
 
   // Mapping ownership is independent of invoice issuance, payment and sync errors.
@@ -139,7 +140,7 @@ export function buildJobCardIndicators({ job, invoiceStatus, accountingProvider 
   }
 
   if (job.maintenancePlanName) {
-    indicators.push({ id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" });
+    indicators.push(serviceBoardIndicatorLegend.find((entry) => entry.id === "maintenance"));
   }
 
   return indicators;

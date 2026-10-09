@@ -301,6 +301,16 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
         for (const view of mobile ? ["Mobile"] : ["List", "Grid", "Compact"]) {
           if (!mobile) await page.getByRole("button", { name: `Completed ${view} view`, exact: true }).click();
           const expanded = enabled && (mobile || view === "List");
+          if (!mobile) {
+            for (const status of ["To Do", "In Progress"]) {
+              await page.getByRole("button", { name: `${status} ${view} view`, exact: true }).click();
+              await expect(column(page, status).locator('[data-service-board-indicator="not-invoiced"]')).toHaveCount(0);
+            }
+            const legend = page.getByRole("list", { name: "Job indicators" });
+            await expect(legend.getByText("Maintenance", { exact: true }).locator("..").locator("span").first()).toHaveClass(/bg-yellow-400/);
+            await expect(legend.getByText("Not invoiced", { exact: true }).locator("..").locator("span").first()).toHaveClass(/bg-orange-300/);
+            await expect(legend.locator("li").last()).toHaveText("!Not in QuickBooks");
+          }
           for (const index of [175, 174, 169]) await assertQuickBooksPill(qbBoardCard(page, index), expanded);
           for (const index of [173, 172, 171, 170]) await expect(qbWarning(qbBoardCard(page, index))).toHaveCount(0);
           const paid = qbBoardCard(page, 175);
@@ -325,6 +335,17 @@ for (const [width, theme] of [[768, "elset"], [1024, "elset"], [1440, "elset"], 
           expect(await unsent.evaluate(element => getComputedStyle(element.querySelector("span") || element).backgroundColor)).toBe(await qbBoardCard(page, 172).locator('[data-service-board-indicator="not-invoiced"]').evaluate(element => getComputedStyle(element.querySelector("span") || element).backgroundColor));
           await expect(page.getByTitle("Invoice not sent", { exact: true })).toHaveCount(0);
           const colour = (element) => getComputedStyle(element.querySelector("span") || element).backgroundColor;
+          await expect(unsent).toHaveAttribute("data-indicator-expanded", String(expanded));
+          if (expanded) await expect(unsent).toHaveText("Not invoiced");
+          else await expect(unsent).toHaveText("");
+          await expect(unsent.locator(expanded ? "span" : "xpath=.").first()).toHaveClass(/bg-orange-300/);
+          const maintenance = paid.getByTitle("Maintenance", { exact: true });
+          await expect(maintenance.locator(expanded ? "span" : "xpath=.").first()).toHaveClass(/bg-yellow-400/);
+          expect(await unsent.evaluate(colour)).not.toBe(await maintenance.evaluate(colour));
+          for (const id of ["quote", "invoice-paid", "invoice-pending"]) {
+            const reference = (id === "invoice-pending" ? qbBoardCard(page, 174) : paid).locator(`[data-service-board-indicator="${id}"]`);
+            expect(await unsent.evaluate(colour)).not.toBe(await reference.evaluate(colour));
+          }
           expect(await unsent.evaluate(colour)).not.toBe(await overdue.evaluate(colour));
           for (const index of [175, 174, 172, 168, 167]) {
             const target = qbBoardCard(page, index);
@@ -486,9 +507,8 @@ for (const width of [768, 1024, 1440]) test(`note layout handles all pill combin
               expect((values.indicator.top + values.indicator.bottom) / 2, label).toBeCloseTo(values.card.top, 1);
               expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);
             } else {
-              await expect(target.getByTitle("Not invoiced", { exact: true })).toBeVisible();
-              expect(values.indicator, label).not.toBeNull();
-              expect((values.indicator.top + values.indicator.bottom) / 2, label).toBeCloseTo(values.card.top, 1);
+              await expect(target.getByTitle("Not invoiced", { exact: true })).toHaveCount(0);
+              expect(values.indicator, label).toBeNull();
               expect(values.number.top, label).toBeCloseTo(values.contentTop, 1);
             }
           }

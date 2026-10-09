@@ -10,10 +10,22 @@ const job = { status: "To Do", invoice };
 const indicators = (record, provider = "quickbooks", status = { id: "draft", label: "Draft Invoice" }) =>
   buildJobCardIndicators({ job: record, accountingProvider: provider, invoiceStatus: status });
 
-for (const status of ["To Do", "In Progress", "Completed"]) test(`${status}: missing and saved unsent invoices share one pre-send indicator without changing the document`, () => {
+test("legend and card colours share distinct yellow maintenance and light orange pre-send warnings", () => {
+  const legend = getServiceBoardIndicatorLegend("quickbooks");
+  const entries = indicators({ status: "Completed", maintenancePlanName: "Annual service" });
+  for (const [id, colour] of [["maintenance", "bg-yellow-400"], ["not-invoiced", "bg-orange-300"]]) {
+    assert.equal(legend.find(entry => entry.id === id).dotClassName, colour);
+    assert.equal(entries.find(entry => entry.id === id).dotClassName, colour);
+  }
+  assert.equal(new Set(legend.filter(entry => entry.dotClassName).map(entry => entry.dotClassName)).size, 6);
+  assert.equal(legend.some(entry => /slate|gray|grey/.test(entry.dotClassName)), false);
+  assert.equal([...legend, ...entries].some(entry => entry.label === "Invoice not sent"), false);
+});
+
+for (const status of ["To Do", "In Progress", "Completed"]) test(`${status}: missing and saved unsent invoices show a pre-send indicator only in Completed without changing the document`, () => {
   for (const invoice of [null, { items: [{ qty: 1, rate: 100 }], sentHistory: [], dueDate: "2000-01-01" }]) {
     const record = { status, invoice }, before = structuredClone(record);
-    assert.deepEqual(indicators(record, "", { id: invoice ? "draft" : "not-invoiced" }).map(entry => [entry.id, entry.label]), [["not-invoiced", "Not invoiced"]]);
+    assert.deepEqual(indicators(record, "", { id: invoice ? "draft" : "not-invoiced" }).map(entry => [entry.id, entry.label]), status === "Completed" ? [["not-invoiced", "Not invoiced"]] : []);
     assert.deepEqual(record, before);
   }
 });
@@ -24,7 +36,7 @@ test("Warranty cards omit the badge while preserving tags, classification and ur
   const entries = indicators(record);
   assert.deepEqual(entries, [
     { id: "quote", label: "Quoted", dotClassName: "bg-cyan-500" },
-    { id: "maintenance", label: "Maintenance", dotClassName: "bg-orange-500" },
+    { id: "maintenance", label: "Maintenance", dotClassName: "bg-yellow-400" },
   ]);
   assert.equal(entries.some(entry => entry.id === "warranty" || entry.type === "warranty"), false);
   assert.deepEqual(record, before);
